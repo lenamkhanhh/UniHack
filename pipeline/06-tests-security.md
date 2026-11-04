@@ -55,10 +55,19 @@ phải contract test — chuyển sang V10.
 | V6 | Operation idempotency | Cùng operationId + cùng input → cùng receipt, không charge hai lần. Cùng operationId + input khác → 409. |
 | V7 | Reservation budget | Gửi concurrent tới tool cap: spent + reserved không vượt cap, request vượt → BLOCK budget_exhausted. |
 | V8 | TalkMeter unique tick | Tick trùng (sessionId, minuteIndex) → receipt cũ. Tick phút tương lai → reject. Tick đồng thời → unique constraint quyết định một thắng. |
-| V9 | UNKNOWN recovery | Facilitator timeout sau submit: không ký mới, check nonce → nonce đã dùng thì không charge lại, trả kết quả đã giữ. |
+| V9 | UNKNOWN recovery — phân biệt SETTLING/UNKNOWN | Facilitator timeout sau submit: không ký mới, không tự chuyển FAILED/SETTLED. SETTLING có tx hash → poll receipt. UNKNOWN không tx hash → giữ reservation tới khi reconcile xong. |
 | V10 | Audit khớp event + hash | Sau C1+C2+C8: mỗi Executed/Queued đều có event + audit entry tương ứng, canonical hash verify = true (cả API và script độc lập). |
 | V11 | Audit tamper | Sửa 1 entry trong DB test copy → verify = false, chỉ ra đúng entry sai đầu tiên. |
 | V12 | Positive control (chống "chặn tất cả") | Sau mỗi attack test bị chặn, một request hợp lệ cùng mission phải thành công. Hệ thống chặn attack mà chặn luôn request hợp lệ là fail. |
+| V13 | Concurrent reservation — hai operation khác nhau | Hai operation khác operationId, cùng mission, toolCap test = 0.50 USDC, mỗi operation mua `tool:summary` 0.50 USDC, gửi đồng thời: đúng một operation RESERVED, operation còn lại BLOCK `budget_exhausted`, tổng spent + reserved không vượt 0.50. Test này bắt buộc dùng transaction + row lock (02 §9.2), không chỉ test duplicate operationId. |
+| V14 | Delayed settlement — giữ UNKNOWN, không giải phóng sớm | Mock facilitator delay: authorization đã ký, validBefore chưa qua, facilitator chưa trả receipt → operation giữ UNKNOWN, reservation không giải phóng, retry không tạo operation mới, wall-clock vượt 60s nhưng block timestamp chưa vượt validBefore cũng không chuyển FAILED. |
+| V15 | Nonce đã dùng ≠ settlement — cancel phân biệt | Mock: nonce đã dùng qua `cancelAuthorization` (không có Transfer) → operation không chuyển SETTLED, không trả kết quả, giữ UNKNOWN hoặc chuyển FAILED khi có event AuthorizationCanceled, reservation không chuyển thành spent. Mock ngược: nonce đã dùng qua transfer có receipt Transfer đúng payer/payTo/amount → SETTLED, trả kết quả. |
+| V16 | Restart sau settlement — held result còn trong DB | Tạo operation RESERVED (held result đã ghi DB), restart server (kill + start lại, không reset DB), rồi settle → trả đúng held result cũ, không chạy lại upstream, không tạo kết quả mới. Restart giữa SETTLING/UNKNOWN cũng phải giữ nguyên state, authorization, facilitator tx hash. |
+| V17 | Cross-mission operation reuse | Cùng operationId, cùng input, cùng payer, nhưng mission khác → `409` cross-mission reuse, không tạo operation mới, không settle. Cùng operationId ở mission khác mà payer cũng khác → `403`/`409`, không được xử lý như operation mới. |
+| V18 | Operation scope mismatch | Paid retry với payer khác (auth.from ≠ mission agent) → `403`, không settle. Retry với amount/payTo/asset khác operation đã lưu → `409`, không settle. Retry với mission token khác mission của operation → `403`. |
+| V19 | Recovery endpoint permission | `GET /api/tools/operations/:id` không token → `401` chung, không lộ state/tx/result. Token của mission khác → `403`, không lộ held result. Token đúng mission → trả state, và chỉ trả held result khi SETTLED. |
+| V20 | S1 auth/pause không dùng guard | Ở chế độ S1 (không deploy guard): tạo mission không có chữ ký owner → từ chối; mission token verify bằng mission record + OWNER_ADDRESS, pause check bằng SystemState, `GET /api/policy` trả pauseSource = "db" và guard = null. Không được gọi guard.owner()/paused() ở S1. Cutover S1→S2: sau khi chuyển PAUSE_SOURCE sang "guard", check pause dùng guard, token S1 cũ phải kích hoạt lại. |
+| V21 | Activation signature binding | Chữ ký thiếu/sai domain, sai nonce, nonce đã dùng, nonce hết hạn 10 phút, expiresAt ≠ mission expiresAt, cap trong message ≠ cap mission → tất cả từ chối, không cấp token. Chữ ký đúng đủ field → cấp token scope đúng mission, expiry = mission expiry. |
 
 ## 3. x402 + ERC-8004 + Live smoke (Fuji) — L-series, bắt buộc
 
@@ -117,27 +126,29 @@ ví chính. Ghi rõ ví test và số tiền test trong README test.
 
 | Attacker / lỗi | Đường tấn công | Chặn ở |
 |---|---|---|
-| Prompt injection qua tool output / tài liệu paste | Lừa LLM propose sai recipient/amount | Validator §3 + guard allowlist/cap |
+| **LLM compromise (không có key)** | Attacker chỉ điều khiển output LLM (prompt injection, tool output độc, tài liệu paste) | Validator + guard + server API vẫn đứng giữa. Tổn thất tối đa: treasury auto tới allowlisted recipient trong dailyCap/mission treasury cap; tool tới allowlisted seller trong toolCap/session cap/per-call cap. |
 | Địa chỉ giả mạo (lookalike, typo) | Lừa mắt người + LLM | Full-address match, không prefix match |
 | Approve vô hạn | Dụ agent ký allowance max | Validator B8, không dùng approve cho tool |
-| Agent key bị lộ | Kẻ khác cầm ví agent, propose trong policy / mua tool hợp lệ nhưng vô ích | Ví agent chỉ giữ tiền lẻ tool; quỹ ở guard, agent không rút được. **Tổn thất tối đa: dailyCap + toolCap trong kỳ, không phải toàn bộ quỹ — nhưng không phải 0.** |
+| **Private-key compromise (có agent key) — KHÁC với LLM compromise** | Attacker giữ agent private key, ký EIP-3009 trực tiếp tới bất kỳ payTo nào, bất kỳ amount nào, **không qua validator/API**; cũng có thể gọi `propose()` trực tiếp trên guard | **Tool: không còn toolCap/session cap/allowlist/velocity nào enforce được.** Tổn thất tối đa cho tool = **toàn bộ số dư ví tool tại thời điểm bị lộ + mọi lần nạp thêm trước khi phát hiện/đóng mission**. Treasury: vẫn được guard bảo vệ (không rút trực tiếp, auto vẫn bị allowlist + per-tx + daily + mission cap on-chain chặn), trừ khi attacker đã nằm trong allowlist. **Không được claim toolCap off-chain vẫn enforce với attacker giữ key.** Mitigation: ví tool chỉ giữ tiền lẻ, không auto-refill (refill chỉ bằng treasury payout do owner duyệt, mỗi lần refill tăng exposure đúng số đó), phát hiện → đóng mission ngay, tạo mission mới với ví agent mới, không refill ví cũ. Pause không chặn attacker ký trực tiếp. |
 | Owner key bị lộ | Kẻ khác đổi policy, approve vượt cap, emergency withdraw khi paused | Ngoài scope MVP — guard bảo vệ khỏi agent/LLM, không bảo vệ khỏi chính owner. Owner key phải giữ như key ví thật, dùng ví riêng cho demo, không share seed. Stretch: multisig / timelock (09) |
-| Facilitator down / độc hại | Không settle, hoặc delay | Facilitator không sửa được amount/destination đã ký; fallback facilitator + tx hash ghi sẵn; UNKNOWN recovery ngăn charge hai lần (02 §9.4) |
-| Authorization đã ký trước pause | Settle trong 60s TTL sau pause | Không thu hồi được; ghi `SETTLED_AFTER_PAUSE`, rủi ro giới hạn bởi TTL + cap + reservation |
+| Facilitator down / độc hại / delay | Không settle, delay settlement, response mất | Facilitator không sửa được amount/destination đã ký; fallback facilitator + tx hash ghi sẵn; UNKNOWN recovery theo 02 §9.4 (giữ reservation tới khi reconcile xong, nonce chưa dùng không tự thành FAILED, nonce đã dùng không tự thành SETTLED) |
+| Authorization đã ký trước pause | Settle trong 60s TTL sau pause, hoặc ký trực tiếp bởi key holder | Không thu hồi được; ghi `SETTLED_AFTER_PAUSE`, rủi ro qua server giới hạn bởi TTL + cap + reservation; rủi ro qua key lộ tính theo số dư ví tool (xem row key compromise) |
 | Reputation farm (Sybil) | Tự feedback nhiều lần để đẹp điểm | Self-feedback bị reject; feedback từ app chỉ sau operation SETTLED và từ mission owner; và MVP không dùng reputation để tăng quyền |
 | Frontend bị sửa / UI giả | Hiển thị sai số, dụ owner approve sai | Owner kiểm tra lại trên Snowtrace trước khi approve; UI chỉ là hiển thị, contract mới là thật |
-| Public API abuse | Người ngoài gọi propose/tool hợp lệ để tiêu ngân sách | Mission token + re-check mission ở mỗi call; demo công khai không nhận input tùy ý (05 §4a) |
+| Public API abuse | Người ngoài gọi propose/tool hợp lệ để tiêu ngân sách | Mission token + re-check mission ở mỗi call + operation binding (02 §9.7); demo công khai không nhận input tùy ý (05 §4a) |
+| Cross-mission operation reuse | Dùng lại operationId ở mission khác, hoặc retry khác payer/amount/payTo | Lookup (mission, operationId) + check global operationId + scope đầy đủ → `403`/`409`, không settle (02 §9.7, test V17–V19) |
 
 ## 6. Security checklist trước khi nộp — tick hết mới nộp
 
 - [ ] Không `.env`, không private key, không seed, không mission token trong repo, slides, video.
 - [ ] Không mainnet address/key trong code demo. Mọi address đều là Fuji.
 - [ ] Guard đã verify source trên Snowtrace.
-- [ ] C-series pass (`forge test`), V-series pass, L-series có tx hash — lệnh chạy ghi trong README. Không ghi "T1–T12 pass" chung chung nữa.
+- [ ] C-series pass (`forge test`), V-series pass (kể cả V13–V21 mới), L-series có tx hash — lệnh chạy ghi trong README. Không ghi "T1–T12 pass" chung chung nữa. **Không tick test nào chưa chạy thật.**
 - [ ] Attack test có số trước/sau cả hai bên + positive control, không chỉ có video.
 - [ ] Audit verify = true trên bản demo cuối (cả API và script độc lập), checkpoint hash ghi vào README nộp bài.
 - [ ] Mock/simulated ghi rõ ở mọi nơi dùng mock.
-- [ ] Owner tx do MetaMask ký, backend không giữ owner key; agent tx chỉ với mission token hợp lệ.
-- [ ] Queue không có auto-approve, pause không bypass authorization đã ký (ghi rõ giới hạn này).
+- [ ] Owner tx do MetaMask ký (S2), backend không giữ owner key; agent tx chỉ với mission token hợp lệ; S1 auth/pause không dùng guard.
+- [ ] Queue không có auto-approve, pause không bypass authorization đã ký (ghi rõ giới hạn này), và pause không chặn key holder ký trực tiếp.
+- [ ] ToolOperation persistence: held result + authorization + payment terms còn trong DB sau restart, reservation atomic, UNKNOWN giữ tới khi reconcile xong.
 - [ ] Mọi link nộp bài mở được ở chế độ ẩn danh (không cần login
       của team mới xem được) — test bằng trình duyệt ẩn danh.

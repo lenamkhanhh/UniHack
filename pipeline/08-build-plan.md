@@ -47,14 +47,19 @@ rộng trước — đừng cắt guard để giữ TalkMeter.
    Ghi rõ facilitator + x402 version + scheme thực tế đã dùng.
 3. **S1 trước:** làm tool server theo `02` (§3, §4, §9) + TalkMeter
    (§5, §9.5) + mission record off-chain + identity display.
-   Test V/L cho x402 + TalkMeter + operation idempotency.
+   S1 auth/pause là off-chain theo `05` §4b — không dùng guard ở S1.
+   Test V/L cho x402 + TalkMeter + operation idempotency + binding
+   (V13–V21).
 4. **S1 submission pack:** README-S1, video draft scene 1/2/6,
    checklist 07 §4b — để S1 có thể nộp ngay nếu phải cắt ở đây.
+   S1 pack phải nói rõ S1 chưa có guard, pause là flag DB.
 5. **S2 sau:** làm contract theo `01` (mission on-chain, state
    machine §6) + test C-series theo `06` §1, chạy `forge test`
-   cho tới khi C-series pass.
+   cho tới khi C-series pass. Sau đó làm cutover checklist `05` §4b
+   (migrate mission, đặt guard pause khớp S1, chuyển PAUSE_SOURCE,
+   kích hoạt lại token) trước khi chạy S2 tiếp.
 6. Làm validator BLOCK/QUEUE + proposer (LLM + scripted) + mission
-   token theo `04` và `05` §4a, test V-series theo `06` §2.
+   token theo `04` và `05` §4a–§4b, test V-series theo `06` §2.
 7. Làm app theo `05`, từng màn hình một: Dashboard (kèm mission
    card) → Queue (MetaMask) → Audit → Demo.
 8. **S3:** làm ERC-8004 feedback từ mission owner theo `03`, gắn
@@ -76,12 +81,14 @@ của spec cũ, đã sửa ở đây.
 - **S0 xong:** tx hash 402→pay→200 + agentId + facilitator/x402
   version thực tế, ghi vào README.
 - **S1 xong:** 3 tool mua live được, TalkMeter tick có tx,
-  operation idempotency + TalkMeter unique tick pass, mission record
-  off-chain có, S1 submission pack xong, không mock trong flow chính.
-- **S2 xong:** C-series + V-series pass, queue approve/reject chạy
-  bằng MetaMask, audit verify = true (API + script độc lập),
-  attack 3 đòn có số trước/sau + positive control.
-- **S3 xong:** video 2:30 đúng 6 scene, slides 11 slide, proof bundle
+  operation idempotency + binding + reservation atomic + UNKNOWN
+  recovery + restart persistence pass (V13–V21), mission record
+  off-chain có, S1 auth/pause off-chain đúng §4b, S1 submission pack
+  xong, không mock trong flow chính. Không tick test nào chưa chạy.
+- **S2 xong:** C-series + V-series pass, cutover checklist 05 §4b
+  xong, queue approve/reject chạy bằng MetaMask, audit verify = true
+  (API + script độc lập), attack 3 đòn có số trước/sau + positive control.
+- **S3 xong:** video 2:30 đúng 6 scene, slides 12 slide, proof bundle
   + verifier script, submission checklist 07 §4c tick hết, link mở
   được ẩn danh.
 - **S4 xong:** mỗi stretch có test riêng + không phá test cũ.
@@ -99,8 +106,15 @@ Nhờ GPT review đúng những điểm này, đừng nhờ review chung chung
 - [ ] Approve/execute sau expiry, execute lặp, recipient bị gỡ sau
   queue, policy đổi giữa propose và execute đã xử lý đúng 01 §6 chưa?
 - [ ] Tool payment có queue không? (MVP: không.)
-- [ ] Operation idempotency, reservation, UNKNOWN recovery, TalkMeter
-  unique tick đã đúng 02 §9 chưa?
+- [ ] Operation idempotency, reservation atomic, UNKNOWN recovery
+  (nonce chưa dùng ≠ FAILED, nonce đã dùng ≠ SETTLED), TalkMeter
+  unique tick, operation binding (mission/payer/tool/input/payment
+  terms), recovery endpoint có quyền đã đúng 02 §9 chưa?
+- [ ] S1 auth/pause có dùng guard không? (Phải là không — S1 là
+  off-chain, cutover checklist 05 §4b đã làm chưa?)
+- [ ] LLM compromise và key compromise có bị gộp không? (Phải tách —
+  toolCap off-chain không enforce với key holder, tổn thất tool tính
+  theo số dư ví tool.)
 - [ ] ERC-8004 ABI đúng chưa: getSummary 4 tham số, readFeedback/
   readAllFeedback (không phải getFeedback), feedback client là
   mission owner, feedback chỉ sau operation SETTLED?

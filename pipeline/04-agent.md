@@ -84,7 +84,7 @@ luật có mã lỗi riêng, ghi vào audit.
 |---|---|---|---|
 | B1 | Schema hợp lệ | JSON parse + schema §2 | `invalid_schema` |
 | B2 | Kind + tool hợp lệ | kind trong allowlist, tool_id trong catalog 02 §4 | `unknown_tool` |
-| B3 | Kill switch | Guard `paused()` == false | `paused` |
+| B3 | Kill switch | **S1:** flag `systemPaused` trong DB == false. **S2:** guard `paused()` == false. Nguồn pause theo stage, xem 05 §4b — không được check guard ở S1 khi chưa có guard | `paused` |
 | B4 | Mission hợp lệ | Mission tồn tại, chưa hết hạn, chưa đóng, agent đúng mission (xem §5); mission token hợp lệ (xem 05 §4) | `invalid_mission` / `mission_expired` / `mission_closed` / `not_mission_agent` |
 | B5 | Recipient allowlist (treasury) | `to` ∈ recipientAllowlist, full-address match | `not_allowlisted` |
 | B6 | Seller allowlist (tool) | tool_id + payTo ∈ tool allowlist, payTo lấy từ config server, không từ LLM, không từ request body | `seller_not_allowlisted` |
@@ -143,13 +143,17 @@ khác. Ghi rõ chế độ đang chạy ở UI (`LIVE LLM` / `SCRIPTED`).
   cũ bị chặn ở execute bởi hard check (01 §6).
 - **S1 fallback:** mission chỉ tồn tại off-chain (không có guard),
   nhưng vẫn có người giao, tool cap, expiry, và receipt — để S1
-  vẫn có trục mission mà không cần contract.
+  vẫn có trục mission mà không cần contract. Owner/auth/pause của
+  S1 định nghĩa ở 05 §4b, không dùng guard owner/paused ở S1.
 - Ý nghĩa pitch: quỹ nhóm không chỉ giới hạn "mỗi ngày bao nhiêu",
   mà còn "nhiệm vụ này tối đa bao nhiêu" — một mission bị LLM làm
   hỏng cũng không rút cạn quỹ ngày, và mọi khoản chi đều gắn với
   một nhiệm vụ cụ thể, không phải chi tiêu vô danh.
 
-## 6. Human queue — duyệt trong 1 click, không cần biết Solidity
+## 6. Human queue — duyệt trong 1 click, không cần biết Solidity (S2 trở đi)
+
+S1 không có queue on-chain (không có guard, tool payment cũng không
+queue). Mục này chỉ áp dụng từ S2.
 
 UI queue hiển thị mỗi proposal: id, to (link Snowtrace), amount,
 mission, reason, lý do vào queue (OverPerTxCap / OverDailyCap /
@@ -241,17 +245,29 @@ không ghi bí mật.
 
 **Câu pitch đúng (dùng nguyên văn, không nói rộng hơn):**
 "Chúng tôi không hứa LLM không bao giờ bị lừa. Chúng tôi chứng minh
-là bị lừa cũng không chuyển tới recipient trái phép, không vượt
-cap tự động, và không approve vô hạn — nhưng vẫn có thể mua tool
-hợp lệ nhưng vô ích trong cap, và agent key bị lộ vẫn propose được
-trong policy."
+là LLM bị lừa cũng không chuyển tới recipient trái phép, không vượt
+cap tự động, và không approve vô hạn — khi attacker chỉ điều khiển
+output LLM mà không có private key. Key agent bị lộ là trường hợp
+khác, xem dưới đây, và không được gộp vào câu này."
 
-**Mô hình tổn thất tối đa (ghi thành bảng trong pitch nếu cần):**
+**Tách hai trường hợp — không được gộp (xem 06 §5):**
 
-- Tới attacker ngoài allowlist qua treasury auto: 0, vì recipient
-  check là hard.
-- Lãng phí qua allowlisted recipient / tool hợp lệ nhưng vô ích:
-  tối đa dailyCap treasury + toolCap mission trong kỳ, nếu agent
-  key bị lộ và attacker propose liên tục trong policy.
+- **LLM compromise (không có key):** attacker chỉ điều khiển output
+  LLM, vẫn phải đi qua validator + guard + server API. Tổn thất tối
+  đa: treasury auto tới allowlisted recipient trong dailyCap /
+  mission treasury cap; tool tới allowlisted seller trong toolCap /
+  session cap / per-call cap.
+- **Private-key compromise (có agent key):** attacker bypass toàn bộ
+  off-chain enforcement cho tool payment — ký EIP-3009 trực tiếp
+  tới bất kỳ payTo nào, bất kỳ amount nào, không qua validator.
+  Tổn thất tối đa cho tool = **toàn bộ số dư ví tool tại thời điểm
+  bị lộ, cộng mọi lần nạp thêm trước khi phát hiện/đóng mission**.
+  Treasury vẫn được guard bảo vệ (không rút trực tiếp, auto vẫn bị
+  allowlist + cap on-chain chặn), trừ khi attacker đã nằm trong
+  allowlist.
+- **Giả định nạp tiền:** MVP không auto-refill ví tool. Refill chỉ
+  bằng treasury payout do owner duyệt, mỗi lần refill tăng exposure
+  thêm đúng số refill đó.
 - Quỹ trong guard không bị rút trực tiếp bởi agent key: đúng, vì
-  không có hàm rút cho agent.
+  không có hàm rút cho agent — nhưng điều này không nói gì về ví
+  tool, và không được dùng để claim toolCap vẫn enforce với key holder.

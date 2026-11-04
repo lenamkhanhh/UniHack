@@ -1,11 +1,15 @@
 # Spike checklist — 2 days to decide hybrid vs Rails + TalkMeter
 
-**Note (review 2026-11-04, pipeline/10-review-response.md):** this
-checklist is the spike shorthand. The full, authoritative test matrix
-is `pipeline/06-tests-security.md` with C (contract/forge), V
-(validator/API integration), and L (live Fuji) series. T-numbers
-below map to 06 §1–§3; where they differ, 06 wins. Do not treat
-this file as a second test spec.
+**Note (review 2026-11-04, pipeline/10-review-response.md, plus
+addendum A1–A5):** this checklist is the spike shorthand. The full,
+authoritative test matrix is `pipeline/06-tests-security.md` with C
+(contract/forge), V (validator/API integration), and L (live Fuji)
+series. T-numbers below map to 06 §1–§3; where they differ, 06 wins.
+Do not treat this file as a second test spec. Day 1 (S1) pause is
+the DB flag, not guard pause — see 05 §4b. Operation tests V13–V21
+(concurrent reservation, UNKNOWN recovery, restart, cross-mission
+reuse, S1 auth/pause, activation binding) are part of S1 DoD, not
+spike gates, but the spike must not contradict them.
 
 **Decision rule (agreed 2026-11-04):** run this spike first. If every
 gate below passes, build the Guarded Agent Economy hybrid. If the

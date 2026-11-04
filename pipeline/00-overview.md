@@ -195,16 +195,24 @@ tương ứng với từng mục.
 5. Facilitator là bên thứ ba: nó không sửa được amount/destination
    trong EIP-3009 đã ký, nhưng nó có thể down — vì vậy tx hash phải
    ghi lại sớm, không dựa vào demo live duy nhất.
-6. Pause không thu hồi authorization x402 đã ký trong 60s TTL.
-   Settlement sau pause phải ghi là `SETTLED_AFTER_PAUSE`.
+6. Pause không thu hồi authorization x402 đã ký trong 60s TTL, và
+   không chặn key holder ký trực tiếp ngoài server. Settlement sau
+   pause phải ghi là `SETTLED_AFTER_PAUSE`.
 7. Hash chain chứng minh integrity + consistency của ledger hiện
    tại, không chứng minh lịch sử chưa từng bị viết lại, và không
    chứng minh chất lượng câu trả lời của agent.
-8. Claim an toàn đúng: bị lừa cũng không chuyển tới recipient trái
-   phép, không vượt cap tự động, không approve vô hạn — nhưng vẫn
-   có thể mua tool hợp lệ nhưng vô ích trong cap, và agent key bị
-   lộ vẫn propose được trong policy. "0 mất" chỉ là kết quả của các
-   kịch bản attack đã chạy, không phải chứng minh tổng quát.
-9. Owner là bên được tin cậy cho ngoại lệ (approve vượt cap) và cho
+8. Claim an toàn đúng, tách hai trường hợp: LLM bị lừa (không có key)
+   thì không chuyển tới recipient trái phép, không vượt cap tự động,
+   không approve vô hạn. Key agent bị lộ là trường hợp khác: toolCap
+   off-chain không còn enforce được, tổn thất tool tối đa = toàn bộ
+   số dư ví tool + mọi lần refill trước khi đóng mission. "0 mất"
+   chỉ là kết quả của các kịch bản attack đã chạy, không phải chứng
+   minh tổng quát.
+9. UNKNOWN không tự thành FAILED/SETTLED: nonce chưa dùng không
+   chứng minh thất bại, nonce đã dùng không chứng minh thành công
+   (có thể là cancel) — chỉ receipt mới kết luận, xem 02 §9.4.
+10. S1 chưa có guard: owner/auth/pause của S1 là off-chain (05 §4b),
+    không được giả vờ S1 có guard owner/paused. S2 mới dùng guard.
+11. Owner là bên được tin cậy cho ngoại lệ (approve vượt cap) và cho
    emergency withdraw khi paused. Guard bảo vệ quỹ khỏi agent/LLM,
    không bảo vệ khỏi chính owner.

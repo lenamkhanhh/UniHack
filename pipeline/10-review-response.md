@@ -482,3 +482,211 @@ scheme thực tế đã dùng, không chỉ ghi tên facilitator.
 **B6. Owner transfer và deployer = agent — đã chốt.**
 Deployer là owner, agent là ví khác, không dùng chung. Owner
 transfer không nằm trong MVP (không test, không demo).
+
+---
+
+# Addendum — Lượt review nhỏ trước khi giao Gemini (base commit 56939ab)
+
+**HEAD đã kiểm tra trước khi sửa:** local và remote đều là
+`56939abd45030d9538c5dce3309402284ba4c883`, working tree sạch,
+không có thay đổi mới nào để ghi đè. Lượt này giữ nguyên hướng
+sản phẩm và scope, chưa implement app, chưa deploy contract.
+
+## A1. Nonce chưa dùng sau timeout không chứng minh payment thất bại — ACCEPT
+
+**Spec cũ sai ở đâu:**
+
+- `pipeline/02-x402-tools.md` §9.4 (tại 56939ab): "Nonce chưa dùng
+  → operation chuyển sang FAILED, reservation được trả lại, client
+  có thể bắt đầu operation mới." Điều này sai vì authorization vẫn
+  có thể settle sau đó, trong cửa sổ `validBefore`.
+- Cũng tại §9.4: "nonce đã dùng → authorization đã settle, trả kết
+  quả đã giữ" — sai vì nonce EIP-3009 chuyển `false → true` qua
+  cả transfer, receive, **và cancel**. Bằng chứng: EIP-3009 định
+  nghĩa `authorizationState(authorizer, nonce)`, `transferWithAuthorization`
+  và `cancelAuthorization(authorizer, nonce, …)`; nonce bị đánh dấu
+  đã dùng khi bị cancel mà không có transfer nào xảy ra. Ngoài ra
+  cửa sổ hợp lệ là `block.timestamp > validAfter` **và**
+  `block.timestamp < validBefore` (strict), nên wall-clock vượt 60s
+  không tự nó kết luận được gì — phải đối chiếu block timestamp
+  trên chain.
+
+**Quyết định sau sửa (xem 02 §9.2, §9.4):**
+
+- Phân biệt SETTLING (facilitator đã ack, có tx hash, đang chờ
+  receipt) và UNKNOWN (không có ack, không biết đã submit hay chưa).
+- UNKNOWN giữ nguyên trạng thái và giữ reservation cho tới khi một
+  trong hai điều kiện xảy ra: (a) receipt settlement xác nhận được
+  (tx receipt có Transfer từ payer tới payTo đúng amount, và/hoặc
+  event AuthorizationUsed cho (authorizer, nonce) nếu contract
+  deploy emit nó) → SETTLED; (b) block timestamp mới nhất trên chain
+  đã **vượt** `validBefore` **và** tại thời điểm đó nonce vẫn chưa
+  dùng → FAILED, lúc đó mới giải phóng reservation.
+- Nonce đã dùng nhưng không tra được receipt/event nào → giữ
+  UNKNOWN, không trả kết quả, không giải phóng reservation, không
+  bịa tx hash. Trường hợp này cần đối chiếu thủ công (facilitator
+  dashboard / Snowtrace); nếu event AuthorizationCanceled cho
+  (authorizer, nonce) được tìm thấy thì mới chuyển FAILED.
+- Không giải phóng reservation chỉ vì wall-clock vượt 60s. Reservation
+  hết hạn khi và chỉ khi đã reconcile xong trên chain theo quy tắc
+  trên.
+
+## A2. S1 không có guard nhưng auth/pause vẫn gọi guard — ACCEPT
+
+**Spec cũ mâu thuẫn ở đâu:**
+
+- `pipeline/04-agent.md` §3 B3: kill switch check `guard.paused()`.
+- `pipeline/05-app.md` §4a: verify mission token bằng cách đối chiếu
+  owner với `owner()` của guard.
+- Cả hai đều vô nghĩa ở S1, khi guard chưa deploy. Spec cũ chỉ nói
+  "S1 mission chỉ tồn tại off-chain" (04 §5) mà không định nghĩa
+  owner/auth/pause của S1, cũng không nói cách chuyển sang S2.
+
+**Quyết định sau sửa (xem 05 §4a–§4b, 04 §3 B3, 01 §5, 08 §3):**
+
+- **S1 owner:** địa chỉ owner ghi trong mission record off-chain
+  lúc tạo mission, và phải trùng `OWNER_ADDRESS` cấu hình deploy
+  (ví sẽ trở thành guard owner ở S2). Không đọc từ contract vì
+  chưa có contract.
+- **S1 pause:** flag `systemPaused` lưu trong DB (một row duy nhất,
+  owner toggle bằng chữ ký, không phải bằng transaction). Pre-flight
+  S1 check flag này, không check guard.
+- **S2 pause:** `guard.paused()` on-chain. Tại cutover S1→S2: deploy
+  guard với owner = S1 owner, tạo mission on-chain khớp mission
+  off-chain (cùng slug → bytes32, agent, cap, expiry chưa qua),
+  đặt guard pause = trạng thái S1 pause lúc đó, rồi chuyển config
+  `PAUSE_SOURCE` từ `db` sang `guard`. Từ đó flag DB không còn
+  được consult nữa.
+- **Activation signature, chốt đầy đủ (05 §4b):** message EIP-191
+  personal_sign có đúng các field sau, theo đúng thứ tự và format
+  này, không tự thêm/bớt field khi implement:
+  `Guarded Agent Economy — mission activation` +
+  `mission: <slug>` + `agent: <checksummed>` +
+  `treasuryCap: <atomic>` + `toolCap: <atomic>` +
+  `nonce: <hex>` + `expiresAt: <unix>` + `chain: fuji-43113` +
+  `domain: <app origin đã cấu hình>`.
+  Nonce do server cấp qua `POST /api/missions/:slug/nonce`, dùng
+  một lần, hết hạn 10 phút; nonce đã dùng hoặc hết hạn → từ chối.
+  Token HMAC scope = đúng một mission, expiry = mission expiry,
+  và server vẫn re-check mission status ở mỗi call. Token payload
+  phải khớp mission record (slug, missionId, agent, cap); cap đổi
+  thì token cũ vô hiệu, phải kích hoạt lại.
+
+## A3. ToolOperation chưa lưu đủ dữ liệu recovery — ACCEPT
+
+**Spec cũ thiếu ở đâu:**
+
+- `pipeline/05-app.md` §3 (tại 56939ab): `ToolOperation` chỉ có
+  operationId, toolId, inputHash, state, reservedAmount, txHash,
+  missionId, sessionId, minuteIndex. Không có held result,
+  authorization (nonce/payer/validity/signature), payment terms,
+  facilitator record, hay reconcile state — nên server restart giữa
+  SETTLING/UNKNOWN là mất khả năng recovery, và held result chỉ
+  tồn tại "trong bộ nhớ, TTL ngắn" (02 §9.1) là không đủ.
+- Reservation cũng chưa được định nghĩa là atomic: hai operation
+  khác nhau gửi đồng thời có thể cùng pass check cap rồi cùng
+  trừ, vượt cap.
+
+**Quyết định sau sửa (xem 05 §3, 02 §9.1–§9.2):**
+
+- Mở rộng `ToolOperation` với: `payerAddress`, `paymentTerms`
+  (price, asset, payTo, network, scheme, maxTimeoutSeconds, dạng
+  JSON), `authNonce`, `authFrom`, `authTo`, `authValue`,
+  `validAfter`, `validBefore`, `authSignature` (server-only, không
+  bao giờ trả ra frontend), `heldResult` + `heldResultHash`,
+  `facilitatorName`, `facilitatorTxHash`, `lastReconciledAt`,
+  `reconcileCount`, `lastReconcileBlockTimestamp`, và
+  `operationKey` = hash của (mission, operationId) để lookup.
+- Held result phải được ghi vào DB **trong cùng transaction** với
+  reservation, trước khi 402 được phát hành. Nếu ghi held result
+  thất bại thì không có RESERVED, không có 402. Held result sống
+  cùng vòng đời operation, không phải TTL bộ nhớ ngắn.
+- Reservation atomic: một DB transaction duy nhất — lock row
+  mission (`SELECT … FOR UPDATE` trong transaction Postgres),
+  đọc spent/reserved, check available, rồi mới tạo operation
+  RESERVED và tăng `reservedTool`. Không có lock thì test
+  concurrent ở A3 sẽ fail, và đó là fail đúng.
+- Authorization và signature lưu server-only: GET operation không
+  bao giờ trả chúng ra, chỉ trả state, txHash, và (khi SETTLED và
+  có quyền) held result.
+
+## A4. Threat model phải tách LLM compromise khỏi private-key compromise — ACCEPT
+
+**Spec cũ sai ở đâu:**
+
+- `pipeline/06-tests-security.md` §5 (tại 56939ab): row "Agent key
+  bị lộ" ghi tổn thất tối đa là `dailyCap + toolCap trong kỳ`.
+  Điều này đúng cho treasury (guard enforce on-chain) nhưng sai
+  cho tool wallet: attacker giữ agent private key không cần đi qua
+  API/validator, ký EIP-3009 trực tiếp tới bất kỳ payTo nào, với
+  bất kỳ amount nào, và rút toàn bộ số dư ví tool. ToolCap,
+  session cap, tool allowlist, velocity — tất cả đều là off-chain,
+  chỉ enforce được với luồng đi qua server.
+- Spec cũ cũng gộp LLM compromise và key compromise vào cùng một
+  câu "agent key bị lộ vẫn propose được trong policy" (04 §8),
+  làm mờ ranh giới quan trọng nhất: LLM bị lừa thì vẫn bị validator
+  chặn, key bị lộ thì validator không còn đứng giữa nữa.
+
+**Quyết định sau sửa (xem 06 §5, 04 §8, 00 §10):**
+
+- **LLM compromise (không có key):** attacker chỉ điều khiển output
+  LLM, vẫn phải đi qua validator + guard + server API. Tổn thất
+  tối đa: treasury auto tới allowlisted recipient, trong
+  dailyCap/mission treasury cap; tool tới allowlisted seller, trong
+  toolCap/session cap/per-call cap. Đây là trường hợp mà validator
+  còn có tác dụng.
+- **Private-key compromise (có agent key):** attacker bypass toàn
+  bộ off-chain enforcement cho tool payment. Tổn thất tối đa cho
+  tool = **toàn bộ số dư ví tool tại thời điểm bị lộ, cộng mọi
+  lần nạp thêm trước khi phát hiện/đóng mission**. Treasury vẫn
+  được guard bảo vệ: không rút trực tiếp, auto-execution vẫn bị
+  allowlist + per-tx + daily + mission cap on-chain chặn, trừ khi
+  attacker đã nằm trong allowlist.
+- **Giả định nạp tiền, nói rõ:** MVP không auto-refill ví tool.
+  Refill chỉ bằng treasury payout do owner duyệt. Mỗi lần refill
+  tăng exposure thêm đúng số refill đó. Nếu team thêm auto-refill
+  thì mô hình tổn thất này vỡ — không làm auto-refill trong MVP.
+- **Ngày UTC:** key holder có thể auto-execute tới dailyCap mỗi
+  ngày UTC (kẽ hở qua nửa đêm vẫn còn), nhưng mission treasury cap
+  là tổng cho cả mission, không reset theo ngày — nên tổng treasury
+  auto cho một mission vẫn bị mission cap chặn, trừ khi owner tạo
+  mission mới.
+- **Sau khi phát hiện key lộ:** đóng mission ngay (revoke token,
+  server ngừng dùng key đó), tạo mission mới với ví agent mới,
+  không refill ví cũ. Số dư còn lại trong ví cũ không thu hồi được
+  bằng guard hay pause — pause không chặn được attacker ký trực tiếp.
+
+## A5. Ràng buộc operationId với mission, caller/payer, tool, input, payment terms — ACCEPT
+
+**Spec cũ thiếu ở đâu:**
+
+- `pipeline/02-x402-tools.md` §9.3 (tại 56939ab): retry chỉ check
+  operationId + inputHash. Không ràng buộc mission, payer, payment
+  terms — nên cùng operationId có thể bị dùng lại ở mission khác,
+  hoặc retry với payer/amount/payTo khác vẫn được xử lý.
+- `GET /api/tools/operations/:operationId` không yêu cầu quyền —
+  ai đoán được operationId cũng tra được trạng thái, tx hash, và
+  (khi SETTLED) kết quả.
+
+**Quyết định sau sửa (xem 02 §9.3, §9.7; 05 §4):**
+
+- Operation identity đầy đủ là bộ 6: (mission, operationId, payer,
+  tool, inputHash, paymentTermsHash). Lookup chính là
+  (missionSlug, operationId), và server đồng thời check index
+  global: operationId đã tồn tại ở mission khác → `409`
+  cross-mission reuse, không tạo operation mới.
+- Paid retry phải khớp **tất cả**: mission từ token (không từ body),
+  payer = `auth.from` = mission agent = operation payer, toolId từ
+  path, inputHash tính lại từ input, payment terms (amount, payTo,
+  asset, network, scheme) khớp operation đã lưu. Khác bất kỳ field
+  nào: mission/payer khác → `403`; input/payment terms khác →
+  `409`. Không settle payment không khớp scope, không tạo operation
+  mới từ retry sai scope.
+- TalkMeter session cũng bind mission: session tạo dưới mission
+  token nào thì tick/stop phải dùng đúng token mission đó.
+- Recovery/result endpoint kiểm tra quyền: `GET /api/tools/operations/:operationId`
+  và việc trả held result đều yêu cầu mission token của đúng mission
+  của operation đó. Không token → `401`; token của mission khác →
+  `403`. Không token thì không được biết operation tồn tại hay không
+  (trả 401 chung, không phân biệt "không tồn tại" với "không có quyền"
+  trong response chi tiết — ít nhất không lộ held result hay tx hash).

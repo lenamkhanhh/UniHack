@@ -143,7 +143,7 @@ TalkMeter trong hybrid **không** phải app họp đầy đủ. Nó là:
 - Quá session cap → dừng, không ký thêm phút nào.
 - Quá 10 tick/phút bất thường (tick dồn, clock sai) → dừng session,
   ghi audit `velocity_circuit_breaker`.
-- Guard paused → TalkMeter tick cũng dừng (pre-flight check paused).
+- Pause (S1: flag DB, S2: guard paused) → TalkMeter tick cũng dừng (pre-flight check paused, nguồn pause theo stage, xem 05 §4b).
 
 ## 6. Pre-flight cho tool payment — 5 luật, chạy trước mọi lần ký
 
@@ -154,7 +154,7 @@ cách đúng là duyệt một treasury payout để nạp tiền vào ví tool 
 agent trước, rồi tool payment mới chạy; không queue chính tool
 payment đó.
 
-1. `kill_switch`: guard paused → không tạo reservation mới, không ký.
+1. `kill_switch`: paused → không tạo reservation mới, không ký. Nguồn pause theo stage: S1 = flag DB, S2 = guard `paused()` (xem 05 §4b).
 2. `host_not_allowlisted`: tool ID + seller không nằm trong allowlist → không ký.
 3. `per_call_cap`: giá > per-call cap của tool → không ký.
 4. `velocity_circuit_breaker`: quá số call/phút cho phép → không ký.
@@ -174,7 +174,7 @@ POST /api/tools/talkmeter/start  { title }       -> { sessionId, cap, rate }
 POST /api/tools/talkmeter/tick   { sessionId }   -> 402 hoặc 200 + receipt (mỗi phút)
 POST /api/tools/talkmeter/stop   { sessionId }   -> { minutes, total, txHashes[] }
 GET  /api/tools              -> catalog 3 tool + giá + payTo (không lộ key)
-GET  /api/tools/operations/:operationId -> trạng thái operation + txHash nếu có (xem §9)
+GET  /api/tools/operations/:operationId -> trạng thái operation + txHash nếu có, yêu cầu mission token đúng mission (xem §9.7)
 ```
 
 **Lỗi trả về phải rõ:** `402` = chưa trả tiền, `402` lại sau khi
@@ -184,33 +184,56 @@ down. Đừng trả `500` chung cho mọi thứ rồi để giám khảo đoán.
 
 ## 9. x402 lifecycle, idempotency và reservation — bắt buộc, không phải nâng cao
 
-### 9.1. Operation và trạng thái
+### 9.1. Operation, trạng thái và dữ liệu phải lưu (persistence)
 
-Mỗi lần mua tool là một operation, xác định bởi `operationId`:
+Mỗi lần mua tool là một operation. Operation identity đầy đủ là
+bộ 6 (xem §9.7): (mission, operationId, payer, tool, inputHash,
+paymentTermsHash). Client tạo UUIDv4, gửi header `X-Operation-Id`
+ở cả request chưa trả tiền và request đã trả tiền. Nếu client
+không gửi, server tạo một ID và trả về trong 402 — nhưng lúc đó
+retry mà không gửi lại ID đó sẽ tạo operation mới, không được
+idempotency.
 
-- Client tạo UUIDv4, gửi header `X-Operation-Id` ở cả request chưa
-  trả tiền và request đã trả tiền. Nếu client không gửi, server tạo
-  một ID và trả về trong 402 — nhưng lúc đó retry mà không gửi lại
-  ID đó sẽ tạo operation mới, không được idempotency.
-- Server lưu operation với: `operationId`, `toolId`, `inputHash`
-  (hash của input đã normalize: query/text đã trim, không chứa
-  secret), `state`, `reservedAmount`, `txHash`, `sessionId`,
-  `minuteIndex` (chỉ TalkMeter), `missionId`, `createdAt`.
+Server lưu operation trong DB (schema đầy đủ ở 05 §3), **không**
+lưu trạng thái hay held result trong bộ nhớ:
+
+- Identity/scope: `missionSlug`, `missionIdBytes32`, `operationId`,
+  `payerAddress` (agent address), `toolId`, `inputHash` (hash của
+  input đã normalize: query/text đã trim, không chứa secret),
+  `paymentTerms` (price, asset, payTo, network, scheme,
+  maxTimeoutSeconds, dạng JSON), `paymentTermsHash`.
+- Authorization (server-only, không bao giờ trả ra frontend):
+  `authNonce`, `authFrom`, `authTo`, `authValue`, `validAfter`,
+  `validBefore`, `authSignature` (v/r/s).
+- Held result: `heldResult` (kết quả tool đầy đủ, dạng JSON/text)
+  và `heldResultHash`. Held result phải được ghi vào DB **trong
+  cùng transaction** với reservation, trước khi 402 được phát hành.
+  Nếu ghi held result thất bại thì không có RESERVED, không có 402.
+  Held result sống cùng vòng đời operation, không phải TTL bộ nhớ
+  ngắn — server restart giữa RESERVED/SETTLING/UNKNOWN vẫn phải
+  trả lại đúng kết quả đã giữ sau khi settlement xác nhận.
+- Recovery: `facilitatorName`, `facilitatorTxHash` (nếu facilitator
+  đã ack), `lastReconciledAt`, `reconcileCount`,
+  `lastReconcileBlockTimestamp`, `state`, `reservedAmount`,
+  `txHash`, `sessionId`, `minuteIndex` (chỉ TalkMeter), `createdAt`.
 
 Trạng thái, theo đúng thứ tự này:
 
 ```
 CREATED     — 402 đã phát hành, chưa có reservation, chưa có payment
-RESERVED    — upstream đã chạy nội bộ thành công, kết quả đang giữ,
-              budget đã trừ vào reserved, chờ client trả tiền
+RESERVED    — upstream đã chạy nội bộ thành công, kết quả đã giữ
+              trong DB, budget đã trừ vào reserved, chờ client trả tiền
 SIGNED      — đã nhận X-PAYMENT, authorization verify pass, chưa settle
-SETTLING    — facilitator đã nhận và đang submit settlement
-SETTLED     — settlement confirmed, kết quả đã giữ được trả, reserved → spent
-FAILED      — upstream lỗi, verify lỗi, settle lỗi, hoặc hết hạn 60s
-UNKNOWN     — facilitator timeout / response mất sau khi đã submit
+SETTLING    — facilitator đã ack submission (có tx hash), đang chờ receipt
+SETTLED     — settlement confirmed bằng receipt, kết quả đã giữ được trả, reserved → spent
+FAILED      — upstream lỗi, verify lỗi, settle lỗi đã reconcile, hoặc
+              authorization hết hạn đã reconcile (xem §9.4)
+UNKNOWN     — facilitator timeout / response mất, chưa có ack, chưa biết
+              đã submit hay chưa — giữ nguyên trạng thái và reservation
+              cho tới khi reconcile xong theo §9.4, không tự chuyển FAILED
 ```
 
-### 9.2. Budget: spent + reserved
+### 9.2. Budget và reservation atomic
 
 Budget khả dụng cho mission tool cap và cho session cap tính như sau:
 
@@ -219,41 +242,100 @@ available = cap − spent − reserved
 ```
 
 - Reservation tạo khi chuyển sang RESERVED, với amount = giá tool.
-- Reservation hết hạn khi authorization hết hạn (60s) hoặc khi
-  operation chuyển sang FAILED — lúc đó reserved được trả lại.
+- Reservation **atomic, bắt buộc**: một DB transaction duy nhất —
+  lock row mission (`SELECT … FOR UPDATE` trong transaction
+  Postgres), đọc spent/reserved, check available, rồi mới tạo
+  operation RESERVED và tăng `reservedTool`. Không có lock thì hai
+  operation khác nhau gửi đồng thời có thể cùng pass check rồi
+  cùng trừ, vượt cap — đó là lỗi, không phải race hiếm.
+- Reservation **không** hết hạn chỉ vì wall-clock vượt 60s.
+  Reservation được giải phóng khi và chỉ khi operation chuyển
+  sang FAILED sau khi đã reconcile trên chain (xem §9.4), hoặc
+  chuyển thành spent khi SETTLED. Không có đường giải phóng nào
+  khác.
 - Reservation chuyển thành spent khi SETTLED, không cộng hai lần.
 
 ### 9.3. Retry và idempotency — không ký payment mới bừa
 
-- Cùng `operationId` + cùng `inputHash`:
+Retry phải khớp **toàn bộ scope**, không chỉ operationId + input:
+
+- Lookup chính là (missionSlug từ token, operationId). Đồng thời
+  check index global: operationId đã tồn tại ở mission khác →
+  `409` cross-mission reuse, không tạo operation mới.
+- Cùng mission + operationId + cùng inputHash + cùng payment terms
+  + cùng payer:
   - Đang RESERVED → trả lại 402 cũ (cùng amount, payTo, asset).
-  - Đã SETTLED → trả lại kết quả cũ + tx hash cũ, không ký mới.
+  - Đã SETTLED → trả lại kết quả cũ + tx hash cũ, không ký mới
+    (và chỉ trả khi caller có quyền, xem §9.7).
   - Đang SETTLING/UNKNOWN → không ký mới, trả trạng thái hiện tại
     và hướng dẫn gọi recovery (xem §9.4).
-- Cùng `operationId` + `inputHash` khác → `409`, không chạy.
+- Mission khác, hoặc payer khác (`auth.from` ≠ mission agent ≠
+  operation payer) → `403`, không settle, không tạo operation mới.
+- Input khác, hoặc payment terms khác (amount, payTo, asset,
+  network, scheme) → `409`, không chạy.
 - Operation khác nhau nhưng cùng input thì là hai lần mua riêng —
-  idempotency chỉ theo operationId, không theo input.
+  idempotency chỉ theo (mission, operationId, scope), không theo
+  input đơn thuần.
 
-### 9.4. Recovery khi settlement UNKNOWN — ngăn charge hai lần
+### 9.4. Recovery khi settlement UNKNOWN — ngăn charge hai lần và ngăn trả kết quả miễn phí
 
-Khi facilitator timeout hoặc response mất sau khi đã submit:
+Khi facilitator timeout hoặc response mất:
 
 1. Không ký authorization mới, không tạo operation mới cho cùng
-   việc đó.
-2. Server check `authorizationState(authorizer, nonce)` trên USDC
-   Fuji: nonce đã dùng → authorization đã settle, không charge lại.
-   Server trả kết quả đã giữ, audit ghi `SETTLED` với ghi chú
-   "tx hash đang tra lại từ facilitator" nếu facilitator chưa trả
-   tx hash — **không bịa tx hash**.
-3. Nonce chưa dùng → operation chuyển sang FAILED, reservation
-   được trả lại, client có thể bắt đầu operation mới.
-4. Endpoint `GET /api/tools/operations/:operationId` là nơi duy
-   nhất client tra trạng thái recovery, không phải đoán từ lỗi.
+   việc đó. Operation giữ nguyên UNKNOWN và giữ reservation.
+2. Phân biệt SETTLING và UNKNOWN: SETTLING đã có facilitator tx
+   hash → poll receipt của tx đó. UNKNOWN chưa có tx hash → chưa
+   biết đã submit hay chưa, không được suy ra từ nonce.
+3. **Nonce chưa dùng không chứng minh payment thất bại.** Nonce
+   chưa dùng chỉ có nghĩa là tại thời điểm check, authorization
+   chưa được tiêu thụ — facilitator vẫn có thể submit nó trước
+   `validBefore`. Vì vậy: nếu block timestamp mới nhất trên chain
+   chưa vượt `validBefore` thì giữ UNKNOWN, không chuyển FAILED,
+   không giải phóng reservation, không cho client bắt đầu lại bằng
+   authorization mới cho cùng việc (authorization mới sẽ là một
+   operation mới, nhưng operation cũ vẫn giữ reservation cho tới
+   khi reconcile — client phải chờ reconcile, không được double-spend
+   ngân sách bằng cách tạo operation mới lén).
+4. **Nonce đã dùng không chứng minh payment thành công.** Theo
+   EIP-3009, nonce chuyển `false → true` qua cả transfer, receive,
+   **và cancel** (`cancelAuthorization` đánh dấu nonce đã dùng mà
+   không chuyển tiền). Vì vậy nonce đã dùng chỉ là tín hiệu để đi
+   tìm receipt, không phải bằng chứng settlement.
+5. **Chỉ chuyển SETTLED khi có receipt xác nhận:** tx receipt có
+   Transfer từ payer tới payTo đúng amount, với tx hash khớp
+   facilitator tx (nếu có), và/hoặc event AuthorizationUsed cho
+   (authorizer, nonce) nếu contract deploy emit nó. Nếu tìm thấy
+   event AuthorizationCanceled cho (authorizer, nonce) thì chuyển
+   FAILED (authorization đã bị hủy, không có transfer).
+6. **Không tra được receipt/event nào → giữ UNKNOWN.** Không trả
+   kết quả đã giữ (trả kết quả khi chưa chắc đã trả tiền là cho
+   miễn phí), không giải phóng reservation, không bịa tx hash.
+   Trường hợp này cần đối chiếu thủ công (facilitator dashboard /
+   Snowtrace) và ghi audit rõ là `UNKNOWN — manual reconciliation
+   required`.
+7. **Chỉ chuyển FAILED khi đã reconcile xong:** block timestamp
+   mới nhất trên chain đã vượt `validBefore` (so bằng block
+   timestamp, không phải wall-clock server — cửa sổ EIP-3009 là
+   `block.timestamp > validAfter` và `block.timestamp < validBefore`,
+   strict) **và** tại thời điểm đó nonce vẫn chưa dùng. Lúc đó
+   mới giải phóng reservation, client mới được bắt đầu operation
+   mới cho cùng việc.
+8. Reconcile được kích hoạt khi: client gọi
+   `GET /api/tools/operations/:operationId`, client retry operation
+   đang UNKNOWN, hoặc server tự chạy reconcile định kỳ (nếu có —
+   không bắt buộc cho MVP, nhưng lazy reconcile ở hai điểm trên
+   là bắt buộc). Mỗi lần reconcile ghi `lastReconciledAt`,
+   `reconcileCount`, `lastReconcileBlockTimestamp` vào operation.
+9. Endpoint `GET /api/tools/operations/:operationId` là nơi duy
+   nhất client tra trạng thái recovery, và nó kiểm tra quyền theo
+   §9.7 — không token đúng mission thì không được biết trạng thái.
 
-### 9.5. TalkMeter: unique (sessionId, minuteIndex), phút tính bằng server
+### 9.5. TalkMeter: unique (sessionId, minuteIndex), phút tính bằng server, session bind mission
 
 - `minuteIndex = floor((serverNow − startedAt) / 60)`, phút 0 là
   phút đầu tiên. Client không được gửi minuteIndex.
+- Session tạo dưới mission token nào thì tick/stop phải dùng đúng
+  token mission đó. Tick với token mission khác → `403`.
 - DB unique constraint trên `(sessionId, minuteIndex)`. Tick trùng
   phút đã trả → trả receipt cũ, không ký mới. Tick đồng thời cùng
   phút → một tick thắng unique constraint, tick còn lại nhận
@@ -263,19 +345,43 @@ Khi facilitator timeout hoặc response mất sau khi đã submit:
   session chuyển CAPPED, không ký thêm.
 - TalkMeter cũng là operation x402 bình thường: mỗi phút là một
   operation riêng, với `operationId` riêng, để idempotency và
-  recovery áp dụng y hệt.
+  recovery áp dụng y hệt, và operation đó cũng bind mission theo §9.7.
 
 ### 9.6. Pause và authorization đã ký — giới hạn phải nói đúng
 
-- Pause chặn: reservation mới, pre-flight mới, ký mới.
+- Pause chặn: reservation mới, pre-flight mới, ký mới **qua server API**.
 - Pause **không** thu hồi authorization đã ký và còn trong 60s TTL.
   Authorization đó vẫn có thể settle trước `validBefore`.
-- Rủi ro tồn đọng tối đa: một authorization / tool / phút, TTL 60s,
-  per-call cap, và reservation đã trừ vào tool cap — không phải
-  rủi ro không giới hạn.
+- Pause cũng **không** chặn attacker giữ agent private key ký trực
+  tiếp ngoài server (xem 06 §5, mục key compromise). Pause là kill
+  switch cho luồng qua server, không phải freeze ví agent.
+- Rủi ro tồn đọng tối đa qua server: một authorization / tool /
+  phút, TTL 60s, per-call cap, và reservation đã trừ vào tool cap —
+  không phải rủi ro không giới hạn. Rủi ro qua key lộ là riêng,
+  tính theo số dư ví tool (xem 06 §5).
 - Settlement nào rơi vào sau thời điểm pause phải ghi audit là
   `SETTLED_AFTER_PAUSE`, kèm thời gian pause và tx hash, không
   được giấu trong audit chung.
+
+### 9.7. Operation binding và quyền truy cập recovery/result
+
+- Operation identity đầy đủ: (missionSlug, operationId, payer,
+  toolId, inputHash, paymentTermsHash). Mọi endpoint operation
+  đều phải check đủ bộ này, không chỉ operationId.
+- Paid retry: mission lấy từ token (không từ body), payer lấy từ
+  `auth.from` và phải bằng mission agent và bằng operation payer,
+  tool lấy từ path, inputHash tính lại từ input, payment terms
+  lấy từ authorization và phải khớp operation đã lưu. Khác scope →
+  `403` (mission/payer) hoặc `409` (input/payment terms), không settle.
+- `GET /api/tools/operations/:operationId` và việc trả held result
+  sau SETTLED đều yêu cầu mission token của đúng mission của
+  operation đó. Không token → `401` chung (không phân biệt "không
+  tồn tại" với "không có quyền" bằng response chi tiết, và tuyệt
+  đối không lộ held result hay tx hash). Token của mission khác →
+  `403`.
+- Server không bao giờ trả `authSignature`, `authNonce` chi tiết
+  hay held result qua endpoint không có quyền. Các field server-only
+  trong 05 §3 chỉ dùng nội bộ cho recovery.
 
 ## 8. Test bắt buộc cho x402 (chi tiết ở 06)
 
@@ -285,8 +391,16 @@ Khi facilitator timeout hoặc response mất sau khi đã submit:
   không serve kết quả đã giữ.
 - Upstream fail → không charge, operation FAILED.
 - Over per-call cap / tool lạ → không ký, audit ghi BLOCK.
-- Idempotency: cùng operationId + cùng input → cùng receipt, không
-  charge hai lần; cùng operationId + input khác → 409.
+- Idempotency + binding: cùng mission + operationId + input + payment
+  terms + payer → cùng receipt, không charge hai lần; khác scope →
+  403/409, không settle (xem §9.7).
 - TalkMeter: tick trùng phút → receipt cũ; tick phút tương lai → reject.
-- Reservation: spent + reserved không vượt tool cap khi gửi concurrent.
+- Reservation atomic: hai operation khác nhau gửi đồng thời không
+  vượt tool cap (xem §9.2, test V13).
+- Recovery: UNKNOWN giữ reservation tới khi reconcile xong trên
+  chain; nonce chưa dùng không tự thành FAILED, nonce đã dùng không
+  tự thành SETTLED (xem §9.4, test V14–V16).
+- Restart: server restart giữa RESERVED/SETTLING/UNKNOWN vẫn trả
+  đúng held result sau settlement, vì held result nằm trong DB
+  (xem §9.1, test V17).
 - Mock mode ghi MOCK, live mode có tx hash — không lẫn hai mode.

@@ -163,7 +163,9 @@ function setRecipient(address r, bool allowed) external onlyOwner;
 function setMissionCap(bytes32 missionId, uint256 cap) external onlyOwner;
 // Không có setTool: tool allowlist là off-chain, không nằm trong guard (xem §3).
 
-// Kill switch. pause() chặn propose + execute + reservation/pre-flight mới (off-chain cũng check paused).
+// Kill switch (S2). pause() chặn propose + execute + reservation/pre-flight mới (off-chain cũng check paused).
+// S1 chưa có guard: pause là flag DB, xem 05 §4b. Không được check guard.paused() ở S1.
+// Pause không chặn key holder ký x402 trực tiếp ngoài server (xem 06 §5) — chỉ chặn luồng qua server/guard.
 // Pause KHÔNG thu hồi authorization x402 đã ký trong 60s TTL (xem 02 §9).
 // unpause() mở lại. Không có hàm nào bypass pause.
 function pause() external onlyOwner;

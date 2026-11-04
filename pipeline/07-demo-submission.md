@@ -51,11 +51,14 @@ demo riêng, không cắt scene 1–6 để nhét TalkMeter vào.
    tx → result hash.
 9. Attack đối chứng: naive mất bao nhiêu vs guarded mất bao nhiêu
    tới attacker (bảng số trước/sau, cùng intent/payload) + positive control.
+   Ghi rõ: attack này là LLM compromise (không có key). Key compromise
+   là trường hợp khác, tổn thất tool tính theo số dư ví tool — không
+   được dùng slide này để claim key lộ cũng chỉ mất trong cap.
 10. Audit ledger: hash chain verify = true (API + script độc lập),
     checkpoint hash, và giới hạn (integrity, không phải trustless).
 11. Roadmap / giới hạn trung thực: cái gì chưa làm (validation
     registry, rolling cap, multisig) + cái gì làm tiếp nếu có thời gian.
-11. Links: repo, app deploy, video, Snowtrace — tất cả mở được ẩn danh.
+12. Links: repo, app deploy, video, Snowtrace — tất cả mở được ẩn danh.
 
 **Cấm trong slides:** số liệu không có nguồn, ảnh chụp màn hình
 mock ghi như live, địa chỉ mainnet, claim "chống hack tuyệt đối".
@@ -78,11 +81,14 @@ mock ghi như live, địa chỉ mainnet, claim "chống hack tuyệt đối".
       facilitator + x402 version thực tế, mission record off-chain,
       cách chạy, bảng tx hash tool + TalkMeter, giới hạn trung thực.
 - [ ] Video: scene 1, 2 và 6 (scene 6 reframed thành meeting billing),
-      không quay scene guard/queue/feedback chưa xây.
+      không quay scene guard/queue/feedback chưa xây. Scene 6 ở S1 là
+      pause bằng flag DB, không phải pause bằng guard tx — nói đúng
+      nguồn pause, không giả vờ có guard tx.
 - [ ] Slides: không claim guard contract, human queue on-chain, hay
       ERC-8004 feedback nếu chưa xây. Ghi rõ S1 là gì và S2 sẽ thêm gì.
 - [ ] Supporting material: test V/L cho x402 + TalkMeter + operation
-      idempotency.
+      idempotency + binding + reservation atomic + UNKNOWN recovery
+      + restart persistence (V13–V21).
 
 ### 4c. Nếu nộp đủ S2/S3 — checklist đầy đủ
 
@@ -90,7 +96,7 @@ mock ghi như live, địa chỉ mainnet, claim "chống hack tuyệt đối".
       Snowtrace verify, agentId, facilitator + x402 version, mission
       demo, cách chạy, bảng tx hash, checkpoint hash audit, giới hạn
       trung thực (00 §10).
-- [ ] Video đủ 6 scene theo §1, slides đủ 11 slide theo §3.
+- [ ] Video đủ 6 scene theo §1, slides đủ 12 slide theo §3.
 - [ ] Supporting material: pipeline spec này (đã trong repo), test
       report (C/V/L output), attack test số liệu trước/sau +
       positive control.

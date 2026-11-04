@@ -32,12 +32,17 @@ agent mua công cụ để hoàn thành nhiệm vụ đó; mọi khoản chi đ�
 - **I5. Owner ký bằng MetaMask, backend không giữ owner key.**
   Backend chỉ ký agent tx khi có mission token hợp lệ, và vẫn
   re-check mission ở mỗi call. Không tin address do client gửi.
-- **I6. x402 idempotency + reservation.** OperationId + inputHash
-  quyết định retry. Budget khả dụng = cap − spent − reserved.
-  Upstream chạy nội bộ, kết quả giữ, settle confirmed mới trả.
-  UNKNOWN → không ký mới, recovery bằng nonce check.
-- **I7. Pause không thu hồi authorization đã ký trong 60s.**
-  Settlement sau pause ghi `SETTLED_AFTER_PAUSE`.
+- **I6. x402 idempotency + reservation atomic + binding.**
+  Operation identity = (mission, operationId, payer, tool, inputHash,
+  paymentTermsHash). Retry khác scope → 403/409, không settle.
+  Budget khả dụng = cap − spent − reserved, reservation trong một
+  DB transaction có row lock mission. Upstream chạy nội bộ, kết quả
+  giữ **trong DB** trước khi phát 402, settle confirmed mới trả.
+  UNKNOWN → không ký mới, không tự chuyển FAILED/SETTLED.
+- **I7. Pause không thu hồi authorization đã ký trong 60s, và
+  không chặn key holder ký trực tiếp.** Settlement sau pause ghi
+  `SETTLED_AFTER_PAUSE`. S1 pause = flag DB, S2 pause = guard —
+  xem 05 §4b, không dùng guard ở S1.
 - **I8. ERC-8004 đúng ABI deploy.** `getSummary` 4 tham số,
   `readFeedback`/`readAllFeedback` (không có `getFeedback`).
   Feedback client là mission owner, chỉ sau operation SETTLED,
@@ -49,6 +54,26 @@ agent mua công cụ để hoàn thành nhiệm vụ đó; mọi khoản chi đ�
   tiền", không nói "0 mất" chung chung, không nói hash chain là
   trustless, không nói reputation chống Sybil. Câu đúng ở 00 §10
   và 04 §8.
+- **I11. Nonce recovery đúng EIP-3009.** Nonce chưa dùng không
+  chứng minh thất bại; nonce đã dùng không chứng minh thành công
+  (có thể là cancel). Chỉ SETTLED khi có receipt Transfer đúng
+  payer/payTo/amount; chỉ FAILED khi block timestamp đã vượt
+  validBefore và nonce vẫn chưa dùng, hoặc có AuthorizationCanceled.
+  Không giải phóng reservation vì wall-clock vượt 60s.
+- **I12. LLM compromise ≠ key compromise.** LLM bị lừa thì validator
+  còn chặn. Key agent bị lộ thì toolCap/allowlist off-chain không
+  còn tác dụng — tổn thất tool tối đa = toàn bộ số dư ví tool +
+  mọi lần refill trước khi đóng mission. Không auto-refill ví tool.
+  Treasury vẫn được guard bảo vệ.
+- **I13. Activation signature bind đủ.** Message đúng format 05 §4b
+  (mission, agent, hai cap, nonce dùng một lần 10 phút, expiresAt =
+  mission expiry, chain fuji-43113, domain = app origin). S1 verify
+  bằng mission record, S2 thêm guard.owner() + mission on-chain
+  khớp. Cutover S1→S2 phải làm checklist 05 §4b và kích hoạt lại token.
+- **I14. Recovery/result có quyền.** GET operation và trả held
+  result yêu cầu mission token đúng mission. Không token → 401
+  chung, token sai mission → 403. Không lộ authSignature hay held
+  result cho người không có quyền.
 
 ## 3. Thứ tự implementation (đồng bộ 08 §3)
 
@@ -80,7 +105,10 @@ agent mua công cụ để hoàn thành nhiệm vụ đó; mọi khoản chi đ�
 - **C — forge:** `cd contracts && forge test` — guard, mission,
   state machine.
 - **V — vitest/node:** validator, schema/policy, mission token,
-  operation idempotency, reservation, TalkMeter unique tick, audit hash.
+  operation idempotency + binding, reservation atomic + concurrent,
+  TalkMeter unique tick, audit hash, UNKNOWN/delayed settlement,
+  nonce cancel, restart persistence, cross-mission reuse, S1 auth/pause,
+  activation signature binding (V13–V21).
 - **L — Fuji live:** x402 402→pay→200 thật, guard tx thật,
   ERC-8004 thật, TalkMeter tick thật — ghi tx hash vào README.
 
@@ -94,6 +122,10 @@ agent mua công cụ để hoàn thành nhiệm vụ đó; mọi khoản chi đ�
   `emergencyWithdraw(to)` — chỉ rút về owner khi paused.
 - Tool seller MVP không cần ERC-8004 identity.
 - ERC-8004 là DRAFT — ABI deploy thắng EIP.
-- Review-response đầy đủ ở `10-review-response.md`. Nếu spec
+- Review-response đầy đủ ở `10-review-response.md`, gồm addendum
+  lượt review nhỏ thứ hai (5 mục A1–A5, đều ACCEPT). Nếu spec
   khác nhau giữa các file, file có số lớn hơn và 10/11 thắng cho
   quyết định đã chốt, còn 00 §8 thắng cho hằng số.
+- **Không tick test nào chưa chạy.** Lượt này chỉ sửa spec, chưa
+  implement app, chưa deploy contract, chưa chạy test nào — mọi
+  test C/V/L vẫn là "bắt buộc phải chạy", không phải "đã pass".
