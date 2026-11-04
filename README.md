@@ -18,6 +18,23 @@ Research bundle prepared on **4 November 2026** to help an AI research assistant
 - [Build sources: curated x402, guard, ERC-8004 and Fuji references — what to copy and what not to copy](context/build-sources.md)
 - [Spike checklist: 2-day pass/fail test for hybrid vs Rails + TalkMeter, with proof tests and demo script](context/spike-checklist.md)
 
+## Full product pipeline — for GPT review, then Gemini implementation
+
+Product: **Guarded Agent Economy** — agent proposes only, a guard contract enforces policy on Fuji, out-of-policy proposals queue for a human, tool purchases settle via x402, and the agent carries an ERC-8004 identity + reputation. Built in stages so the Rails + TalkMeter slice (Stage 1) is submittable even if the guard stage slips: read the files in numeric order, and use the shared constants in `00-overview.md` §8 everywhere — do not invent different caps, addresses, or prices.
+
+- [00 — Overview, staged pipeline, architecture, rubric mapping, shared constants](pipeline/00-overview.md)
+- [01 — Guard contract spec: GuardedTreasury on Fuji](pipeline/01-contracts.md)
+- [02 — x402 tool marketplace + TalkMeter metered billing](pipeline/02-x402-tools.md)
+- [03 — ERC-8004 Identity + Reputation on Fuji](pipeline/03-erc8004.md)
+- [04 — Agent proposer, 12-rule pre-flight validator, human queue, hash-chained audit ledger](pipeline/04-agent.md)
+- [05 — App, API, DB, UI, and submission repo layout](pipeline/05-app.md)
+- [06 — Test matrix T1–T12, attack test with a naive-vault control, security checklist](pipeline/06-tests-security.md)
+- [07 — Demo script (6 scenes, 2:30), video, slides, submission checklist](pipeline/07-demo-submission.md)
+- [08 — Day-by-day build plan to 21/11, work split, GPT review checklist](pipeline/08-build-plan.md)
+- [09 — Creative breakthroughs in priority order, and what NOT to build](pipeline/09-breakthroughs.md)
+
+Honest limits (kept in every pitch, video, and README): reputation is a trust signal, not Sybil-proof; TalkMeter here is a per-minute paid tool, not a full meeting product; the MVP daily cap is a UTC day, not a rolling window; mock mode must always be labelled mock; testnet only, no mainnet keys or funds.
+
 ## Official links
 
 - [Team1 Vietnam UniHack](https://team1vn.xyz/)
