@@ -1,10 +1,18 @@
 # Spike checklist — 2 days to decide hybrid vs Rails + TalkMeter
 
+**Note (review 2026-11-04, pipeline/10-review-response.md):** this
+checklist is the spike shorthand. The full, authoritative test matrix
+is `pipeline/06-tests-security.md` with C (contract/forge), V
+(validator/API integration), and L (live Fuji) series. T-numbers
+below map to 06 §1–§3; where they differ, 06 wins. Do not treat
+this file as a second test spec.
+
 **Decision rule (agreed 2026-11-04):** run this spike first. If every
 gate below passes, build the Guarded Agent Economy hybrid. If the
 guard contract or the x402 facilitator is still stuck after 2 days,
 cut to the Rails + TalkMeter slice — which is already the working
-part of the hybrid, not a restart.
+part of the hybrid, not a restart. Rails + TalkMeter (S1) still gets
+its own submission pack (pipeline/07 §4b) even if the guard is cut.
 
 **Scope for the spike:** one club/lab treasury, testnet only, 2–3
 pre-approved tools, no mainnet, no token launch, no yield, no
@@ -25,8 +33,11 @@ arbitrary-code sandbox, no real microphone capture.
       `TransferWithAuthorization` off-chain → retry with `X-PAYMENT`
       → `200` + `X-PAYMENT-RESPONSE` carrying a real Snowtrace tx hash.
 - [ ] Facilitator choice recorded: hosted (Ultravioleta or Thirdweb)
-      or self-hosted (x402-rs). If the hosted facilitator is unstable,
-      switch to the fallback on Day 1, not in the final week.
+      or self-hosted (x402-rs), **plus x402 version + scheme actually
+      used** (v1 `exact` expected, but record what actually worked —
+      do not assume v1 works with a facilitator that only supports v2).
+      If the hosted facilitator is unstable, switch to the fallback
+      on Day 1, not in the final week.
 - [ ] ERC-8004 testnet registries readable on Fuji:
       Identity `0x8004A818BFB912233c491871b3d84c89A494BD9e`,
       Reputation `0x8004B663056A597Dffe9eCcC1965A193B7388713`.
@@ -44,9 +55,12 @@ payment rail is not a demo.
 Deploy a minimal guard contract on Fuji with: owner-only policy
 changes, agent role that can only propose, per-tx cap, daily cap
 (UTC-day window for the MVP — simpler to test and explain than a
-rolling window), USDC-only token whitelist, recipient allowlist,
-tool allowlist, pending queue, `pause()` / `unpause()`, and events
-for Proposed / Executed / Blocked / Queued / Approved / Paused.
+rolling window), USDC-only, recipient allowlist, **mission on-chain
+(createMission, expiry, agent assignment — no mission-less payout)**,
+pending queue, `pause()` / `unpause()`, and events for Proposed /
+Executed / Queued / Approved / Paused. **No Blocked event** (a revert
+erases events — blocks are recorded off-chain in the audit ledger).
+**No toolAllowlist in the guard** (tool allowlist is off-chain only).
 
 Each test must produce a tx hash or a clean revert, not a UI mock:
 
@@ -75,7 +89,15 @@ Each test must produce a tx hash or a clean revert, not a UI mock:
       against the guarded vault loses 0 to the attacker (blocked or
       queued). Record both tx hashes.
 - [ ] T12. Audit ledger: every proposal, execution, block, queue,
-      approval and pause appears with rule, reason and tx hash.
+      approval and pause appears with rule, reason and tx hash (block
+      entries have no tx hash by design — they were blocked before signing).
+- [ ] T13. Mission gate: propose without a mission, with an expired
+      mission, or with the wrong agent → revert.
+- [ ] T14. Operation gate: same operationId + same input → same
+      receipt, no double charge; TalkMeter duplicate tick → old receipt.
+- [ ] T15. State-machine gate: approve/execute after expiry revert;
+      duplicate execute reverts; recipient removed after queue →
+      execute reverts.
 
 **Day 2 fail →** cut to Rails + TalkMeter. Do not spend the rest of
 the week debugging the guard while the x402 slice is already working.
@@ -95,10 +117,14 @@ billing demo).
 4. **Over cap → queue → human approves (35s):** the same transfer
    above the cap queues, the owner approves, it executes.
    Evidence: queue tx/event + approval tx + execution tx.
-5. **Attack blocked (25s):** lookalike recipient or unlimited
-   approval. Evidence: revert / blocked event, 0 funds moved.
-6. **Kill switch (20s):** owner pauses; an in-policy attempt is
+5. **Attack blocked + positive control (25s):** lookalike recipient
+   or unlimited approval. Evidence: revert / audit BLOCKED + rule,
+   0 funds to attacker, then a valid request succeeds (proving the
+   system does not "block everything").
+6. **Kill switch (20s):** owner pauses; a new in-policy attempt is
    blocked until unpaused. Evidence: pause tx + blocked attempt.
+   State the limit: pause does not cancel an x402 authorization
+   already signed within its 60s TTL.
 
 Fill in before submission (do not submit with blanks):
 
@@ -106,16 +132,19 @@ Fill in before submission (do not submit with blanks):
 - Fuji USDC used: `0x5425890298aed601595a70AB815c96711a31Bc65`
 - ERC-8004 Identity (Fuji testnet): `0x8004A818BFB912233c491871b3d84c89A494BD9e`
 - ERC-8004 Reputation (Fuji testnet): `0x8004B663056A597Dffe9eCcC1965A193B7388713`
-- Facilitator used: _______________
+- Facilitator used + x402 version/scheme actually used: _______________
+- Mission demo (slug, treasury cap, tool cap, expiry): _______________
 - Demo tx hashes: _______________
+- Audit checkpoint hash (last entry): _______________
 
 ## Cut rules — freeze scope on 17 November
 
 - After 17 November: no new features, no new tools, no new chains.
 - Only 2–3 pre-approved tools. A fourth tool is not worth a broken demo.
 - Reputation feedback is the only allowed stretch, and only after
-  T1–T12 pass. It is feedback from a verified demo client, not a
-  Sybil-proof score.
+  the S2 gates (contract + validator) pass. It is feedback from the
+  mission owner after a SETTLED operation, not a Sybil-proof score,
+  and not a success rate of all calls.
 - If a scene cannot be shown live on Fuji, label it simulated in the
   video and README. Never present a mock settlement as a live tx.
 

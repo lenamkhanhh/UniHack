@@ -21,11 +21,13 @@ UniHack/                         # repo nộp bài (sau này, xem §7)
 │   │       └── audit/verify/route.ts
 │   ├── lib/
 │   │   ├── chain.ts             # Fuji config, viem clients, addresses
-│   │   ├── validator.ts         # pre-flight 12 luật (04 §3)
+│   │   ├── validator.ts         # pre-flight BLOCK/QUEUE (04 §3)
 │   │   ├── proposer.ts          # LLM + scripted proposer
-│   │   ├── audit.ts             # hash-chained ledger
-│   │   └── tools.ts             # tool catalog + x402 client
-│   └── prisma/schema.prisma     # SQLite (xem §3)
+│   │   ├── audit.ts             # hash-chained ledger (04 §7)
+│   │   ├── missions.ts          # mission token verify + mission status re-check
+│   │   └── tools.ts             # tool catalog + x402 client + operation lifecycle
+│   ├── prisma/schema.prisma     # hosted Postgres, xem §3
+│   └── scripts/verify-audit.ts  # verifier độc lập, đọc DB read-only (04 §7)
 ├── contracts/                   # Foundry
 │   ├── src/GuardedTreasury.sol
 │   ├── test/GuardedTreasury.t.sol
@@ -46,25 +48,48 @@ nhưng tên file contract, tên hàm, tên API ở trên phải giữ nguyên**
 | On-chain read/write | viem + wagmi | Đọc Fuji không cần server riêng; owner ký bằng MetaMask |
 | Wallet connect | wagmi injected (MetaMask) trong MVP | Privy là stretch (Team1 starter có, nhưng thêm dependency lúc deadline là rủi ro) |
 | Contracts | Foundry + OpenZeppelin v5 | Test nhanh, verify Snowtrace dễ |
-| DB | SQLite qua Prisma | Không cần DB server cho demo; file DB không commit lên repo (chỉ schema) |
+| DB (chốt) | **Hosted Postgres (Supabase free tier) qua Prisma provider `postgresql`** | Vercel Functions không có filesystem persistent cho SQLite (xem §3). Local dev dùng cùng Supabase dev DB, hoặc local Postgres — chỉ đổi `DATABASE_URL`, không đổi schema. **Cấm** `DATABASE_URL` trỏ tới file `.db` local ở production. |
 | LLM | Provider-agnostic, qua env `LLM_API_KEY` + `LLM_MODEL` | Không hardcode provider; không có key thì chạy scripted mode |
 | x402 client | Middleware theo facilitator đã chọn (02 §2), v1 `exact` | Không tự viết lại EIP-712 từ đầu nếu middleware đã có |
 
 ## 3. DB schema — tối thiểu, đủ cho demo
 
 ```prisma
+// datasource db { provider = "postgresql"; url = env("DATABASE_URL") }
+// generator client { provider = "prisma-client-js" }
+
 model AuditEntry {
-  id         Int      @id @default(autoincrement())
-  prevHash   String
-  entryHash  String   @unique
-  kind       String   // PROPOSED / EXECUTED / QUEUED / BLOCKED / ...
-  actor      String   // agent address hoặc owner address hoặc "system"
-  toAddress  String?
-  amount     String?  // atomic units, lưu string để không tràn số JS
-  rule       String?
-  reason     String?
-  txHash     String?
-  createdAt  DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  prevHash      String
+  entryHash     String   @unique
+  kind          String   // PROPOSED / EXECUTED / QUEUED / BLOCKED / ...
+  actor         String   // agent address hoặc owner address hoặc "system"
+  toAddress     String?
+  amount        String?  // atomic units, lưu string để không tràn số JS
+  rule          String?
+  reason        String?
+  txHash        String?
+  missionId     String?  // slug mission, xem 04 §5
+  operationId   String?  // operation x402, xem 02 §9
+  policyVersion Int?
+  resultHash    String?
+  createdAt     DateTime @default(now())
+}
+
+model Mission {
+  slug          String   @id // ví dụ "mission-demo-01"
+  missionId     String   @unique // bytes32 hex của keccak256(slug)
+  agentAddress  String
+  ownerAddress  String
+  treasuryCap   String
+  toolCap       String
+  spentTreasury String   @default("0")
+  spentTool     String   @default("0")
+  reservedTool  String   @default("0")
+  expiresAt     DateTime
+  status        String   // ACTIVE / CLOSED / EXPIRED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model ProposalRecord {
@@ -74,6 +99,20 @@ model ProposalRecord {
   missionId  String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+model ToolOperation { // x402 lifecycle, xem 02 §9
+  operationId   String   @id
+  toolId        String
+  inputHash     String
+  state         String   // CREATED / RESERVED / SIGNED / SETTLING / SETTLED / FAILED / UNKNOWN
+  reservedAmount String  @default("0")
+  txHash        String?
+  missionId     String?
+  sessionId     String?
+  minuteIndex   Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model ToolSession { // TalkMeter
@@ -88,29 +127,72 @@ model ToolSession { // TalkMeter
 
 On-chain là source of truth cho proposal status; DB chỉ là bản
 mirror để UI nhanh + audit. Nếu DB và on-chain lệch, tin on-chain.
+Nếu DB hosted down, app vẫn đọc được dữ liệu on-chain và phần audit
+hiển thị "audit DB unavailable" thay vì hiển thị rỗng giả tạo.
 
 ## 4. API — contract giữa frontend và server, viết đúng như này
 
 ```
+POST /api/missions
+  body: { slug, agentAddress, treasuryCap, toolCap, durationSeconds }
+  + header X-Owner-Signature (EIP-191 personal_sign, xem §4a)
+  -> 201 { slug, missionId, expiresAt }   // mission ACTIVE, chưa có token
+
+POST /api/missions/:slug/activate
+  body: { signature }  // ký mission-activate:{slug}:{agentAddress}:{nonce}:{expiry}
+  -> 200 { missionToken }  // HMAC, scope = đúng 1 mission, expiry = mission expiry
+
 POST /api/propose
-  body: { kind, to?, amount_atomic, mission_id?, reason, tool_id? }
+  header: Authorization: Bearer <missionToken>
+  body: { kind, to?, amount_atomic, mission_id (bắt buộc), reason, tool_id? }
   -> 200 { route: "EXECUTED"|"QUEUED", proposalId, txHash? }
   -> 403 { route: "BLOCKED", rule, reason }   // không có tx, đó là đúng
   -> 400 { error: "invalid_schema" }          // JSON sai schema
+  -> 401 { error: "invalid_mission_token" }   // token sai, hết hạn, hoặc mission đã đóng/hết hạn
 
-POST /api/queue/:id/approve   -> { txHashApprove, txHashExecute? } (xem 04 §6)
-POST /api/queue/:id/reject    body: { reason } -> { txHash }
+POST /api/queue/:id/record
+  body: { action: "approve"|"reject"|"execute", txHash }
+  -> 200 { ok: true }  // server verify tx on-chain (to == guard, proposalId, method) rồi mới ghi audit
+  // Lưu ý: approve/reject/execute KHÔNG phải API submit tx. Owner ký bằng MetaMask ở frontend,
+  // API này chỉ ghi audit sau khi verify tx. Backend không giữ owner key.
+
 GET  /api/audit               -> list entries mới nhất trước
 GET  /api/audit/verify        -> { valid: true } hoặc { valid: false, firstBadId }
-GET  /api/policy              -> { perTxCap, dailyCap, spentToday, paused, agent, guard }
-POST /api/tools/:id           -> 402 hoặc 200 + receipt (02 §3)
-POST /api/tools/talkmeter/start|tick|stop  (02 §5)
+GET  /api/policy              -> { perTxCap, dailyCap, spentToday, paused, guard, policyVersion }
+GET  /api/missions/:slug      -> mission + spent/reserved/remaining/expiry cho từng budget riêng
+POST /api/tools/:id           -> 402 hoặc 200 + receipt (02 §3, §9), cần missionToken nếu thuộc mission
+GET  /api/tools/operations/:operationId -> trạng thái operation + txHash nếu có (02 §9)
+POST /api/tools/talkmeter/start|tick|stop  (02 §5, §9.5)
 ```
 
-**Auth cho demo:** owner action (approve/reject/pause/set policy) yêu
-cầu ví connect đúng owner address, check ở cả frontend lẫn API
-(không chỉ frontend — frontend check là UX, API check là bảo mật).
-Agent propose không cần auth ví, nhưng bị giới hạn bởi validator.
+### 4a. Auth — cơ chế nhỏ, đủ cho demo, không thêm hệ thống auth lớn
+
+1. **Owner transaction do MetaMask ký.** Approve/reject/pause/set
+   policy/createMission/emergencyWithdraw đều là transaction từ ví
+   owner qua wagmi/viem ở frontend. Backend không giữ owner key,
+   không bao giờ submit owner tx.
+2. **Agent transaction do backend ký, chỉ trong mission đã kích hoạt.**
+   Backend giữ agent test key (server-side only, không bao giờ gửi
+   ra frontend) để ký x402 và gọi `propose()`. Điều kiện để backend
+   dùng key đó: request kèm mission token hợp lệ (xem trên).
+3. **Mission token:** owner ký message
+   `mission-activate:{slug}:{agentAddress}:{nonce}:{expiry}` bằng
+   EIP-191. Server verify chữ ký, đối chiếu địa chỉ recovered với
+   `owner()` đọc từ guard contract (không tin field owner trong
+   body). Đúng thì cấp token HMAC, scope = đúng slug đó, expiry =
+   mission expiry. Token hết hạn, mission đóng/hết hạn, hoặc mission
+   không tồn tại → mọi propose/tool call cho mission đó đều 401.
+   Server vẫn check lại mission status ở mỗi call — token một mình
+   không đủ.
+4. **Demo công khai:** khách không có token chỉ được đọc
+   dashboard/audit/policy. Demo scripted chạy bằng mission demo do
+   owner tạo trước, với input cố định trong script, không nhận
+   recipient/amount tự do từ người lạ. Rate limit theo IP và ví tool
+   chỉ nạp tiền test nhỏ là lớp phụ, không phải lớp chính.
+5. **Không tin địa chỉ do client gửi:** agent address lấy từ key
+   server, owner lấy từ guard `owner()`, payTo lấy từ tool config,
+   mission agent lấy từ mission record. Field `from`/`owner` trong
+   body (nếu có) bị bỏ qua hoàn toàn.
 
 ## 5. UI — 4 màn hình, mỗi màn 1 nhiệm vụ, không làm dashboard "tất cả trong 1"
 
@@ -119,16 +201,21 @@ Agent propose không cần auth ví, nhưng bị giới hạn bởi validator.
 - Header: guard address (link Snowtrace) + paused badge (đỏ nếu paused)
   + mode badge (`LIVE LLM` / `SCRIPTED` / `MOCK` nếu đang mock).
 - Policy card: per-tx cap, daily cap, spent today (progress bar),
-  mission cap — số đọc từ contract, không hardcode text.
-- Propose form: kind, to (dropdown allowlist, không cho gõ tự do
-  trong demo chính — gõ tự do chỉ ở màn attack demo), amount, mission,
+  policy version — số đọc từ contract, không hardcode text.
+- Mission card: mission đang chọn, spent/reserved/remaining/expiry
+  cho treasury và tool riêng, trạng thái ACTIVE/CLOSED/EXPIRED.
+- Propose form: chỉ enable khi mission đã kích hoạt (có mission
+  token); kind, to (dropdown allowlist, không cho gõ tự do trong
+  demo chính — gõ tự do chỉ ở màn attack demo), amount, mission,
   reason → nút Propose → kết quả EXECUTED / QUEUED / BLOCKED + rule.
 - Recent activity: 10 audit entry mới nhất, mỗi dòng có tx link nếu có.
 
 ### Queue (`/queue`)
 
-- Bảng proposal Queued, mỗi dòng: to, amount, lý do queue, thời gian,
-  nút Approve / Reject. Approve xong hiển thị 2 tx hash.
+- Bảng proposal Queued, mỗi dòng: to, amount, mission, lý do queue,
+  policy version lúc propose, thời gian, nút Approve / Reject.
+  Nút này ký bằng MetaMask của owner, không phải backend ký hộ.
+  Approve xong hiển thị 2 tx hash (approve + execute riêng).
 - Không có nút "approve all". Duyệt từng cái là ý nghĩa của human
   queue.
 
@@ -156,10 +243,11 @@ NEXT_PUBLIC_GUARD_ADDRESS=
 NEXT_PUBLIC_IDENTITY_REGISTRY=0x8004A818BFB912233c491871b3d84c89A494BD9e
 NEXT_PUBLIC_REPUTATION_REGISTRY=0x8004B663056A597Dffe9eCcC1965A193B7388713
 NEXT_PUBLIC_FACILITATOR_URL=https://facilitator.ultravioletadao.xyz
+DATABASE_URL=             # hosted Postgres (Supabase), KHÔNG phải file .db local ở production
 LLM_API_KEY=
 LLM_MODEL=
-AGENT_PRIVATE_KEY=        # testnet only, không bao giờ commit
-OWNER_ADDRESS=
+AGENT_PRIVATE_KEY=        # testnet only, server-side only, không bao giờ commit, không bao giờ gửi ra frontend
+MISSION_TOKEN_SECRET=     # HMAC secret cho mission token, server-side only
 ```
 
 **Check trước khi push:** `grep -r "0x" --include="*.ts" --include="*.sol" .`

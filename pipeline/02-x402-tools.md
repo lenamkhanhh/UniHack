@@ -77,21 +77,24 @@ struct TransferWithAuthorization {
 Approve vô hạn là đúng cái mà sản phẩm này chống lại — demo mà dùng
 nó thì pitch tự phủ định.
 
-### 3.3. Paid retry → 200 + receipt
+### 3.3. Paid retry → 200 + receipt (luồng đầy đủ ở §9, đây là tóm tắt)
 
 Client retry với header `X-PAYMENT` (base64 JSON chứa authorization
-đã ký). Server qua facilitator:
+đã ký) và cùng `X-Operation-Id`. Server qua facilitator:
 
-1. **Verify trước, serve sau.** Facilitator verify signature, balance,
-   nonce. Fail → trả 402 mới, không serve resource.
-2. **Settle, rồi mới serve (hoặc serve kèm receipt).** Settlement fail
-   → resource không trả, client nhận 402 mới.
-3. **No money for nothing:** nếu upstream tool lỗi (non-2xx) thì agent
-   không bị charge — server phải check upstream trước khi settle, hoặc
-   hoàn logic theo GateKeep: upstream fail → không settle.
-4. Trả `200` + header `X-PAYMENT-RESPONSE` chứa tx hash settlement.
-   Frontend hiển thị link Snowtrace từ tx hash này, không chụp màn
-   hình thay bằng chứng.
+1. **Upstream chạy nội bộ trước, kết quả được giữ (held), chưa trả.**
+   Upstream lỗi → operation FAILED, không charge, không trả 402
+   để "thử lại rồi tính tiền" — lỗi upstream trả về lỗi upstream.
+2. **Verify trước, settle sau, trả kết quả đã giữ sau cùng.**
+   Facilitator verify signature, balance, nonce. Fail → trả 402 mới,
+   không trả kết quả đã giữ.
+3. Settlement fail → kết quả đã giữ không trả, client nhận 402 mới.
+4. Settlement confirmed → trả kết quả đã giữ + `200` + header
+   `X-PAYMENT-RESPONSE` chứa tx hash settlement. Frontend hiển thị
+   link Snowtrace từ tx hash này, không chụp màn hình thay bằng chứng.
+5. **No money for nothing** theo đúng nghĩa trên: upstream lỗi
+   trước settlement thì không charge; settlement thành công thì
+   kết quả đã giữ được trả, không phải chạy lại upstream.
 
 ### 3.4. Mock vs live — ghi rõ, không lẫn
 
@@ -142,17 +145,21 @@ TalkMeter trong hybrid **không** phải app họp đầy đủ. Nó là:
   ghi audit `velocity_circuit_breaker`.
 - Guard paused → TalkMeter tick cũng dừng (pre-flight check paused).
 
-## 6. Pre-flight cho tool payment — 6 luật, chạy trước mọi lần ký
+## 6. Pre-flight cho tool payment — 5 luật, chạy trước mọi lần ký
 
-Chạy ở server, bằng code, không bằng prompt (chi tiết full ở 04 §3):
+Chạy ở server, bằng code, không bằng prompt (chi tiết full ở 04 §3).
+**Tool payment không có human queue trong MVP** — đây là hành vi
+duy nhất, đồng bộ với 04 §3. Nếu một tool purchase cần người duyệt,
+cách đúng là duyệt một treasury payout để nạp tiền vào ví tool của
+agent trước, rồi tool payment mới chạy; không queue chính tool
+payment đó.
 
-1. `kill_switch`: guard paused → không ký.
+1. `kill_switch`: guard paused → không tạo reservation mới, không ký.
 2. `host_not_allowlisted`: tool ID + seller không nằm trong allowlist → không ký.
 3. `per_call_cap`: giá > per-call cap của tool → không ký.
 4. `velocity_circuit_breaker`: quá số call/phút cho phép → không ký.
-5. `budget_exhausted`: tổng chi mission/session đã chạm cap → không ký.
-6. `human_approval_required`: tool/payment vượt tier auto → chuyển sang
-   queue chờ người duyệt, không tự ký.
+5. `budget_exhausted`: spent + reserved đã chạm mission tool cap
+   hoặc session cap → không ký.
 
 Mọi lần BLOCK đều ghi audit: tool, giá, rule, reason, thời gian —
 không cần tx hash vì chưa có transaction nào xảy ra (đó chính là
@@ -167,19 +174,119 @@ POST /api/tools/talkmeter/start  { title }       -> { sessionId, cap, rate }
 POST /api/tools/talkmeter/tick   { sessionId }   -> 402 hoặc 200 + receipt (mỗi phút)
 POST /api/tools/talkmeter/stop   { sessionId }   -> { minutes, total, txHashes[] }
 GET  /api/tools              -> catalog 3 tool + giá + payTo (không lộ key)
+GET  /api/tools/operations/:operationId -> trạng thái operation + txHash nếu có (xem §9)
 ```
 
 **Lỗi trả về phải rõ:** `402` = chưa trả tiền, `402` lại sau khi
-settle fail = trả lại, `403` = tool không allowlisted, `503` =
-paused hoặc facilitator down. Đừng trả `500` chung cho mọi thứ rồi
-để giám khảo đoán.
+settle fail = trả lại, `403` = tool không allowlisted, `409` =
+operationId dùng lại với input khác, `503` = paused hoặc facilitator
+down. Đừng trả `500` chung cho mọi thứ rồi để giám khảo đoán.
+
+## 9. x402 lifecycle, idempotency và reservation — bắt buộc, không phải nâng cao
+
+### 9.1. Operation và trạng thái
+
+Mỗi lần mua tool là một operation, xác định bởi `operationId`:
+
+- Client tạo UUIDv4, gửi header `X-Operation-Id` ở cả request chưa
+  trả tiền và request đã trả tiền. Nếu client không gửi, server tạo
+  một ID và trả về trong 402 — nhưng lúc đó retry mà không gửi lại
+  ID đó sẽ tạo operation mới, không được idempotency.
+- Server lưu operation với: `operationId`, `toolId`, `inputHash`
+  (hash của input đã normalize: query/text đã trim, không chứa
+  secret), `state`, `reservedAmount`, `txHash`, `sessionId`,
+  `minuteIndex` (chỉ TalkMeter), `missionId`, `createdAt`.
+
+Trạng thái, theo đúng thứ tự này:
+
+```
+CREATED     — 402 đã phát hành, chưa có reservation, chưa có payment
+RESERVED    — upstream đã chạy nội bộ thành công, kết quả đang giữ,
+              budget đã trừ vào reserved, chờ client trả tiền
+SIGNED      — đã nhận X-PAYMENT, authorization verify pass, chưa settle
+SETTLING    — facilitator đã nhận và đang submit settlement
+SETTLED     — settlement confirmed, kết quả đã giữ được trả, reserved → spent
+FAILED      — upstream lỗi, verify lỗi, settle lỗi, hoặc hết hạn 60s
+UNKNOWN     — facilitator timeout / response mất sau khi đã submit
+```
+
+### 9.2. Budget: spent + reserved
+
+Budget khả dụng cho mission tool cap và cho session cap tính như sau:
+
+```
+available = cap − spent − reserved
+```
+
+- Reservation tạo khi chuyển sang RESERVED, với amount = giá tool.
+- Reservation hết hạn khi authorization hết hạn (60s) hoặc khi
+  operation chuyển sang FAILED — lúc đó reserved được trả lại.
+- Reservation chuyển thành spent khi SETTLED, không cộng hai lần.
+
+### 9.3. Retry và idempotency — không ký payment mới bừa
+
+- Cùng `operationId` + cùng `inputHash`:
+  - Đang RESERVED → trả lại 402 cũ (cùng amount, payTo, asset).
+  - Đã SETTLED → trả lại kết quả cũ + tx hash cũ, không ký mới.
+  - Đang SETTLING/UNKNOWN → không ký mới, trả trạng thái hiện tại
+    và hướng dẫn gọi recovery (xem §9.4).
+- Cùng `operationId` + `inputHash` khác → `409`, không chạy.
+- Operation khác nhau nhưng cùng input thì là hai lần mua riêng —
+  idempotency chỉ theo operationId, không theo input.
+
+### 9.4. Recovery khi settlement UNKNOWN — ngăn charge hai lần
+
+Khi facilitator timeout hoặc response mất sau khi đã submit:
+
+1. Không ký authorization mới, không tạo operation mới cho cùng
+   việc đó.
+2. Server check `authorizationState(authorizer, nonce)` trên USDC
+   Fuji: nonce đã dùng → authorization đã settle, không charge lại.
+   Server trả kết quả đã giữ, audit ghi `SETTLED` với ghi chú
+   "tx hash đang tra lại từ facilitator" nếu facilitator chưa trả
+   tx hash — **không bịa tx hash**.
+3. Nonce chưa dùng → operation chuyển sang FAILED, reservation
+   được trả lại, client có thể bắt đầu operation mới.
+4. Endpoint `GET /api/tools/operations/:operationId` là nơi duy
+   nhất client tra trạng thái recovery, không phải đoán từ lỗi.
+
+### 9.5. TalkMeter: unique (sessionId, minuteIndex), phút tính bằng server
+
+- `minuteIndex = floor((serverNow − startedAt) / 60)`, phút 0 là
+  phút đầu tiên. Client không được gửi minuteIndex.
+- DB unique constraint trên `(sessionId, minuteIndex)`. Tick trùng
+  phút đã trả → trả receipt cũ, không ký mới. Tick đồng thời cùng
+  phút → một tick thắng unique constraint, tick còn lại nhận
+  receipt của tick thắng.
+- Tick cho phút tương lai (theo server time) → reject. Tick sau khi
+  session đã stop/capped → reject. Tick khi session cap đã chạm →
+  session chuyển CAPPED, không ký thêm.
+- TalkMeter cũng là operation x402 bình thường: mỗi phút là một
+  operation riêng, với `operationId` riêng, để idempotency và
+  recovery áp dụng y hệt.
+
+### 9.6. Pause và authorization đã ký — giới hạn phải nói đúng
+
+- Pause chặn: reservation mới, pre-flight mới, ký mới.
+- Pause **không** thu hồi authorization đã ký và còn trong 60s TTL.
+  Authorization đó vẫn có thể settle trước `validBefore`.
+- Rủi ro tồn đọng tối đa: một authorization / tool / phút, TTL 60s,
+  per-call cap, và reservation đã trừ vào tool cap — không phải
+  rủi ro không giới hạn.
+- Settlement nào rơi vào sau thời điểm pause phải ghi audit là
+  `SETTLED_AFTER_PAUSE`, kèm thời gian pause và tx hash, không
+  được giấu trong audit chung.
 
 ## 8. Test bắt buộc cho x402 (chi tiết ở 06)
 
 - Unpaid → 402 đúng `accepts[]`, đúng amount, đúng asset, đúng payTo.
 - Paid đúng → 200 + tx hash thật trên Snowtrace, balance seller tăng đúng.
 - Paid sai amount / sai payTo / nonce đã dùng / hết hạn 60s → fail,
-  không serve resource.
-- Upstream fail → không charge.
+  không serve kết quả đã giữ.
+- Upstream fail → không charge, operation FAILED.
 - Over per-call cap / tool lạ → không ký, audit ghi BLOCK.
+- Idempotency: cùng operationId + cùng input → cùng receipt, không
+  charge hai lần; cùng operationId + input khác → 409.
+- TalkMeter: tick trùng phút → receipt cũ; tick phút tương lai → reject.
+- Reservation: spent + reserved không vượt tool cap khi gửi concurrent.
 - Mock mode ghi MOCK, live mode có tx hash — không lẫn hai mode.

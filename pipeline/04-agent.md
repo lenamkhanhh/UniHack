@@ -43,16 +43,21 @@ Hoặc cho tool purchase:
 }
 ```
 
-**Validation schema (code, không phải prompt):**
+**Validation schema (code, không phải prompt) — chỉ check hình dạng, không check cap:**
 
 - `kind` chỉ nhận `treasury_payout` hoặc `tool_purchase`. Khác → reject toàn bộ.
 - `to` (nếu có) phải là address EVM hợp lệ, checksum đúng. Không
   nhận ENS, không nhận tên, không nhận địa chỉ rút gọn.
-- `amount_atomic` là string số nguyên, > 0, ≤ per-call/per-tx cap
-  tương ứng (check tiếp ở §3, nhưng schema đã chặn số âm, số thập
-  phân, chữ).
-- `reason` ≤ 200 ký tự. Dài hơn → cắt? Không — reject, bắt LLM trả lại.
-  Cắt ngầm là sửa ý định mà không ai biết.
+- `amount_atomic` là string số nguyên, > 0, không thập phân, không
+  chữ. Schema **không** check ≤ per-call/per-tx cap — cap là policy
+  ở §3, và treasury vượt cap thì QUEUE chứ không phải sai schema
+  (xem 10 §2). Schema chỉ chặn số âm, số thập phân, chữ, và số
+  vượt quá uint256.
+- `mission_id` (bắt buộc cho treasury, bắt buộc cho tool trong
+  mission) phải là slug đã được owner tạo và kích hoạt (xem §5).
+  LLM không tự tạo mission, không tự đổi cap/expiry/agent.
+- `reason` ≤ 200 ký tự, không chứa newline. Dài hơn → reject, bắt
+  LLM trả lại. Cắt ngầm là sửa ý định mà không ai biết.
 - Field lạ → reject toàn bộ, không lặng lẽ bỏ qua. (Allowlist keys,
   không phải blocklist.)
 - Parse fail → trả `parse_failed`, không cố salvage một nửa JSON.
@@ -68,29 +73,42 @@ Hoặc cho tool purchase:
 - Không đưa secret, private key, hay seed vào context của LLM. Không
   bao giờ.
 
-## 3. Pre-flight validator — 12 luật, chạy bằng code trước mọi lần ký/chuyển
+## 3. Pre-flight validator — BLOCK trước, QUEUE sau, chạy bằng code trước mọi lần ký/chuyển
 
-Đây là tầng quan trọng nhất cho điểm Technical và cho pitch chống
-prompt injection. Mỗi luật có mã lỗi riêng, ghi vào audit.
+Đây là tầng quan trọng nhất cho pitch chống prompt injection. Mỗi
+luật có mã lỗi riêng, ghi vào audit.
 
-| # | Luật | Check bằng code | Fail → |
+### 3a. BLOCK check — fail bất kỳ mục nào → BLOCK, dừng ngay, không chạy tiếp
+
+| # | Luật | Check bằng code | Mã lỗi |
 |---|---|---|---|
-| 1 | Schema hợp lệ | JSON parse + schema §2 | BLOCK `invalid_schema` |
-| 2 | Kind + tool hợp lệ | kind trong allowlist, tool_id trong catalog 02 §4 | BLOCK `unknown_tool` |
-| 3 | Kill switch | Guard `paused()` == false | BLOCK `paused` |
-| 4 | Recipient allowlist (treasury) | `to` ∈ recipientAllowlist, full-address match | BLOCK `not_allowlisted` |
-| 5 | Seller allowlist (tool) | tool_id + payTo ∈ tool allowlist, payTo lấy từ config server, không từ LLM | BLOCK `seller_not_allowlisted` |
-| 6 | Per-tx / per-call cap | amount ≤ cap tương ứng | Treasury → QUEUE; Tool → BLOCK (tool không có queue trong MVP, vì tool giá cố định — giá sai là lỗi, không phải ngoại lệ cần duyệt) |
-| 7 | Daily cap (treasury) | spentToday + amount ≤ dailyCap (ngày UTC) | QUEUE `over_daily_cap` |
-| 8 | Mission envelope | missionSpent + amount ≤ mission cap | QUEUE `over_mission_cap` |
-| 9 | Lookalike check | `to` không chỉ "giống" allowlist — đã là full match ở luật 4, luật này là cảnh báo riêng: nếu `to` giống allowlist ở đầu/cuối nhưng khác full → BLOCK + audit `lookalike_blocked` (để demo có câu chuyện) | BLOCK |
-| 10 | Unlimited approval | Bất kỳ proposal nào yêu cầu approve, allowance vô hạn, hoặc `value = max uint` → BLOCK ngay, không queue | BLOCK `unlimited_approval` |
-| 11 | Velocity | Quá N call/phút (MVP: 10 call/phút/agent) hoặc TalkMeter tick dồn → BLOCK + dừng session nếu là TalkMeter | BLOCK `velocity` |
-| 12 | Budget / session cap | Tổng mission/session đã chạm cap → BLOCK (tool) hoặc QUEUE (treasury, nếu còn trong mission mới) | Theo kind ở luật 6 |
+| B1 | Schema hợp lệ | JSON parse + schema §2 | `invalid_schema` |
+| B2 | Kind + tool hợp lệ | kind trong allowlist, tool_id trong catalog 02 §4 | `unknown_tool` |
+| B3 | Kill switch | Guard `paused()` == false | `paused` |
+| B4 | Mission hợp lệ | Mission tồn tại, chưa hết hạn, chưa đóng, agent đúng mission (xem §5); mission token hợp lệ (xem 05 §4) | `invalid_mission` / `mission_expired` / `mission_closed` / `not_mission_agent` |
+| B5 | Recipient allowlist (treasury) | `to` ∈ recipientAllowlist, full-address match | `not_allowlisted` |
+| B6 | Seller allowlist (tool) | tool_id + payTo ∈ tool allowlist, payTo lấy từ config server, không từ LLM, không từ request body | `seller_not_allowlisted` |
+| B7 | Lookalike | `to` giống allowlist ở đầu/cuối nhưng khác full → BLOCK riêng để demo có câu chuyện (luật B5 đã chặn, luật này chỉ để ghi audit rõ lý do) | `lookalike_blocked` |
+| B8 | Unlimited approval | Bất kỳ proposal nào yêu cầu approve, allowance vô hạn, hoặc `value = max uint` → BLOCK ngay, không queue | `unlimited_approval` |
+| B9 | Velocity | Quá N call/phút (MVP: 10 call/phút/agent) hoặc TalkMeter tick dồn → BLOCK + dừng session nếu là TalkMeter | `velocity` |
+| B10 | Tool budget / session cap | Tool: spent + reserved đã chạm mission tool cap hoặc session cap → BLOCK. Treasury không dùng luật này (treasury dùng QUEUE ở §3b) | `budget_exhausted` |
 
-**Thứ tự:** 1 → 12 theo bảng. BLOCK dừng ngay, không chạy tiếp.
-QUEUE chỉ xảy ra ở luật 6/7/8 cho treasury. Không có "QUEUE rồi tự
-chạy sau" — queue luôn cần owner approve.
+### 3b. QUEUE check — chỉ cho treasury, chỉ chạy sau khi mọi BLOCK đã pass
+
+| # | Luật | Check bằng code | Mã lỗi |
+|---|---|---|---|
+| Q1 | Per-tx cap | amount ≤ perTxCap | QUEUE `over_per_tx_cap` |
+| Q2 | Daily cap | spentToday + amount ≤ dailyCap (ngày UTC) | QUEUE `over_daily_cap` |
+| Q3 | Mission treasury cap | missionSpent + amount ≤ mission treasury cap | QUEUE `over_mission_cap` |
+
+Nếu nhiều QUEUE lý do cùng xảy ra, ghi lý do đầu tiên theo thứ tự
+Q1 → Q2 → Q3.
+
+**Thứ tự không được đảo:** B1 → B10 trước, rồi Q1 → Q3. QUEUE chỉ
+xảy ra cho treasury. Tool không có queue trong MVP (đồng bộ với
+02 §6). Không có "QUEUE rồi tự chạy sau" — queue luôn cần owner
+approve, và proposal queue phải gọi `propose()` on-chain (xem §6),
+không dừng ở trạng thái DB.
 
 ## 4. Hai chế độ proposer — demo không được chết vì LLM down
 
@@ -103,52 +121,111 @@ chạy sau" — queue luôn cần owner approve.
 guard vẫn thật, tx hash vẫn thật. Chỉ có "ai nghĩ ra proposal" là
 khác. Ghi rõ chế độ đang chạy ở UI (`LIVE LLM` / `SCRIPTED`).
 
-## 5. Mission envelope — ngân sách theo nhiệm vụ, không chỉ theo ngày
+## 5. Mission — ai tạo, ai được giao, LLM được làm gì
 
-- Mỗi mission có: `missionId`, `cap` (mặc định 10 USDC), `expiresAt`
-  (tạo + 24h), `spent` (cộng dồn).
-- Proposal mang `missionId`. Validator cộng `missionSpent` trước khi
-  cho qua.
-- Hết cap hoặc hết hạn → QUEUE (treasury) hoặc BLOCK (tool).
+- **Owner tạo mission, LLM chỉ tham chiếu mission đã giao.**
+  Owner tạo mission off-chain (slug, người giao, agent, hai cap,
+  expiry) và on-chain bằng `createMission` (S2). LLM không tạo
+  mission, không đổi cap, không đổi expiry, không đổi agent.
+- Mission record (off-chain, xem 05 §3):
+  `slug` (ví dụ `mission-demo-01`), `missionIdBytes32 =
+  keccak256(slug)`, `agentAddress`, `ownerAddress`,
+  `treasuryCap` (mặc định 10 USDC), `toolCap` (mặc định 5 USDC),
+  `spentTreasury`, `spentTool`, `reservedTool`, `expiresAt`
+  (tạo + 24h mặc định), `status` (ACTIVE / CLOSED / EXPIRED).
+- Proposal mang `mission_id` là slug. Validator chuyển slug →
+  bytes32, check mission tồn tại, chưa hết hạn, chưa đóng, agent
+  đúng mission, rồi mới check cap.
+- **Hai budget riêng:** treasury cap enforce on-chain (01 §4);
+  tool cap enforce off-chain bởi validator + reservation (02 §9).
+  Hết treasury cap → QUEUE; hết tool cap → BLOCK.
+- Mission hết hạn hoặc đóng → propose mới BLOCK, proposal queue
+  cũ bị chặn ở execute bởi hard check (01 §6).
+- **S1 fallback:** mission chỉ tồn tại off-chain (không có guard),
+  nhưng vẫn có người giao, tool cap, expiry, và receipt — để S1
+  vẫn có trục mission mà không cần contract.
 - Ý nghĩa pitch: quỹ nhóm không chỉ giới hạn "mỗi ngày bao nhiêu",
   mà còn "nhiệm vụ này tối đa bao nhiêu" — một mission bị LLM làm
-  hỏng cũng không rút cạn quỹ ngày.
+  hỏng cũng không rút cạn quỹ ngày, và mọi khoản chi đều gắn với
+  một nhiệm vụ cụ thể, không phải chi tiêu vô danh.
 
 ## 6. Human queue — duyệt trong 1 click, không cần biết Solidity
 
 UI queue hiển thị mỗi proposal: id, to (link Snowtrace), amount,
 mission, reason, lý do vào queue (OverPerTxCap / OverDailyCap /
-OverMissionCap), thời gian, nút Approve / Reject.
+OverMissionCap), policy version lúc propose, thời gian, nút Approve
+/ Reject.
 
-- Approve → gọi `approve()` rồi `execute()` (2 tx, hoặc gộp UI thành
-  1 flow 2 bước rõ ràng — đừng giấu 2 tx thành 1, giám khảo đọc
-  Snowtrace sẽ thấy).
-- Reject → gọi `reject(reason)`, tiền không đi, audit ghi rõ.
-- Hết 48h chưa duyệt → `expire()`, proposal không chạy được nữa.
+- **Proposal queue phải có bản ghi on-chain:** khi validator quyết
+  QUEUE, backend (bằng agent key, với mission token hợp lệ) gọi
+  `propose()` on-chain để tạo proposal Queued. DB chỉ mirror trạng
+  thái on-chain, không bao giờ là proposal.
+- Approve → owner ký `approve()` bằng MetaMask, rồi ký `execute()`
+  riêng (2 tx, hoặc gộp UI thành 1 flow 2 bước rõ ràng — đừng giấu
+  2 tx thành 1, giám khảo đọc Snowtrace sẽ thấy). Backend không ký
+  hộ owner tx.
+- Reject → owner ký `reject(reason)` bằng MetaMask, tiền không đi,
+  audit ghi rõ sau khi verify tx on-chain.
+- Hết 48h chưa duyệt → `approve()`/`execute()` đều revert (check
+  trong contract, xem 01 §6); `expire()` dọn dẹp trạng thái.
 - Queue không tự chạy, không tự approve theo thời gian. Không có
   auto-approve.
 
-## 7. Audit ledger — append-only, hash-chained, tra được
+## 7. Audit ledger — append-only, hash-chained, tra được (và giới hạn của nó)
 
-Bảng `audit_entries` (SQLite, xem 05 §3):
+Bảng `audit_entries` (hosted Postgres, xem 05 §3):
 
 | Field | Ý nghĩa |
 |---|---|
 | `id` (tăng dần) | Thứ tự, không sửa, không xóa |
-| `prev_hash` | Hash của entry trước (entry đầu: `0x00…`) |
-| `entry_hash` | `keccak256(prev_hash + kind + actor + to + amount + rule + reason + tx_hash + timestamp)` |
-| `kind` | `PROPOSED` / `EXECUTED` / `QUEUED` / `BLOCKED` / `APPROVED` / `REJECTED` / `EXPIRED` / `TOOL_PAID` / `TOOL_BLOCKED` |
+| `prev_hash` | Hash của entry trước (entry đầu: `0x00…` — 32 bytes zero, ghi đúng dạng này) |
+| `entry_hash` | Xem canonical encoding dưới đây, không phải cộng chuỗi tự do |
+| `kind` | `PROPOSED` / `EXECUTED` / `QUEUED` / `BLOCKED` / `APPROVED` / `REJECTED` / `EXPIRED` / `TOOL_PAID` / `TOOL_BLOCKED` / `SETTLED_AFTER_PAUSE` |
 | `rule` | Mã luật §3 (ví dụ `not_allowlisted`, `over_daily_cap`) hoặc `null` |
 | `reason` | Text ngắn, giống lý do hiển thị UI |
 | `tx_hash` | Tx hash Fuji nếu có, `null` nếu bị chặn trước khi có tx (đó là bằng chứng chặn sớm) |
-| `created_at` | ISO timestamp |
+| `mission_id` | Slug mission, để nối audit với mission |
+| `operation_id` | Operation x402 nếu có (xem 02 §9), để nối audit với payment |
+| `policy_version` | Policy version lúc quyết định (xem 01 §3), để nối audit với policy |
+| `result_hash` | Hash của kết quả tool đã trả (nếu có), để nối audit với kết quả — xem proof bundle 09 §1 |
+| `created_at` | ISO timestamp đã lưu (verifier dùng đúng timestamp này, không dùng thời gian hiện tại) |
 
-**Verify:** API `GET /api/audit/verify` chạy lại hash chain từ đầu,
-trả `valid: true/false` + entry đầu tiên sai (nếu có). Đây là tính
-năng khoe được: "ledger này mà sửa 1 dòng là lộ ngay".
+**Canonical encoding — bắt buộc, để verifier độc lập tính lại được:**
+
+```
+canonical = JSON.stringify với key sort theo alphabet, value đều là string:
+{
+  "actor": "...", "amount": "...", "created_at": "...", "kind": "...",
+  "mission_id": "...", "operation_id": "...", "policy_version": "...",
+  "prev_hash": "...", "reason": "...", "result_hash": "...",
+  "rule": "...", "to": "...", "tx_hash": "..."
+}
+trong đó null → "" (chuỗi rỗng), không bỏ key.
+entry_hash = keccak256(utf8(canonical))
+```
+
+**Verify:** có hai lớp, không chỉ một API của cùng server:
+
+- API `GET /api/audit/verify` chạy lại hash chain từ đầu, trả
+  `valid: true/false` + entry đầu tiên sai (nếu có).
+- Script độc lập trong repo (ví dụ `scripts/verify-audit.ts`) đọc
+  DB read-only và tính lại chain bằng cùng canonical encoding trên.
+  Script này mới là phần "độc lập" của proof bundle.
+
+**Checkpoint neo ngoài DB:** hash của entry cuối trong bản demo
+cuối được ghi vào proof bundle / README nộp bài. Nếu DB bị viết
+lại toàn bộ và tính lại chain, checkpoint cũ sẽ lệch với chain mới
+— đó là mức neo rẻ nhất cho hackathon, không phải anchor on-chain.
+
+**Giới hạn nói đúng (xem 10 §9):** hash chain chứng minh integrity
++ consistency của ledger hiện tại, không chứng minh lịch sử chưa
+từng bị viết lại hoàn toàn, và không chứng minh chất lượng câu trả
+lời của agent. Đừng nói "không cần tin team" mà không kèm giới hạn
+này và checkpoint.
 
 **Không ghi vào ledger:** private key, seed, API key, nội dung
-prompt đầy đủ có secret. Ledger ghi quyết định, không ghi bí mật.
+prompt đầy đủ có secret, mission token. Ledger ghi quyết định,
+không ghi bí mật.
 
 ## 8. Prompt injection — test tấn công phải có trong 06
 
@@ -162,6 +239,19 @@ prompt đầy đủ có secret. Ledger ghi quyết định, không ghi bí mật
 3. Địa chỉ lookalike (giống đầu/cuối allowlist) trong proposal →
    BLOCK `lookalike_blocked`, 0 tiền đi.
 
-**Câu pitch đúng:** "Chúng tôi không hứa LLM không bao giờ bị lừa.
-Chúng tôi chứng minh là bị lừa cũng không mất tiền, vì tiền chỉ đi
-khi code và contract cùng đồng ý."
+**Câu pitch đúng (dùng nguyên văn, không nói rộng hơn):**
+"Chúng tôi không hứa LLM không bao giờ bị lừa. Chúng tôi chứng minh
+là bị lừa cũng không chuyển tới recipient trái phép, không vượt
+cap tự động, và không approve vô hạn — nhưng vẫn có thể mua tool
+hợp lệ nhưng vô ích trong cap, và agent key bị lộ vẫn propose được
+trong policy."
+
+**Mô hình tổn thất tối đa (ghi thành bảng trong pitch nếu cần):**
+
+- Tới attacker ngoài allowlist qua treasury auto: 0, vì recipient
+  check là hard.
+- Lãng phí qua allowlisted recipient / tool hợp lệ nhưng vô ích:
+  tối đa dailyCap treasury + toolCap mission trong kỳ, nếu agent
+  key bị lộ và attacker propose liên tục trong policy.
+- Quỹ trong guard không bị rút trực tiếp bởi agent key: đúng, vì
+  không có hàm rút cho agent.

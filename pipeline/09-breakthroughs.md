@@ -1,48 +1,78 @@
 # 09 — Đột phá sáng tạo: làm thêm gì để khác biệt, theo thứ tự ưu tiên
 
-**Quy tắc:** chỉ làm stretch khi S1–S3 đã xong (08 §4). Mỗi stretch
-phải có test riêng và không được phá test cũ. Làm theo thứ tự 1 → 7,
-không nhảy cóc tới stretch khó trong khi stretch dễ chưa xong.
+**Định vị thẳng thắn (xem 10 §12):** các thành phần riêng đều đã
+có tiền lệ — GateKeep cho x402 + ERC-8004 trên Fuji, AgentVault cho
+guard pattern, Wallie cho pre-payment rails. Điểm khác biệt không
+nằm ở việc phát minh thêm một component mới, mà nằm ở sự kết hợp
+có thể kiểm chứng: **mission-scoped budget + receipt nối đủ mắt
+xích + replay giải thích được vì sao một request auto/queue/block.**
+Đừng claim "novel component" — claim "mission-scoped, auditable,
+explainable" mới là đúng và kiểm chứng được.
 
-## 1. Proof bundle — nên làm đầu tiên (dễ, khoe mạnh)
+**Chia core / stretch (sửa từ spec cũ):** proof bundle và mission
+budget display không phải stretch — chúng là lớp bằng chứng của
+chính use case đã chốt, thuộc S3. Chỉ các mục từ §3 trở đi mới là
+stretch, làm khi S1–S3 đã xong (08 §4). Mỗi stretch phải có test
+riêng và không được phá test cũ.
+
+## 1. [CORE — S3] Proof bundle / receipt — làm trong S3, không phải stretch
 
 **Ý tưởng:** mỗi lần thực thi thành công tạo ra 1 "gói bằng chứng"
-mà ai cũng kiểm tra được, không cần tin team.
+nối đủ mắt xích: mission → policy decision → payment → result.
 
 Gói gồm:
 
+- Mission slug + missionId bytes32.
 - Proposal JSON (đã validate) + hash của nó.
-- Policy snapshot tại thời điểm đó (per-tx cap, daily cap, spent).
+- Policy snapshot tại thời điểm đó: policy version, per-tx cap,
+  daily cap, spent, queue reason nếu có.
 - Tx hash payout hoặc tx hash tool payment.
-- Feedback ERC-8004 (nếu có) + tx hash feedback.
-- Audit entry hash (nối vào hash chain).
+- Result hash (hash của kết quả tool đã trả).
+- Feedback ERC-8004 (nếu có, từ mission owner sau operation
+  SETTLED) + tx hash feedback.
+- Audit entry hash (nối vào hash chain, canonical encoding 04 §7).
 
 UI hiển thị proof bundle dưới dạng 1 card: "Kiểm tra gói này" →
-mở Snowtrace từng tx + verify hash. Giám khảo không cần tin lời
-nói, chỉ cần click.
+mở Snowtrace từng tx + verify hash bằng script độc lập. Giám khảo
+không cần tin lời nói, chỉ cần click — nhưng kèm giới hạn ở 04 §7
+(checkpoint, integrity không phải trustless).
 
-**Vì sao khác biệt:** hầu hết bài hackathon chỉ khoe "nó chạy",
-không khoe "nó chạy và bạn kiểm tra được từng bước".
+## 2. [CORE — S3] Mission budget display + mission timeline
 
-## 2. Mission envelope + mission timeline — đã có lõi ở 04 §5, làm rõ thêm
-
-- Dashboard mission: mỗi mission hiển thị cap, đã chi, còn lại,
-  hết hạn khi nào, danh sách proposal thuộc mission đó.
+- Dashboard mission: mỗi mission hiển thị, **cho từng budget riêng**:
+  treasury cap, spent, remaining, expiry; tool cap, spent, reserved,
+  remaining, expiry; danh sách proposal/operation thuộc mission đó.
 - Mission hết hạn tự động khóa (không propose thêm được, proposal
-  cũ chưa chạy thì expire theo 48h queue).
+  cũ chưa chạy thì bị chặn ở execute bởi hard check, rồi expire
+  theo 48h queue).
 - Pitch: "quỹ không chỉ có giới hạn ngày, mà có giới hạn theo việc
-  — một việc hỏng không kéo cả ngày xuống".
+  — một việc hỏng không kéo cả ngày xuống, và mọi khoản chi đều
+  gắn với một nhiệm vụ cụ thể".
 
-## 3. Attack replay — cho giám khảo tự bấm nút tấn công
+## 3. [STRETCH — S4] Replay dưới các policy khác nhau — simulation, không phải replay on-chain
 
-- Trang `/demo/attack`: 3 nút tương ứng 3 đòn ở 06 §2. Giám khảo
+- Cùng một proposal JSON + cùng snapshot mission, chạy validator
+  với 3 policy variant (permissive / hiện tại / strict) và hiển thị
+  route cho từng variant: auto / queue / block, kèm lý do.
+- **Implement dưới dạng policy simulation off-chain, không submit
+  tx.** Replay on-chain cùng một request sẽ double-spend hoặc tạo
+  proposal trùng — bác bỏ implementation đó, giữ lại ý tưởng giải
+  thích.
+- Đây là stretch tạo khác biệt thật cho phần "explainable": giám
+  khảo thấy vì sao cùng một request, đổi policy là đổi kết quả,
+  mà không cần tin lời giải thích.
+
+## 4. [STRETCH — S4] Attack replay — cho giám khảo tự bấm nút tấn công
+
+- Trang `/demo/attack`: 3 nút tương ứng 3 đòn ở 06 §4. Giám khảo
   bấm nút → hệ thống chạy đòn tấn công thật (testnet, ví test) →
-  hiển thị kết quả: naive mất bao nhiêu, guarded mất 0.
+  hiển thị kết quả: naive mất bao nhiêu, guarded mất bao nhiêu tới
+  attacker (kèm positive control).
 - Khác với video quay sẵn: giám khảo tự tay thử, tin hơn nhiều.
 - **An toàn:** chỉ chạy với ví test + tiền testnet nhỏ, nút có xác
   nhận "chỉ chạy trên Fuji testnet", không bao giờ chạy với ví chính.
 
-## 4. Reputation-gated tool tier — làm cẩn thận, không làm ẩu
+## 5. [STRETCH — S4] Reputation-gated tool tier — làm cẩn thận, không làm ẩu
 
 **Chỉ làm khi đã hiểu rõ giới hạn Sybil (03 §4).** Thiết kế an toàn:
 
@@ -55,7 +85,7 @@ không khoe "nó chạy và bạn kiểm tra được từng bước".
 - Nếu không làm kịp logic trusted clients đúng chuẩn, **bỏ stretch
   này** — làm sai còn tệ hơn không làm, vì giám khảo sẽ hỏi về Sybil.
 
-## 5. Rolling daily cap — thay ngày UTC bằng cửa sổ trượt 24h
+## 6. [STRETCH — S4] Rolling daily cap — thay ngày UTC bằng cửa sổ trượt 24h
 
 - Thay `spentOnDay` bằng lịch sử payout (mảng timestamp + amount,
   hoặc bucket theo giờ) và tính tổng 24h gần nhất mỗi lần propose.
@@ -64,7 +94,7 @@ không khoe "nó chạy và bạn kiểm tra được từng bước".
   đây là stretch, không phải MVP. Nếu làm, phải đổi cả 01, 04, 06,
   slides — không đổi 1 nơi rồi để nơi khác ghi ngày UTC.
 
-## 6. Human-in-the-loop nâng cao — duyệt có điều kiện, không chỉ Approve/Reject
+## 7. [STRETCH — S4] Human-in-the-loop nâng cao — duyệt có điều kiện, không chỉ Approve/Reject
 
 - Owner duyệt kèm điều kiện: "approve nhưng giảm amount xuống X"
   (tạo proposal mới với amount đã sửa, proposal cũ reject).
@@ -72,7 +102,7 @@ không khoe "nó chạy và bạn kiểm tra được từng bước".
 - Batch approve? Không — duyệt từng cái là ý nghĩa của queue, batch
   làm mất kiểm soát. Đừng thêm batch approve cho tiện.
 
-## 7. Multisig / timelock cho owner — stretch cuối cùng, chỉ khi còn thời gian
+## 8. [STRETCH — S4] Multisig / timelock cho owner — stretch cuối cùng, chỉ khi còn thời gian
 
 - Thay owner đơn bằng multisig 2/3 hoặc timelock 24h cho đổi policy
   (đổi cap phải chờ 24h mới có hiệu lực, trong thời gian chờ ai
@@ -96,13 +126,13 @@ không khoe "nó chạy và bạn kiểm tra được từng bước".
 ## Tóm tắt thứ tự cho Gemini
 
 ```
-S1–S3 xong
-  → 1. Proof bundle
-  → 2. Mission timeline UI
-  → 3. Attack replay page
-  → 4. Reputation tier (chỉ nếu làm đúng trusted clients)
-  → 5. Rolling cap (chỉ nếu đổi hết docs kèm theo)
-  → 6. Conditional approve
-  → 7. Multisig/timelock
+S3 core đã có: proof bundle (§1) + mission budget display (§2)
+S4 stretch, theo thứ tự:
+  → 3. Policy replay simulation (off-chain, không replay on-chain)
+  → 4. Attack replay page
+  → 5. Reputation tier (chỉ nếu làm đúng trusted clients)
+  → 6. Rolling cap (chỉ nếu đổi hết docs kèm theo)
+  → 7. Conditional approve
+  → 8. Multisig/timelock
   → Dừng ở bất kỳ bước nào khi tới freeze 17/11.
 ```

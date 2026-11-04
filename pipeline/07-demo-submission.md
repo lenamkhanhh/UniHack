@@ -7,12 +7,12 @@ màn hình đủ lâu để đọc (ít nhất 3 giây).
 
 | Scene | Thời lượng | Làm gì trên màn hình | Bằng chứng hiện ra |
 |---|---|---|---|
-| 1. Discover | 20s | Dashboard: agentId ERC-8004, URI, reputation count + summary | AgentId + link Snowtrace registry |
-| 2. Pay tool | 25s | Mua `tool:summary` $0.50 qua x402: 402 → sign → 200 | Tx hash settlement trên Snowtrace, balance seller tăng |
-| 3. In-policy payout | 25s | Propose payout 5 USDC tới recipient allowlisted → auto execute | Tx hash guard, spentToday tăng |
-| 4. Over cap → queue → approve | 35s | Propose 6 USDC → Queued → owner Approve → Execute | Tx hash queue + approve + execute, 3 tx rõ ràng |
-| 5. Attack blocked | 25s | Chạy lookalike + unlimited approval + injection (chọn 1 đòn rõ nhất, 2 đòn còn lại để ở README test) | Balance guard không đổi, audit ghi BLOCKED + rule, 0 tiền mất |
-| 6. Kill switch | 20s | Owner Pause → propose in-policy cũng revert → Unpause → chạy lại | Tx pause/unpause, lỗi revert hiện rõ, sau đó chạy lại thành công |
+| 1. Discover | 20s | Dashboard: agentId ERC-8004, URI, agentWallet, reputation count + summary (getSummary 4 tham số) | AgentId + link Snowtrace registry |
+| 2. Pay tool | 25s | Mission đã kích hoạt → mua `tool:summary` $0.50 qua x402: 402 (operationId) → sign → 200 | Tx hash settlement trên Snowtrace, balance seller tăng, operation SETTLED |
+| 3. In-policy payout | 25s | Propose payout 5 USDC trong mission, tới recipient allowlisted → auto execute | Tx hash guard, spentToday + missionSpent tăng |
+| 4. Over cap → queue → approve | 35s | Propose 6 USDC → Queued → owner Approve (MetaMask) → Execute (MetaMask) | Tx hash queue + approve + execute, 3 tx rõ ràng |
+| 5. Attack blocked + positive control | 25s | Chạy lookalike (chọn 1 đòn rõ nhất, 2 đòn còn lại để ở README test) → BLOCK, rồi chạy ngay một request hợp lệ → thành công | Balance guard không đổi, audit ghi BLOCKED + rule, rồi request hợp lệ thành công (chứng minh không "chặn tất cả") |
+| 6. Kill switch | 20s | Owner Pause → propose/reservation mới revert → Unpause → chạy lại | Tx pause/unpause, lỗi revert hiện rõ, sau đó chạy lại thành công. Nói rõ: pause không thu hồi authorization đã ký trong 60s TTL |
 
 **Fallback nếu live fail lúc quay:** dùng tx hash đã ghi sẵn + audit
 ledger + video quay trước, không quay lại bằng mock rồi ghi là live.
@@ -46,9 +46,14 @@ demo riêng, không cắt scene 1–6 để nhét TalkMeter vào.
 5. Guard live: guard address + policy (cap) + link Snowtrace.
 6. x402 live: 402 → sign → 200 + tx hash tool purchase.
 7. ERC-8004 live: agentId + reputation + tx feedback.
-8. Attack đối chứng: naive mất bao nhiêu vs guarded mất 0 (bảng số).
-9. Audit ledger: hash chain verify = true, screenshot verify.
-10. Roadmap / giới hạn trung thực: cái gì chưa làm (validation
+8. Mission budget + receipt: mission, hai budget spent/reserved/
+   remaining/expiry, receipt nối mission → policy version → payment
+   tx → result hash.
+9. Attack đối chứng: naive mất bao nhiêu vs guarded mất bao nhiêu
+   tới attacker (bảng số trước/sau, cùng intent/payload) + positive control.
+10. Audit ledger: hash chain verify = true (API + script độc lập),
+    checkpoint hash, và giới hạn (integrity, không phải trustless).
+11. Roadmap / giới hạn trung thực: cái gì chưa làm (validation
     registry, rolling cap, multisig) + cái gì làm tiếp nếu có thời gian.
 11. Links: repo, app deploy, video, Snowtrace — tất cả mở được ẩn danh.
 
@@ -57,17 +62,38 @@ mock ghi như live, địa chỉ mainnet, claim "chống hack tuyệt đối".
 
 ## 4. Submission checklist — nộp qua team1vn.xyz, trước 21/11 23:59 VN
 
+### 4a. Checklist chung (cả S1 và S2/S3)
+
 - [ ] Repo public, hoặc private + collaborator `tuantqse90` đã accept.
-- [ ] README nộp bài có: 1 câu sản phẩm, link app, guard address,
-      agentId, facilitator, cách chạy, bảng tx hash, giới hạn trung thực.
 - [ ] Pitch slides link (Canva/Slides) mở được ẩn danh.
 - [ ] Video 2–3 phút link mở được ẩn danh.
-- [ ] Supporting material: pipeline spec này (đã trong repo), test
-      report (forge test output), attack test số liệu.
 - [ ] Bấm **Submit** (draft không tính). Sau khi Submit, chụp màn
       hình xác nhận và lưu lại.
 - [ ] Kiểm tra lại bằng trình duyệt ẩn danh: mọi link đều mở được,
       không link nào chỉ team xem được.
+
+### 4b. Nếu chỉ nộp S1 (Rails + TalkMeter) — checklist riêng, không claim thừa
+
+- [ ] README nộp bài có: 1 câu sản phẩm (trục mission), link app,
+      facilitator + x402 version thực tế, mission record off-chain,
+      cách chạy, bảng tx hash tool + TalkMeter, giới hạn trung thực.
+- [ ] Video: scene 1, 2 và 6 (scene 6 reframed thành meeting billing),
+      không quay scene guard/queue/feedback chưa xây.
+- [ ] Slides: không claim guard contract, human queue on-chain, hay
+      ERC-8004 feedback nếu chưa xây. Ghi rõ S1 là gì và S2 sẽ thêm gì.
+- [ ] Supporting material: test V/L cho x402 + TalkMeter + operation
+      idempotency.
+
+### 4c. Nếu nộp đủ S2/S3 — checklist đầy đủ
+
+- [ ] README nộp bài có: 1 câu sản phẩm, link app, guard address +
+      Snowtrace verify, agentId, facilitator + x402 version, mission
+      demo, cách chạy, bảng tx hash, checkpoint hash audit, giới hạn
+      trung thực (00 §10).
+- [ ] Video đủ 6 scene theo §1, slides đủ 11 slide theo §3.
+- [ ] Supporting material: pipeline spec này (đã trong repo), test
+      report (C/V/L output), attack test số liệu trước/sau +
+      positive control.
 
 **Lưu ý Builder Hub:** Builder Hub có deadline/địa điểm khác và tài
 khoản riêng (xem context). Coi Team1 là kênh nộp chính cho kế hoạch
@@ -76,17 +102,14 @@ không thay thế Team1 bằng Builder Hub khi chưa có xác nhận.
 
 ## 5. Rubric evidence — giám khảo chấm điểm nào thì xem bằng chứng nào
 
+Không dự báo điểm số hay khả năng thắng. Bảng này chỉ liệt kê
+bằng chứng tương ứng với từng mục rubric.
+
 | Rubric (điểm) | Bằng chứng nộp kèm | Ở đâu |
 |---|---|---|
-| Technical 25 | Guard code verified + T1–T12 pass + validator 12 luật | Repo `contracts/`, `pipeline/01`, `pipeline/04`, `pipeline/06` |
+| Technical 25 | Guard code verified + test C/V/L pass + validator BLOCK/QUEUE | Repo `contracts/`, `pipeline/01`, `pipeline/04`, `pipeline/06` |
 | Avalanche 25 | Guard + x402 + ERC-8004 live trên Fuji, tx hash Snowtrace | Video scene 1–3, README bảng tx |
-| Creativity 15 | Propose-only + queue + proof bundle + mission envelope | Slides 3, `pipeline/09` |
-| Impact 15 | Use case quỹ nhóm/CLB + tool marketplace 3 tool | Slides 2, app demo |
+| Creativity 15 | Mission-scoped budget + receipt/proof bundle + replay giải thích | Slides 3, `pipeline/09` (phần core) |
+| Impact 15 | Use case mission của nhóm/CLB + tool marketplace 3 tool | Slides 2, app demo |
 | Presentation 10 | Video 2:30 đúng script + slides 1 claim = 1 bằng chứng | Video, slides |
-| UI/UX 10 | Dashboard policy nhìn thấy, queue 1 click, audit verify | App deploy, video |
-
-**Tự chấm trước khi nộp (ước lượng, không phải điểm hứa):** nếu
-S1–S3 xong và video đúng script, mục tiêu thực tế là 81–93/100
-(theo phân tích hybrid trước đó). Nếu chỉ xong S1 (Rails +
-TalkMeter), mục tiêu là 72–84/100. Đừng ghi con số này vào slides
-nộp bài — đây là tự đánh giá nội bộ để biết mình đang ở đâu.
+| UI/UX 10 | Dashboard policy + mission budget nhìn thấy, queue 1 click, audit verify | App deploy, video |
