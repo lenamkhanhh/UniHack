@@ -1,46 +1,51 @@
-# UniHack — Avalanche Team1 Vietnam UniHack 2026
+# UniHack — Guarded Agent Economy
 
-Research bundle prepared on **4 November 2026** to help an AI research assistant find and cross-check the competition context.
+**Trạng thái: specification only.** Chưa có app/contracts được implement, chưa deploy, chưa có runtime test pass.
+Research snapshot: 4 November 2026. Competition: [Avalanche Team1 Vietnam UniHack](https://team1vn.xyz/).
 
-## Quick facts
+Một nhóm nghiên cứu/CLB giao agent mission có ngân sách. Agent mua search/summary tools bằng USDC Fuji,
+người giao nhận deliverable và đối chiếu quyền chi, payment và result. TalkMeter minh họa billing theo phút.
+S2 bổ sung treasury guard + human queue; S1 payment slice vẫn là release nộp độc lập.
 
-- A 30-day student build program on Avalanche, scheduled for 2–30 November 2026.
-- Vietnamese university students from any major may participate; joining and building are free, and teams may have up to three people.
-- Projects may use an Avalanche L1, Fuji testnet, or C-Chain mainnet. The suggested ideas are optional.
-- Team1’s current website and Luma schedule say submissions close **21 November at 23:59 Vietnam time**. The Avalanche Builder Hub listing shows a different deadline, venue, and submission path. See [the discrepancy note](context/competition-context.md#official-source-conflicts).
-- The authenticated participant dashboard snapshot reviewed for this research showed a two-person team on the Agent Economy (x402) track and no submission yet. Personal names, contact details, invite links, and pending applicant identities are intentionally excluded from this public repository.
+## Bắt đầu cho Gemini
 
-## Research files
+Đọc [handoff](pipeline/11-gemini-handoff.md), rồi [overview/constants](pipeline/00-overview.md).
+Implement S0 → S1 → S2 → S3; giữ passing S1 release. Các checklist là yêu cầu phải chạy, không phải evidence đã pass.
 
-- [Competition overview, schedule, rules, prizes, and source conflicts](context/competition-context.md)
-- [All 20 suggested project ideas with plain-language MVP sketches](context/idea-catalog.md)
-- [Source and registration link index](context/source-index.md)
-- [Build sources: curated x402, guard, ERC-8004 and Fuji references — what to copy and what not to copy](context/build-sources.md)
-- [Spike checklist: 2-day pass/fail test for hybrid vs Rails + TalkMeter, with proof tests and demo script](context/spike-checklist.md)
+| Spec | Nội dung |
+|---|---|
+| [00](pipeline/00-overview.md) | Use case, stages, constants, ownership của từng spec |
+| [01](pipeline/01-contracts.md) | Treasury mission/queue, hard vs soft, idempotent propose |
+| [02](pipeline/02-x402-tools.md) | Quote/reservation/authorization/receipt/recovery, TalkMeter |
+| [03](pipeline/03-erc8004.md) | Deployed ABI, identity roles, owner quality feedback |
+| [04](pipeline/04-agent.md) | Validator, canonical audit, result/proof export |
+| [05](pipeline/05-app.md) | PostgreSQL schema/constraints, owner auth, spend/read, API/cutover |
+| [06](pipeline/06-tests-security.md) | C/P/V/E/L acceptance matrix + threat model |
+| [07](pipeline/07-demo-submission.md) | S1/full demo, 12-slide outline và submission |
+| [08](pipeline/08-build-plan.md) | Execution order, release gates, freeze/fallback |
+| [09](pipeline/09-breakthroughs.md) | Core evidence và optional simulation/replay |
+| [10](pipeline/10-review-response.md) | Historical review responses; không override owning specs |
+| [11](pipeline/11-gemini-handoff.md) | Handoff ngắn, invariants và remaining live checks |
 
-## Full product pipeline — for GPT review, then Gemini implementation
+## Competition và nguồn
 
-Product: **Guarded Agent Economy** — use-case axis: a research group / club assigns an agent a budgeted mission; the agent buys tools to complete it; every spend reconciles against the granted permission and the result received. Agent proposes only, a guard contract enforces policy on Fuji, out-of-policy treasury proposals queue for a human, tool purchases settle via x402 (no human queue for tools in MVP), and the agent carries an ERC-8004 identity + reputation from the mission owner. Built in stages so the Rails + TalkMeter slice (Stage 1, with its own submission pack) is submittable even if the guard stage slips: read the files in numeric order, and use the shared constants in `00-overview.md` §8 everywhere — do not invent different caps, addresses, or prices.
+- [Competition context](context/competition-context.md): lịch, eligibility, requirements, prizes và official-source conflicts.
+- [20 optional ideas](context/idea-catalog.md), [source/Luma index](context/source-index.md).
+- [Build references](context/build-sources.md), [spike checklist](context/spike-checklist.md).
+- [Luma calendar](https://luma.com/Team1VN), [Builder Hub event](https://build.avax.network/events/596c0b2d-63aa-4cf0-a0ad-a7e34ddbfdc0).
 
-- [00 — Overview, staged pipeline, architecture, rubric evidence (no score prediction), shared constants](pipeline/00-overview.md)
-- [01 — Guard contract spec: GuardedTreasury on Fuji, mission on-chain, hard vs soft checks, state machine](pipeline/01-contracts.md)
-- [02 — x402 tool marketplace + TalkMeter metered billing + operation lifecycle, idempotency, reservation, recovery](pipeline/02-x402-tools.md)
-- [03 — ERC-8004 Identity + Reputation on Fuji, correct ABI (getSummary 4 params, readFeedback/readAllFeedback), mission-owner feedback](pipeline/03-erc8004.md)
-- [04 — Agent proposer, BLOCK-before-QUEUE validator, mission, human queue, hash-chained audit ledger with canonical encoding](pipeline/04-agent.md)
-- [05 — App, API, DB, UI, and submission repo layout — Vercel + hosted Postgres, MetaMask owner txs, mission token for agent txs](pipeline/05-app.md)
-- [06 — Test matrix split into contract (forge), validator/API integration, and live Fuji smoke; attack test with a naive-vault control + positive control](pipeline/06-tests-security.md)
-- [07 — Demo script (6 scenes, 2:30), video, slides, submission checklists split for S1 vs S2/S3](pipeline/07-demo-submission.md)
-- [08 — Day-by-day build plan to 21/11, work split, GPT review checklist](pipeline/08-build-plan.md)
-- [09 — Core evidence (proof bundle, mission budget display) vs stretch in priority order, and what NOT to build](pipeline/09-breakthroughs.md)
-- [10 — Review-response: verdicts (ACCEPT / PARTIAL / REJECT / ALREADY FIXED) for 12 GPT suggestions, with spec paths and official sources, plus addendum A1–A5 for the second small review (nonce recovery, S1 auth/pause, operation persistence, LLM vs key compromise, operation binding)](pipeline/10-review-response.md)
-- [11 — Gemini handoff: product, invariants (I1–I14), implementation order, stage gates, fallback, test locations, locked decisions](pipeline/11-gemini-handoff.md)
+Planning deadline 21 November 2026 23:59 Vietnam time; target submit 20/11, feature freeze 17/11.
+Team1/Luma và Builder Hub khác deadline/venue/route trong research snapshot; xác nhận organizer instructions trước submit.
+Public repo lược bỏ email cá nhân, member/applicant identities, invite tokens và liên hệ riêng.
 
-Honest limits (kept in every pitch, video, and README): reputation is a trust signal, not Sybil-proof, and MVP feedback is a quality rating from the mission owner, not a success rate of all calls; TalkMeter here is a per-minute paid tool, not a full meeting product; the MVP daily cap is a UTC day (with a midnight-boundary gap), not a rolling window; pause does not cancel an x402 authorization already signed within its 60s TTL, and does not stop a key holder signing directly; LLM compromise and private-key compromise are different threats — toolCap off-chain does not hold against a key holder, whose tool loss is bounded by the tool wallet balance plus refills, not by toolCap; UNKNOWN is not FAILED or SETTLED by itself — only a settlement receipt (or a reconciled expiry + unused nonce) concludes it; S1 has no guard, its owner/auth/pause are off-chain; the hash chain proves ledger integrity/consistency, not trustlessness or answer quality; mock mode must always be labelled mock; testnet only, no mainnet keys or funds.
+## Giới hạn cần giữ trong demo
 
-## Official links
+Hai budget riêng: treasury on-chain, tool budget off-chain khi signer/backend an toàn.
+Key agent bị lộ có thể rút toàn bộ tool wallet; không auto-refill. Pause không recall authorization đã ký.
+Mission hết hạn cấm spend mới nhưng owner vẫn read/reconcile/lấy kết quả đã trả tiền.
+UTC day không rolling 24h; owner có soft-cap override và emergency withdraw.
+Hash chain/checkpoint chứng minh consistency, không chất lượng câu trả lời/trustlessness.
+Reputation không Sybil-proof. Mock/scripted/live luôn ghi đúng mode.
 
-- [Team1 Vietnam UniHack](https://team1vn.xyz/)
-- [Team1 Vietnam on Luma](https://luma.com/Team1VN)
-- [Avalanche Builder Hub event listing](https://build.avax.network/events/596c0b2d-63aa-4cf0-a0ad-a7e34ddbfdc0)
-
-This is a research summary, not an organizer notice. Verify dates and submission instructions with the organizers before relying on them.
+Không cần chạy install/forge từ README ở trạng thái này: chưa có implementation.
+Khi implement, thêm lockfiles, env template rỗng, migrations, commands/results thật và receipt manifest đã sanitize.

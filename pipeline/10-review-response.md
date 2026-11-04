@@ -1,3 +1,5 @@
+> **Historical record — superseded for implementation.** Các verdict và snippets dưới đây mô tả các commit trước, bao gồm những sửa tiếp tục được thay thế. Không copy interface/test IDs hoặc dùng quy tắc precedence cũ từ file này. Spec hiện hành do từng owning file 00–09 quản lý; handoff 11 chỉ tóm tắt. Xem [revision record](../context/spec-hardening.md) cho lượt sửa trực tiếp sau dec7648.
+
 # 10 — Review-response: 12 góp ý của GPT, đối chiếu với spec tại commit 8dd1f49
 
 **HEAD đã kiểm tra trước khi sửa:** local và remote đều là

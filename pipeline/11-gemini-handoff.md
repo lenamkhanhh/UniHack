@@ -1,131 +1,59 @@
-# 11 — Handoff cho Gemini (đọc trước khi code, không cần đọc hết 10 file mới code được)
+# 11 — Handoff triển khai
 
-**Sản phẩm chốt:** Guarded Agent Economy trên Fuji. Trục use case:
-**một nhóm nghiên cứu / CLB giao agent một nhiệm vụ có ngân sách;
-agent mua công cụ để hoàn thành nhiệm vụ đó; mọi khoản chi đối chiếu
-được với quyền được cấp và kết quả nhận lại.**
+Đọc 00 trước; 01/02/03/04/05 là owning specs, 06 là acceptance. 10 chỉ là lịch sử.
+Không có quy tắc "file số lớn hơn thắng". Repo ở lượt hardening này vẫn chỉ là spec, chưa có implementation/tests pass.
 
-## 1. Luồng tiền, nói trong 4 dòng
+## 1. Sản phẩm và giới hạn
 
-1. Owner tạo mission (slug, agent, treasury cap 10 USDC, tool cap
-   5 USDC, expiry 24h) và kích hoạt bằng chữ ký.
-2. Agent (LLM chỉ đề xuất JSON) → validator BLOCK/QUEUE → treasury
-   payout qua guard on-chain, hoặc tool purchase qua x402.
-3. Treasury vượt cap → queue, owner duyệt bằng MetaMask.
-   Tool vượt cap → BLOCK, không queue.
-4. Mọi quyết định vào audit ledger + proof bundle (mission →
-   policy version → payment tx → result hash).
+Nhóm nghiên cứu giao mission có budget, agent dùng search + summary tạo deliverable có nguồn.
+Hai đường tiền: treasury trong guard S2; tool payments qua signer + reservation từ S1.
+TalkMeter là simulated metering, không full meeting app. Giữ S1 submittable, không đợi guard mới build payment.
 
-## 2. Invariants bắt buộc — phá invariant nào cũng là phá sản phẩm
+## 2. Invariants cần implement
 
-- **I1. Mission bắt buộc.** Treasury payout S2 phải thuộc mission
-  tồn tại, chưa hết hạn, chưa đóng, đúng agent. Không có payout
-  ngoài mission. LLM không tạo mission.
-- **I2. Schema ≠ policy.** Schema chỉ check hình dạng. Cap là policy.
-  Treasury vượt cap → QUEUE, không phải schema lỗi.
-- **I3. BLOCK trước QUEUE.** Mọi BLOCK check trước, rồi mới QUEUE
-  (per-tx → daily → mission treasury). Tool không có queue.
-- **I4. Hard không override, soft được owner duyệt.** Hard: paused,
-  recipient không allowlisted, mission hết hạn/đóng, đã Executed/
-  Rejected/Expired. Soft: 3 cap. Approve/execute check expiry trong
-  hàm, không reset khi approve. Execute chỉ từ Approved, một lần.
-- **I5. Owner ký bằng MetaMask, backend không giữ owner key.**
-  Backend chỉ ký agent tx khi có mission token hợp lệ, và vẫn
-  re-check mission ở mỗi call. Không tin address do client gửi.
-- **I6. x402 idempotency + reservation atomic + binding.**
-  Operation identity = (mission, operationId, payer, tool, inputHash,
-  paymentTermsHash). Retry khác scope → 403/409, không settle.
-  Budget khả dụng = cap − spent − reserved, reservation trong một
-  DB transaction có row lock mission. Upstream chạy nội bộ, kết quả
-  giữ **trong DB** trước khi phát 402, settle confirmed mới trả.
-  UNKNOWN → không ký mới, không tự chuyển FAILED/SETTLED.
-- **I7. Pause không thu hồi authorization đã ký trong 60s, và
-  không chặn key holder ký trực tiếp.** Settlement sau pause ghi
-  `SETTLED_AFTER_PAUSE`. S1 pause = flag DB, S2 pause = guard —
-  xem 05 §4b, không dùng guard ở S1.
-- **I8. ERC-8004 đúng ABI deploy.** `getSummary` 4 tham số,
-  `readFeedback`/`readAllFeedback` (không có `getFeedback`).
-  Feedback client là mission owner, chỉ sau operation SETTLED,
-  tag MVP chỉ `starred` (quality). Không gọi là success rate.
-- **I9. Storage deploy là Vercel + hosted Postgres.** Không dùng
-  file SQLite local trên Vercel. Nếu DB down, hiển thị "audit DB
-  unavailable", không hiển thị rỗng giả tạo.
-- **I10. Claim đúng phạm vi.** Không nói "bị lừa cũng không mất
-  tiền", không nói "0 mất" chung chung, không nói hash chain là
-  trustless, không nói reputation chống Sybil. Câu đúng ở 00 §10
-  và 04 §8.
-- **I11. Nonce recovery đúng EIP-3009.** Nonce chưa dùng không
-  chứng minh thất bại; nonce đã dùng không chứng minh thành công
-  (có thể là cancel). Chỉ SETTLED khi có receipt Transfer đúng
-  payer/payTo/amount; chỉ FAILED khi block timestamp đã vượt
-  validBefore và nonce vẫn chưa dùng, hoặc có AuthorizationCanceled.
-  Không giải phóng reservation vì wall-clock vượt 60s.
-- **I12. LLM compromise ≠ key compromise.** LLM bị lừa thì validator
-  còn chặn. Key agent bị lộ thì toolCap/allowlist off-chain không
-  còn tác dụng — tổn thất tool tối đa = toàn bộ số dư ví tool +
-  mọi lần refill trước khi đóng mission. Không auto-refill ví tool.
-  Treasury vẫn được guard bảo vệ.
-- **I13. Activation signature bind đủ.** Message đúng format 05 §4b
-  (mission, agent, hai cap, nonce dùng một lần 10 phút, expiresAt =
-  mission expiry, chain fuji-43113, domain = app origin). S1 verify
-  bằng mission record, S2 thêm guard.owner() + mission on-chain
-  khớp. Cutover S1→S2 phải làm checklist 05 §4b và kích hoạt lại token.
-- **I14. Recovery/result có quyền.** GET operation và trả held
-  result yêu cầu mission token đúng mission. Không token → 401
-  chung, token sai mission → 403. Không lộ authSignature hay held
-  result cho người không có quyền.
+1. Mọi spend có mission đã được O cấp, đúng agent A, còn hạn và credential đúng deployment/stage/authVersion.
+2. S1 owner/pause từ config+DB; S2 từ guard. Cutover maintenance + version revocation, không reset outstanding spend.
+3. Owner ký MetaMask, backend chỉ key A. O != A; ERC-8004 NFT owner=A, feedback client=O.
+4. BLOCK hard trước soft caps. Treasury auto trong propose; QUEUE on-chain, approve/execute owner hai tx.
+5. Mission hết hạn/closed và recipient bị gỡ không owner-override. Soft caps được approve cho proposal cụ thể.
+6. Treasury requestId unique on-chain, duplicate HTTP/broadcast không tạo payout mới.
+7. x402 quote chưa reserve/compute. Reserve atomic trước ký; unsigned lease expiry khác signed authorization expiry.
+8. Một operation một immutable authorization; UNIQUE nonce binding chống credit lại cùng payment.
+9. Persist signature/state trước transmission, held result trước settle, submission intent trước external call.
+10. Finalize payment từ đúng token/nonce/Transfer/receipt + finality, không từ nonce bool hay amount đơn lẻ.
+11. SETTLED/FAILED + counters + audit atomic/idempotent. UNKNOWN giữ reservation.
+12. CREATED/unsigned RESERVED có deadline cleanup; đã SIGNED chỉ release sau reconcile an toàn.
+13. operationId global unique, UNIQUE(sessionId,minuteIndex), input/terms/mission/payer binding.
+14. Mission đóng/hết hạn/pause không làm mất quyền owner read/reconcile/result. Read token không có quyền sign/spend.
+15. Tool budget off-chain không bảo vệ khi key A lộ; no auto-refill. Pause không recall chữ ký đã phát hành.
+16. Audit append serialized, unique source events, verifier dùng export/checkpoint, public export redact private fields.
+17. ERC-8004 feedback 1 lần/mission do O xác nhận deliverable và paid operation, không gọi là success rate.
+18. Mock, scripted, live chain là badges khác nhau; chỉ receipt thật mới ghi live Fuji tx.
 
-## 3. Thứ tự implementation (đồng bộ 08 §3)
+## 3. Thứ tự làm và gate
 
-1. S0 spike → ghi facilitator + x402 version thực tế.
-2. **S1 trước:** tool server + TalkMeter + mission record off-chain
-   + identity display + S1 submission pack (07 §4b).
-3. **S2 sau:** guard contract (mission on-chain) + test C-series,
-   rồi validator + mission token + queue MetaMask + audit.
-4. **S3:** ERC-8004 feedback từ mission owner + proof bundle +
-   verifier script + demo 6 scene + video + slides.
-5. **S4 stretch theo 09:** policy replay simulation (off-chain) →
-   attack replay → reputation tier → rolling cap → conditional
-   approve → multisig/timelock. Dừng ở freeze 17/11.
+- S0: verify token/SDK/facilitator/version/finality, 402→paid→result thật. Ghi manifest, chưa có tx thì đừng build UI lớn.
+- S1: provision Postgres; auth/read access; quote/reserve/signer/recovery; one summary tool; search; TalkMeter;
+  audit cơ bản; P/V/E tests áp dụng S1; live payment + S1 video/slides. Tag release S1.
+- S2: contract C tests (mission+idempotency+queue), deploy/verify Fuji; authenticated treasury route,
+  cutover, MetaMask queue, event mirror, attack + positive control.
+- S3: feedback đúng wallet roles; proof export/offline verifier; demo deliverable; 12-slide deck/video.
+- S4 optional theo 09, dừng ở freeze 17/11/2026. Không cắt accounting/auth/recovery để kịp stretch.
 
-## 4. Stage gates và fallback
+Mỗi stage chỉ đạt khi checks 06 cho stage đó chạy thực sự; ghi commands/results và tx hashes.
+Nếu S2 chưa đạt lúc freeze, nộp S1 release; bỏ guard/feedback claims chưa xây.
 
-- **S1 gate:** tool mua live, TalkMeter tick có tx, operation
-  idempotency pass, S1 pack xong → có thể nộp ngay.
-- **S2 gate:** C-series + V-series pass, queue MetaMask chạy,
-  audit verify = true (API + script), attack có số trước/sau +
-  positive control.
-- **S3 gate:** feedback đọc lại được, proof bundle + verifier,
-  video 2:30 đúng 6 scene, link mở được ẩn danh.
-- **Fallback:** tới 17/11 mà S2 chưa xong → nộp S1, không nộp S2
-  dở dang, và README/slides/video không claim phần chưa xây.
+## 4. Tình huống bắt buộc trước live demo
 
-## 5. Test chạy ở đâu (đồng bộ 06)
+402 bị bỏ dở; signer đua expiry worker; hai operation tranh budget; duplicate session tick;
+authorization ký lại cho cùng operation; response timeout trước/sau submit; process crash sau settlement;
+nonce cancel; payment giống payer/amount nhưng khác nonce; reused nonce; concurrent finalize;
+mission hết hạn trước delayed settlement; read recovery sau expiry; cutover với outstanding payments;
+treasury broadcast timeout và retry; event ingest trùng; DB/RPC unavailable.
+Xem IDs và expected outcomes tại 06, không tick bằng suy luận.
 
-- **C — forge:** `cd contracts && forge test` — guard, mission,
-  state machine.
-- **V — vitest/node:** validator, schema/policy, mission token,
-  operation idempotency + binding, reservation atomic + concurrent,
-  TalkMeter unique tick, audit hash, UNKNOWN/delayed settlement,
-  nonce cancel, restart persistence, cross-mission reuse, S1 auth/pause,
-  activation signature binding (V13–V21).
-- **L — Fuji live:** x402 402→pay→200 thật, guard tx thật,
-  ERC-8004 thật, TalkMeter tick thật — ghi tx hash vào README.
+## 5. Chưa xác minh
 
-## 6. Quyết định đã chốt — không tự đoán lại
-
-- Hằng số duy nhất ở 00 §8: Fuji 43113, USDC `0x5425…Bc65`,
-  per-tx 5 USDC, daily 20 USDC (ngày UTC), mission treasury 10 USDC,
-  mission tool 5 USDC, queue TTL 48h, x402 TTL 60s.
-- Hai budget riêng, không gộp, không ghép x402 vào guard.
-- Guard bỏ `toolAllowlist`, bỏ event `Blocked`, bỏ
-  `emergencyWithdraw(to)` — chỉ rút về owner khi paused.
-- Tool seller MVP không cần ERC-8004 identity.
-- ERC-8004 là DRAFT — ABI deploy thắng EIP.
-- Review-response đầy đủ ở `10-review-response.md`, gồm addendum
-  lượt review nhỏ thứ hai (5 mục A1–A5, đều ACCEPT). Nếu spec
-  khác nhau giữa các file, file có số lớn hơn và 10/11 thắng cho
-  quyết định đã chốt, còn 00 §8 thắng cho hằng số.
-- **Không tick test nào chưa chạy.** Lượt này chỉ sửa spec, chưa
-  implement app, chưa deploy contract, chưa chạy test nào — mọi
-  test C/V/L vẫn là "bắt buộc phải chạy", không phải "đã pass".
+Deployed USDC/registry ABI + code hash, facilitator actual settlement, Fuji finality RPC,
+SDK package versions, DB provisioning, migrations, app/contracts/verifier và mọi test runtime.
+Không có số liệu benchmark hay deploy address được tạo trong lượt sửa spec.

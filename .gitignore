@@ -1,0 +1,19 @@
+# Secrets and local state; templates with placeholders may be committed.
+.env
+.env.*
+!.env.example
+!.env.*.example
+node_modules/
+.next/
+coverage/
+*.db
+*.db-*
+*.sqlite*
+*.dump
+*.pem
+*.key
+secrets/
+private-evidence/
+contracts/cache/
+contracts/out/
+contracts/broadcast/

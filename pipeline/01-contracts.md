@@ -8,15 +8,15 @@ policy check bằng code.
 
 - Tooling: **Foundry** (`forge build`, `forge test`, `forge script`).
   Lý do: test nhanh, không cần node server cho contract test.
-- Solidity `^0.8.20`, OpenZeppelin v5: `Ownable`, `Pausable`,
-  `ReentrancyGuard`, `SafeERC20`. Chốt `Ownable` (không phải
-  `Ownable2Step`) cho MVP để đơn giản; owner transfer không nằm
-  trong MVP, không test, không demo.
+- Solidity compiler và OpenZeppelin v5 pin exact versions tương thích trong lock/config lúc implement; dùng Ownable, Pausable, ReentrancyGuard, SafeERC20.
+  Backend không có key owner. MVP vô hiệu hóa transferOwnership/renounceOwnership (override revert) để giữ owner cố định;
+  không chỉ giấu nút UI trong khi hàm inherited vẫn gọi được. Multisig/owner rotation là thay đổi spec ngoài MVP.
 - **Không upgradeable, không proxy trong MVP.** Lý do pitch: policy
   mà owner đổi ngầm được thì không còn là guard. Mọi đổi policy đều
   qua hàm owner-only và phát event, đọc được trên Snowtrace.
-- Token duy nhất trong MVP: **USDC Fuji** (6 decimals). Không nhận
-  AVAX, không nhận token lạ — hàm nhận token khác phải revert.
+- Token được hỗ trợ cho payout/accounting là USDC Fuji immutable (6 decimals). Không có arbitrary token/call/approve API.
+  Revert receive/fallback cho AVAX gửi thông thường. Không claim chặn được ERC-20 lạ được gửi thẳng tới address guard
+  hoặc AVAX forced-send: recipient contract không kiểm soát mọi inbound transfer. Token lạ không tạo spending authority.
 - Pattern: Checks-Effects-Interactions. Cập nhật state (spent, queue)
   **trước** khi gọi `safeTransfer`. Mọi hàm chuyển tiền có
   `nonReentrant`.
@@ -25,18 +25,18 @@ policy check bằng code.
 
 | Vai | Ai | Quyền |
 |---|---|---|
-| Owner (human) | Ví người duyệt (MetaMask demo) | Tạo/đóng mission, set policy, allowlist, approve/reject queue, pause/unpause, rút tiền khẩn cấp khi paused (chỉ về chính owner, xem §7) |
+| Owner (human) | Ví người duyệt (MetaMask demo) | Tạo/đóng mission, set policy, allowlist, approve/reject queue, pause/unpause, rút tiền khẩn cấp khi paused (chỉ về chính owner, xem §5) |
 | Agent | Ví agent riêng, khác ví owner, chỉ giữ tiền lẻ tool | Chỉ gọi `propose()` trong mission đã giao cho mình. Không gọi được hàm owner, không rút trực tiếp |
+| Anyone (read) | Giám khảo | Đọc chain state/events; không quyền chi |
 
 **Deployer = owner, agent = ví khác, không dùng chung.** Backend
 không bao giờ giữ owner key; owner transaction do MetaMask ký
 (xem 05 §4). Backend chỉ submit agent transaction (`propose()`)
 khi có mission token hợp lệ.
-| Anyone (read) | Giám khảo, bất kỳ ai | Đọc policy, balance, queue, event — không cần quyền |
+
 
 **Cấm:** không có hàm nào cho agent tự `execute` trực tiếp mà bỏ qua
-policy. `execute()` chỉ chạy cho proposal đã qua check, hoặc proposal
-đã được owner approve.
+policy. `execute()` chỉ chạy cho proposal status Approved và hard checks hiện tại pass.
 
 ## 3. Storage — viết đúng tên này để frontend/test không lệch
 
@@ -45,17 +45,17 @@ address public immutable USDC;          // 0x5425…Bc65 Fuji
 uint256 public perTxCap;                // mặc định 5_000_000 (5 USDC)
 uint256 public dailyCap;                // mặc định 20_000_000 (20 USDC)
 uint256 public missionCapDefault;       // mặc định 10_000_000 (10 USDC)
-uint256 public policyVersion;           // tăng 1 mỗi lần đổi policy (setCaps/allowlist/agent/mission cap)
+uint256 public policyVersion;           // tăng khi đổi caps/allowlist/mission policy; không có setAgent global
 
 mapping(address => bool) public recipientAllowlist;
 // KHÔNG có toolAllowlist trong guard. Tool allowlist chỉ tồn tại
-// off-chain (tool config + validator, xem 02 §4). Guard không kiểm
+// off-chain (tool config + validator, xem 02 §2). Guard không kiểm
 // soát x402 settlement, nên allowlist tool on-chain là thừa và gây nhầm.
 mapping(uint256 => uint256) public spentOnDay; // day (UTC) -> tổng đã chi trong ngày đó
 mapping(bytes32 => uint256) public missionSpent; // missionId -> đã chi treasury
 
 struct Mission {
-    bytes32 id;            // keccak256(slug) — slug ở off-chain, xem 04 §5
+    bytes32 id;            // keccak256(UTF8(slug)) — xem 04 §3
     address agent;         // agent duy nhất được propose cho mission này
     uint256 cap;           // mission treasury cap
     uint256 expiresAt;     // createdAt + duration (mặc định 24h)
@@ -70,14 +70,18 @@ struct Proposal {
     address to;            // recipient, phải full-address match allowlist
     uint256 amount;        // USDC atomic units, > 0
     bytes32 missionId;     // bắt buộc != 0, phải tồn tại — không có payout ngoài mission trong S2
-    string reason;         // lý do ngắn, ≤ 200 chars, không chứa newline (sanitize off-chain trước khi gọi)
+    string reason;         // UTF-8 <= 200 bytes, contract enforce length; off-chain reject newline/control chars, không cắt ngầm
     uint8 status;          // 0=Proposed (chỉ dùng nội bộ lúc tạo), 1=Queued, 2=Approved, 3=Executed, 4=Rejected, 5=Expired
     uint256 createdAt;
     uint256 expiresAt;     // createdAt + 48 hours, không reset khi approve
     uint256 policyVersionAtPropose;
+    bytes32 operationId;    // nonzero, unique trong mission, không phải LLM-generated
     string queueReason;    // OverPerTxCap / OverDailyCap / OverMissionCap, rỗng nếu auto-execute
 }
 mapping(uint256 => Proposal) public proposals;
+// UUID request từ app encode bytes32, cùng fixtures ở app/contract.
+// Store id+1 vì proposal id đầu có thể = 0.
+mapping(bytes32 => mapping(bytes32 => uint256)) public proposalIdPlusOneByOperation;
 uint256 public nextProposalId;
 ```
 
@@ -103,7 +107,7 @@ là lọt tấn công. Nếu nhiều QUEUE lý do cùng xảy ra, ghi lý do
 |---|---|---|
 | B1 | Contract không paused | BLOCK (`Paused`) |
 | B2 | `missionId != 0`, mission tồn tại, chưa hết hạn, chưa đóng, `msg.sender == mission.agent` | BLOCK (`InvalidMission` / `MissionExpired` / `MissionClosed` / `NotMissionAgent`) |
-| B3 | `to != address(0)`, `amount > 0` | BLOCK (`InvalidAmount`) |
+| B3 | `to != address(0)`, `to != mission.agent`, `amount > 0` | BLOCK (`InvalidRecipient` / `InvalidAmount`) |
 | B4 | `to` nằm trong `recipientAllowlist` — **so full address, không so prefix** | BLOCK (`NotAllowlisted`) |
 
 ### 4b. QUEUE check (chỉ chạy sau khi mọi BLOCK đã pass)
@@ -124,7 +128,7 @@ Tất cả pass → EXECUTE ngay trong `propose()`.
   daily cap, mission treasury cap. Đây là giới hạn của auto-execution,
   không phải giới hạn tuyệt đối.
 
-**Lưu ý cho người review (GPT):** đây là lý do daily cap MVP là ngày
+**Cửa sổ ngân sách:** đây là lý do daily cap MVP là ngày
 UTC chứ không phải rolling 24h — rolling cần lưu lịch sử từng payout
 và cộng dồn cửa sổ trượt, code dài hơn, test khó hơn, và demo khó
 giải thích trong 25 giây. Nếu muốn rolling, làm ở stretch, không đổi
@@ -143,7 +147,7 @@ function closeMission(bytes32 missionId) external onlyOwner;
 
 // Agent only (msg.sender phải == missions[missionId].agent). Hàm này tự route theo _evaluate.
 // BLOCK → revert, không tạo proposal. QUEUE → tạo proposal Queued. EXECUTE → chuyển tiền ngay.
-function propose(address to, uint256 amount, bytes32 missionId, string calldata reason)
+function propose(bytes32 operationId, address to, uint256 amount, bytes32 missionId, string calldata reason)
     external returns (uint256 proposalId);
 
 // Owner only. Chỉ chạy khi status == Approved. Re-check hard tại đây (xem §6):
@@ -164,9 +168,9 @@ function setMissionCap(bytes32 missionId, uint256 cap) external onlyOwner;
 // Không có setTool: tool allowlist là off-chain, không nằm trong guard (xem §3).
 
 // Kill switch (S2). pause() chặn propose + execute + reservation/pre-flight mới (off-chain cũng check paused).
-// S1 chưa có guard: pause là flag DB, xem 05 §4b. Không được check guard.paused() ở S1.
-// Pause không chặn key holder ký x402 trực tiếp ngoài server (xem 06 §5) — chỉ chặn luồng qua server/guard.
-// Pause KHÔNG thu hồi authorization x402 đã ký trong 60s TTL (xem 02 §9).
+// S1 chưa có guard: pause là flag DB, xem 05 §3. Không được check guard.paused() ở S1.
+// Pause không chặn key holder ký x402 trực tiếp ngoài server (xem 06 §6) — chỉ chặn luồng qua server/guard.
+// Pause KHÔNG thu hồi authorization x402 đã ký trong 60s TTL (xem 02 §7).
 // unpause() mở lại. Không có hàm nào bypass pause.
 function pause() external onlyOwner;
 function unpause() external onlyOwner;
@@ -225,7 +229,10 @@ propose()  [agent, mission hợp lệ]
 ```solidity
 event MissionCreated(bytes32 indexed missionId, address indexed agent, uint256 cap, uint256 expiresAt);
 event MissionClosed(bytes32 indexed missionId);
-event Proposed(uint256 indexed id, address indexed proposer, address indexed to, uint256 amount, bytes32 missionId);
+event MissionCapUpdated(bytes32 indexed missionId, uint256 cap);
+event PolicyVersionAdvanced(uint256 version);
+event EmergencyWithdrawn(uint256 amount);
+event Proposed(uint256 indexed id, address indexed proposer, address indexed to, uint256 amount, bytes32 missionId, bytes32 operationId);
 event Executed(uint256 indexed id, address indexed to, uint256 amount, bytes32 missionId);
 event Queued(uint256 indexed id, address indexed to, uint256 amount, string reason); // reason = OverPerTxCap / OverDailyCap / OverMissionCap
 event Approved(uint256 indexed id);
@@ -287,3 +294,28 @@ on-chain — audit ledger off-chain phải ghi BLOCK từ API validator
 
 **Không làm:** không deploy lại contract mới giữa demo mà không cập
 nhật mọi nơi ghi address cũ. Một address, dùng xuyên suốt từ S2 tới nộp.
+
+## 10. Treasury idempotency và invariants bổ sung
+
+- createMission: id nonzero, chưa tồn tại kể cả đã closed; agent nonzero và != owner; cap > 0; duration > 0.
+  Không cho tái tạo mission để reset spent. setMissionCap chỉ mission tồn tại, owner và emit đầy đủ cap/id/version.
+- propose kiểm tra operationId nonzero và chưa có trong mapping của mission trước transfer/queue.
+  Tạo mapping cùng proposal trong một transaction; auto transfer fail thì toàn bộ revert.
+  Duplicate operationId revert DuplicateOperation; API đọc proposalIdPlusOneByOperation để trả kết quả cũ,
+  không gửi một ID mới để thử lại. Mapping áp dụng cả auto-execute và queue.
+- propose có nonReentrant vì có nhánh auto-transfer; execute/emergencyWithdraw cũng nonReentrant.
+  amount/số tiền caps uint256, bounds/reason bytes enforce trực tiếp trong contract.
+- approve và execute re-check mission exists/agent của proposal, expiry, not closed, recipient hiện tại, paused.
+  Không dùng msg.sender==mission.agent trong internal hard check của owner execute: owner caller khác agent.
+  Tách quyền caller khỏi các điều kiện của proposal; test owner execute hợp lệ.
+- proposal expiry: now <= expiresAt cho approve/execute; mission active chỉ khi now < mission.expiresAt.
+  expire cho Queued/Approved khi now > proposal.expiresAt. Không phụ thuộc keeper để chặn expired mission.
+- setCaps/allowlist/create/close/setMissionCap emit version và dữ liệu đủ reconstruct policy; record snapshot/block trong proof.
+  Không có setTool hay agent đổi policy. Soft cap approvals không reset spent và không reserve treasury balance.
+- Nếu balance không đủ khi auto/owner execute, SafeERC20 revert, trạng thái/accounting không đổi.
+  Hai Queued proposals không bảo đảm đã được giữ tiền; UI không gọi queued amount là reserved treasury.
+- Không treasury payout tới mission.agent, kể cả owner execute: hard rule ngăn guard trở thành đường auto-refill.
+  O cấp test USDC cho A bằng giao dịch owner riêng ngoài guard khi thật sự cần; không backend auto-topup.
+- Owner override có thể làm missionSpent/dailySpent vượt cap: next auto-execution queue, UI hiển thị overBy.
+  emergencyWithdraw chỉ về owner khi paused, không tăng payout spent, emit EmergencyWithdrawn(amount) để audit.
+- Thêm C19–C22 ở 06: operation replay, insufficient balance, owner management disabled, same-input cross-layer route.

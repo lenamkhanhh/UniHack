@@ -1,418 +1,335 @@
-# 05 — App, API, DB, UI (cho Gemini implement trực tiếp)
+# 05 — App, storage, authorization và API
 
-## 1. Monorepo layout — tạo đúng cấu trúc này, đừng tự đặt tên khác lung tung
+**Owner của spec persistence/auth/API.** Payment lifecycle ở [02](02-x402-tools.md), contract ở [01](01-contracts.md).
+Đây là thiết kế triển khai, chưa có app/schema migration được chạy trong repo.
 
-```
-UniHack/                         # repo nộp bài (sau này, xem §7)
-├── pipeline/                    # spec này (đã có)
-├── context/                     # research cũ (đã có)
-├── apps/web/                    # Next.js app (dashboard + API)
-│   ├── app/
-│   │   ├── page.tsx             # Dashboard
-│   │   ├── queue/page.tsx       # Human queue
-│   │   ├── audit/page.tsx       # Audit ledger + verify
-│   │   ├── demo/page.tsx        # Demo mode (6 scene, scripted)
-│   │   └── api/
-│   │       ├── propose/route.ts
-│   │       ├── queue/[id]/approve/route.ts
-│   │       ├── queue/[id]/reject/route.ts
-│   │       ├── tools/[...]/route.ts
-│   │       ├── audit/route.ts
-│   │       └── audit/verify/route.ts
-│   ├── lib/
-│   │   ├── chain.ts             # Fuji config, viem clients, addresses
-│   │   ├── validator.ts         # pre-flight BLOCK/QUEUE (04 §3)
-│   │   ├── proposer.ts          # LLM + scripted proposer
-│   │   ├── audit.ts             # hash-chained ledger (04 §7)
-│   │   ├── missions.ts          # mission token verify + mission status re-check
-│   │   └── tools.ts             # tool catalog + x402 client + operation lifecycle
-│   ├── prisma/schema.prisma     # hosted Postgres, xem §3
-│   └── scripts/verify-audit.ts  # verifier độc lập, đọc DB read-only (04 §7)
-├── contracts/                   # Foundry
-│   ├── src/GuardedTreasury.sol
-│   ├── test/GuardedTreasury.t.sol
-│   └── script/Deploy.s.sol
-├── .env.example                 # placeholder only, không key thật
-└── README.md                    # nộp bài: link, address, tx hash, cách chạy
+## 1. Stack, layout và runtime
+
+Next.js App Router + TypeScript + Tailwind; viem/wagmi/MetaMask; Prisma + hosted PostgreSQL (Supabase).
+Pin phiên bản Next.js được hỗ trợ và bản vá bảo mật lúc tạo app, ghi lockfile; không ép Next.js 14 cũ chỉ vì spec trước chọn.
+Vercel chạy web/API; không file SQLite local production, không timer RAM làm billing, không worker RAM làm source of truth.
+S1 và S2 dùng cùng schema Postgres. Provision/migrate là công việc implementation, chưa thực hiện.
+Secrets chỉ ở server; frontend không giữ AGENT_PRIVATE_KEY hay token signing secret.
+Nếu ORM migration cần direct connection khác pooled runtime connection, ghi hai URL trong env template theo provider đã chọn.
+
+Layout dự kiến:
+```text
+apps/web/app/{page.tsx,queue/page.tsx,audit/page.tsx,demo/page.tsx,api/...}
+apps/web/lib/{chain,auth,validator,proposer,payments,reconcile,audit,tools}.ts
+apps/web/prisma/{schema.prisma,migrations/...}
+apps/web/tests/                       # P/V/E integration
+contracts/{src/GuardedTreasury.sol,test/GuardedTreasury.t.sol,script/Deploy.s.sol}
+scripts/verify-proof.ts               # đọc export, không cần DB secret
+evidence/                            # manifest/receipt export đã chọn, không chứa credential
 ```
 
-**Nếu Gemini muốn gộp app + contracts vào 1 folder khác thì được,
-nhưng tên file contract, tên hàm, tên API ở trên phải giữ nguyên**
-— vì slides, video, test đều nhắc tới chúng.
+## 2. Persistence contract
 
-## 2. Tech stack — chốt, không thay giữa chừng trừ khi có lý do ghi rõ
-
-| Lớp | Chọn | Vì sao / ghi chú |
-|---|---|---|
-| Frontend | Next.js 14 App Router + Tailwind | Nhanh, deploy Vercel free, giám khảo mở link là chạy |
-| On-chain read/write | viem + wagmi | Đọc Fuji không cần server riêng; owner ký bằng MetaMask |
-| Wallet connect | wagmi injected (MetaMask) trong MVP | Privy là stretch (Team1 starter có, nhưng thêm dependency lúc deadline là rủi ro) |
-| Contracts | Foundry + OpenZeppelin v5 | Test nhanh, verify Snowtrace dễ |
-| DB (chốt) | **Hosted Postgres (Supabase free tier) qua Prisma provider `postgresql`** | Vercel Functions không có filesystem persistent cho SQLite (xem §3). Local dev dùng cùng Supabase dev DB, hoặc local Postgres — chỉ đổi `DATABASE_URL`, không đổi schema. **Cấm** `DATABASE_URL` trỏ tới file `.db` local ở production. |
-| LLM | Provider-agnostic, qua env `LLM_API_KEY` + `LLM_MODEL` | Không hardcode provider; không có key thì chạy scripted mode |
-| x402 client | Middleware theo facilitator đã chọn (02 §2), v1 `exact` | Không tự viết lại EIP-712 từ đầu nếu middleware đã có |
-
-## 3. DB schema — tối thiểu, đủ cho demo
+Đoạn Prisma dưới đây là schema mục tiêu để Gemini hoàn thiện migration, không phải schema đã validate bằng Prisma.
+Các số tiền là Decimal(78,0) để chứa uint256, không dùng JS Number.
+API trả decimal integer strings; code dùng BigInt; kiểm tra `0 <= n <= 2^256-1`.
+Mỗi transaction dưới đây phải có idempotent state transition, không chỉ read-modify-write ngoài transaction.
 
 ```prisma
-// datasource db { provider = "postgresql"; url = env("DATABASE_URL") }
-// generator client { provider = "prisma-client-js" }
-
-model AuditEntry {
-  id            Int      @id @default(autoincrement())
-  prevHash      String
-  entryHash     String   @unique
-  kind          String   // PROPOSED / EXECUTED / QUEUED / BLOCKED / ...
-  actor         String   // agent address hoặc owner address hoặc "system"
-  toAddress     String?
-  amount        String?  // atomic units, lưu string để không tràn số JS
-  rule          String?
-  reason        String?
-  txHash        String?
-  missionId     String?  // slug mission, xem 04 §5
-  operationId   String?  // operation x402, xem 02 §9
-  policyVersion Int?
-  resultHash    String?
-  createdAt     DateTime @default(now())
+model SystemState {
+  id             Int      @id
+  deploymentId   String
+  stage          String   // S1 or S2
+  guardAddress   String?
+  authVersion    Int      @default(1)
+  systemPaused   Boolean  @default(false)
+  maintenance    Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
 }
 
 model Mission {
-  slug          String   @id // ví dụ "mission-demo-01"
-  missionId     String   @unique // bytes32 hex của keccak256(slug)
-  agentAddress  String
-  ownerAddress  String
-  treasuryCap   String
-  toolCap       String
-  spentTreasury String   @default("0")
-  spentTool     String   @default("0")
-  reservedTool  String   @default("0")
-  expiresAt     DateTime
-  status        String   // ACTIVE / CLOSED / EXPIRED
-  activationNonce String? // nonce dùng một lần cho activation signature, xem §4b
-  activationNonceExpiresAt DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  slug           String   @id
+  missionId      String   @unique
+  ownerAddress   String
+  agentAddress   String
+  treasuryCap    Decimal  @db.Decimal(78, 0)
+  toolCap        Decimal  @db.Decimal(78, 0)
+  spentTool      Decimal  @default(0) @db.Decimal(78, 0)
+  reservedTool   Decimal  @default(0) @db.Decimal(78, 0)
+  expiresAt      DateTime
+  status         String   // ACTIVE/CLOSED; expiry checked from expiresAt on every spend
+  completedAt    DateTime?
+  deliverableHash String?
+  configVersion  Int      @default(1)
+  policyHash     String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  operations     ToolOperation[]
+  sessions       ToolSession[]
 }
 
-// Global pause cho S1 (khi chưa có guard). S2 dùng guard.paused(), không dùng row này nữa — xem §4b.
-model SystemState {
-  id            Int      @id @default(1)
-  systemPaused  Boolean  @default(false)
-  pauseSource   String   @default("db") // "db" ở S1, "guard" ở S2
-  updatedAt     DateTime @updatedAt
+model AuthChallenge {
+  nonce          String   @id
+  action         String   // CREATE_MISSION/ACTIVATE/READ_MISSION/PAUSE_S1/CLOSE_MISSION_S1/COMPLETE_MISSION/PREPARE_FEEDBACK
+  payloadHash    String
+  expectedSigner String
+  deploymentId   String
+  authVersion    Int
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime @default(now())
 }
 
-model ProposalRecord {
-  id         Int      @id
-  onchainId  Int      @unique
-  status     String
-  missionId  String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+model ToolSession {
+  id             String   @id @db.Uuid
+  missionSlug    String
+  mission        Mission  @relation(fields: [missionSlug], references: [slug], onDelete: Restrict)
+  payerAddress   String
+  rate           Decimal  @db.Decimal(78, 0)
+  cap            Decimal  @db.Decimal(78, 0)
+  spent          Decimal  @default(0) @db.Decimal(78, 0)
+  reserved       Decimal  @default(0) @db.Decimal(78, 0)
+  status         String   // ACTIVE/STOPPED/CAPPED
+  startedAt      DateTime @default(now())
+  stoppedAt      DateTime?
+  operations     ToolOperation[]
 }
 
-model ToolOperation { // x402 lifecycle, xem 02 §9
-  // Khóa lookup chính là (missionSlug, operationId). Đồng thời có index global
-  // trên operationId để phát hiện cross-mission reuse → 409 (xem 02 §9.7).
-  missionSlug   String
-  operationId   String
-  payerAddress  String
-  toolId        String
-  inputHash     String
-  paymentTerms  String   // JSON: price, asset, payTo, network, scheme, maxTimeoutSeconds
+model ToolOperation {
+  operationId    String   @id @db.Uuid
+  deploymentId   String
+  missionSlug    String
+  mission        Mission  @relation(fields: [missionSlug], references: [slug], onDelete: Restrict)
+  payerAddress   String
+  toolId         String
+  inputHash      String
+  paymentTerms   String   // canonical immutable JSON
   paymentTermsHash String
-  state         String   // CREATED / RESERVED / SIGNED / SETTLING / SETTLED / FAILED / UNKNOWN
-  reservedAmount String  @default("0")
-  txHash        String?
-  sessionId     String?
-  minuteIndex   Int?
-  // Authorization — server-only, KHÔNG BAO GIỜ trả ra frontend/API công khai.
-  authNonce     String?
-  authFrom      String?
-  authTo        String?
-  authValue     String?
-  validAfter    Int?
-  validBefore   Int?
-  authSignature String?  // v/r/s, để resubmit/recovery sau restart nếu cần
-  // Held result — ghi trong cùng transaction với reservation, trước khi phát 402.
-  heldResult    String?
+  policyHash     String
+  chainId        Int
+  asset          String
+  state          String
+  version        Int      @default(0)
+  authDeploymentVersion Int
+  quoteExpiresAt DateTime
+  reservationExpiresAt DateTime?
+  reservedAmount Decimal  @default(0) @db.Decimal(78, 0)
+  authFrom       String?
+  authTo         String?
+  authValue      Decimal? @db.Decimal(78, 0)
+  authNonce      String?
+  validAfter     BigInt?
+  validBefore    BigInt?
+  authSignature  String?  // server-only, immutable after SIGNED
+  heldResult     String?
   heldResultHash String?
-  // Recovery — xem 02 §9.4.
-  facilitatorName String?
+  workerLeaseUntil DateTime?
+  submissionStartedAt DateTime?
+  facilitator    String?
   facilitatorTxHash String?
+  txHash         String?
+  receiptBlockNumber BigInt?
+  receiptBlockHash String?
+  authorizationLogIndex Int?
+  transferLogIndex Int?
   lastReconciledAt DateTime?
-  reconcileCount Int      @default(0)
-  lastReconcileBlockTimestamp Int?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  reconcileBlockNumber BigInt?
+  reconcileBlockHash String?
+  reconcileBlockTimestamp BigInt?
+  failureReason  String?
+  sessionId      String?  @db.Uuid
+  session        ToolSession? @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  minuteIndex    Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  @@id([missionSlug, operationId])
-  @@index([operationId])
+  @@unique([sessionId, minuteIndex])
+  @@unique([chainId, asset, authFrom, authNonce])
+  @@index([missionSlug, state])
 }
 
-model ToolSession { // TalkMeter
-  id         String   @id
-  missionSlug String   // session bind mission, tick/stop phải dùng đúng token mission đó (02 §9.5)
-  status     String   // ACTIVE / STOPPED / CAPPED
-  minutes    Int      @default(0)
-  totalPaid  String   @default("0")
-  txHashes   String   @default("[]") // JSON array string
-  createdAt  DateTime @default(now())
+model TreasuryRequest {
+  operationId    String   @id @db.Uuid
+  missionSlug    String
+  requestHash    String
+  state          String   // CREATED/SUBMITTING/UNKNOWN/CONFIRMED/FAILED
+  agentNonce     BigInt?
+  rawTxHash      String?
+  proposalId     String?
+  chainId        Int
+  guardAddress   String
+  createdAt      DateTime @default(now())
+}
+
+model AuditHead {
+  id             Int      @id
+  lastHash       String
+}
+
+model AuditEntry {
+  id             BigInt   @id @default(autoincrement())
+  sourceKey      String   @unique
+  prevHash       String
+  entryHash      String   @unique
+  canonicalJson  String
+  createdAt      DateTime
+}
+
+model MissionFeedback {
+  missionSlug    String   @id
+  agentId        String
+  chainId        Int
+  registry       String
+  clientAddress  String
+  txHash         String?
+  feedbackIndex  String?
+  feedbackURI    String?
+  feedbackHash   String?
+  preparedValue  Int?
+  preparedResultHash String?
+  state          String   // PREPARED/SUBMITTED/CONFIRMED
 }
 ```
 
-On-chain là source of truth cho proposal status; DB chỉ là bản
-mirror để UI nhanh + audit. Nếu DB và on-chain lệch, tin on-chain.
-Nếu DB hosted down, app vẫn đọc được dữ liệu on-chain và phần audit
-hiển thị "audit DB unavailable" thay vì hiển thị rỗng giả tạo.
+Migrations cần CHECK ngoài Prisma:
+- SystemState/AuditHead chỉ có id=1; stage thuộc S1/S2.
+- Số tiền uint256 range, spent/reserved/session amounts không âm; tool spent + reserved <= toolCap;
+  session spent + reserved <= session cap. Owner không được hạ tool cap dưới exposure đã tồn tại.
+- sessionId/minuteIndex cùng NULL hoặc cùng non-NULL; minuteIndex >= 0; session.mission/payer phải khớp operation
+  (enforce bằng validation dưới row locks, có test; FK riêng không tự enforce quan hệ này).
+- State hợp lệ; SIGNED trở đi cần authorization fields; SETTLED cần receipt binding + heldResult;
+  FAILED cần failureReason. Mọi actor/token address normalize về lowercase khi lưu/so sánh.
+- Global operationId là primary key, không chỉ index thường. Cross-mission reuse race do DB xử lý.
+- PostgreSQL UNIQUE cho phép nhiều NULL mặc định: các operation chưa ký/không phải TalkMeter không xung đột giả.
+- Không commit DB, secrets, signatures hay private heldResult vào repo.
+  Public evidence chỉ lấy allowlist fields; không serialize nguyên ORM rows.
 
-## 4. API — contract giữa frontend và server, viết đúng như này
+Atomic writes:
+- Reserve/sign/expire/reconcile: lock mission → session nếu có → operation → audit head.
+- Terminal state CAS + counters + audit cùng transaction. Duplicate worker/GET không double charge/release.
+- Không giữ DB lock trong upstream/RPC/facilitator network calls. Dùng durable submission intent/lease.
+- AuditHead lock serialize append; sourceKey unique tránh ghi trùng event/recovery.
+- On-chain event ingestion dùng sourceKey `chain:txHash:logIndex`, check receipt success/finality,
+  sender/method/guard/proposal, không tin txHash client tự báo. Missed events được backfill bằng chain scan.
+- Mission treasury spent đọc từ chain; DB mirror không có quyền quyết định payout. Không reset ledger demo.
+- TreasuryRequest lưu submission intent trước broadcast; cùng UUID encode bytes32 operationId vào propose (01).
+  Retry tra mapping của guard hoặc cùng tx hash; không tạo proposal/EOA nonce mới khi chưa rõ.
+  Serialize nonce của agent EOA khi gửi treasury transactions; pending tx phải reconcile trước khi thay thế.
 
-```
-POST /api/missions
-  body: { slug, agentAddress, treasuryCap, toolCap, durationSeconds }
-  + header X-Owner-Signature (EIP-191 personal_sign của message tạo mission, xem §4b)
-  -> 201 { slug, missionId, expiresAt }   // mission tạo off-chain, chưa kích hoạt, chưa có token
-  // S1: chữ ký tạo mission verify bằng OWNER_ADDRESS. Không có chữ ký owner thì không tạo được mission —
-  // không để người lạ tự tạo mission rồi xin token.
-  // S2: owner phải tạo mission on-chain bằng MetaMask TRƯỚC, rồi gọi API này kèm txHash on-chain;
-  // server đọc mission từ chain rồi mới tạo record off-chain khớp chain (xem §4b).
+## 3. Authorization: spend và read là hai quyền khác nhau
 
-POST /api/missions/:slug/nonce
-  -> 200 { nonce, expiresAt }  // nonce dùng một lần, hết hạn 10 phút, lưu vào Mission (xem §4b)
+Wallet map:
+- O: mission/guard owner, ký MetaMask; backend không giữ key O.
+- A: agent tool signer + treasury proposer + registry NFT owner; backend giữ test key A.
+- S: seller, khác A; không bán rồi trả về cùng ví để giả lập payment.
+O khác A và không là approved operator của NFT A để feedback hợp lệ.
 
-POST /api/missions/:slug/activate
-  body: { signature }  // EIP-191 personal_sign của message đúng format §4b, không tự thêm/bớt field
-  -> 200 { missionToken }  // HMAC, scope = đúng 1 mission, expiry = mission expiry
-
-POST /api/propose
-  header: Authorization: Bearer <missionToken>
-  body: { kind, to?, amount_atomic, mission_id (bắt buộc), reason, tool_id? }
-  -> 200 { route: "EXECUTED"|"QUEUED", proposalId, txHash? }
-  -> 403 { route: "BLOCKED", rule, reason }   // không có tx, đó là đúng
-  -> 400 { error: "invalid_schema" }          // JSON sai schema
-  -> 401 { error: "invalid_mission_token" }   // token sai, hết hạn, hoặc mission đã đóng/hết hạn
-
-POST /api/queue/:id/record
-  body: { action: "approve"|"reject"|"execute", txHash }
-  -> 200 { ok: true }  // server verify tx on-chain (to == guard, proposalId, method) rồi mới ghi audit
-  // Lưu ý: approve/reject/execute KHÔNG phải API submit tx. Owner ký bằng MetaMask ở frontend,
-  // API này chỉ ghi audit sau khi verify tx. Backend không giữ owner key.
-  // S1 không có queue on-chain, endpoint này chỉ dùng từ S2 trở đi.
-
-GET  /api/audit               -> list entries mới nhất trước
-GET  /api/audit/verify        -> { valid: true } hoặc { valid: false, firstBadId }
-GET  /api/policy              -> { perTxCap, dailyCap, spentToday, paused, pauseSource, guard, policyVersion }
-  // S1: perTxCap/dailyCap/guard là null, paused lấy từ SystemState, pauseSource = "db".
-  // S2: số đọc từ guard, pauseSource = "guard". Frontend phải hiển thị đúng nguồn, không giả vờ S1 có guard.
-GET  /api/missions/:slug      -> mission + spent/reserved/remaining/expiry cho từng budget riêng
-POST /api/tools/:id           -> 402 hoặc 200 + receipt (02 §3, §9), cần missionToken nếu thuộc mission
-GET  /api/tools/operations/:operationId
-  header: Authorization: Bearer <missionToken của đúng mission của operation>
-  -> 200 { state, txHash?, result? (chỉ khi SETTLED) }  // không token → 401 chung, token sai mission → 403, không lộ auth/held result
-  // Lưu ý: operation lookup là (missionSlug từ token, operationId), không phải operationId đơn thuần.
-POST /api/tools/talkmeter/start|tick|stop  (02 §5, §9.5, session bind mission)
-POST /api/system/pause
-  body: { paused: boolean, signature }  // S1 only, owner ký; S2 pause bằng guard.pause() on-chain, không qua API này
-  -> 200 { paused, pauseSource }
+Server-generated EIP-191 challenge dùng cho mọi owner action, không chỉ activation.
+Message UTF-8 chính xác:
+```text
+Guarded Agent Economy
+action: <ACTION>
+deployment: <DEPLOYMENT_ID>
+domain: <APP_ORIGIN>
+chainId: 43113
+stage: <S1|S2>
+guard: <lowercase-address-or-none>
+authVersion: <integer>
+payloadHash: <keccak256 canonical action payload>
+nonce: <32-byte CSPRNG hex>
+issuedAt: <unix seconds>
+challengeExpiresAt: <issuedAt+600>
 ```
 
-### 4a. Auth — cơ chế nhỏ, đủ cho demo, không thêm hệ thống auth lớn
+Payload phải hiển thị human-readable trên UI trước ký, server tự reconstruct và hash (04).
+CREATE_MISSION bind slug, agent, hai cap, duration; COMPLETE_MISSION/PREPARE_FEEDBACK bind mission, deliverableHash, agentId và score khi có; ACTIVATE bind missionId, owner, agent, hai cap,
+mission expiry, configVersion, policyHash; PAUSE_S1 bind desired bool; READ_MISSION bind slug + read action.
+Server lưu challenge, action, payloadHash, expected signer và deployment/authVersion.
+Consume nonce một lần trong cùng transaction với action/token issuance; hết hạn/reuse/wrong domain/action/payload → reject.
+Không lấy recovered owner từ body; S1 đối chiếu OWNER_ADDRESS, S2 đối chiếu guard.owner() và mission record.
+Không có chữ ký tạo mission tồn tại vô thời hạn. Challenge endpoint rate-limited; không được overwrite challenge khác.
 
-1. **Owner transaction do MetaMask ký (S2).** Approve/reject/pause/
-   set policy/createMission/emergencyWithdraw đều là transaction từ
-   ví owner qua wagmi/viem ở frontend. Backend không giữ owner key,
-   không bao giờ submit owner tx.
-2. **Agent transaction do backend ký, chỉ trong mission đã kích hoạt.**
-   Backend giữ agent test key (server-side only, không bao giờ gửi
-   ra frontend) để ký x402 và gọi `propose()`. Điều kiện để backend
-   dùng key đó: request kèm mission token hợp lệ (xem §4b).
-3. **Mission token (xem format đầy đủ ở §4b).** Server verify chữ
-   ký, đối chiếu địa chỉ recovered với mission owner (S1: owner
-   trong mission record; S2: thêm điều kiện owner đó phải bằng
-   `guard.owner()` và mission on-chain phải khớp record). Đúng thì
-   cấp token HMAC, scope = đúng slug đó, expiry = mission expiry.
-   Token hết hạn, mission đóng/hết hạn, hoặc mission không tồn tại
-   → mọi propose/tool call cho mission đó đều 401. Server vẫn
-   check lại mission status ở mỗi call — token một mình không đủ.
-   Token payload phải khớp mission record (slug, missionId, agent,
-   cap); cap đổi thì token cũ vô hiệu, phải kích hoạt lại.
-4. **Demo công khai:** khách không có token chỉ được đọc
-   dashboard/audit/policy. Demo scripted chạy bằng mission demo do
-   owner tạo trước, với input cố định trong script, không nhận
-   recipient/amount tự do từ người lạ. Rate limit theo IP và ví tool
-   chỉ nạp tiền test nhỏ là lớp phụ, không phải lớp chính.
-5. **Không tin địa chỉ do client gửi:** agent address lấy từ key
-   server, owner lấy từ mission record (S1) hoặc guard `owner()`
-   (S2), payTo lấy từ tool config, mission agent lấy từ mission
-   record. Field `from`/`owner` trong body (nếu có) bị bỏ qua hoàn toàn.
+Tokens dùng HMAC đã pin algorithm (HS256), verify signature constant-time qua thư viện chuẩn.
+Payload: `type(spend|read), iss, aud, deploymentId, stage, chainId, guardAddress,
+authVersion, missionSlug, missionId, owner, agent, missionConfigVersion, policyHash, iat, exp, jti`.
+Không log token; browser không lưu lâu trong localStorage; cùng-origin POST kiểm tra Origin nếu dùng cookie.
+- Spend: expiry <= mission expiry, TTL tối đa 24h; mỗi call re-check current owner/mission/agent/configVersion,
+  pause/maintenance, stage/guard/authVersion. Mission CLOSED/expired chặn reserve/sign mới.
+- Read: owner ký READ_MISSION để nhận credential 15 phút, không bị giới hạn bởi mission expiry/status.
+  Chỉ đọc state/result/proof và yêu cầu reconciliation, không reserve/sign/payout, không đổi mission.
+  Spend token hợp lệ cũng đọc được; token spend hết hạn thì dùng owner challenge xin read token mới.
+- Đóng mission, pause, revoke spend và cutover không được xóa operation/reserved/heldResult.
+  Owner vẫn có đường read/reconcile sau các sự kiện này.
+- Nếu owner address đổi, dừng spend cho tới khi cấu hình rõ. Không âm thầm chuyển read access cho người không được xác minh.
+  MVP không demo owner transfer; không đưa chức năng recovery key mới vào scope.
 
-### 4b. S1 owner/auth/pause và chuyển sang S2 — định nghĩa đầy đủ, không để lửng
+S1: OWNER_ADDRESS là authority, SystemState.systemPaused là pause; không gọi guard.
+S2: owner/mission treasury/pause là chain authority; read failure chặn spend mới, không xóa state.
 
-**S1 (chưa có guard):**
+Cutover S1 → S2:
+1. Bật maintenance để dừng reserve/sign mới; đọc/reconcile vẫn chạy. Chờ worker sign đang claim hoàn tất;
+   reconcile outstanding operations hoặc giữ nguyên exposure và metadata cũ.
+2. Deploy guard với O; tạo mission on-chain tương ứng còn hạn, đọc lại agent/cap/expiry từ receipt/storage.
+   createMission nhận duration nên expiry thực tế tính từ block; đồng bộ DB với chain, không giả định trùng từng giây.
+3. Copy pause có chủ ý, ghi deployment manifest và cutover audit.
+4. Trong transaction cập nhật stage, guardAddress, authVersion += 1 và mission configVersion khi thay.
+   Tokens/challenges S1 cũ bị reject thực sự bởi version/stage/guard binding.
+5. Kích hoạt credential S2 mới, tắt maintenance. Old operations giữ payment scope lúc tạo;
+   owner read credential hiện tại được đọc/reconcile historical operations thuộc cùng deployment/mission.
+   Cutover không tạo mới operation, reset ngân sách hoặc xóa history.
 
-- **Owner:** địa chỉ owner ghi trong mission record lúc tạo mission,
-  và phải trùng `OWNER_ADDRESS` cấu hình deploy (ví sẽ trở thành
-  guard owner ở S2). Mọi check "owner" ở S1 đều đối chiếu với
-  record này, không đọc contract. Tạo mission ở S1 yêu cầu chữ ký
-  owner: message EIP-191 `mission-create:{slug}:{agentAddress}:{treasuryCap}:{toolCap}:{durationSeconds}:{domain}`,
-  recovered phải bằng `OWNER_ADDRESS`, nếu không từ chối tạo.
-- **Pause:** flag `systemPaused` trong bảng `SystemState`
-  (một row duy nhất). Owner toggle bằng chữ ký EIP-191 trên message
-  `system-pause:{paused}:{nonce}:{domain}` với nonce dùng một lần
-  tương tự activation (server cấp nonce, hết hạn 10 phút).
-  Pre-flight S1 (validator B3, tool pre-flight) check flag này.
-  `GET /api/policy` ở S1 trả `paused` từ flag này và
-  `pauseSource: "db"`.
-- **Mission creation S1:** tạo record off-chain trực tiếp, chưa cần
-  transaction. Activation vẫn theo §4b dưới đây, với owner check
-  là mission record.
+## 4. API contract
 
-**S2 (đã có guard):**
+| Endpoint | Quyền / hành vi |
+|---|---|
+| POST /api/auth/challenge | Tạo challenge cho action/payload đã validate; không thực thi action |
+| POST /api/missions | Owner signed CREATE_MISSION; S2 phải verify createMission on-chain trước DB mirror |
+| POST /api/missions/:slug/activate | Consume ACTIVATE challenge → spend token |
+| POST /api/missions/:slug/read-access | Consume READ_MISSION challenge → read token dù mission đã đóng/hết hạn |
+| POST /api/missions/:slug/close | S1 owner signature; S2 MetaMask closeMission + verified chain record |
+| POST /api/missions/:slug/complete | Owner signed COMPLETE_MISSION, persist deliverableHash/completedAt, được phép sau expiry |
+| POST /api/missions/:slug/feedback | Owner signed PREPARE_FEEDBACK → chuẩn bị metadata + tx MetaMask, record event idempotent theo 03 |
+| POST /api/system/pause | S1 owner signed PAUSE_S1; S2 dùng MetaMask guard.pause/unpause |
+| POST /api/propose | Spend token, operationId, strict proposal; S1 reject treasury kind |
+| POST /api/tools/:id | Spend token + operationId; quote/paid request theo 02 |
+| POST /api/tools/operations/:id/reserve | Internal orchestrator boundary, spend token; không endpoint ký tùy ý |
+| GET /api/tools/operations/:id | Read/spend credential đúng mission; reconcile lazy, result chỉ SETTLED |
+| POST /api/tools/talkmeter/start,tick,stop | Spend để tạo/tick; stop không hủy outstanding payment; read lấy receipts |
+| POST /api/queue/:id/record | Verify receipt/event, chỉ mirror tx owner đã ký, không submit owner tx |
+| GET /api/policy | Public snapshot, S1 guard/perTx/daily = null; S2 chain values |
+| GET /api/missions/:slug | Credential để xem private mission/results; public demo chỉ curated snapshot |
+| GET /api/audit, /api/audit/verify | Public sanitized demo entries/checkpoint; private results chỉ owner |
+| GET /api/missions/:slug/proof | Owner read/spend credential → private export; public bundle opt-in sanitized |
 
-- **Owner:** `guard.owner()` on-chain. Mission owner trong record
-  phải bằng guard owner, nếu không mission đó không kích hoạt được.
-- **Pause:** `guard.paused()` on-chain. `GET /api/policy` trả
-  `pauseSource: "guard"` và không consult flag DB nữa.
+Unauthorized operation lookup trả cùng lỗi chung (404 cho valid credential sai scope/ID; 401 cho thiếu credential),
+không tiết lộ existence/state/tx/result bằng khác biệt message. UUID không phải authorization.
+401/403/409 details cho request đã được xác thực dùng theo 02, không trả ORM error stack.
+Tool route không có "nếu thuộc mission": mọi payment do server agent signer thực hiện đều phải có mission.
+Rate-limit auth challenge, quote, upstream và public demo; cap input/provider timeout, không trust LLM URLs.
 
-**Cutover S1 → S2 (checklist bắt buộc, xem thêm 08 §3):**
+## 5. UI và env
 
-1. Deploy guard với deployer = S1 owner (cùng một ví).
-2. Với mỗi mission off-chain còn ACTIVE và chưa hết hạn: owner tạo
-   mission on-chain bằng `createMission` với cùng slug → bytes32,
-   cùng agent, cùng treasury cap, và expiry = expiry off-chain còn
-   lại (nếu mission off-chain đã hết hạn thì không migrate — tạo
-   mission mới thay vì migrate mission hết hạn).
-3. Server đọc mission từ chain và cập nhật record off-chain khớp
-   chain (agent, cap, expiry). Nếu chain và record lệch, tin chain
-   và ghi rõ lệch ở đâu trước khi kích hoạt tiếp.
-4. Đặt guard pause = trạng thái S1 pause lúc cutover (nếu S1 đang
-   paused thì deploy guard ở trạng thái paused, hoặc pause ngay
-   sau deploy trước khi nhận request mới).
-5. Chuyển config `PAUSE_SOURCE` từ `db` sang `guard`. Từ thời điểm
-   này, mọi check pause đều dùng guard, flag DB chỉ còn là lịch sử.
-6. Mission token cũ (S1) phải kích hoạt lại sau cutover, vì payload
-   và owner check giờ gắn với guard — token S1 không tự động có
-   hiệu lực ở S2.
+Bốn màn: Dashboard (mission + hai budget + kết quả), Queue (S2 owner MetaMask),
+Audit (filter/export/checkpoint), Demo (scripted cùng đường kiểm tra, không nút wipe DB).
+Nút read recovery sau mission expiry; trạng thái UNKNOWN hiện pending amount, reason và last checked block.
+Treasury remaining hiển thị max(0, cap-spent) và overBy riêng nếu owner override; không giấu overspend.
+Tool remaining = cap-spent-reserved. Không tạo treasury reserved từ queue vì queue cần owner override.
+New operation không được che outstanding operation cũ.
 
-**Activation signature — format chốt, không tự thêm/bớt field:**
-
-Message EIP-191 `personal_sign`, đúng các dòng sau, đúng thứ tự:
-
-```
-Guarded Agent Economy — mission activation
-mission: <slug>
-agent: <checksummed agent address>
-treasuryCap: <atomic units, dạng string số nguyên>
-toolCap: <atomic units, dạng string số nguyên>
-nonce: <hex, do server cấp, dùng một lần>
-expiresAt: <unix seconds, phải bằng mission expiresAt>
-chain: fuji-43113
-domain: <app origin đã cấu hình, ví dụ https://<app deploy> hoặc localhost:3000 ở dev>
-```
-
-- **Domain binding:** domain trong message phải bằng app origin đã
-  cấu hình trên server (`APP_DOMAIN` env). Chữ ký cho domain khác
-  bị từ chối — chống reuse chữ ký sang app giả mạo cùng slug.
-  Nếu app đổi domain deploy thì phải kích hoạt lại mission.
-- **Nonce lifecycle:** server cấp nonce qua
-  `POST /api/missions/:slug/nonce`, lưu vào Mission với expiry 10
-  phút. Nonce chỉ dùng được một lần: sau khi activate thành công
-  (hoặc sau khi hết hạn) nonce đó vô hiệu, lần activate tiếp theo
-  phải xin nonce mới. Nonce của mission này không dùng được cho
-  mission khác, và nonce đã dùng không cấp lại token thứ hai.
-- **Expiry binding:** `expiresAt` trong message phải bằng mission
-  expiresAt, và token expiry cũng bằng mission expiresAt. Token
-  không dài hơn mission. Mission hết hạn → token tự hết hiệu lực
-  dù token chưa bị thu hồi tường minh.
-- **Mission binding:** token payload gồm slug, missionId bytes32,
-  agent, treasuryCap, toolCap. Server so payload với mission record
-  ở mỗi call; lệch bất kỳ field nào → 401, phải kích hoạt lại.
-  Đóng mission → token vô hiệu ngay, dù chưa hết expiry (server
-  check status ở mỗi call).
-
-## 5. UI — 4 màn hình, mỗi màn 1 nhiệm vụ, không làm dashboard "tất cả trong 1"
-
-### Dashboard (`/`)
-
-- Header: guard address (link Snowtrace, S2) hoặc "S1 — chưa có guard"
-  (S1, ghi rõ) + paused badge (đỏ nếu paused, kèm nguồn pause: DB hay guard)
-  + mode badge (`LIVE LLM` / `SCRIPTED` / `MOCK` nếu đang mock).
-- Policy card: per-tx cap, daily cap, spent today (progress bar),
-  policy version — số đọc từ contract, không hardcode text.
-- Mission card: mission đang chọn, spent/reserved/remaining/expiry
-  cho treasury và tool riêng, trạng thái ACTIVE/CLOSED/EXPIRED.
-- Propose form: chỉ enable khi mission đã kích hoạt (có mission
-  token); kind, to (dropdown allowlist, không cho gõ tự do trong
-  demo chính — gõ tự do chỉ ở màn attack demo), amount, mission,
-  reason → nút Propose → kết quả EXECUTED / QUEUED / BLOCKED + rule.
-- Recent activity: 10 audit entry mới nhất, mỗi dòng có tx link nếu có.
-
-### Queue (`/queue`)
-
-- Bảng proposal Queued, mỗi dòng: to, amount, mission, lý do queue,
-  policy version lúc propose, thời gian, nút Approve / Reject.
-  Nút này ký bằng MetaMask của owner, không phải backend ký hộ.
-  Approve xong hiển thị 2 tx hash (approve + execute riêng).
-- Không có nút "approve all". Duyệt từng cái là ý nghĩa của human
-  queue.
-
-### Audit (`/audit`)
-
-- Bảng full audit, filter theo kind/rule, nút Verify chain → hiển thị
-  `valid: true` hoặc entry sai đầu tiên.
-- Mỗi dòng có tx link Snowtrace nếu có; dòng BLOCKED ghi rõ
-  "no tx — blocked before signing" (đó là feature, không phải thiếu).
-
-### Demo (`/demo`)
-
-- Chạy 6 scene theo kịch bản 07, từng scene có nút Run + kết quả +
-  tx hash + thời gian. Dùng cho quay video và cho giám khảo tự bấm.
-- Có nút "Reset demo data" chỉ reset UI/DB demo, **không** reset
-  on-chain (on-chain không reset được — nói rõ).
-
-## 6. Env — `.env.example` chỉ có placeholder, `.env` gitignored
-
-```
-NEXT_PUBLIC_CHAIN_ID=43113
-NEXT_PUBLIC_RPC_URL=https://api.avax-test.network/ext/bc/C/rpc
-NEXT_PUBLIC_USDC_ADDRESS=0x5425890298aed601595a70AB815c96711a31Bc65
-NEXT_PUBLIC_GUARD_ADDRESS=
-NEXT_PUBLIC_IDENTITY_REGISTRY=0x8004A818BFB912233c491871b3d84c89A494BD9e
-NEXT_PUBLIC_REPUTATION_REGISTRY=0x8004B663056A597Dffe9eCcC1965A193B7388713
-NEXT_PUBLIC_FACILITATOR_URL=https://facilitator.ultravioletadao.xyz
-DATABASE_URL=             # hosted Postgres (Supabase), KHÔNG phải file .db local ở production
+Env template khi implement:
+```dotenv
+APP_ORIGIN=
+DEPLOYMENT_ID=
+DATABASE_URL=
+DIRECT_URL=
+OWNER_ADDRESS=
+AGENT_PRIVATE_KEY=
+MISSION_TOKEN_SECRET=
 LLM_API_KEY=
 LLM_MODEL=
-AGENT_PRIVATE_KEY=        # testnet only, server-side only, không bao giờ commit, không bao giờ gửi ra frontend
-MISSION_TOKEN_SECRET=     # HMAC secret cho mission token, server-side only
-APP_DOMAIN=               # app origin dùng trong activation signature, ví dụ https://<app deploy>
-OWNER_ADDRESS=            # S1 owner, phải bằng guard owner ở S2
-PAUSE_SOURCE=db           # "db" ở S1, "guard" ở S2 — xem §4b, không tự đổi giữa chừng mà không làm cutover checklist
+FACILITATOR_URL=https://facilitator.ultravioletadao.xyz
+NEXT_PUBLIC_CHAIN_ID=43113
+NEXT_PUBLIC_GUARD_ADDRESS=
 ```
+Addresses/ABIs/versions/finality lấy từ manifest (00), không duplicate secrets vào NEXT_PUBLIC.
+Stage/authVersion/guard phải đồng nhất với SystemState; startup mismatch → fail closed.
+Secrets template chỉ rỗng/placeholders; .env/.env.local/DB dump/raw signatures gitignored.
 
-**Check trước khi push:** `grep -r "0x" --include="*.ts" --include="*.sol" .`
-không được ra private key; `git status` không được thấy `.env`.
-
-## 7. Repo nộp bài — cấu trúc cuối cùng khi Gemini xong
-
-Repo nộp bài (public, hoặc private + collaborator `tuantqse90`) phải có:
-
-- `README.md`: 1 câu sản phẩm, link app deploy, guard address +
-  Snowtrace, agentId, facilitator đã dùng, cách chạy local (3 lệnh),
-  bảng tx hash demo, giới hạn trung thực (00 §10).
-- `contracts/` + test pass (lệnh chạy test ghi trong README).
-- `apps/web/` chạy được bằng `npm install && npm run dev`.
-- Không có `.env`, không có key, không có video nặng trong repo
-  (video để link YouTube/Drive, slides để link Canva/Slides).
-
-## 8. Lệnh chạy — ghi đúng vào README nộp bài
-
-```bash
-# Contracts
-cd contracts && forge test
-
-# App
-cd apps/web && npm install && npm run dev
-# Mở http://localhost:3000
-```
+Các lệnh dự kiến sau khi app tồn tại: install bằng lockfile, Prisma migrate dev/deploy theo môi trường,
+test integration với DB test riêng, rồi npm run dev/build. Gemini phải ghi lệnh thực tế đã chạy vào README;
+không copy các lệnh này như bằng chứng đã chạy. Chưa có app nên lượt sửa spec không chạy Prisma/Next/forge.
