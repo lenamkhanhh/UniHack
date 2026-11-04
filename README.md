@@ -15,6 +15,8 @@ Research bundle prepared on **4 November 2026** to help an AI research assistant
 - [Competition overview, schedule, rules, prizes, and source conflicts](context/competition-context.md)
 - [All 20 suggested project ideas with plain-language MVP sketches](context/idea-catalog.md)
 - [Source and registration link index](context/source-index.md)
+- [Build sources: curated x402, guard, ERC-8004 and Fuji references — what to copy and what not to copy](context/build-sources.md)
+- [Spike checklist: 2-day pass/fail test for hybrid vs Rails + TalkMeter, with proof tests and demo script](context/spike-checklist.md)
 
 ## Official links
 
