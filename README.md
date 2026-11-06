@@ -112,9 +112,39 @@ The verifier independently checks:
 | **Unmocked Browser E2E** | **VERIFIED** | Playwright real-integration spec passes in 36s (retries: 0) against live backend & DB. |
 | **Cryptographic Proof Verifier** | **VERIFIED** | Standalone CLI verifier validates hash-chain and Merkle checkpoint. |
 | **Avalanche Fuji Live Settlement** | *PENDING* | Requires live testnet RPC, Fuji USDC token balance, and external facilitator relay. |
-| **GuardedTreasury Smart Contract (S2)** | *PENDING* | Smart contract written in `packages/contracts`, awaiting Foundry testnet deployment. |
-| **ERC-8004 Identity & Feedback (S3)** | *PENDING* | Planned post-S2 evaluation. |
+| **GuardedTreasury Smart Contract (S2)** | **COMPILED & VERIFIED** | Smart contract located in `contracts/`, 30/30 Foundry tests pass (`contracts/test/GuardedTreasury.t.sol`). |
+| **ERC-8004 Identity & Feedback (S3)** | **IMPLEMENTED** | Fuji Registry client (`apps/web/lib/erc8004.ts`), 3/3 tests pass (`apps/web/tests/erc8004.test.ts`). |
 | **Public Production Deployment** | *PENDING* | Production domain cutover scheduled after local submission artifacts. |
+
+---
+
+## Maximum Potential Loss Bounding (P1-A Security Model)
+
+| Failure / Attack Scenario | Stage S1 Containment | Stage S2 On-Chain Containment (`GuardedTreasury` + Session Wallet) | Maximum Potential Loss |
+|---|---|---|---|
+| **Agent / Session Key Compromised** | Software validator & DB balance tracking | Contract-funded Session Wallet (`fundMissionWallet`) | **Strictly bounded to mission `toolCap`** (e.g. 5.00 USDC). Treasury balance is untouched. |
+| **Prompt Injection proposing payout** | Strictly blocked by `STAGE_S1_NO_TREASURY` | Contract checks full recipient allowlist & caps; reverts on Avalanche Fuji | **0 USDC** (unallowlisted recipient payout impossible). |
+| **Server / Database Compromised** | Off-chain checks vulnerable | `GuardedTreasury` contract independently enforces per-tx, daily, and mission caps on-chain | **Bounded by contract daily/mission cap**. Owner emergency pause halts contract. |
+
+---
+
+## Smart Contract Testing & Fuji Deployment Simulation
+
+Foundry tests and deployment scripts are located in `contracts/`:
+
+```bash
+# 1. Run all 30 smart contract security tests
+cd contracts
+forge test
+
+# 2. Run Fuji deployment simulation (Dry-Run, No Broadcast)
+forge script script/Deploy.s.sol
+
+# To simulate against Fuji RPC endpoint (requires live connection):
+forge script script/Deploy.s.sol --rpc-url https://api.avax-test.network/ext/bc/C/rpc
+```
+
+> **Security Guardrail (KEY-02):** `Deploy.s.sol` strictly rejects well-known Anvil/Hardhat private keys and aborts execution if an insecure test key is supplied. Broadcasting to Fuji testnet requires an explicitly funded owner key and explicit owner authorization.
 
 ---
 

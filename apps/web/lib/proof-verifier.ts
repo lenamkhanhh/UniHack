@@ -24,12 +24,15 @@ export interface VerificationResult {
 }
 
 /**
- * Pure cryptographic proof verifier for use in browser client & server.
- * Verifies sequential hash-chain continuity:
- * entry.prevHash === previous entry.entryHash
- * entry.entryHash === keccak256(canonicalJson)
- * checkpoint.headHash === final entryHash
- * checkpoint.entryCount === entries.length
+ * Unified cryptographic proof verifier for browser client, server, and CLI.
+ * Strict rules:
+ * - sequential hash-chain continuity: entry.prevHash === previous entry.entryHash
+ * - entry.entryHash === keccak256(canonicalJson)
+ * - inner canonicalJson parsed.source_key === entry.sourceKey
+ * - inner canonicalJson parsed.prev_hash === entry.prevHash (strictly required, missing -> FAIL)
+ * - checkpoint.headHash === final entryHash
+ * - checkpoint.entryCount === entries.length
+ * - expectedResult matching when provided
  */
 export function verifyProof(
   entries: AuditEntry[],
@@ -75,7 +78,7 @@ export function verifyProof(
       );
     }
 
-    // Parse canonical JSON and enforce inner/outer equality
+    // Parse canonical JSON and enforce inner/outer equality strictly (Finding F11 / VER-02)
     let parsed: any;
     try {
       parsed = JSON.parse(entry.canonicalJson);
@@ -84,13 +87,13 @@ export function verifyProof(
       continue;
     }
 
-    if (parsed.source_key && parsed.source_key !== entry.sourceKey) {
+    if (parsed.source_key !== entry.sourceKey) {
       errors.push(
         `Inner/outer sourceKey mismatch at index ${i}: inner '${parsed.source_key}' != outer '${entry.sourceKey}'`
       );
     }
 
-    if (parsed.prev_hash && parsed.prev_hash.toLowerCase() !== entry.prevHash.toLowerCase()) {
+    if ((parsed.prev_hash || '').toLowerCase() !== entry.prevHash.toLowerCase()) {
       errors.push(
         `Inner/outer prevHash mismatch at index ${i}: inner '${parsed.prev_hash}' != outer '${entry.prevHash}'`
       );
@@ -109,6 +112,33 @@ export function verifyProof(
       errors.push(
         `Head hash mismatch: checkpoint ${checkpoint.headHash} != computed ${currentPrevHash}`
       );
+    }
+  }
+
+  if (expectedResult) {
+    const opId = typeof expectedResult === 'object' ? expectedResult.operationId : undefined;
+    const resHash =
+      typeof expectedResult === 'object'
+        ? expectedResult.resultHash || (expectedResult.result ? keccak256(stringToBytes(expectedResult.result)) : undefined)
+        : keccak256(stringToBytes(expectedResult));
+
+    let matched = false;
+    for (let i = entries.length - 1; i >= 0; i--) {
+      try {
+        const parsed = JSON.parse(entries[i].canonicalJson);
+        if ((!opId || parsed.operation_id === opId) && parsed.result_hash) {
+          matched = true;
+          if (resHash && parsed.result_hash.toLowerCase() !== resHash.toLowerCase()) {
+            errors.push(
+              `Result hash mismatch: expected ${resHash} != entry result_hash ${parsed.result_hash}`
+            );
+          }
+          break;
+        }
+      } catch {}
+    }
+    if (!matched && resHash) {
+      errors.push('No matching operation found with result_hash');
     }
   }
 

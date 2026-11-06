@@ -82,6 +82,9 @@ contract GuardedTreasury {
     event AllowlistUpdated(address indexed account, bool allowed);
     event Paused(address account);
     event Unpaused(address account);
+    event MissionFunded(bytes32 indexed missionId, address indexed wallet, uint256 amount);
+    event MissionSwept(bytes32 indexed missionId, address indexed wallet, uint256 amount);
+    event MissionProofAnchored(bytes32 indexed missionId, bytes32 indexed headHash, uint256 timestamp);
 
     // --- State Variables (01 §3) ---
     address public immutable USDC; // 0x5425...Bc65 Fuji USDC
@@ -97,6 +100,10 @@ contract GuardedTreasury {
     mapping(address => bool) public recipientAllowlist;
     mapping(uint256 => uint256) public spentOnDay; // day (UTC) -> total spent
     mapping(bytes32 => uint256) public missionSpent; // missionId -> total treasury spent
+    mapping(bytes32 => uint256) public missionToolCap; // missionId -> on-chain tool cap
+    mapping(bytes32 => bool) public missionFunded; // missionId -> true if session wallet funded
+    mapping(bytes32 => address) public missionSessionWallet; // missionId -> funded session wallet
+    mapping(bytes32 => bytes32) public anchoredMissionProofs; // missionId -> anchored audit headHash
 
     struct Mission {
         bytes32 id; // keccak256(UTF8(slug))
@@ -288,6 +295,67 @@ contract GuardedTreasury {
         require(balance > 0, "NoFunds");
         IERC20(USDC).safeTransfer(_owner, balance);
         emit EmergencyWithdrawn(balance);
+    }
+
+    // --- On-Chain Session Wallet Funding & Sweeping (P1-A, STRATEGY §4.3) ---
+    function setMissionToolCap(bytes32 missionId, uint256 toolCap) external onlyOwner {
+        require(missions[missionId].exists, "MissionNotFound");
+        require(!missionFunded[missionId], "MissionAlreadyFunded");
+        require(toolCap > 0, "InvalidToolCap");
+        missionToolCap[missionId] = toolCap;
+    }
+
+    function fundMissionWallet(bytes32 missionId, address wallet, uint256 amount) public onlyOwner nonReentrant whenNotPaused {
+        require(missions[missionId].exists, "MissionNotFound");
+        require(!missions[missionId].closed, "MissionAlreadyClosed");
+        require(block.timestamp < missions[missionId].expiresAt, "MissionExpired");
+        require(!missionFunded[missionId], "MissionAlreadyFunded");
+        require(wallet != address(0) && wallet != _owner && wallet != address(this), "InvalidWallet");
+        require(amount > 0, "InvalidAmount");
+        require(IERC20(USDC).balanceOf(address(this)) >= amount, "InsufficientTreasuryBalance");
+
+        missionFunded[missionId] = true;
+        missionSessionWallet[missionId] = wallet;
+        missionToolCap[missionId] = amount;
+
+        IERC20(USDC).safeTransfer(wallet, amount);
+        emit MissionFunded(missionId, wallet, amount);
+    }
+
+    function fundMissionWallet(bytes32 missionId, address wallet) external onlyOwner {
+        uint256 amount = missionToolCap[missionId] > 0 ? missionToolCap[missionId] : perTxCap;
+        fundMissionWallet(missionId, wallet, amount);
+    }
+
+    function sweepMissionWallet(bytes32 missionId, uint256 amount) public onlyOwner nonReentrant {
+        require(missions[missionId].exists, "MissionNotFound");
+        require(missionFunded[missionId], "MissionNotFunded");
+        address wallet = missionSessionWallet[missionId];
+        require(wallet != address(0), "NoSessionWallet");
+        require(amount > 0, "InvalidAmount");
+
+        IERC20(USDC).safeTransferFrom(wallet, address(this), amount);
+        emit MissionSwept(missionId, wallet, amount);
+    }
+
+    function sweepMissionWallet(bytes32 missionId) external onlyOwner {
+        require(missions[missionId].exists, "MissionNotFound");
+        require(missionFunded[missionId], "MissionNotFunded");
+        address wallet = missionSessionWallet[missionId];
+        require(wallet != address(0), "NoSessionWallet");
+        uint256 remaining = IERC20(USDC).balanceOf(wallet);
+        require(remaining > 0, "ZeroRemainingBalance");
+
+        sweepMissionWallet(missionId, remaining);
+    }
+
+    // --- On-Chain Proof Anchoring (P1-B, STRATEGY §4.4) ---
+    function anchorMissionProof(bytes32 missionId, bytes32 headHash) external onlyOwner {
+        require(missions[missionId].exists, "MissionNotFound");
+        require(headHash != bytes32(0), "InvalidHeadHash");
+
+        anchoredMissionProofs[missionId] = headHash;
+        emit MissionProofAnchored(missionId, headHash, block.timestamp);
     }
 
     // --- Core Propose Function (01 §4, §5) ---

@@ -1,24 +1,26 @@
-# BÁO CÁO NGHIỆM THU ACCEPTANCE (BẢN FIX UI-01..05, P2-PRICE, KEY-02b, INJ-01)
+# BÁO CÁO NGHIỆM THU ACCEPTANCE (BẢN FIX UI-02b, VER-02, INJ-01b, HYG-01, P1-A, P1-B, DEPLOY-READY)
 
-**Thời điểm:** 2026-11-07 02:35 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
-**Cam kết:** Chỉ 2 file trao đổi; contracts ở `contracts/`; không push `main`, không deploy public, không commit secret; chỉ dùng Fuji testnet.
+**Thời điểm:** 2026-11-07 02:58 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
+**Cam kết:** Chỉ 2 file trao đổi; contracts ở `contracts/`; không push `main`, không deploy public, không commit secret; chỉ simulation, không broadcast.
 
-## 1. BẢNG ACCEPTANCE MỤC 4 (REVIEW_PROMPT_GPT.md 02:15)
+## 1. BẢNG ACCEPTANCE MỤC 4 (REVIEW_PROMPT_GPT.md 02:45)
 
 | ID | Điều kiện đạt | Bằng chứng thực tế & Lệnh kiểm tra | Trạng thái |
 |---|---|---|---|
-| **UI-01** | Verify thật; tamper → FAIL; 401 → UNVERIFIED; xóa toàn bộ hash/count gán cứng | `apps/web/lib/proof-verifier.ts` tính `keccak256` canonical JSON, kiểm sequential `prevHash` & checkpoint count/head. `demo/page.tsx` xác minh in-browser. Grep xác nhận không còn `0xe708441f`/`0x7e4b2d1c`. Playwright `mission-control.spec.ts` 3/3 cases PASS: Valid → VERIFIED; Tampered → FAIL; 401 → UNVERIFIED. Ảnh: `evidence/p2-mission-control-ui.png`. | **PASS** |
-| **UI-02** | Pause gọi API `/api/system/pause`, agent run bị 403 khi paused | Nút Pause yêu cầu challenge `PAUSE_S1`, ký qua ví owner, POST `/api/system/pause`, refetch server policy. Khi pause, `/api/agent/run` trả HTTP 403 (`System is paused`). Playwright test UI-02 PASS. | **PASS** |
-| **UI-03** | Queue lấy từ DB, approve qua API có chữ ký; S1 hiện trống | Stage S1 khóa hoàn toàn treasury (`STAGE_S1_NO_TREASURY`), UI hiển thị banner vô hiệu hóa S1 trung thực: "STAGE S1 INACTIVE — Treasury payouts disabled. Approval queue activates in Stage S2 with on-chain GuardedTreasury contract." 0 fake clickable items. | **PASS** |
-| **UI-04/05** | Text theo mode; lý do Guarded lấy từ verdict thật | Header & badge ghi rõ: `Payment Mode: MOCK (Local Simulation)`. Thẻ Guarded render dynamic `verdict.rule` (`STAGE_S1_NO_TREASURY`) & `verdict.reason`. Ảnh: `evidence/p1-c-prompt-injection-defense.png`, `evidence/p2-mission-control-ui.png`. | **PASS** |
-| **P2-PRICE** | BLOCK qua handler thanh toán thật | `verifyQuoteAgainstCatalog` được gọi trong `reserveOperation` (`payments.ts`) & `/api/agent/run`. Quote vượt giá bị chặn, ghi `BLOCKED` audit log dưới lock trong DB (`rule: 'PRICE_MISMATCH'`), ném error. Test `agent-lifecycle.test.ts` Reg 14 PASS. | **PASS** |
-| **KEY-02b** | Route ngoài agent cũng fail ở LIVE khi config sai | `validateLiveFujiConfig()` được gọi trong `payments.ts` (mọi chi tiêu) và `/api/tools/orchestrate`. Test `agent-lifecycle.test.ts` Reg 15: gọi orchestrate ở LIVE_FUJI với ví Anvil lập tức ném `KEY-02`. | **PASS** |
-| **INJ-01** | Không kích hoạt fixture qua từ khóa | Đã xóa kiểm tra từ khóa (`attack`, `injection`) trong `tools.ts`. Query nghiên cứu thật chạy bình thường. Fixture adversarial chỉ kích hoạt khi `demoAdversarial: true` hoặc env `DEMO_ADVERSARIAL=1` (kèm `fixture: true`). Test `agent-lifecycle.test.ts` Reg 16 PASS. | **PASS** |
+| **UI-02b** | Pause thật → 403 ở agent + orchestrate; unpause chạy lại | `agent-lifecycle.test.ts` Reg 17: Owner ký challenge `PAUSE_S1` gọi `/api/system/pause`; `/api/agent/run` và `/api/tools/orchestrate` trả HTTP 403 (`System is paused`); unpause bằng challenge mới khôi phục 200. | **PASS** |
+| **VER-02** | Một module verifier; thiếu inner prev_hash → FAIL cả hai | Gộp verifier vào `apps/web/lib/proof-verifier.ts`, `scripts/verify-proof.ts` import dùng chung. Kiểm tra nghiêm ngặt `parsed.prev_hash`. `agent-lifecycle.test.ts` Reg 18 & CLI `npm run verify-proof` đều PASS. | **PASS** |
+| **INJ-01b** | Không bật theo từ khóa; chỉ env + non-production | Xóa mọi heuristic từ khóa trong `agent.ts`. Fixture chỉ bật khi `DEMO_ADVERSARIAL=1` và `NODE_ENV!=production`. `agent-lifecycle.test.ts` Reg 16 PASS. | **PASS** |
+| **HYG-01** | tsbuildinfo không còn tracked | Đã xóa khỏi git cache: `git ls-files apps/web/tsconfig.tsbuildinfo` trả về rỗng. `.gitignore` đã có `*.tsbuildinfo`. | **PASS** |
+| **P1-A** | Hàm + events + forge tests pass; backend dùng ví phiên ở S2 | `GuardedTreasury.sol` thêm `fundMissionWallet`, `sweepMissionWallet`, events `MissionFunded`, `MissionSwept`. `GuardedTreasury.t.sol` 6 test P1A PASS (fund 2 lần revert, vượt số dư revert, agent gọi revert, hết hạn revert, sweep PASS). `session-wallets.ts` cấp ví phiên riêng theo mission ở S2. Bảng tổn thất tối đa đã cập nhật trong `README.md`. | **PASS** |
+| **P1-B** | Anchor + event + test; ERC-8004 module + test mock | `GuardedTreasury.sol` thêm `anchorMissionProof(missionId, headHash)`, event `MissionProofAnchored`, 2 test P1B PASS. Tạo `apps/web/lib/erc8004.ts` pin địa chỉ Fuji (`0x8004A818...`, `0x8004B663...`), test `tests/erc8004.test.ts` 3/3 PASS. | **PASS** |
+| **DEPLOY-READY** | Script deploy chạy được simulation, chặn key Anvil, không broadcast | `contracts/script/Deploy.s.sol`: simulation tạo contract tại `0x5aAdFB43eF8dAF45DD80F4676345b7676f1D70e3`; truyền key Anvil lập tức revert `KEY-02: INSECURE_ANVIL_KEY_PROHIBITED_ON_FUJI`. Không có cờ `--broadcast`. | **PASS** |
 
-## 2. KẾT QUẢ TEST & TYPECHECK TOÀN DIỆN
+## 2. KẾT QUẢ KIỂM ĐỊNH TOÀN DIỆN
 
-1. **Vitest Suite:** `91/91 tests PASS` (7 test files: `unit-boundaries` 33, `p-series` 25, `agent-lifecycle` 16, `v-series` 10, `agent-planning` 4, `e-series` 2, `handler-lifecycle` 1).
-2. **Playwright E2E Suite:** `16/16 tests PASS` (`mission-control.spec.ts` 5, `agent-autonomous.spec.ts` 1, `mission-lifecycle.spec.ts` 2, `pending-and-publication.spec.ts` 7, `real-integration.spec.ts` 1).
-3. **TypeScript Typecheck:** `npx tsc --noEmit --incremental false` exit 0 (0 errors).
-4. **Evidence Screenshots:** Đã chụp lại và lưu vào `apps/web/evidence/p2-mission-control-ui.png` và `apps/web/evidence/p1-c-prompt-injection-defense.png`.
-5. **Bảo mật:** 0 secrets / Anvil keys commit.
+1. **Foundry Contracts Suite:** `30/30 tests PASS` (`contracts/test/GuardedTreasury.t.sol`: 22 gốc + 8 tests P1-A/P1-B).
+2. **Foundry Deploy Simulation:** `forge script script/Deploy.s.sol` thành công (gas: 3,658,468, 0 tx broadcast).
+3. **Vitest Full Suite:** `96/96 tests PASS` (8 test files: `unit-boundaries` 33, `p-series` 25, `agent-lifecycle` 18, `v-series` 10, `agent-planning` 4, `erc8004` 3, `e-series` 2, `handler-lifecycle` 1).
+4. **Playwright E2E Suite:** `5/5 tests PASS` (`mission-control.spec.ts`).
+5. **Standalone Verifier CLI:** `npm run verify-proof` exit 0 (self-test PASS).
+6. **TypeScript Typecheck:** `npx tsc --noEmit --incremental false` exit 0 (0 errors).
+7. **Bảo mật:** 0 keys/secrets commit; Anvil keys bị chặn trên mọi script deploy và config Fuji.

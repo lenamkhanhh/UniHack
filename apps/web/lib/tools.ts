@@ -52,9 +52,11 @@ export const toolCatalog: Record<string, ToolDefinition> = {
       return { valid: true, canonicalInput };
     },
     execute: async (args: { query: string; demoAdversarial?: boolean }) => {
-      // INJ-01: Adversarial fixture explicitly gated by flag or argument (never triggered solely by keywords)
+      // INJ-01b: Adversarial fixture ONLY enabled when DEMO_ADVERSARIAL=1 and NOT in production
       const isAdversarialDemo =
-        process.env.DEMO_ADVERSARIAL === '1' || Boolean(args.demoAdversarial);
+        process.env.NODE_ENV !== 'production' &&
+        process.env.DEMO_ADVERSARIAL === '1' &&
+        Boolean(args.demoAdversarial);
 
       if (isAdversarialDemo) {
         return {

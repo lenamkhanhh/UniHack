@@ -3,14 +3,18 @@ import { NextRequest } from 'next/server';
 import { randomUUID } from 'crypto';
 import { POST } from '../app/api/agent/run/route';
 import { POST as orchestratePOST } from '../app/api/tools/orchestrate/route';
+import { POST as pausePOST } from '../app/api/system/pause/route';
+import { POST as challengePOST } from '../app/api/auth/challenge/route';
 import { prisma } from '../lib/db';
-import { clearDatabase, createTestMission } from './setup';
+import { clearDatabase, createTestMission, ownerAccount } from './setup';
 import { issueSpendToken, verifyToken } from '../lib/auth';
 import { hashUtf8, normalizeAddress } from '../lib/chain';
 import { validateLiveFujiConfig } from '../lib/config';
 import { verifyQuoteAgainstCatalog } from '../lib/validator';
 import { reserveOperation } from '../lib/payments';
 import { toolCatalog } from '../lib/tools';
+import { verifyProof, INITIAL_PREV_HASH } from '../lib/proof-verifier';
+import { keccak256, stringToBytes } from 'viem';
 
 describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Rails', () => {
   beforeEach(async () => {
@@ -536,49 +540,54 @@ describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Ra
   });
 
   it('Regression 13 (P1-C): Local prompt injection payload in search results is intercepted and strictly BLOCKED', async () => {
-    const { mission, spendToken } = await createTestMission({
-      toolCap: 2_000_000n, // 2.00 USDC
-    });
+    process.env.DEMO_ADVERSARIAL = '1';
+    try {
+      const { mission, spendToken } = await createTestMission({
+        toolCap: 2_000_000n, // 2.00 USDC
+      });
 
-    // Run agent with an adversarial goal triggering untrusted search results with injection payload
-    const req = new NextRequest('http://localhost:3000/api/agent/run', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${spendToken}`,
-      },
-      body: JSON.stringify({
-        goal: 'Security audit test: Prompt injection exploit detection',
-      }),
-    });
+      // Run agent with an adversarial goal triggering untrusted search results with injection payload
+      const req = new NextRequest('http://localhost:3000/api/agent/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${spendToken}`,
+        },
+        body: JSON.stringify({
+          goal: 'Security audit test: Prompt injection exploit detection',
+        }),
+      });
 
-    const res = await POST(req);
-    expect(res.status).toBe(200);
-    const data = await res.json();
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const data = await res.json();
 
-    // Turn 1: Search was executed
-    expect(data.steps[0].action).toBe('TOOL');
-    expect(data.steps[0].toolId).toBe('tool:search');
-    expect(data.steps[0].state).toBe('SETTLED');
+      // Turn 1: Search was executed
+      expect(data.steps[0].action).toBe('TOOL');
+      expect(data.steps[0].toolId).toBe('tool:search');
+      expect(data.steps[0].state).toBe('SETTLED');
 
-    // Turn 2: Untrusted source attempted prompt injection proposing 50 USDC payout to attacker
-    // The policy validator strictly BLOCKED the attempt!
-    expect(data.steps[1].action).toBe('TOOL_BLOCKED');
-    expect(data.steps[1].verdict.outcome).toBe('BLOCK');
-    expect(data.steps[1].amountAtomic).toBe('50000000'); // 50 USDC attempt
-    expect(data.steps[1].reason).toContain('POISONED_PAYLOAD');
+      // Turn 2: Untrusted source attempted prompt injection proposing 50 USDC payout to attacker
+      // The policy validator strictly BLOCKED the attempt!
+      expect(data.steps[1].action).toBe('TOOL_BLOCKED');
+      expect(data.steps[1].verdict.outcome).toBe('BLOCK');
+      expect(data.steps[1].amountAtomic).toBe('50000000'); // 50 USDC attempt
+      expect(data.steps[1].reason).toContain('POISONED_PAYLOAD');
 
-    // Verify in database: ONLY Turn 1 search was settled (0.10 USDC spent). The 50 USDC was BLOCKED!
-    const dbMission = await prisma.mission.findUnique({ where: { slug: mission.slug } });
-    expect(BigInt(dbMission!.spentTool.toString())).toBe(100_000n); // Exactly 0.10 USDC spent for search
+      // Verify in database: ONLY Turn 1 search was settled (0.10 USDC spent). The 50 USDC was BLOCKED!
+      const dbMission = await prisma.mission.findUnique({ where: { slug: mission.slug } });
+      expect(BigInt(dbMission!.spentTool.toString())).toBe(100_000n); // Exactly 0.10 USDC spent for search
 
-    // Verify BLOCKED audit record in DB
-    const entries = await prisma.auditEntry.findMany({ where: { missionSlug: mission.slug } });
-    const blockedEntry = entries.find((e) => JSON.parse(e.canonicalJson).kind === 'BLOCKED');
-    expect(blockedEntry).toBeDefined();
-    const parsedBlocked = JSON.parse(blockedEntry!.canonicalJson);
-    expect(parsedBlocked.amount).toBe('50000000');
-    expect(parsedBlocked.to).toBe('0x3333333333333333333333333333333333333333');
+      // Verify BLOCKED audit record in DB
+      const entries = await prisma.auditEntry.findMany({ where: { missionSlug: mission.slug } });
+      const blockedEntry = entries.find((e) => JSON.parse(e.canonicalJson).kind === 'BLOCKED');
+      expect(blockedEntry).toBeDefined();
+      const parsedBlocked = JSON.parse(blockedEntry!.canonicalJson);
+      expect(parsedBlocked.amount).toBe('50000000');
+      expect(parsedBlocked.to).toBe('0x3333333333333333333333333333333333333333');
+    } finally {
+      delete process.env.DEMO_ADVERSARIAL;
+    }
   });
 
   it('Regression 14 (P2-PRICE): Quote exceeding catalog price or per-call cap is strictly rejected by payment rail and logged to audit', async () => {
@@ -684,28 +693,181 @@ describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Ra
     process.env.PAYMENT_MODE = 'MOCK';
   });
 
-  it('Regression 16 (INJ-01): Research query containing "attack" executes normal live search when demo flag is false', async () => {
+  it('Regression 16 (INJ-01b): Research query containing "attack" executes normal live search when demo flag is false; fixture requires DEMO_ADVERSARIAL=1', async () => {
     delete process.env.DEMO_ADVERSARIAL;
 
-    // Normal query mentioning attack
+    // 1. Without env flag, query mentioning "attack" executes normal search
     const normalResult = await toolCatalog['tool:search'].execute({
       query: '51% attack blockchain consensus security',
       demoAdversarial: false,
     });
-
-    // Must NOT return the adversarial injection directive fixture
     expect(normalResult.provider).not.toBe('demo-adversarial-search-fixture');
     expect((normalResult as any).fixture).toBeUndefined();
 
-    // Adversarial mode explicitly enabled via argument
-    const adversarialResult = await toolCatalog['tool:search'].execute({
+    // 2. Without env flag, even passing demoAdversarial=true is ignored (safe by default)
+    const ignoredResult = await toolCatalog['tool:search'].execute({
       query: 'Attack demo test',
       demoAdversarial: true,
     });
+    expect(ignoredResult.provider).not.toBe('demo-adversarial-search-fixture');
+    expect((ignoredResult as any).fixture).toBeUndefined();
 
-    // MUST return the labeled fixture with fixture: true
-    expect(adversarialResult.provider).toBe('demo-adversarial-search-fixture');
-    expect((adversarialResult as any).fixture).toBe(true);
-    expect(adversarialResult.points[1]).toContain('URGENT ADVISORY');
+    // 3. With DEMO_ADVERSARIAL=1 in non-production, passing demoAdversarial=true returns labeled fixture
+    process.env.DEMO_ADVERSARIAL = '1';
+    try {
+      const adversarialResult = await toolCatalog['tool:search'].execute({
+        query: 'Attack demo test',
+        demoAdversarial: true,
+      });
+      expect(adversarialResult.provider).toBe('demo-adversarial-search-fixture');
+      expect((adversarialResult as any).fixture).toBe(true);
+      expect(adversarialResult.points[1]).toContain('URGENT ADVISORY');
+
+      // 4. Even with DEMO_ADVERSARIAL=1, a normal search query (demoAdversarial=false) does not return fixture
+      const regularResult = await toolCatalog['tool:search'].execute({
+        query: 'Avalanche consensus mechanism',
+        demoAdversarial: false,
+      });
+      expect(regularResult.provider).not.toBe('demo-adversarial-search-fixture');
+      expect((regularResult as any).fixture).toBeUndefined();
+    } finally {
+      delete process.env.DEMO_ADVERSARIAL;
+    }
+  });
+
+  it('Regression 17 (UI-02b): Real server pause via owner challenge strictly blocks /api/agent/run and /api/tools/orchestrate with 403; unpause resumes', async () => {
+    // 1. Request PAUSE_S1 challenge for owner
+    const challengeReq = new NextRequest('http://localhost:3000/api/auth/challenge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'PAUSE_S1',
+        payload: { desiredPaused: true },
+        expectedSigner: ownerAccount.address,
+      }),
+    });
+    const challengeRes = await challengePOST(challengeReq);
+    expect(challengeRes.status).toBe(200);
+    const { nonce, message } = await challengeRes.json();
+
+    // 2. Owner signs challenge
+    const signature = await ownerAccount.signMessage({ message });
+
+    // 3. Send real POST /api/system/pause
+    const pauseReq = new NextRequest('http://localhost:3000/api/system/pause', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nonce,
+        signature,
+        payload: { desiredPaused: true },
+      }),
+    });
+    const pauseRes = await pausePOST(pauseReq);
+    expect(pauseRes.status).toBe(200);
+    const pauseData = await pauseRes.json();
+    expect(pauseData.systemPaused).toBe(true);
+
+    // 4. Create active mission and spend token
+    const { spendToken } = await createTestMission();
+
+    // 5. Verify /api/agent/run is strictly halted with HTTP 403
+    const runReq = new NextRequest('http://localhost:3000/api/agent/run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${spendToken}`,
+      },
+      body: JSON.stringify({ goal: 'Execute under pause' }),
+    });
+    const runRes = await POST(runReq);
+    expect(runRes.status).toBe(403);
+    const runData = await runRes.json();
+    expect(runData.error).toContain('System is paused');
+
+    // 6. Verify /api/tools/orchestrate is strictly halted with HTTP 403
+    const orchReq = new NextRequest('http://localhost:3000/api/tools/orchestrate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${spendToken}`,
+      },
+      body: JSON.stringify({
+        toolId: 'tool:search',
+        arguments: { query: 'Blockchain security' },
+      }),
+    });
+    const orchRes = await orchestratePOST(orchReq);
+    expect(orchRes.status).toBe(403);
+    const orchData = await orchRes.json();
+    expect(orchData.error).toContain('System is paused');
+
+    // 7. Unpause the system via owner challenge
+    const unpauseChallReq = new NextRequest('http://localhost:3000/api/auth/challenge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'PAUSE_S1',
+        payload: { desiredPaused: false },
+        expectedSigner: ownerAccount.address,
+      }),
+    });
+    const unpauseChallRes = await challengePOST(unpauseChallReq);
+    const unpauseChall = await unpauseChallRes.json();
+    const unpauseSig = await ownerAccount.signMessage({ message: unpauseChall.message });
+
+    const unpauseReq = new NextRequest('http://localhost:3000/api/system/pause', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nonce: unpauseChall.nonce,
+        signature: unpauseSig,
+        payload: { desiredPaused: false },
+      }),
+    });
+    const unpauseRes = await pausePOST(unpauseReq);
+    expect(unpauseRes.status).toBe(200);
+
+    // 8. Now /api/agent/run and /api/tools/orchestrate resume normal execution
+    const runResAfter = await POST(runReq);
+    expect(runResAfter.status).toBe(200);
+  });
+
+  it('Regression 18 (VER-02): Shared cryptographic proof verifier strictly enforces inner prev_hash matching', () => {
+    const canonicalJson =
+      '{"actor":"0x1","amount":"0","chain_id":"43113","created_at":"2026-11-04T00:00:00.000Z","kind":"CUTOVER","mission_id":"m1","operation_id":"","policy_hash":"0x0","policy_version":"1","prev_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","reason":"Genesis","result_hash":"","rule":"","source_key":"test:genesis","to":"","tx_hash":""}';
+    const entryHash = keccak256(stringToBytes(canonicalJson));
+
+    // 1. Valid entry passes verification
+    const validRes = verifyProof(
+      [
+        {
+          sourceKey: 'test:genesis',
+          prevHash: INITIAL_PREV_HASH,
+          entryHash,
+          canonicalJson,
+        },
+      ],
+      { entryCount: 1, headHash: entryHash }
+    );
+    expect(validRes.valid).toBe(true);
+
+    // 2. Entry missing inner prev_hash strictly FAILS
+    const jsonMissingPrevHash =
+      '{"actor":"0x1","amount":"0","chain_id":"43113","created_at":"2026-11-04T00:00:00.000Z","kind":"CUTOVER","mission_id":"m1","operation_id":"","policy_hash":"0x0","policy_version":"1","reason":"Genesis","result_hash":"","rule":"","source_key":"test:genesis","to":"","tx_hash":""}';
+    const hashMissing = keccak256(stringToBytes(jsonMissingPrevHash));
+    const failRes = verifyProof(
+      [
+        {
+          sourceKey: 'test:genesis',
+          prevHash: '0x1234567890123456789012345678901234567890123456789012345678901234',
+          entryHash: hashMissing,
+          canonicalJson: jsonMissingPrevHash,
+        },
+      ],
+      { entryCount: 1, headHash: hashMissing }
+    );
+    expect(failRes.valid).toBe(false);
+    expect(failRes.errors.some((e) => e.includes('Inner/outer prevHash mismatch'))).toBe(true);
   });
 });

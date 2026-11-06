@@ -22,6 +22,7 @@ import { canonicalJson, computePayloadHash, TokenClaims } from './auth';
 import { reconcileOperation, ChainEvidence } from './reconcile';
 import { getPaymentMode, validateLiveFujiConfig } from './config';
 import { verifyQuoteAgainstCatalog } from './validator';
+import { getSessionWalletForMission } from './session-wallets';
 
 export { getPaymentMode };
 
@@ -89,13 +90,18 @@ export async function createQuote(params: QuoteParams) {
     };
   }
 
+  const payerAddress =
+    params.tokenClaims.stage === 'S2'
+      ? getSessionWalletForMission(params.tokenClaims.missionSlug).address
+      : normalizeAddress(params.tokenClaims.agent);
+
   const operation = await prisma.toolOperation.create({
     data: {
       operationId: params.operationId,
       deploymentId: params.tokenClaims.deploymentId,
       missionSlug: params.tokenClaims.missionSlug,
       paymentMode: getPaymentMode(),
-      payerAddress: normalizeAddress(params.tokenClaims.agent),
+      payerAddress,
       toolId: params.toolId,
       inputHash,
       paymentTerms: paymentTermsJson,
@@ -416,13 +422,23 @@ export async function signOperationAuthorization(params: {
 
       const mode = (op as any).paymentMode || getPaymentMode();
 
-      let signature = 'mock_signature_for_testing';
-      if (mode === 'LIVE_FUJI' && !params.agentPrivateKey) {
-        throw new Error('AGENT_PRIVATE_KEY is required for signing in LIVE_FUJI mode');
+      let effectivePrivateKey = params.agentPrivateKey;
+      let effectivePayer = op.payerAddress;
+
+      // P1-A: In Stage S2, use isolated on-chain session wallet per mission (STRATEGY §4.3)
+      if (state?.stage === 'S2') {
+        const sessionWallet = getSessionWalletForMission(op.missionSlug);
+        effectivePrivateKey = sessionWallet.privateKey;
+        effectivePayer = sessionWallet.address;
       }
 
-      if (params.agentPrivateKey) {
-        const account = privateKeyToAccount(params.agentPrivateKey);
+      let signature = 'mock_signature_for_testing';
+      if (mode === 'LIVE_FUJI' && !effectivePrivateKey) {
+        throw new Error('Signing private key is required for signing in LIVE_FUJI mode');
+      }
+
+      if (effectivePrivateKey) {
+        const account = privateKeyToAccount(effectivePrivateKey);
         signature = await account.signTypedData({
           domain: usdcEip712Domain,
           types: eip3009Types,
@@ -442,7 +458,7 @@ export async function signOperationAuthorization(params: {
         where: { operationId: params.operationId },
         data: {
           state: 'SIGNED',
-          authFrom: normalizeAddress(op.payerAddress),
+          authFrom: normalizeAddress(effectivePayer),
           authTo: normalizeAddress(terms.payTo),
           authValue: value.toString(),
           authNonce: nonce.toLowerCase(),

@@ -1,8 +1,8 @@
 # UniHack — review hiện tại và nhiệm vụ tiếp theo
 
-Cập nhật: 2026-11-07 02:15, Asia/Saigon.
-Repo: D:\Code\Code\AIO\Code\ZaloAIC\UniHack — nhánh `feat/s1-app`, HEAD `25e1dcf`.
-Báo cáo đã đọc: REPORT_REVIEW_AND_FIX_COMPLETION.md (bản commit `25e1dcf`).
+Cập nhật: 2026-11-07 02:45, Asia/Saigon.
+Repo: D:\Code\Code\AIO\Code\ZaloAIC\UniHack — nhánh `feat/s1-app`, HEAD `95cb2c3`.
+Báo cáo đã đọc: REPORT_REVIEW_AND_FIX_COMPLETION.md (bản commit `95cb2c3`).
 Kế hoạch: STRATEGY_MAX_SCORE.md.
 
 ## 1. Hai file trao đổi cố định
@@ -16,86 +16,83 @@ Kế hoạch: STRATEGY_MAX_SCORE.md.
 
 | ID | Kết quả |
 |---|---|
-| AG-05 | Đạt. Payout tách khỏi đường tool; S1 BLOCK; S2 PASS/QUEUE tạo `TreasuryRequest` + audit (Reg 7–9). |
-| AG-04 | Đạt. Override chỉ bật bằng `ALLOW_AGENT_TEST_OVERRIDE=1` ngoài production, nhãn `CLIENT_OVERRIDE`. |
-| AG-07 | Đạt. 500 trả lỗi chung. |
-| Test | Reviewer chạy lại `vitest run` toàn bộ: **89/89, 7 files**; `tsc` exit 0. |
+| **UI-01** | **Đạt.** `lib/proof-verifier.ts` tính lại keccak/canonicalJson/prevHash/checkpoint thật; lỗi fetch → UNVERIFIED, chain sai → FAIL; `page.tsx` không còn hash/count gán cứng. |
+| UI-02 | Đạt phần UI: gọi challenge → ký → `/api/system/pause` → đọc lại `/api/policy`. (Xem UI-02b.) |
+| UI-03 | Đạt. S1 hiển thị banner vô hiệu, không còn nút duyệt giả. |
+| UI-04/05 | Đạt. Text theo mode; lý do Guarded lấy từ verdict. |
+| P2-PRICE | Đạt. `verifyQuoteAgainstCatalog` được gọi trong `reserveOperation` + agent route; BLOCK có audit. |
+| KEY-02b | Đạt. `validateLiveFujiConfig()` trong `payments.ts` + `/api/tools/orchestrate`. |
+| Test | Reviewer chạy lại: vitest **91/91**; Playwright `mission-control.spec.ts` **5/5**; `tsc` exit 0. |
 
-### 2.2 Chưa đạt: UI đang báo kết quả giả (chặn nộp bài)
+Ghi chú: trong lúc chạy Playwright, reviewer vô tình ghi đè 2 ảnh evidence và đã khôi phục bằng `git checkout`. Working tree sạch.
 
-Đây là lỗi nghiêm trọng nhất từ đầu tới giờ về **tính trung thực của demo**. Giám khảo mở code (DevRel, academic) sẽ thấy ngay; nếu bị phát hiện khi Q&A, toàn bộ claim "verifiable" của sản phẩm mất giá trị.
-
-| ID | Mức | Vị trí | Vấn đề | Yêu cầu |
-|---|---|---|---|---|
-| **UI-01** | **Critical** | `app/demo/page.tsx:111-141` | Nút **Verify Proof là giả**. Khi API OK: đặt `verified: true` mà không kiểm gì (không tính hash, không đối chiếu chain/checkpoint). Khi API lỗi (vd. 401): **vẫn** hiện "Verified… unbroken chain" với hash gán cứng `0xe708441f…`, `count` tự bịa (`steps*2` hoặc `6`), log "matches on-chain state". Ảnh `evidence/p2-mission-control-ui.png` chụp đúng trạng thái giả này. | Verify thật trên trình duyệt: dùng lại logic `scripts/verify-proof.ts` (canonicalJson, keccak, prevHash, đối chiếu checkpoint/head). Lỗi fetch hoặc chain sai → hiện **FAIL/UNVERIFIED**, không có giá trị mặc định. Xóa mọi hash/count gán cứng. Test: proof hợp lệ → PASS; sửa 1 entry → FAIL; 401 → không hiện verified. Chụp lại evidence. |
-| **UI-02** | High | `page.tsx:104-109` | Nút **Pause Kill-Switch** chỉ đổi state React, không gọi `/api/system/pause`. Agent server vẫn chi tiêu bình thường. | Gọi route pause thật (owner ký challenge như flow hiện có); UI đọc lại trạng thái từ server (`/api/policy`). Test: pause → `/api/agent/run` trả 403. |
-| **UI-03** | High | `page.tsx:145-160, 612` | Hàng chờ duyệt: Approve/Reject chỉ sửa state client, không qua API hay chữ ký owner. | Nối với `TreasuryRequest` thật (route queue hiện có, owner ký). Ở S1 không có payout: hiển thị trống + nhãn "S2", không cho bấm giả. |
-| **UI-04** | Medium | `page.tsx:653`, header, badge ngân sách | Ở MOCK nhưng UI ghi "on-chain budget enforcement, real x402 payment rails", "Interactive S1 Production Demo", badge "USDC Fuji (43113)". | Text phụ thuộc mode: MOCK ghi rõ "MOCK — local simulation". Chỉ ghi "on-chain"/"Fuji" khi có tx thật. |
-| **UI-05** | Medium | `page.tsx:978` | Thẻ "Guarded" in cứng lý do "recipient not allowlisted; over per-tx cap", trong khi verdict thật là `STAGE_S1_NO_TREASURY`. | Render đúng `verdict.rule` và `verdict.reason` từ response. |
-
-### 2.3 Chưa đạt: guard chưa nối vào luồng thật
+### 2.2 Còn mở (nhỏ)
 
 | ID | Mức | Vị trí | Vấn đề | Yêu cầu |
 |---|---|---|---|---|
-| **P2-PRICE** | High | `lib/validator.ts:297` | `verifyQuoteAgainstCatalog` **chỉ được gọi trong test**, không có trong `payments.ts` hay route nào. Report ghi PASS là sai. | Gọi trong luồng thanh toán trước khi reserve/sign: quote vượt giá niêm yết hoặc cap/call → BLOCK + audit. Test qua handler thật (`/api/agent/run` hoặc `/api/tools/orchestrate`), không chỉ gọi hàm. |
-| **KEY-02b** | Medium | `lib/config.ts:86` | `validateLiveFujiConfig()` chỉ chạy trong `/api/agent/run`. Các route chi tiêu khác (`/api/tools/orchestrate`, `/api/tools/[id]`, TalkMeter) ở LIVE_FUJI không được chặn. | Gọi ở một điểm chung cho mọi đường chi tiêu (vd. trong `payments.ts` khi mode LIVE, hoặc `instrumentation.ts` lúc khởi động). Test cho ít nhất 1 route ngoài agent. |
-| **INJ-01** | Medium | `lib/tools.ts:52-59` | Search trả fixture "adversarial" mỗi khi query chứa `injection/attack/jailbreak/compromise`. Câu hỏi nghiên cứu thật (vd. "51% attack Avalanche") sẽ nhận dữ liệu giả. | Chỉ bật bằng cờ demo rõ ràng (env `DEMO_ADVERSARIAL=1` + tham số preset), không dựa vào từ khóa. Kết quả gắn `fixture: true`. |
-
-### 2.4 Ghi chú cho pitch (không phải lỗi code)
-
-Ở S1, injection bị chặn bởi `STAGE_S1_NO_TREASURY`, tức là chặn mọi payout. Câu chuyện cho giám khảo yếu hơn so với "bị chặn vì không có trong allowlist / vượt cap". Khi lên S2 (contract trên Fuji), quay demo tấn công với rule allowlist/cap và revert on-chain.
+| UI-02b | Medium | `e2e/mission-control.spec.ts:113,133` | Test pause mock cả `/api/system/pause` lẫn `/api/agent/run`, nên chưa chứng minh **server thật** trả 403 khi paused. Vitest cũng chưa có case này. | Thêm test gọi handler thật: set pause qua route (owner ký) → `/api/agent/run` và `/api/tools/orchestrate` trả 403 → unpause → chạy lại được. |
+| VER-02 | Low | `lib/proof-verifier.ts:93` vs `scripts/verify-proof.ts:79` | Verifier trình duyệt **bỏ qua** kiểm `prev_hash` bên trong khi trường này vắng; CLI thì bắt buộc. Hai bản logic có thể lệch nhau. | Dùng **một** module chung cho cả CLI và trình duyệt; giữ quy tắc chặt của CLI. Test: entry thiếu inner `prev_hash` → FAIL ở cả hai. |
+| INJ-01b | Low | `lib/agent.ts:105-109`, `lib/tools.ts:57` | Fixture adversarial vẫn bật theo từ khóa trong goal (`adversarial`, `p1-c`, `exploit detection`) hoặc theo tham số client `demoAdversarial`. | Chỉ bật khi `DEMO_ADVERSARIAL=1` và không phải production; nút preset trên UI gửi cờ rõ ràng. Không dựa vào từ khóa. |
+| HYG-01 | Low | `apps/web/tsconfig.tsbuildinfo` | File build cache đang được git track. | Thêm vào `.gitignore`, `git rm --cached`. |
 
 ## 3. Nhiệm vụ tiếp theo (đúng thứ tự)
 
-1. **UI-01 → UI-05** (ưu tiên tuyệt đối; không thêm feature mới trước khi xong).
-2. **P2-PRICE, KEY-02b, INJ-01**, kèm test gọi handler thật.
-3. Chụp lại toàn bộ evidence UI sau khi sửa; xóa ảnh cũ chụp trạng thái giả (`evidence/p2-mission-control-ui.png`, `evidence/p1-c-prompt-injection-defense.png`) hoặc thay bằng ảnh mới.
-4. Fuji live / LIVE_LLM vẫn chờ owner điền `.env` (ví test mới, `GEMINI_API_KEY`).
+Fuji live vẫn chờ owner. Trong lúc chờ, làm hết phần contract/tích hợp **có thể test local** để khi có ví chỉ cần deploy.
+
+1. **Sửa nhỏ:** UI-02b, VER-02, INJ-01b, HYG-01.
+2. **P1-A ví phiên on-chain** (STRATEGY §4.3), viết + test bằng Foundry:
+   - `fundMissionWallet(missionId, wallet)`: chỉ owner gọi, chuyển đúng `toolCap` của mission, mỗi mission đúng 1 lần.
+   - `sweepMissionWallet(missionId)` / luồng trả dư khi close/expire; events `MissionFunded`, `MissionSwept`.
+   - Forge tests: fund 2 lần → revert; fund vượt số dư → revert; agent gọi → revert; mission đóng/hết hạn → không fund.
+   - Backend: tạo ví phiên theo mission (key lưu server-side, không log, không commit), dùng ví này ký EIP-3009 thay cho key agent chung khi `STAGE=S2`.
+   - Cập nhật bảng tổn thất tối đa trong spec/README.
+3. **P1-B proof anchor + ERC-8004 client**:
+   - Contract: `anchorMissionProof(missionId, headHash)` (owner), event `MissionProofAnchored`; forge test.
+   - Backend: khi complete mission ở S2 → gửi tx anchor (MOCK: ghi rõ chưa gửi). Verifier trình duyệt hiển thị "khớp hash neo on-chain" **chỉ khi** đọc được event thật.
+   - ERC-8004: module gọi `IdentityRegistry`/`ReputationRegistry` Fuji (địa chỉ trong STRATEGY §4.4), pin ABI từ contract đã verify; test với mock/anvil fork. `giveFeedback` chỉ sau operation SETTLED và owner xác nhận.
+4. **Script deploy Fuji sẵn sàng** (`contracts/script/Deploy.s.sol` + hướng dẫn README): đọc key từ env, từ chối key Anvil, in địa chỉ + lệnh verify Snowtrace. **Không broadcast.**
 
 ## 4. Acceptance lượt tới
 
 | ID | Điều kiện đạt | Bằng chứng |
 |---|---|---|
-| UI-01 | Verify thật; tamper → FAIL; 401 → UNVERIFIED; không còn hash/count gán cứng | Test Playwright 3 case + grep không còn `0xe708441f`/`0x7e4b2d1c` trong `page.tsx` |
-| UI-02 | Pause gọi API, agent run bị 403 khi paused | Test |
-| UI-03 | Queue lấy từ DB, approve qua API có chữ ký; S1 hiện trống | Test/ảnh |
-| UI-04/05 | Text theo mode; lý do lấy từ verdict | Ảnh |
-| P2-PRICE | BLOCK qua handler thật | Test |
-| KEY-02b | Route ngoài agent cũng fail ở LIVE khi config sai | Test |
-| INJ-01 | Không kích hoạt fixture qua từ khóa | Test |
+| UI-02b | Pause thật → 403 ở agent + orchestrate; unpause chạy lại | Tên test + output |
+| VER-02 | Một module verifier; thiếu inner prev_hash → FAIL cả hai | Test |
+| INJ-01b | Không bật theo từ khóa; chỉ env + non-production | Test |
+| HYG-01 | tsbuildinfo không còn tracked | `git ls-files` |
+| P1-A | Hàm + events + forge tests pass; backend dùng ví phiên ở S2 | `forge test` output, test backend |
+| P1-B | Anchor + event + test; ERC-8004 module + test mock | `forge test`, vitest |
+| DEPLOY-READY | Script deploy chạy được với `--dry-run`/simulation, chặn key Anvil | Output simulation |
 
 ## 5. Giới hạn thực thi
 
-- **Không hiển thị kết quả kiểm chứng, giao dịch, verdict hay trạng thái mà hệ thống không thực sự tạo ra.** Không dùng giá trị mặc định/gán cứng thay cho kết quả thật. Đây là điều kiện bắt buộc cho mọi UI/deck/video.
-- Agent và UI dùng lại validator, caps, payment lifecycle, auth đã nghiệm thu.
-- Không dùng khóa Anvil/Hardhat trên Fuji hay mạng công khai nào; không đọc/in/commit key.
+- Không hiển thị kết quả, giao dịch, verdict hay trạng thái mà hệ thống không thực sự tạo ra.
+- Không broadcast giao dịch lên Fuji khi owner chưa điền ví mới vào `.env` và chưa duyệt.
+- Không dùng khóa Anvil/Hardhat trên Fuji/mạng công khai; không đọc/in/commit key.
+- Không đổi luật validator, caps, payment lifecycle đã nghiệm thu (P1-A chỉ thêm đường ví phiên cho S2).
 - Không push `main`, không deploy public, không nộp bài khi owner chưa duyệt.
-- Report chỉ ghi PASS khi tính năng được gọi trong luồng thật và có test qua handler/UI thật.
 
 ## 6. Prompt cho Gemini
 
 ~~~text
-Đọc REVIEW_PROMPT_GPT.md (bản 02:15). Báo cáo ngắn vào REPORT_REVIEW_AND_FIX_COMPLETION.md.
+Đọc REVIEW_PROMPT_GPT.md (bản 02:45). Báo cáo ngắn vào REPORT_REVIEW_AND_FIX_COMPLETION.md.
 
-Chấp nhận: AG-05, AG-04, AG-07; reviewer chạy lại vitest 89/89, tsc exit 0.
+Chấp nhận: UI-01..05, P2-PRICE, KEY-02b. Reviewer chạy lại vitest 91/91,
+Playwright mission-control 5/5, tsc exit 0.
 
-Chặn nộp bài — sửa trước mọi việc khác:
-- UI-01 (critical): nút Verify Proof đang giả: luôn hiện verified, và khi API lỗi còn bịa
-  hash 0xe708441f… và count. Verify thật trên trình duyệt (logic verify-proof.ts),
-  lỗi/tamper → FAIL/UNVERIFIED, xóa mọi giá trị gán cứng; 3 test Playwright.
-- UI-02: Pause phải gọi /api/system/pause thật và đọc lại trạng thái từ server.
-- UI-03: Approval queue phải lấy từ TreasuryRequest thật, approve qua API có chữ ký owner;
-  S1 hiển thị trống.
-- UI-04/05: text theo mode (MOCK ghi rõ), lý do Guarded lấy từ verdict thật.
-Sau đó: P2-PRICE (nối verifyQuoteAgainstCatalog vào luồng thanh toán thật, test qua handler),
-KEY-02b (chặn LIVE config sai ở mọi route chi tiêu), INJ-01 (fixture adversarial chỉ bật
-bằng cờ demo, không theo từ khóa). Chụp lại evidence, thay ảnh cũ.
+Làm theo mục 3:
+1. Sửa nhỏ: UI-02b (test pause trên server thật), VER-02 (gộp verifier CLI/browser,
+   giữ quy tắc chặt), INJ-01b (fixture adversarial chỉ bật bằng env, không theo từ khóa),
+   HYG-01 (bỏ track tsbuildinfo).
+2. P1-A ví phiên on-chain: fundMissionWallet/sweep + events + forge tests; backend ký bằng ví
+   phiên ở S2.
+3. P1-B anchorMissionProof + event + test; module ERC-8004 + test mock.
+4. Script deploy Fuji sẵn sàng, chỉ simulation, chặn key Anvil. KHÔNG broadcast.
 
-Quy tắc: không hiển thị kết quả mà hệ thống không thực sự tạo ra.
 Commit trên feat/s1-app, không push main, không deploy public.
 ~~~
 
 ## 7. Nhật ký reviewer
 
-Chỉ sửa REVIEW_PROMPT_GPT.md.
-Lệnh đã chạy: đọc output watcher; `git log`, `git diff --stat ba587af HEAD`; grep các nơi gọi `validateLiveFujiConfig`, `verifyQuoteAgainstCatalog`, `ALLOW_AGENT_TEST_OVERRIDE`, injection trong `tools.ts`/`agent.ts`; `sed` `page.tsx` (verify, pause, queue); xem `evidence/p2-mission-control-ui.png`; `vitest run` toàn bộ (89/89); `tsc --noEmit --incremental false` (exit 0).
+Chỉ sửa REVIEW_PROMPT_GPT.md; khôi phục 2 ảnh evidence bị test của reviewer ghi đè (`git checkout`).
+Lệnh đã chạy: đọc output watcher; `git log`, `git diff --stat 25e1dcf HEAD`; grep `page.tsx` (hash gán cứng, verify handler), `agent.ts`/`tools.ts` (demoAdversarial); so `proof-verifier.ts` với `scripts/verify-proof.ts`; `vitest run` (91/91); `tsc` (exit 0); `playwright test e2e/mission-control.spec.ts` với `NO_WEBSERVER=1` trên dev server :3100 (5/5); grep `page.route` trong spec; `git ls-files apps/web/tsconfig.tsbuildinfo`.

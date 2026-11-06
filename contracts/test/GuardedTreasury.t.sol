@@ -11,6 +11,10 @@ abstract contract Test {
         require(condition, "Assertion failed: condition not true");
     }
 
+    function assertEq(bool a, bool b) internal pure {
+        require(a == b, "Assertion failed: bool mismatch");
+    }
+
     function assertFalse(bool condition) internal pure {
         require(!condition, "Assertion failed: condition not false");
     }
@@ -580,5 +584,130 @@ contract GuardedTreasuryTest is Test {
         vm_expectRevert(bytes("CannotPayAgent"));
         vm_prank(agent);
         treasury.propose(keccak256("op-c22"), agent, 1_000_000, missionId, "Refill agent");
+    }
+
+    // --- P1-A & P1-B Extension Tests (STRATEGY §4.3 & §4.4) ---
+
+    // P1-A Case 1: Owner successfully funds session wallet with toolCap (5 USDC)
+    function test_P1A_fund_mission_wallet_success() public {
+        address sessionWallet = address(0x5E551011);
+        uint256 toolCap = 5_000_000; // 5 USDC
+        uint256 treasuryBefore = usdc.balanceOf(address(treasury));
+
+        vm_prank(owner);
+        treasury.fundMissionWallet(missionId, sessionWallet, toolCap);
+
+        assertEq(treasury.missionFunded(missionId), true);
+        assertEq(treasury.missionSessionWallet(missionId), sessionWallet);
+        assertEq(usdc.balanceOf(sessionWallet), toolCap);
+        assertEq(usdc.balanceOf(address(treasury)), treasuryBefore - toolCap);
+    }
+
+    // P1-A Case 2: Funding twice for the same mission strictly reverts
+    function test_P1A_fund_twice_reverts() public {
+        address sessionWallet = address(0x5E551011);
+        vm_prank(owner);
+        treasury.fundMissionWallet(missionId, sessionWallet, 2_000_000);
+
+        vm_expectRevert(bytes("MissionAlreadyFunded"));
+        vm_prank(owner);
+        treasury.fundMissionWallet(missionId, sessionWallet, 2_000_000);
+    }
+
+    // P1-A Case 3: Funding exceeding treasury balance reverts
+    function test_P1A_fund_exceeding_treasury_balance_reverts() public {
+        address sessionWallet = address(0x5E551011);
+        uint256 excessiveAmount = usdc.balanceOf(address(treasury)) + 1_000_000;
+
+        vm_expectRevert(bytes("InsufficientTreasuryBalance"));
+        vm_prank(owner);
+        treasury.fundMissionWallet(missionId, sessionWallet, excessiveAmount);
+    }
+
+    // P1-A Case 4: Non-owner / agent calling fundMissionWallet reverts
+    function test_P1A_agent_fund_reverts() public {
+        address sessionWallet = address(0x5E551011);
+
+        vm_expectRevert(bytes("Ownable: caller is not the owner"));
+        vm_prank(agent);
+        treasury.fundMissionWallet(missionId, sessionWallet, 1_000_000);
+    }
+
+    // P1-A Case 5: Closed or expired mission cannot be funded
+    function test_P1A_fund_closed_or_expired_reverts() public {
+        address sessionWallet = address(0x5E551011);
+
+        // 1. Closed mission
+        bytes32 closedMissionId = keccak256("closed-mission");
+        vm_prank(owner);
+        treasury.createMission(closedMissionId, agent, 10_000_000, 24 hours);
+        vm_prank(owner);
+        treasury.closeMission(closedMissionId);
+
+        vm_expectRevert(bytes("MissionAlreadyClosed"));
+        vm_prank(owner);
+        treasury.fundMissionWallet(closedMissionId, sessionWallet, 1_000_000);
+
+        // 2. Expired mission
+        bytes32 expiredMissionId = keccak256("expired-mission");
+        vm_prank(owner);
+        treasury.createMission(expiredMissionId, agent, 10_000_000, 1 hours);
+        vm_warp(block.timestamp + 2 hours);
+
+        vm_expectRevert(bytes("MissionExpired"));
+        vm_prank(owner);
+        treasury.fundMissionWallet(expiredMissionId, sessionWallet, 1_000_000);
+    }
+
+    // P1-A Case 6: Sweep unused balance from session wallet back to treasury
+    function test_P1A_sweep_mission_wallet() public {
+        address sessionWallet = address(0x5E551011);
+        uint256 toolCap = 5_000_000;
+
+        vm_prank(owner);
+        treasury.fundMissionWallet(missionId, sessionWallet, toolCap);
+
+        // Simulate agent spent 3 USDC, 2 USDC remaining in session wallet
+        uint256 unusedAmount = 2_000_000;
+        vm_prank(sessionWallet);
+        usdc.approve(address(treasury), unusedAmount);
+
+        uint256 treasuryBefore = usdc.balanceOf(address(treasury));
+
+        vm_prank(owner);
+        treasury.sweepMissionWallet(missionId, unusedAmount);
+
+        assertEq(usdc.balanceOf(address(treasury)), treasuryBefore + unusedAmount);
+        assertEq(usdc.balanceOf(sessionWallet), toolCap - unusedAmount);
+    }
+
+    // P1-B Case 1: Owner anchors cryptographic proof hash on-chain
+    function test_P1B_anchor_mission_proof() public {
+        bytes32 headHash = keccak256("proof-head-hash-step-3");
+
+        vm_prank(owner);
+        treasury.anchorMissionProof(missionId, headHash);
+
+        assertEq(treasury.anchoredMissionProofs(missionId), headHash);
+    }
+
+    // P1-B Case 2: Non-owner or zero hash reverts
+    function test_P1B_anchor_guards_revert() public {
+        bytes32 headHash = keccak256("proof-head-hash");
+
+        // Non-owner reverts
+        vm_expectRevert(bytes("Ownable: caller is not the owner"));
+        vm_prank(agent);
+        treasury.anchorMissionProof(missionId, headHash);
+
+        // Zero hash reverts
+        vm_expectRevert(bytes("InvalidHeadHash"));
+        vm_prank(owner);
+        treasury.anchorMissionProof(missionId, bytes32(0));
+
+        // Nonexistent mission reverts
+        vm_expectRevert(bytes("MissionNotFound"));
+        vm_prank(owner);
+        treasury.anchorMissionProof(keccak256("unknown-mission"), headHash);
     }
 }

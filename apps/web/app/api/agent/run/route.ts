@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     if (systemState?.systemPaused || systemState?.maintenance) {
       return NextResponse.json(
         { error: 'System is paused or in maintenance' },
-        { status: 503 }
+        { status: 403 }
       );
     }
 

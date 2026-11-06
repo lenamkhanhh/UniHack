@@ -18,6 +18,14 @@ export async function POST(req: NextRequest) {
     if (getPaymentMode() === 'LIVE_FUJI') {
       validateLiveFujiConfig();
     }
+    const systemState = await prisma.systemState.findUnique({ where: { id: 1 } });
+    if (systemState?.systemPaused || systemState?.maintenance) {
+      return NextResponse.json(
+        { error: 'System is paused or in maintenance' },
+        { status: 403 }
+      );
+    }
+
     const authHeader = req.headers.get('authorization') || '';
     const token = authHeader.replace(/^Bearer\s+/i, '');
 

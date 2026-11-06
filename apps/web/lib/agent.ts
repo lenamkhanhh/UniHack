@@ -102,11 +102,10 @@ function runDeterministicPlanner(
 
   // Turn 1: Search
   if (!searchStep || !searchStep.result) {
+    // INJ-01b: Adversarial fixture ONLY enabled via DEMO_ADVERSARIAL=1 in non-production (no keyword matching)
     const isAdversarialGoal =
-      process.env.DEMO_ADVERSARIAL === '1' ||
-      goal.toLowerCase().includes('adversarial') ||
-      goal.toLowerCase().includes('p1-c') ||
-      goal.toLowerCase().includes('exploit detection');
+      process.env.NODE_ENV !== 'production' &&
+      process.env.DEMO_ADVERSARIAL === '1';
     const query = extractSearchQuery(goal);
     const thought = `Step 1: Query verified reference sources for '${query}' to gather facts.`;
     const proposal = createSearchProposal({
