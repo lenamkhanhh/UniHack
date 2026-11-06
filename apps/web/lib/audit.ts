@@ -21,7 +21,10 @@ export interface AuditEntryFields {
     | 'TOOL_UNKNOWN'
     | 'PAUSED'
     | 'UNPAUSED'
-    | 'CUTOVER';
+    | 'CUTOVER'
+    | 'SESSION_WALLET_FUNDED'
+    | 'PROOF_ANCHORED'
+    | 'ERC8004_FEEDBACK';
   mission_id: string;
   operation_id: string;
   policy_hash: string;

@@ -1,26 +1,22 @@
-# BÁO CÁO NGHIỆM THU ACCEPTANCE (BẢN FIX UI-02b, VER-02, INJ-01b, HYG-01, P1-A, P1-B, DEPLOY-READY)
+# BÁO CÁO NGHIỆM THU ACCEPTANCE (SW-01..03, ERC-01..02, P1-WIRE, README & DECK)
 
-**Thời điểm:** 2026-11-07 02:58 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
-**Cam kết:** Chỉ 2 file trao đổi; contracts ở `contracts/`; không push `main`, không deploy public, không commit secret; chỉ simulation, không broadcast.
+**Thời điểm:** 2026-11-07 03:20 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
+**Cam kết:** Chỉ 2 file trao đổi; contracts ở `contracts/`; không push `main`, không deploy public, không commit secret; chỉ Fuji simulation, không broadcast.
 
-## 1. BẢNG ACCEPTANCE MỤC 4 (REVIEW_PROMPT_GPT.md 02:45)
+## 1. BẢNG ACCEPTANCE MỤC 4 (REVIEW_PROMPT_GPT.md 03:10)
 
 | ID | Điều kiện đạt | Bằng chứng thực tế & Lệnh kiểm tra | Trạng thái |
 |---|---|---|---|
-| **UI-02b** | Pause thật → 403 ở agent + orchestrate; unpause chạy lại | `agent-lifecycle.test.ts` Reg 17: Owner ký challenge `PAUSE_S1` gọi `/api/system/pause`; `/api/agent/run` và `/api/tools/orchestrate` trả HTTP 403 (`System is paused`); unpause bằng challenge mới khôi phục 200. | **PASS** |
-| **VER-02** | Một module verifier; thiếu inner prev_hash → FAIL cả hai | Gộp verifier vào `apps/web/lib/proof-verifier.ts`, `scripts/verify-proof.ts` import dùng chung. Kiểm tra nghiêm ngặt `parsed.prev_hash`. `agent-lifecycle.test.ts` Reg 18 & CLI `npm run verify-proof` đều PASS. | **PASS** |
-| **INJ-01b** | Không bật theo từ khóa; chỉ env + non-production | Xóa mọi heuristic từ khóa trong `agent.ts`. Fixture chỉ bật khi `DEMO_ADVERSARIAL=1` và `NODE_ENV!=production`. `agent-lifecycle.test.ts` Reg 16 PASS. | **PASS** |
-| **HYG-01** | tsbuildinfo không còn tracked | Đã xóa khỏi git cache: `git ls-files apps/web/tsconfig.tsbuildinfo` trả về rỗng. `.gitignore` đã có `*.tsbuildinfo`. | **PASS** |
-| **P1-A** | Hàm + events + forge tests pass; backend dùng ví phiên ở S2 | `GuardedTreasury.sol` thêm `fundMissionWallet`, `sweepMissionWallet`, events `MissionFunded`, `MissionSwept`. `GuardedTreasury.t.sol` 6 test P1A PASS (fund 2 lần revert, vượt số dư revert, agent gọi revert, hết hạn revert, sweep PASS). `session-wallets.ts` cấp ví phiên riêng theo mission ở S2. Bảng tổn thất tối đa đã cập nhật trong `README.md`. | **PASS** |
-| **P1-B** | Anchor + event + test; ERC-8004 module + test mock | `GuardedTreasury.sol` thêm `anchorMissionProof(missionId, headHash)`, event `MissionProofAnchored`, 2 test P1B PASS. Tạo `apps/web/lib/erc8004.ts` pin địa chỉ Fuji (`0x8004A818...`, `0x8004B663...`), test `tests/erc8004.test.ts` 3/3 PASS. | **PASS** |
-| **DEPLOY-READY** | Script deploy chạy được simulation, chặn key Anvil, không broadcast | `contracts/script/Deploy.s.sol`: simulation tạo contract tại `0x5aAdFB43eF8dAF45DD80F4676345b7676f1D70e3`; truyền key Anvil lập tức revert `KEY-02: INSECURE_ANVIL_KEY_PROHIBITED_ON_FUJI`. Không có cờ `--broadcast`. | **PASS** |
+| **SW-01** | Không fallback; HKDF + seed riêng ≥32 ký tự; LIVE từ chối cấu hình yếu/trùng | `session-wallets.ts` dùng HKDF-SHA256 (`salt=DEPLOYMENT_ID`, `info=session-wallet:v1:${slug}`) từ `SESSION_WALLET_SEED` riêng biệt; xóa bỏ toàn bộ fallback key cứng. `config.ts` (`validateLiveFujiConfig`) chặn nếu thiếu seed, seed < 32 ký tự, trùng JWT secret hoặc trùng placeholder dev. `tests/erc8004.test.ts` (tests 1–4) PASS. | **PASS** |
+| **ERC-01** | ABI pin từ contract thật; selector khớp; agentId uint256; client = owner | Pinned verified implementation ABIs từ Fuji vào `apps/web/lib/abi/erc8004-reputation.json` và `erc8004-identity.json`. `lib/erc8004.ts` gọi `giveFeedback` đủ 8 tham số, `agentId` kiểu `uint256` (`bigint`), caller là mission owner. `tests/erc8004.test.ts` (test 5) verify selector `0x87a17bc1` PASS. | **PASS** |
+| **SW-02** | Sweep không cần approve/gas của ví phiên; test không prank approve | `GuardedTreasury.sol` thêm `sweepMissionWalletWithAuthorization` dùng EIP-3009 `receiveWithAuthorization`. Owner gọi contract và trả gas; ví phiên chỉ ký EIP-712 off-chain (gasless, 0 AVAX). `contracts/test/GuardedTreasury.t.sol` test `test_SW02_sweep_mission_wallet_gasless_authorization` không dùng prank/approve; `forge test` 31/31 PASS. | **PASS** |
+| **ERC-02 / SW-03** | MOCK trả txHash null trung thực; fund bắt buộc có tool cap rõ | `erc8004.ts` và API routes trả `txHash: null` ở chế độ MOCK (không sinh fake hash). `fundMissionWallet` trong `GuardedTreasury.sol` bắt buộc `missionToolCap[missionId] > 0` và `amount <= toolCap`, bỏ hoàn toàn fallback `perTxCap`. `test_SW03_fund_without_toolcap_or_over_toolcap_reverts` PASS. | **PASS** |
+| **P1-WIRE** | Lifecycle S2 nối fund, anchor, feedback; MOCK ghi rõ mode | `activate/route.ts` nối cấp ví phiên + audit `SESSION_WALLET_FUNDED`. `complete/route.ts` nối anchor proof + audit `PROOF_ANCHORED`. Tạo `api/feedback/route.ts` kiểm tra `SETTLED` và gọi `submitErc8004Feedback` + audit `ERC8004_FEEDBACK`. `tests/agent-lifecycle.test.ts` Reg 19 test toàn bộ luồng E2E PASS. | **PASS** |
+| **README / DECK** | README cập nhật env/tổn thất; outline deck 11 slide không tx giả | `README.md` cập nhật danh sách env LIVE bắt buộc, bảng tổn thất tối đa SW-01/P1-A, câu định vị MissionPay. Tạo `artifacts/submission-s1/deck-outline-11-slides.md` (11 slide theo STRATEGY §7, sửa DECK-01..06, số liệu 27.5k endpoint, ma trận đối thủ, ô tx ghi rõ `PENDING_FUJI`). | **PASS** |
 
 ## 2. KẾT QUẢ KIỂM ĐỊNH TOÀN DIỆN
 
-1. **Foundry Contracts Suite:** `30/30 tests PASS` (`contracts/test/GuardedTreasury.t.sol`: 22 gốc + 8 tests P1-A/P1-B).
-2. **Foundry Deploy Simulation:** `forge script script/Deploy.s.sol` thành công (gas: 3,658,468, 0 tx broadcast).
-3. **Vitest Full Suite:** `96/96 tests PASS` (8 test files: `unit-boundaries` 33, `p-series` 25, `agent-lifecycle` 18, `v-series` 10, `agent-planning` 4, `erc8004` 3, `e-series` 2, `handler-lifecycle` 1).
-4. **Playwright E2E Suite:** `5/5 tests PASS` (`mission-control.spec.ts`).
-5. **Standalone Verifier CLI:** `npm run verify-proof` exit 0 (self-test PASS).
-6. **TypeScript Typecheck:** `npx tsc --noEmit --incremental false` exit 0 (0 errors).
-7. **Bảo mật:** 0 keys/secrets commit; Anvil keys bị chặn trên mọi script deploy và config Fuji.
+1. **Foundry Contracts Suite:** `31/31 tests PASS` (`contracts/test/GuardedTreasury.t.sol`: 22 gốc + 7 P1 + 2 SW-02/SW-03).
+2. **Vitest Full Suite:** `101/101 tests PASS` across 8 files (`unit-boundaries` 33, `p-series` 25, `agent-lifecycle` 19, `v-series` 10, `erc8004` 7, `agent-planning` 4, `e-series` 2, `handler-lifecycle` 1).
+3. **TypeScript Typecheck:** `npx tsc --noEmit --incremental false` exit 0 (0 errors).
+4. **Bảo mật & Giới hạn:** Không commit private key/seed, không fake transaction hash, không deploy public, không broadcast lên mạng công khai.

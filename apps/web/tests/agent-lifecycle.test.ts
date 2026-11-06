@@ -5,6 +5,9 @@ import { POST } from '../app/api/agent/run/route';
 import { POST as orchestratePOST } from '../app/api/tools/orchestrate/route';
 import { POST as pausePOST } from '../app/api/system/pause/route';
 import { POST as challengePOST } from '../app/api/auth/challenge/route';
+import { POST as activatePOST } from '../app/api/missions/[slug]/activate/route';
+import { POST as completePOST } from '../app/api/missions/[slug]/complete/route';
+import { POST as feedbackPOST } from '../app/api/feedback/route';
 import { prisma } from '../lib/db';
 import { clearDatabase, createTestMission, ownerAccount } from './setup';
 import { issueSpendToken, verifyToken } from '../lib/auth';
@@ -869,5 +872,156 @@ describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Ra
     );
     expect(failRes.valid).toBe(false);
     expect(failRes.errors.some((e) => e.includes('Inner/outer prevHash mismatch'))).toBe(true);
+  });
+
+  it('Regression 19 (P1-WIRE): In Stage S2, activate wires session wallet funding, complete wires proof anchor, and feedback wires ERC-8004', async () => {
+    // 1. Switch system state to Stage S2
+    await prisma.systemState.update({
+      where: { id: 1 },
+      data: { stage: 'S2' },
+    });
+
+    // 2. Create mission in S2
+    const { mission, spendToken } = await createTestMission();
+
+    // 3. Activate in S2: triggers session wallet funding logic
+    const actPayload = {
+      missionId: mission.missionId,
+      ownerAddress: mission.ownerAddress,
+      agentAddress: mission.agentAddress,
+      treasuryCap: mission.treasuryCap,
+      toolCap: mission.toolCap,
+    };
+    const actChallengeReq = new NextRequest('http://localhost:3000/api/auth/challenge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'ACTIVATE',
+        payload: actPayload,
+        expectedSigner: ownerAccount.address,
+      }),
+    });
+    const actChallRes = await challengePOST(actChallengeReq);
+    const { nonce: actNonce, message: actMessage } = await actChallRes.json();
+    const actSig = await ownerAccount.signMessage({ message: actMessage });
+
+    const actReq = new NextRequest(`http://localhost:3000/api/missions/${mission.slug}/activate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nonce: actNonce,
+        signature: actSig,
+        payload: actPayload,
+      }),
+    });
+    const actRes = await activatePOST(actReq, { params: Promise.resolve({ slug: mission.slug }) });
+    expect(actRes.status).toBe(200);
+    const actData = await actRes.json();
+    expect(actData.sessionWallet).toBeDefined();
+    expect(actData.sessionWallet.funded).toBe(true);
+    expect(actData.sessionWallet.txHash).toBeNull(); // Honest null in MOCK mode (ERC-02)
+
+    // Verify SESSION_WALLET_FUNDED audit entry in DB
+    const entriesAfterAct = await prisma.auditEntry.findMany({
+      where: { missionSlug: mission.slug },
+    });
+    const fundAudit = entriesAfterAct
+      .map((e) => JSON.parse(e.canonicalJson))
+      .find((p) => p.kind === 'SESSION_WALLET_FUNDED');
+    expect(fundAudit).toBeDefined();
+
+    // 4. Execute a tool operation so we have a SETTLED operation
+    const orchReq = new NextRequest('http://localhost:3000/api/tools/orchestrate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${spendToken}`,
+      },
+      body: JSON.stringify({
+        toolId: 'tool:search',
+        arguments: { query: 'Avalanche Consensus' },
+      }),
+    });
+    const orchRes = await orchestratePOST(orchReq);
+    expect(orchRes.status).toBe(200);
+    const orchData = await orchRes.json();
+    expect(orchData.operation.state).toBe('SETTLED');
+
+    // 5. Complete mission in S2: triggers proof anchor logic
+    const compPayload = {
+      slug: mission.slug,
+      deliverableHash: '0x1111222233334444555566667777888899990000111122223333444455556666',
+    };
+    const compChallReq = new NextRequest('http://localhost:3000/api/auth/challenge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'COMPLETE_MISSION',
+        payload: compPayload,
+        expectedSigner: ownerAccount.address,
+      }),
+    });
+    const compChallRes = await challengePOST(compChallReq);
+    const { nonce: compNonce, message: compMessage } = await compChallRes.json();
+    const compSig = await ownerAccount.signMessage({ message: compMessage });
+
+    const compReq = new NextRequest(`http://localhost:3000/api/missions/${mission.slug}/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nonce: compNonce,
+        signature: compSig,
+        payload: compPayload,
+      }),
+    });
+    const compRes = await completePOST(compReq, { params: Promise.resolve({ slug: mission.slug }) });
+    expect(compRes.status).toBe(200);
+    const compData = await compRes.json();
+    expect(compData.anchoredProof).toBeDefined();
+    expect(compData.anchoredProof.anchored).toBe(true);
+    expect(compData.anchoredProof.txHash).toBeNull(); // Honest null in MOCK mode (ERC-02)
+
+    // Verify PROOF_ANCHORED audit entry in DB
+    const entriesAfterComp = await prisma.auditEntry.findMany({
+      where: { missionSlug: mission.slug },
+    });
+    const anchorAudit = entriesAfterComp
+      .map((e) => JSON.parse(e.canonicalJson))
+      .find((p) => p.kind === 'PROOF_ANCHORED');
+    expect(anchorAudit).toBeDefined();
+
+    // 6. Submit feedback for the settled operation
+    const fbReq = new NextRequest('http://localhost:3000/api/feedback', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${spendToken}`,
+      },
+      body: JSON.stringify({
+        operationId: orchData.operation.operationId,
+        score: 95,
+        tag1: 'starred',
+      }),
+    });
+    const fbRes = await feedbackPOST(fbReq);
+    expect(fbRes.status).toBe(200);
+    const fbData = await fbRes.json();
+    expect(fbData.success).toBe(true);
+    expect(fbData.txHash).toBeNull(); // Honest null in MOCK mode (ERC-02)
+
+    // Verify ERC8004_FEEDBACK audit entry in DB
+    const entriesAfterFb = await prisma.auditEntry.findMany({
+      where: { missionSlug: mission.slug },
+    });
+    const fbAudit = entriesAfterFb
+      .map((e) => JSON.parse(e.canonicalJson))
+      .find((p) => p.kind === 'ERC8004_FEEDBACK');
+    expect(fbAudit).toBeDefined();
+
+    // Reset back to S1 for subsequent tests
+    await prisma.systemState.update({
+      where: { id: 1 },
+      data: { stage: 'S1' },
+    });
   });
 });

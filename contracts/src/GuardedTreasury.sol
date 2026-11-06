@@ -14,6 +14,35 @@ interface IERC20 {
 }
 
 /**
+ * @dev Interface for EIP-3009 gasless transfers (supported natively by Fuji USDC).
+ */
+interface IERC3009 {
+    function receiveWithAuthorization(
+        address from,
+        address to,
+        uint256 value,
+        uint256 validAfter,
+        uint256 validBefore,
+        bytes32 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+
+    function transferWithAuthorization(
+        address from,
+        address to,
+        uint256 value,
+        uint256 validAfter,
+        uint256 validBefore,
+        bytes32 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+}
+
+/**
  * @dev SafeERC20 library for safe token interactions.
  */
 library SafeERC20 {
@@ -297,7 +326,7 @@ contract GuardedTreasury {
         emit EmergencyWithdrawn(balance);
     }
 
-    // --- On-Chain Session Wallet Funding & Sweeping (P1-A, STRATEGY §4.3) ---
+    // --- On-Chain Session Wallet Funding & Sweeping (P1-A, STRATEGY §4.3 & SW-02/SW-03) ---
     function setMissionToolCap(bytes32 missionId, uint256 toolCap) external onlyOwner {
         require(missions[missionId].exists, "MissionNotFound");
         require(!missionFunded[missionId], "MissionAlreadyFunded");
@@ -311,42 +340,58 @@ contract GuardedTreasury {
         require(block.timestamp < missions[missionId].expiresAt, "MissionExpired");
         require(!missionFunded[missionId], "MissionAlreadyFunded");
         require(wallet != address(0) && wallet != _owner && wallet != address(this), "InvalidWallet");
+        require(missionToolCap[missionId] > 0, "MissionToolCapNotSet");
         require(amount > 0, "InvalidAmount");
+        require(amount <= missionToolCap[missionId], "AmountExceedsToolCap");
         require(IERC20(USDC).balanceOf(address(this)) >= amount, "InsufficientTreasuryBalance");
 
         missionFunded[missionId] = true;
         missionSessionWallet[missionId] = wallet;
-        missionToolCap[missionId] = amount;
 
         IERC20(USDC).safeTransfer(wallet, amount);
         emit MissionFunded(missionId, wallet, amount);
     }
 
     function fundMissionWallet(bytes32 missionId, address wallet) external onlyOwner {
-        uint256 amount = missionToolCap[missionId] > 0 ? missionToolCap[missionId] : perTxCap;
-        fundMissionWallet(missionId, wallet, amount);
+        require(missionToolCap[missionId] > 0, "MissionToolCapNotSet");
+        fundMissionWallet(missionId, wallet, missionToolCap[missionId]);
     }
 
-    function sweepMissionWallet(bytes32 missionId, uint256 amount) public onlyOwner nonReentrant {
+    /**
+     * SW-02: Gasless sweep using EIP-3009 receiveWithAuthorization.
+     * The session wallet signs authorization off-chain.
+     * Owner submits this transaction and pays gas.
+     * The session wallet needs 0 AVAX and 0 ERC-20 approval.
+     */
+    function sweepMissionWalletWithAuthorization(
+        bytes32 missionId,
+        uint256 amount,
+        uint256 validAfter,
+        uint256 validBefore,
+        bytes32 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external onlyOwner nonReentrant {
         require(missions[missionId].exists, "MissionNotFound");
         require(missionFunded[missionId], "MissionNotFunded");
         address wallet = missionSessionWallet[missionId];
         require(wallet != address(0), "NoSessionWallet");
         require(amount > 0, "InvalidAmount");
 
-        IERC20(USDC).safeTransferFrom(wallet, address(this), amount);
+        IERC3009(USDC).receiveWithAuthorization(
+            wallet,
+            address(this),
+            amount,
+            validAfter,
+            validBefore,
+            nonce,
+            v,
+            r,
+            s
+        );
+
         emit MissionSwept(missionId, wallet, amount);
-    }
-
-    function sweepMissionWallet(bytes32 missionId) external onlyOwner {
-        require(missions[missionId].exists, "MissionNotFound");
-        require(missionFunded[missionId], "MissionNotFunded");
-        address wallet = missionSessionWallet[missionId];
-        require(wallet != address(0), "NoSessionWallet");
-        uint256 remaining = IERC20(USDC).balanceOf(wallet);
-        require(remaining > 0, "ZeroRemainingBalance");
-
-        sweepMissionWallet(missionId, remaining);
     }
 
     // --- On-Chain Proof Anchoring (P1-B, STRATEGY §4.4) ---

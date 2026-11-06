@@ -81,6 +81,25 @@ contract MockUSDC is IERC20 {
         balanceOf[to] += value;
         return true;
     }
+
+    // EIP-3009 Native receiveWithAuthorization (simulating Fuji USDC)
+    function receiveWithAuthorization(
+        address from,
+        address to,
+        uint256 value,
+        uint256 validAfter,
+        uint256 validBefore,
+        bytes32 /*nonce*/,
+        uint8 /*v*/,
+        bytes32 /*r*/,
+        bytes32 /*s*/
+    ) external {
+        require(block.timestamp >= validAfter, "AuthorizationNotYetValid");
+        require(block.timestamp <= validBefore, "AuthorizationExpired");
+        require(balanceOf[from] >= value, "InsufficientBalance");
+        balanceOf[from] -= value;
+        balanceOf[to] += value;
+    }
 }
 
 contract ReentrantAttackerToken is IERC20 {
@@ -586,13 +605,16 @@ contract GuardedTreasuryTest is Test {
         treasury.propose(keccak256("op-c22"), agent, 1_000_000, missionId, "Refill agent");
     }
 
-    // --- P1-A & P1-B Extension Tests (STRATEGY §4.3 & §4.4) ---
+    // --- P1-A & P1-B Extension Tests (STRATEGY §4.3, §4.4 & SW-01..03) ---
 
     // P1-A Case 1: Owner successfully funds session wallet with toolCap (5 USDC)
     function test_P1A_fund_mission_wallet_success() public {
         address sessionWallet = address(0x5E551011);
         uint256 toolCap = 5_000_000; // 5 USDC
         uint256 treasuryBefore = usdc.balanceOf(address(treasury));
+
+        vm_prank(owner);
+        treasury.setMissionToolCap(missionId, toolCap);
 
         vm_prank(owner);
         treasury.fundMissionWallet(missionId, sessionWallet, toolCap);
@@ -603,9 +625,40 @@ contract GuardedTreasuryTest is Test {
         assertEq(usdc.balanceOf(address(treasury)), treasuryBefore - toolCap);
     }
 
+    // SW-03: Funding without tool cap set or exceeding cap strictly reverts
+    function test_SW03_fund_without_toolcap_or_over_toolcap_reverts() public {
+        address sessionWallet = address(0x5E551011);
+        bytes32 freshMissionId = keccak256("fresh-mission-no-cap");
+
+        vm_prank(owner);
+        treasury.createMission(freshMissionId, agent, 10_000_000, 24 hours);
+
+        // 1. Without tool cap set -> reverts
+        vm_expectRevert(bytes("MissionToolCapNotSet"));
+        vm_prank(owner);
+        treasury.fundMissionWallet(freshMissionId, sessionWallet, 2_000_000);
+
+        // Set tool cap to 3 USDC
+        vm_prank(owner);
+        treasury.setMissionToolCap(freshMissionId, 3_000_000);
+
+        // 2. Amount > tool cap -> reverts
+        vm_expectRevert(bytes("AmountExceedsToolCap"));
+        vm_prank(owner);
+        treasury.fundMissionWallet(freshMissionId, sessionWallet, 4_000_000);
+
+        // 3. Amount <= tool cap -> succeeds
+        vm_prank(owner);
+        treasury.fundMissionWallet(freshMissionId, sessionWallet, 3_000_000);
+        assertEq(treasury.missionFunded(freshMissionId), true);
+    }
+
     // P1-A Case 2: Funding twice for the same mission strictly reverts
     function test_P1A_fund_twice_reverts() public {
         address sessionWallet = address(0x5E551011);
+        vm_prank(owner);
+        treasury.setMissionToolCap(missionId, 5_000_000);
+
         vm_prank(owner);
         treasury.fundMissionWallet(missionId, sessionWallet, 2_000_000);
 
@@ -619,6 +672,9 @@ contract GuardedTreasuryTest is Test {
         address sessionWallet = address(0x5E551011);
         uint256 excessiveAmount = usdc.balanceOf(address(treasury)) + 1_000_000;
 
+        vm_prank(owner);
+        treasury.setMissionToolCap(missionId, excessiveAmount);
+
         vm_expectRevert(bytes("InsufficientTreasuryBalance"));
         vm_prank(owner);
         treasury.fundMissionWallet(missionId, sessionWallet, excessiveAmount);
@@ -627,6 +683,8 @@ contract GuardedTreasuryTest is Test {
     // P1-A Case 4: Non-owner / agent calling fundMissionWallet reverts
     function test_P1A_agent_fund_reverts() public {
         address sessionWallet = address(0x5E551011);
+        vm_prank(owner);
+        treasury.setMissionToolCap(missionId, 2_000_000);
 
         vm_expectRevert(bytes("Ownable: caller is not the owner"));
         vm_prank(agent);
@@ -642,6 +700,8 @@ contract GuardedTreasuryTest is Test {
         vm_prank(owner);
         treasury.createMission(closedMissionId, agent, 10_000_000, 24 hours);
         vm_prank(owner);
+        treasury.setMissionToolCap(closedMissionId, 2_000_000);
+        vm_prank(owner);
         treasury.closeMission(closedMissionId);
 
         vm_expectRevert(bytes("MissionAlreadyClosed"));
@@ -652,6 +712,8 @@ contract GuardedTreasuryTest is Test {
         bytes32 expiredMissionId = keccak256("expired-mission");
         vm_prank(owner);
         treasury.createMission(expiredMissionId, agent, 10_000_000, 1 hours);
+        vm_prank(owner);
+        treasury.setMissionToolCap(expiredMissionId, 2_000_000);
         vm_warp(block.timestamp + 2 hours);
 
         vm_expectRevert(bytes("MissionExpired"));
@@ -659,23 +721,41 @@ contract GuardedTreasuryTest is Test {
         treasury.fundMissionWallet(expiredMissionId, sessionWallet, 1_000_000);
     }
 
-    // P1-A Case 6: Sweep unused balance from session wallet back to treasury
-    function test_P1A_sweep_mission_wallet() public {
+    // SW-02: Gasless sweep using EIP-3009 receiveWithAuthorization (ZERO approve, ZERO gas from session wallet)
+    function test_SW02_sweep_mission_wallet_gasless_authorization() public {
         address sessionWallet = address(0x5E551011);
         uint256 toolCap = 5_000_000;
 
         vm_prank(owner);
+        treasury.setMissionToolCap(missionId, toolCap);
+        vm_prank(owner);
         treasury.fundMissionWallet(missionId, sessionWallet, toolCap);
 
-        // Simulate agent spent 3 USDC, 2 USDC remaining in session wallet
+        // Session wallet spent 3 USDC, 2 USDC remaining to be swept
         uint256 unusedAmount = 2_000_000;
-        vm_prank(sessionWallet);
-        usdc.approve(address(treasury), unusedAmount);
-
         uint256 treasuryBefore = usdc.balanceOf(address(treasury));
 
+        // Off-chain EIP-3009 authorization parameters signed by session wallet
+        uint256 validAfter = block.timestamp - 60;
+        uint256 validBefore = block.timestamp + 3600;
+        bytes32 nonce = keccak256("sweep-nonce-1");
+        uint8 v = 27;
+        bytes32 r = keccak256("mock-r");
+        bytes32 s = keccak256("mock-s");
+
+        // Notice: ZERO vm_prank(sessionWallet), ZERO usdc.approve!
+        // Owner submits transaction and pays gas:
         vm_prank(owner);
-        treasury.sweepMissionWallet(missionId, unusedAmount);
+        treasury.sweepMissionWalletWithAuthorization(
+            missionId,
+            unusedAmount,
+            validAfter,
+            validBefore,
+            nonce,
+            v,
+            r,
+            s
+        );
 
         assertEq(usdc.balanceOf(address(treasury)), treasuryBefore + unusedAmount);
         assertEq(usdc.balanceOf(sessionWallet), toolCap - unusedAmount);

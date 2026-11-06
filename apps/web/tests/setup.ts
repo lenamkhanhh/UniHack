@@ -24,6 +24,9 @@ export const sellerAddress = '0x70997970c51812dc3a010c7d01b50e0d17dc79c8';
 process.env.MISSION_TOKEN_SECRET =
   process.env.MISSION_TOKEN_SECRET ||
   'test-mission-token-secret-must-be-at-least-32-chars-long!';
+process.env.SESSION_WALLET_SEED =
+  process.env.SESSION_WALLET_SEED ||
+  'test-isolated-session-wallet-seed-must-be-distinct-32chars!';
 process.env.OWNER_ADDRESS =
   process.env.OWNER_ADDRESS || normalizeAddress(ownerAccount.address);
 process.env.AGENT_PRIVATE_KEY = process.env.AGENT_PRIVATE_KEY || TEST_AGENT_KEY;

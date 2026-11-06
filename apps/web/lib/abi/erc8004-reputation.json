@@ -1,0 +1,79 @@
+{
+  "name": "ERC8004ReputationRegistry",
+  "proxyAddress": "0x8004B663056A597Dffe9eCcC1965A193B7388713",
+  "implementationAddress": "0x16e0FA7f7C56B9a767E34B192B51f921BE31dA34",
+  "chain": "Avalanche Fuji Testnet (43113)",
+  "source": "https://testnet.snowtrace.io/address/0x8004B663056A597Dffe9eCcC1965A193B7388713 / Routescan verified implementation",
+  "abi": [
+    {
+      "type": "function",
+      "name": "giveFeedback",
+      "inputs": [
+        { "name": "agentId", "type": "uint256" },
+        { "name": "value", "type": "int128" },
+        { "name": "valueDecimals", "type": "uint8" },
+        { "name": "tag1", "type": "string" },
+        { "name": "tag2", "type": "string" },
+        { "name": "endpoint", "type": "string" },
+        { "name": "feedbackURI", "type": "string" },
+        { "name": "feedbackHash", "type": "bytes32" }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "getSummary",
+      "inputs": [
+        { "name": "agentId", "type": "uint256" },
+        { "name": "clientAddresses", "type": "address[]" },
+        { "name": "tag1", "type": "string" },
+        { "name": "tag2", "type": "string" }
+      ],
+      "outputs": [
+        { "name": "count", "type": "uint64" },
+        { "name": "summaryValue", "type": "int128" },
+        { "name": "summaryValueDecimals", "type": "uint8" }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "readFeedback",
+      "inputs": [
+        { "name": "agentId", "type": "uint256" },
+        { "name": "clientAddress", "type": "address" },
+        { "name": "feedbackIndex", "type": "uint64" }
+      ],
+      "outputs": [
+        { "name": "value", "type": "int128" },
+        { "name": "valueDecimals", "type": "uint8" },
+        { "name": "tag1", "type": "string" },
+        { "name": "tag2", "type": "string" },
+        { "name": "isRevoked", "type": "bool" }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "getClients",
+      "inputs": [
+        { "name": "agentId", "type": "uint256" }
+      ],
+      "outputs": [
+        { "name": "clientAddresses", "type": "address[]" }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "revokeFeedback",
+      "inputs": [
+        { "name": "agentId", "type": "uint256" },
+        { "name": "feedbackIndex", "type": "uint64" }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    }
+  ]
+}

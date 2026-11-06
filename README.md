@@ -1,12 +1,14 @@
-# UniHack — Guarded Agent Economy
+# MissionPay (Guarded Agent Economy)
 
-**Stage S1: Gasless Micro-Payments & Cryptographic Audit for AI Agents on Avalanche**
+> **"Giao cho AI agent một nhiệm vụ và một ngân sách. Avalanche bảo đảm nó không tiêu quá, và bạn thấy từng đồng đi đâu."**  
+> *(Give your AI agent a mission and a budget. Avalanche makes sure it can't overspend — and shows you every cent.)*
 
-- **Verification Status**: S1 Payment & Audit Slice Verified in MOCK mode on PostgreSQL 16.
-- **Test Suite**: 71/71 Vitest tests pass (37 tests on real PostgreSQL 16 daemon + 34 unit/handler/PGlite isolation tests).
-- **Browser E2E**: 1/1 Unmocked Real-Integration spec pass on Chromium (UI -> HTTP -> Prisma -> PostgreSQL 16).
-- **Proof Verifier**: Standalone cryptographic verifier pass (`scripts/verify-proof.ts`, keccak256 hash-chaining + Merkle checkpoint match).
-- **Open Code Findings**: 0 (CLEANUP-01, TEST-01, M5, M6, R8 closed).
+- **Verification Status**: S1 Payment & Audit Slice Verified; Stage S2 Lifecycle Wired (fund / anchor / feedback).
+- **Test Suite**: **101/101 Vitest tests pass** across 8 test suites on PostgreSQL 16 + PGlite.
+- **Smart Contracts**: **31/31 Foundry tests pass** (`contracts/test/GuardedTreasury.t.sol`), including gasless EIP-3009 sweep and strict tool cap guardrails.
+- **ERC-8004 Support**: Pinned and verified against official Fuji Identity (`0x8004A818...`) and Reputation (`0x8004B663...`) registries.
+- **Proof Verifier**: Standalone cryptographic verifier pass (`scripts/verify-proof.ts`, keccak256 hash-chaining + checkpoint matching).
+- **Open Code Findings**: 0 (SW-01, SW-02, SW-03, ERC-01, ERC-02, P1-WIRE closed).
 
 ---
 
@@ -16,10 +18,10 @@ This guide reproduces the complete S1 vertical lifecycle against an isolated Pos
 
 ### 1. Prerequisites & Environment Setup
 
-- Node.js >= 20.x, npm >= 10.x, Python >= 3.10
+- Node.js >= 20.x, npm >= 10.x, Python >= 3.10, Foundry (`forge`)
 - Dedicated PostgreSQL 16 database running locally on port `55432`
 
-Configure your environment variables (do not commit secrets):
+#### A. Local Development & MOCK Mode Configuration (.env.local)
 
 ```bash
 # Core Database Connections (disposable test database)
@@ -29,20 +31,41 @@ DIRECT_URL="postgresql://postgres:postgres_test_password@127.0.0.1:55432/unihack
 # Runtime & Security Configuration
 APP_ORIGIN="http://localhost:3100"
 DEPLOYMENT_ID="unihack-test-deployment"
-MISSION_TOKEN_SECRET="test-mission-token-secret-must-be-at-least-32-chars-long!"
 PAYMENT_MODE="MOCK"
 
-> [!WARNING]
-> **Security Warning (KEY-01 - Testnet Safety)**:
-> The addresses and private keys listed below (`0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`, `0xac09...`, `0x59c6...`) are well-known default fixture keys from Anvil/Hardhat. They are strictly for **local unit tests and mocked browser test harnesses**.
-> **NEVER fund or use these keys on Avalanche Fuji testnet or any public blockchain**, as automated front-running bots monitor and instantly drain all funds sent to known Anvil accounts.
-> For Avalanche Fuji live operations (Bước 2 / Stage S2), the project owner must generate fresh, dedicated testnet keypairs in `.env` and fund them via official testnet faucets.
+# Cryptographic Seeds (SW-01: Must be distinct and >= 32 characters)
+MISSION_TOKEN_SECRET="test-mission-token-secret-must-be-at-least-32-chars-long!"
+SESSION_WALLET_SEED="test-isolated-session-wallet-seed-must-be-distinct-32chars!"
 
-# Standard Test Fixture Addresses (Hardhat / Anvil default accounts - LOCAL ONLY)
+# Standard Test Fixture Addresses (Hardhat / Anvil default accounts - LOCAL MOCK ONLY)
 OWNER_ADDRESS="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 SELLER_ADDRESS="0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
 AGENT_PRIVATE_KEY="0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
 ```
+
+#### B. Mandatory Environment Variables for LIVE Mode (`PAYMENT_MODE="LIVE_FUJI"`)
+
+> [!CAUTION]
+> **Production / Fuji Testnet Security Guardrails (SW-01 & KEY-01/02):**
+> When `PAYMENT_MODE="LIVE_FUJI"`, `validateLiveFujiConfig()` executes strict pre-flight checks on server boot. It **aborts immediately** if any of the following conditions are met:
+> 1. `SESSION_WALLET_SEED` is missing, shorter than 32 characters, identical to `MISSION_TOKEN_SECRET`, or matches any known dev/sample placeholder.
+> 2. `OWNER_ADDRESS` or `AGENT_PRIVATE_KEY` matches known Anvil/Hardhat test fixture keys.
+> 3. Required contract addresses or live RPC URLs are omitted.
+
+| Variable Name | Required Value Specification | Purpose & Enforcement |
+|---|---|---|
+| `PAYMENT_MODE` | `"LIVE_FUJI"` | Activates live Avalanche Fuji testnet settlement rails. |
+| `DATABASE_URL` | Valid PostgreSQL URL with pool | Hosted production database (e.g. Neon / Supabase). |
+| `DIRECT_URL` | Direct PostgreSQL connection URL | Prisma migrations without connection pooling. |
+| `APP_ORIGIN` | `https://your-domain.vercel.app` | CORS & EIP-712 domain verification. |
+| `DEPLOYMENT_ID` | High-entropy UUID / random hex | Session wallet HKDF salt and authorization domain tag. |
+| `MISSION_TOKEN_SECRET` | High-entropy random string (>= 32 chars) | Signs short-lived Spend JWT tokens. **Never shared with wallet seed.** |
+| `SESSION_WALLET_SEED` | High-entropy random string (>= 32 chars) | Master HKDF seed for deriving task-isolated session wallet private keys. |
+| `AVALANCHE_FUJI_RPC_URL`| e.g. `https://api.avax-test.network/ext/bc/C/rpc` | Reliable C-Chain JSON-RPC endpoint. |
+| `GUARDED_TREASURY_ADDRESS`| `0x...` (deployed contract) | Address of verified `GuardedTreasury.sol` on Fuji. |
+| `OWNER_ADDRESS` | Live Owner EOA | Signs mission creation, activation, and complete challenges. Must not be Anvil key. |
+| `AGENT_PRIVATE_KEY` | Live Agent EOA Private Key | Signs tool payment authorizations. Must not be Anvil key. |
+| `SELLER_ADDRESS` | Live Seller / Facilitator EOA | Tool payment recipient address. |
 
 ### 2. Database Migrations
 
@@ -108,23 +131,24 @@ The verifier independently checks:
 | Component | Status | Verification Evidence |
 |---|---|---|
 | **x402 Gasless Micropayments (Off-Chain)** | **VERIFIED** | Unit + API handler tests verify reservation, settlement, idempotency, and recovery. |
-| **Database Persistence (PostgreSQL 16)** | **VERIFIED** | 37 P/V/E test cases run directly against live PostgreSQL daemon on port 55432. |
-| **Unmocked Browser E2E** | **VERIFIED** | Playwright real-integration spec passes in 36s (retries: 0) against live backend & DB. |
-| **Cryptographic Proof Verifier** | **VERIFIED** | Standalone CLI verifier validates hash-chain and Merkle checkpoint. |
-| **Avalanche Fuji Live Settlement** | *PENDING* | Requires live testnet RPC, Fuji USDC token balance, and external facilitator relay. |
-| **GuardedTreasury Smart Contract (S2)** | **COMPILED & VERIFIED** | Smart contract located in `contracts/`, 30/30 Foundry tests pass (`contracts/test/GuardedTreasury.t.sol`). |
-| **ERC-8004 Identity & Feedback (S3)** | **IMPLEMENTED** | Fuji Registry client (`apps/web/lib/erc8004.ts`), 3/3 tests pass (`apps/web/tests/erc8004.test.ts`). |
-| **Public Production Deployment** | *PENDING* | Production domain cutover scheduled after local submission artifacts. |
+| **Database Persistence (PostgreSQL 16)** | **VERIFIED** | 101 Vitest cases run directly against live PostgreSQL daemon on port 55432 & PGlite. |
+| **Unmocked Browser E2E** | **VERIFIED** | Playwright real-integration spec passes against live backend & DB. |
+| **Cryptographic Proof Verifier** | **VERIFIED** | Standalone CLI verifier validates hash-chain and database checkpoint. |
+| **GuardedTreasury Smart Contract (S2)** | **COMPILED & VERIFIED** | Smart contract in `contracts/src/GuardedTreasury.sol`, **31/31 Foundry tests pass** (`contracts/test/GuardedTreasury.t.sol`). Includes EIP-3009 gasless sweep and tool cap check. |
+| **ERC-8004 Identity & Feedback (S3)** | **VERIFIED & PINNED** | Pinned verified implementation ABIs from Fuji contracts (`0x16e0FA...` and `0x7274e8...`), **7/7 Vitest tests pass** with function selector matching. |
+| **Avalanche Fuji Live Settlement** | *PENDING_FUJI* | Requires live testnet RPC, funded Fuji USDC, and owner broadcast approval. |
+| **Public Production Deployment** | *PENDING_FUJI* | Production deployment cutover scheduled for Step 6. |
 
 ---
 
-## Maximum Potential Loss Bounding (P1-A Security Model)
+## Maximum Potential Loss Bounding (P1-A / SW-01 Security Model)
 
 | Failure / Attack Scenario | Stage S1 Containment | Stage S2 On-Chain Containment (`GuardedTreasury` + Session Wallet) | Maximum Potential Loss |
 |---|---|---|---|
-| **Agent / Session Key Compromised** | Software validator & DB balance tracking | Contract-funded Session Wallet (`fundMissionWallet`) | **Strictly bounded to mission `toolCap`** (e.g. 5.00 USDC). Treasury balance is untouched. |
-| **Prompt Injection proposing payout** | Strictly blocked by `STAGE_S1_NO_TREASURY` | Contract checks full recipient allowlist & caps; reverts on Avalanche Fuji | **0 USDC** (unallowlisted recipient payout impossible). |
-| **Server / Database Compromised** | Off-chain checks vulnerable | `GuardedTreasury` contract independently enforces per-tx, daily, and mission caps on-chain | **Bounded by contract daily/mission cap**. Owner emergency pause halts contract. |
+| **Agent / Session Key Compromised (SW-01)** | Software validator & DB balance tracking | **Contract-Funded Session Wallet**: Derived via HKDF-SHA256 from dedicated `SESSION_WALLET_SEED`. Treasury transfers only `toolCap` USDC. Gasless EIP-3009 sweep reclaims unspent funds without wallet needing AVAX. | **Strictly bounded to mission `toolCap`** (e.g. 5.00 USDC). Main treasury balance is mathematically unspendable by session key. |
+| **Prompt Injection proposing payout** | Strictly blocked by `STAGE_S1_NO_TREASURY` | Contract enforces recipient allowlist and proposal review queue; reverts on Avalanche Fuji | **0 USDC** (unallowlisted recipient payout impossible). |
+| **Server / Database Compromised** | Off-chain checks vulnerable | `GuardedTreasury` contract independently enforces per-tx, daily (UTC-reset), and mission caps on-chain | **Bounded by contract daily/mission cap**. Owner emergency pause immediately freezes treasury. |
+| **Tool Price-Mismatch (> advertised)** | Price comparison guard blocks payment | Payment authorization not signed | **0 USDC**. |
 
 ---
 
@@ -133,7 +157,7 @@ The verifier independently checks:
 Foundry tests and deployment scripts are located in `contracts/`:
 
 ```bash
-# 1. Run all 30 smart contract security tests
+# 1. Run all 31 smart contract security tests
 cd contracts
 forge test
 

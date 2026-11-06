@@ -1,0 +1,47 @@
+{
+  "name": "ERC8004IdentityRegistry",
+  "proxyAddress": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+  "implementationAddress": "0x7274e874CA62410a93Bd8bf61c69d8045E399c02",
+  "chain": "Avalanche Fuji Testnet (43113)",
+  "source": "https://testnet.snowtrace.io/address/0x8004A818BFB912233c491871b3d84c89A494BD9e / Routescan verified implementation",
+  "abi": [
+    {
+      "type": "function",
+      "name": "register",
+      "inputs": [],
+      "outputs": [{ "name": "agentId", "type": "uint256" }],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "register",
+      "inputs": [{ "name": "agentURI", "type": "string" }],
+      "outputs": [{ "name": "agentId", "type": "uint256" }],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "setAgentURI",
+      "inputs": [
+        { "name": "agentId", "type": "uint256" },
+        { "name": "newURI", "type": "string" }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "ownerOf",
+      "inputs": [{ "name": "tokenId", "type": "uint256" }],
+      "outputs": [{ "name": "", "type": "address" }],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "tokenURI",
+      "inputs": [{ "name": "tokenId", "type": "uint256" }],
+      "outputs": [{ "name": "", "type": "string" }],
+      "stateMutability": "view"
+    }
+  ]
+}

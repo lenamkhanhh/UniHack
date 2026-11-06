@@ -1,8 +1,8 @@
 # UniHack — review hiện tại và nhiệm vụ tiếp theo
 
-Cập nhật: 2026-11-07 02:45, Asia/Saigon.
-Repo: D:\Code\Code\AIO\Code\ZaloAIC\UniHack — nhánh `feat/s1-app`, HEAD `95cb2c3`.
-Báo cáo đã đọc: REPORT_REVIEW_AND_FIX_COMPLETION.md (bản commit `95cb2c3`).
+Cập nhật: 2026-11-07 03:10, Asia/Saigon.
+Repo: D:\Code\Code\AIO\Code\ZaloAIC\UniHack — nhánh `feat/s1-app`, HEAD `ddd6d16`.
+Báo cáo đã đọc: REPORT_REVIEW_AND_FIX_COMPLETION.md (bản commit `ddd6d16`).
 Kế hoạch: STRATEGY_MAX_SCORE.md.
 
 ## 1. Hai file trao đổi cố định
@@ -16,83 +16,92 @@ Kế hoạch: STRATEGY_MAX_SCORE.md.
 
 | ID | Kết quả |
 |---|---|
-| **UI-01** | **Đạt.** `lib/proof-verifier.ts` tính lại keccak/canonicalJson/prevHash/checkpoint thật; lỗi fetch → UNVERIFIED, chain sai → FAIL; `page.tsx` không còn hash/count gán cứng. |
-| UI-02 | Đạt phần UI: gọi challenge → ký → `/api/system/pause` → đọc lại `/api/policy`. (Xem UI-02b.) |
-| UI-03 | Đạt. S1 hiển thị banner vô hiệu, không còn nút duyệt giả. |
-| UI-04/05 | Đạt. Text theo mode; lý do Guarded lấy từ verdict. |
-| P2-PRICE | Đạt. `verifyQuoteAgainstCatalog` được gọi trong `reserveOperation` + agent route; BLOCK có audit. |
-| KEY-02b | Đạt. `validateLiveFujiConfig()` trong `payments.ts` + `/api/tools/orchestrate`. |
-| Test | Reviewer chạy lại: vitest **91/91**; Playwright `mission-control.spec.ts` **5/5**; `tsc` exit 0. |
+| UI-02b | Đạt. Reg 17: pause thật qua route có chữ ký → agent + orchestrate trả 403 → unpause chạy lại. |
+| VER-02 | Đạt. `scripts/verify-proof.ts` dùng chung `lib/proof-verifier.ts`; thiếu inner `prev_hash` → FAIL. |
+| INJ-01b | Đạt. Không còn kích hoạt theo từ khóa. |
+| HYG-01 | Đạt. `tsconfig.tsbuildinfo` không còn tracked. |
+| P1-B (contract) | Đạt phần contract: `anchorMissionProof` + event + test. |
+| Test | Reviewer chạy lại: **forge 30/30**, **vitest 96/96 (8 files)**, `tsc` exit 0. |
 
-Ghi chú: trong lúc chạy Playwright, reviewer vô tình ghi đè 2 ảnh evidence và đã khôi phục bằng `git checkout`. Working tree sạch.
-
-### 2.2 Còn mở (nhỏ)
+### 2.2 Chưa đạt
 
 | ID | Mức | Vị trí | Vấn đề | Yêu cầu |
 |---|---|---|---|---|
-| UI-02b | Medium | `e2e/mission-control.spec.ts:113,133` | Test pause mock cả `/api/system/pause` lẫn `/api/agent/run`, nên chưa chứng minh **server thật** trả 403 khi paused. Vitest cũng chưa có case này. | Thêm test gọi handler thật: set pause qua route (owner ký) → `/api/agent/run` và `/api/tools/orchestrate` trả 403 → unpause → chạy lại được. |
-| VER-02 | Low | `lib/proof-verifier.ts:93` vs `scripts/verify-proof.ts:79` | Verifier trình duyệt **bỏ qua** kiểm `prev_hash` bên trong khi trường này vắng; CLI thì bắt buộc. Hai bản logic có thể lệch nhau. | Dùng **một** module chung cho cả CLI và trình duyệt; giữ quy tắc chặt của CLI. Test: entry thiếu inner `prev_hash` → FAIL ở cả hai. |
-| INJ-01b | Low | `lib/agent.ts:105-109`, `lib/tools.ts:57` | Fixture adversarial vẫn bật theo từ khóa trong goal (`adversarial`, `p1-c`, `exploit detection`) hoặc theo tham số client `demoAdversarial`. | Chỉ bật khi `DEMO_ADVERSARIAL=1` và không phải production; nút preset trên UI gửi cờ rõ ràng. Không dựa vào từ khóa. |
-| HYG-01 | Low | `apps/web/tsconfig.tsbuildinfo` | File build cache đang được git track. | Thêm vào `.gitignore`, `git rm --cached`. |
+| **SW-01** | **Critical** | `apps/web/lib/session-wallets.ts:24-28` | Private key ví phiên = `keccak256("${MISSION_TOKEN_SECRET}:session-wallet:${missionSlug}")`. Có 3 vấn đề. (1) Fallback **viết cứng trong code** `'unihack-session-wallet-secret-dev-fallback-key-32chars'`. (2) README công bố sẵn giá trị `MISSION_TOKEN_SECRET` mẫu. (3) Slug mission là công khai (URL proof). Ai biết secret, kể cả secret mẫu hoặc fallback, sẽ **tính được key của mọi ví phiên** và rút sạch. Ngoài ra, dùng chung secret JWT để sinh key nghĩa là lộ một secret thì mất cả auth lẫn tiền. Đây chính là loại lỗi giống khóa Anvil (KEY-01/02). | Bỏ fallback. Ưu tiên: sinh key **ngẫu nhiên** (`generatePrivateKey`) mỗi mission, lưu **mã hóa** (AES-GCM với `SESSION_WALLET_ENCRYPTION_KEY` riêng) trong DB, không log. Nếu vẫn derive thì phải dùng `SESSION_WALLET_SEED` riêng ≥32 byte ngẫu nhiên, khác `MISSION_TOKEN_SECRET`, và chạy HKDF. `validateLiveFujiConfig()` từ chối khi thiếu biến, trùng secret JWT, hoặc trùng giá trị mẫu trong README/.env.example. Có test cho từng trường hợp. |
+| **ERC-01** | **High** | `apps/web/lib/erc8004.ts:19-66` | **ABI tự bịa, không khớp contract đã deploy**: `giveFeedback(address agent, int128, uint8, string tag)`, `getAgent(address)`, `getReputation(address, string)` không tồn tại. Trên Fuji mọi lệnh gọi sẽ revert. Reviewer đã đọc ABI verified trên Routescan (proxy ERC1967): |  Dùng đúng ABI dưới đây (pin vào file JSON trong repo kèm địa chỉ implementation + nguồn). `agentId` là **uint256** (ERC-721 tokenId), không phải address. Feedback do **mission owner** (client) gửi, không phải agent tự gửi. Test encode bằng ABI thật (vd. `encodeFunctionData`) và so selector. |
+| ERC-02 | Medium | `erc8004.ts` (MOCK branch) | MOCK trả `txHash = keccak256(...)`, trông như một tx hash thật. Nếu hiển thị lên UI hoặc deck sẽ thành giao dịch giả. | MOCK trả `txHash: null` + `mode: 'MOCK'`; UI không render link Snowtrace khi không có tx thật. |
+| **SW-02** | High | `GuardedTreasury.sol` `sweepMissionWallet` | Sweep dùng `safeTransferFrom(wallet → treasury)`, cần ví phiên đã `approve` cho treasury. Không có code nào tạo approve, và ví phiên không có AVAX để trả gas cho approve. Test chỉ pass nhờ `vm.prank(sessionWallet); usdc.approve(...)`. Trên Fuji sweep **không bao giờ chạy được**. | Sweep bằng EIP-3009: ví phiên ký `transferWithAuthorization(to=treasury)` (hoặc `receiveWithAuthorization`) off-chain, backend/owner submit (gasless cho ví phiên). Hoặc thêm hàm contract nhận authorization đã ký. Test không dùng `approve` giả. |
+| SW-03 | Medium | `fundMissionWallet(bytes32,address)` | Nếu chưa set `missionToolCap`, số tiền fund mặc định = `perTxCap`, một giá trị không liên quan tới budget. | Bắt buộc đã set tool cap (hoặc truyền amount rõ ràng); amount ≤ cap đã set. |
+| P1-WIRE | Medium | backend | Không có code backend nào gọi `fundMissionWallet`, `anchorMissionProof` hay `submitErc8004Feedback` (grep chỉ thấy định nghĩa). Ở S2, payer là ví phiên nhưng chưa bao giờ được fund. | Nối vào lifecycle ở S2: activate → fund; complete → anchor; settled + owner xác nhận → feedback. MOCK không gửi tx, ghi rõ mode. Report ghi đúng: contract đã có, wiring đang chưa có/đã có. |
+
+**ABI thật trên Fuji** (đọc từ Routescan, implementation verified):
+
+ReputationRegistry proxy `0x8004B663056A597Dffe9eCcC1965A193B7388713` → impl `0x16e0FA7f7C56B9a767E34B192B51f921BE31dA34`:
+```
+giveFeedback(uint256 agentId, int128 value, uint8 valueDecimals, string tag1, string tag2, string endpoint, string feedbackURI, bytes32 feedbackHash)
+getSummary(uint256 agentId, address[] clientAddresses, string tag1, string tag2) -> (uint64, int128, uint8)
+readFeedback(uint256 agentId, address clientAddress, uint64 feedbackIndex) -> (int128, uint8, string, string, bool)
+readAllFeedback(uint256 agentId, address[] clientAddresses, string tag1, string tag2, bool includeRevoked) -> (...)
+getClients(uint256 agentId) -> address[]
+revokeFeedback(uint256 agentId, uint64 feedbackIndex)
+```
+IdentityRegistry proxy `0x8004A818BFB912233c491871b3d84c89A494BD9e` → impl `0x7274e874CA62410a93Bd8bf61c69d8045E399c02`:
+```
+register() / register(string agentURI) / register(string agentURI, tuple[] metadata) -> uint256
+setAgentURI(uint256 agentId, string newURI)
+ownerOf(uint256 tokenId) -> address ; tokenURI(uint256 tokenId) -> string
+```
+Lấy ABI đầy đủ bằng: `https://api.routescan.io/v2/network/testnet/evm/43113/etherscan/api?module=contract&action=getabi&address=<impl>`.
 
 ## 3. Nhiệm vụ tiếp theo (đúng thứ tự)
 
-Fuji live vẫn chờ owner. Trong lúc chờ, làm hết phần contract/tích hợp **có thể test local** để khi có ví chỉ cần deploy.
-
-1. **Sửa nhỏ:** UI-02b, VER-02, INJ-01b, HYG-01.
-2. **P1-A ví phiên on-chain** (STRATEGY §4.3), viết + test bằng Foundry:
-   - `fundMissionWallet(missionId, wallet)`: chỉ owner gọi, chuyển đúng `toolCap` của mission, mỗi mission đúng 1 lần.
-   - `sweepMissionWallet(missionId)` / luồng trả dư khi close/expire; events `MissionFunded`, `MissionSwept`.
-   - Forge tests: fund 2 lần → revert; fund vượt số dư → revert; agent gọi → revert; mission đóng/hết hạn → không fund.
-   - Backend: tạo ví phiên theo mission (key lưu server-side, không log, không commit), dùng ví này ký EIP-3009 thay cho key agent chung khi `STAGE=S2`.
-   - Cập nhật bảng tổn thất tối đa trong spec/README.
-3. **P1-B proof anchor + ERC-8004 client**:
-   - Contract: `anchorMissionProof(missionId, headHash)` (owner), event `MissionProofAnchored`; forge test.
-   - Backend: khi complete mission ở S2 → gửi tx anchor (MOCK: ghi rõ chưa gửi). Verifier trình duyệt hiển thị "khớp hash neo on-chain" **chỉ khi** đọc được event thật.
-   - ERC-8004: module gọi `IdentityRegistry`/`ReputationRegistry` Fuji (địa chỉ trong STRATEGY §4.4), pin ABI từ contract đã verify; test với mock/anvil fork. `giveFeedback` chỉ sau operation SETTLED và owner xác nhận.
-4. **Script deploy Fuji sẵn sàng** (`contracts/script/Deploy.s.sol` + hướng dẫn README): đọc key từ env, từ chối key Anvil, in địa chỉ + lệnh verify Snowtrace. **Không broadcast.**
+1. **SW-01** (critical) → **ERC-01** → **SW-02** → ERC-02, SW-03.
+2. **P1-WIRE**: nối fund/anchor/feedback vào lifecycle S2, MOCK không gửi tx.
+3. Cập nhật README: bảng tổn thất tối đa sau P1-A; danh sách biến env bắt buộc cho LIVE (không có giá trị mẫu dùng được).
+4. Sau đó dừng phát triển tính năng mới. Chuẩn bị Bước 5 phần không cần Fuji: README chính (câu định vị, ảnh, quickstart), outline deck 11 slide theo STRATEGY §7 (sửa DECK-01..06). Ô tx/link để trống có nhãn `PENDING_FUJI`.
 
 ## 4. Acceptance lượt tới
 
 | ID | Điều kiện đạt | Bằng chứng |
 |---|---|---|
-| UI-02b | Pause thật → 403 ở agent + orchestrate; unpause chạy lại | Tên test + output |
-| VER-02 | Một module verifier; thiếu inner prev_hash → FAIL cả hai | Test |
-| INJ-01b | Không bật theo từ khóa; chỉ env + non-production | Test |
-| HYG-01 | tsbuildinfo không còn tracked | `git ls-files` |
-| P1-A | Hàm + events + forge tests pass; backend dùng ví phiên ở S2 | `forge test` output, test backend |
-| P1-B | Anchor + event + test; ERC-8004 module + test mock | `forge test`, vitest |
-| DEPLOY-READY | Script deploy chạy được với `--dry-run`/simulation, chặn key Anvil | Output simulation |
+| SW-01 | Không fallback; key ngẫu nhiên mã hóa (hoặc seed riêng + HKDF); LIVE từ chối cấu hình yếu | Test + diff |
+| ERC-01 | ABI pin từ contract thật; selector khớp; agentId uint256; client = owner | Test encode |
+| SW-02 | Sweep không cần approve/gas của ví phiên; test không prank approve | `forge test` |
+| ERC-02 / SW-03 | Như mục 2.2 | Test |
+| P1-WIRE | Lifecycle S2 gọi fund/anchor/feedback; MOCK ghi đúng mode | Test handler |
+| README/DECK | README mới + outline deck, không có tx giả | Đường dẫn file |
 
 ## 5. Giới hạn thực thi
 
-- Không hiển thị kết quả, giao dịch, verdict hay trạng thái mà hệ thống không thực sự tạo ra.
-- Không broadcast giao dịch lên Fuji khi owner chưa điền ví mới vào `.env` và chưa duyệt.
-- Không dùng khóa Anvil/Hardhat trên Fuji/mạng công khai; không đọc/in/commit key.
-- Không đổi luật validator, caps, payment lifecycle đã nghiệm thu (P1-A chỉ thêm đường ví phiên cho S2).
+- Không hiển thị kết quả, giao dịch, verdict hay trạng thái mà hệ thống không thực sự tạo ra (kể cả tx hash "simulated").
+- Không có secret/key fallback viết cứng trong code cho bất kỳ đường nào giữ tiền.
+- Không broadcast lên Fuji khi owner chưa điền ví mới vào `.env` và chưa duyệt.
+- Không dùng khóa Anvil/Hardhat trên mạng công khai; không đọc/in/commit key.
 - Không push `main`, không deploy public, không nộp bài khi owner chưa duyệt.
 
 ## 6. Prompt cho Gemini
 
 ~~~text
-Đọc REVIEW_PROMPT_GPT.md (bản 02:45). Báo cáo ngắn vào REPORT_REVIEW_AND_FIX_COMPLETION.md.
+Đọc REVIEW_PROMPT_GPT.md (bản 03:10). Báo cáo ngắn vào REPORT_REVIEW_AND_FIX_COMPLETION.md.
 
-Chấp nhận: UI-01..05, P2-PRICE, KEY-02b. Reviewer chạy lại vitest 91/91,
-Playwright mission-control 5/5, tsc exit 0.
+Chấp nhận: UI-02b, VER-02, INJ-01b, HYG-01, anchorMissionProof. Reviewer chạy lại forge 30/30,
+vitest 96/96, tsc ok.
 
-Làm theo mục 3:
-1. Sửa nhỏ: UI-02b (test pause trên server thật), VER-02 (gộp verifier CLI/browser,
-   giữ quy tắc chặt), INJ-01b (fixture adversarial chỉ bật bằng env, không theo từ khóa),
-   HYG-01 (bỏ track tsbuildinfo).
-2. P1-A ví phiên on-chain: fundMissionWallet/sweep + events + forge tests; backend ký bằng ví
-   phiên ở S2.
-3. P1-B anchorMissionProof + event + test; module ERC-8004 + test mock.
-4. Script deploy Fuji sẵn sàng, chỉ simulation, chặn key Anvil. KHÔNG broadcast.
+Sửa theo thứ tự:
+- SW-01 (critical): key ví phiên đang derive từ MISSION_TOKEN_SECRET + slug công khai, có fallback
+  viết cứng → ai biết secret mẫu/fallback rút được mọi ví. Đổi sang key ngẫu nhiên lưu mã hóa
+  (hoặc seed riêng + HKDF), bỏ fallback, LIVE từ chối cấu hình yếu.
+- ERC-01: ABI ERC-8004 đang tự bịa. Dùng ABI thật ở mục 2.2 (agentId uint256,
+  giveFeedback 8 tham số, register(string)); pin JSON + test selector.
+- SW-02: sweep không được dựa vào approve của ví phiên; dùng EIP-3009 authorization.
+- ERC-02 (MOCK không trả tx hash giả), SW-03 (fund phải có tool cap rõ).
+Sau đó P1-WIRE (nối fund/anchor/feedback vào lifecycle S2), README env/tổn thất,
+rồi README chính + outline deck với ô tx để PENDING_FUJI.
 
-Commit trên feat/s1-app, không push main, không deploy public.
+Commit trên feat/s1-app, không push main, không deploy public, không broadcast.
 ~~~
 
 ## 7. Nhật ký reviewer
 
-Chỉ sửa REVIEW_PROMPT_GPT.md; khôi phục 2 ảnh evidence bị test của reviewer ghi đè (`git checkout`).
-Lệnh đã chạy: đọc output watcher; `git log`, `git diff --stat 25e1dcf HEAD`; grep `page.tsx` (hash gán cứng, verify handler), `agent.ts`/`tools.ts` (demoAdversarial); so `proof-verifier.ts` với `scripts/verify-proof.ts`; `vitest run` (91/91); `tsc` (exit 0); `playwright test e2e/mission-control.spec.ts` với `NO_WEBSERVER=1` trên dev server :3100 (5/5); grep `page.route` trong spec; `git ls-files apps/web/tsconfig.tsbuildinfo`.
+Chỉ sửa REVIEW_PROMPT_GPT.md.
+Lệnh đã chạy: đọc output watcher; `git log`, `git diff --stat 95cb2c3 HEAD`; đọc `session-wallets.ts`, diff `GuardedTreasury.sol` và `payments.ts`, ABI trong `erc8004.ts`, test sweep; grep nơi gọi fund/anchor/feedback; `curl` Routescan `getsourcecode` + `getabi` cho 2 proxy/implementation ERC-8004 trên Fuji (chỉ đọc); `forge test` (30/30); `vitest run` (96/96); `tsc` (exit 0); grep `MISSION_TOKEN_SECRET` trong config/README.

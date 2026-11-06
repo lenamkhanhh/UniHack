@@ -107,4 +107,25 @@ export function validateLiveFujiConfig(): void {
   if (owner && KNOWN_INSECURE_ANVIL_ADDRESSES.has(owner.toLowerCase())) {
     throw new Error('KEY-02: OWNER_ADDRESS cannot be a well-known Anvil/Hardhat test address in LIVE_FUJI mode');
   }
+
+  // SW-01 Security Guard: In LIVE_FUJI mode, SESSION_WALLET_SEED must be dedicated, secure, and independent
+  const sessionSeed = process.env.SESSION_WALLET_SEED?.trim();
+  const tokenSecret = process.env.MISSION_TOKEN_SECRET?.trim();
+
+  if (!sessionSeed || sessionSeed.length < 32) {
+    throw new Error('SW-01: SESSION_WALLET_SEED must be set and at least 32 characters long in LIVE_FUJI mode');
+  }
+  if (tokenSecret && sessionSeed === tokenSecret) {
+    throw new Error('SW-01: SESSION_WALLET_SEED must not be identical to MISSION_TOKEN_SECRET');
+  }
+  const KNOWN_INSECURE_SEEDS = new Set([
+    'unihack-session-wallet-secret-dev-fallback-key-32chars',
+    'test-session-wallet-seed-must-be-at-least-32-chars!',
+    'test-isolated-session-wallet-seed-must-be-distinct-32chars!',
+    'test-mission-token-secret-must-be-at-least-32-chars-long!',
+    'your-session-wallet-seed-here-32chars-minimum-length',
+  ]);
+  if (KNOWN_INSECURE_SEEDS.has(sessionSeed.toLowerCase())) {
+    throw new Error('SW-01: SESSION_WALLET_SEED cannot be a placeholder or well-known sample value in LIVE_FUJI mode');
+  }
 }
