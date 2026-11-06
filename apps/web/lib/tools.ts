@@ -126,14 +126,67 @@ export const toolCatalog: Record<string, ToolDefinition> = {
       return { valid: true, canonicalInput };
     },
     execute: async (args: { text: string }) => {
+      // AG-03: Real LLM synthesis when key is available, explicitly labeled fixture fallback otherwise
+      const apiKey =
+        process.env.GEMINI_API_KEY ||
+        (process.env.LLM_API_KEY?.startsWith('AIza') ? process.env.LLM_API_KEY : '');
+      const model = process.env.LLM_MODEL || 'gemini-2.0-flash';
+
+      if (apiKey) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    {
+                      text: `Synthesize the following document into a concise factual summary of at most 450 characters:\n\n${args.text}`,
+                    },
+                  ],
+                },
+              ],
+              generationConfig: {
+                temperature: 0.0,
+                maxOutputTokens: 150,
+              },
+            }),
+            signal: AbortSignal.timeout(6000),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text && text.trim().length > 0) {
+              const summary = text.trim().slice(0, SUMMARY_OUTPUT_MAX_CHARS);
+              return {
+                provider: 'gemini-llm-synthesis',
+                fixture: false,
+                live: true,
+                model,
+                summary,
+                inputLength: args.text.length,
+                summaryLength: summary.length,
+              };
+            }
+          }
+        } catch {
+          // Fall back to labeled fixture below if LLM request fails
+        }
+      }
+
+      // Explicitly labeled deterministic fixture when API key is missing or offline (Finding AG-03)
       const clean = args.text.replace(/\s+/g, ' ').trim();
-      let summary = `Summary: ${clean}`;
+      let summary = `[FIXTURE] Summary of sources: ${clean}`;
       if (summary.length > SUMMARY_OUTPUT_MAX_CHARS) {
         summary = summary.substring(0, SUMMARY_OUTPUT_MAX_CHARS - 3) + '...';
       }
       return {
-        provider: 'deterministic-synthesis',
-        live: true,
+        provider: 'deterministic-fixture',
+        fixture: true,
+        live: false,
         summary,
         inputLength: args.text.length,
         summaryLength: summary.length,

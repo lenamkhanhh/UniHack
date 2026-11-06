@@ -19,6 +19,7 @@ export default function DemoPage() {
   const [policy, setPolicy] = useState<PolicyData | null>(null);
   const [account, setAccount] = useState<string | null>(null);
   const [stepStatus, setStepStatus] = useState<Record<string, 'IDLE' | 'RUNNING' | 'PENDING' | 'SUCCESS' | 'ERROR'>>({});
+  const [currentSpendToken, setCurrentSpendToken] = useState<string | null>(null);
 
   // Autonomous AI Agent State (AGENT-01)
   const [agentGoal, setAgentGoal] = useState('Tóm tắt 3 nguồn về Avalanche blockchain architecture và transaction fees');
@@ -215,6 +216,7 @@ export default function DemoPage() {
       if (!spendToken) {
         throw new Error(`Activation did not return spendToken. Response keys: ${Object.keys(actResult).join(', ')}`);
       }
+      setCurrentSpendToken(spendToken);
       addLog(`Mission activated. Received spend token (expires: ${actResult.expiresAt}).`);
       setStatus('activate', 'SUCCESS');
 
@@ -468,14 +470,23 @@ export default function DemoPage() {
     addLog(`[AGENT-01] Initializing autonomous AI Agent with goal: "${agentGoal}"...`);
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (currentSpendToken) {
+        headers['Authorization'] = `Bearer ${currentSpendToken}`;
+      }
+
       const res = await fetch('/api/agent/run', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ goal: agentGoal }),
       });
 
       if (!res.ok) {
-        throw new Error(`Agent execution failed: HTTP ${res.status}`);
+        const errJson = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          throw new Error('Missing spend token. Please execute Steps 1–4 to activate a mission before running the autonomous agent.');
+        }
+        throw new Error(`Agent execution failed: HTTP ${res.status} ${errJson.error || ''}`);
       }
 
       const data = await res.json();
@@ -485,7 +496,7 @@ export default function DemoPage() {
       setAgentDeliverable(data.deliverable);
       setAgentDeliverableHash(data.deliverableHash);
 
-      addLog(`[AGENT-01] Autonomous run completed. Mode: ${data.plannerMode}, Turns: ${data.turnCount}, DeliverableHash: ${data.deliverableHash.slice(0, 18)}...`);
+      addLog(`[AGENT-01] Autonomous run completed. Mode: ${data.plannerMode}, Turns: ${data.turnCount}, DeliverableHash: ${data.deliverableHash?.slice(0, 18) || 'N/A'}...`);
       data.steps?.forEach((st: any) => {
         addLog(`[AGENT-01] Turn ${st.turn} [${st.action}]: ${st.thought}`);
       });

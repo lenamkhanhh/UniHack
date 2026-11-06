@@ -32,7 +32,13 @@ DEPLOYMENT_ID="unihack-test-deployment"
 MISSION_TOKEN_SECRET="test-mission-token-secret-must-be-at-least-32-chars-long!"
 PAYMENT_MODE="MOCK"
 
-# Standard Test Fixture Addresses (Hardhat / Anvil default accounts)
+> [!WARNING]
+> **Security Warning (KEY-01 - Testnet Safety)**:
+> The addresses and private keys listed below (`0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`, `0xac09...`, `0x59c6...`) are well-known default fixture keys from Anvil/Hardhat. They are strictly for **local unit tests and mocked browser test harnesses**.
+> **NEVER fund or use these keys on Avalanche Fuji testnet or any public blockchain**, as automated front-running bots monitor and instantly drain all funds sent to known Anvil accounts.
+> For Avalanche Fuji live operations (Bước 2 / Stage S2), the project owner must generate fresh, dedicated testnet keypairs in `.env` and fund them via official testnet faucets.
+
+# Standard Test Fixture Addresses (Hardhat / Anvil default accounts - LOCAL ONLY)
 OWNER_ADDRESS="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 SELLER_ADDRESS="0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
 AGENT_PRIVATE_KEY="0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
