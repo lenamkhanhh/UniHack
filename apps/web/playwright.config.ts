@@ -45,7 +45,7 @@ export default defineConfig({
     : {
         command: `npm run dev -- -p ${TEST_PORT}`,
         url: `${TEST_BASE_URL}/demo`,
-        reuseExistingServer: false,
+        reuseExistingServer: true,
         timeout: 120000,
       },
 });

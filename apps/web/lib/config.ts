@@ -52,3 +52,59 @@ export function getPaymentMode(): 'MOCK' | 'LIVE_FUJI' {
   if (upper === 'LIVE_FUJI') return 'LIVE_FUJI';
   throw new Error(`Invalid PAYMENT_MODE: "${mode}". Must be MOCK or LIVE_FUJI.`);
 }
+
+export const KNOWN_INSECURE_ANVIL_ADDRESSES = new Set([
+  '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266',
+  '0x70997970c51812dc3a010c7d01b50e0d17dc79c8',
+  '0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc',
+  '0x90f79bf6eb2c4f870365e785982e1f101e93b906',
+  '0x15d34aaf54267db7d7c367839aaf71a00a2c6a65',
+  '0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc',
+  '0x976ea74026e72cd99245227776a3ce92b0eff418',
+  '0xbcd4042de499d14e55001ccbb24a551f3a940447',
+  '0x71be63f3384f5fb98995898a86b02fb2426c5788',
+  '0xfabb0ac9d68b0b445fb7357272ff202c5651694a',
+]);
+
+export const KNOWN_INSECURE_ANVIL_KEYS = new Set([
+  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+  '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d',
+  '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
+  '0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6',
+  '0x47e179ec197488593b100287e90165c649ed994f43aac47f1068fc1eedf5dec8',
+  '0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba',
+  '0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d7b1180d9c7c7abff8',
+  '0x4bbbf856008566ac57e1e29272365cb97318d572f00f0e02329ca660d5b4f2c3',
+  '0xdb0a065e6281a683a043214224d40b957647248b77054f9a562efce33f8a0022',
+  '0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073746b220c22',
+]);
+
+/**
+ * KEY-02 Security Guard: Validates that when operating in LIVE_FUJI mode,
+ * public Anvil/Hardhat test accounts and private keys are strictly rejected.
+ */
+export function validateLiveFujiConfig(): void {
+  const mode = getPaymentMode();
+  if (mode !== 'LIVE_FUJI') return;
+
+  const seller = process.env.SELLER_ADDRESS?.trim();
+  if (!seller || !/^0x[0-9a-fA-F]{40}$/.test(seller)) {
+    throw new Error('KEY-02: SELLER_ADDRESS must be set to a valid 20-byte hex address when PAYMENT_MODE=LIVE_FUJI');
+  }
+  if (KNOWN_INSECURE_ANVIL_ADDRESSES.has(seller.toLowerCase())) {
+    throw new Error('KEY-02: SELLER_ADDRESS cannot be a well-known Anvil/Hardhat test address in LIVE_FUJI mode');
+  }
+
+  const agentKey = process.env.AGENT_PRIVATE_KEY?.trim();
+  if (!agentKey || !/^0x[0-9a-fA-F]{64}$/.test(agentKey)) {
+    throw new Error('KEY-02: AGENT_PRIVATE_KEY must be set to a valid 32-byte hex key when PAYMENT_MODE=LIVE_FUJI');
+  }
+  if (KNOWN_INSECURE_ANVIL_KEYS.has(agentKey.toLowerCase())) {
+    throw new Error('KEY-02: AGENT_PRIVATE_KEY cannot be a well-known Anvil/Hardhat test private key in LIVE_FUJI mode');
+  }
+
+  const owner = process.env.OWNER_ADDRESS?.trim();
+  if (owner && KNOWN_INSECURE_ANVIL_ADDRESSES.has(owner.toLowerCase())) {
+    throw new Error('KEY-02: OWNER_ADDRESS cannot be a well-known Anvil/Hardhat test address in LIVE_FUJI mode');
+  }
+}

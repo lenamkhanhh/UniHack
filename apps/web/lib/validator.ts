@@ -289,3 +289,36 @@ export function validateProposal(proposal: Proposal, ctx: ValidationContext): Va
     canonicalArguments: argValidation.canonicalInput,
   };
 }
+
+/**
+ * P2-PRICE Security Guard: Verifies an incoming 402 Quote against the official tool catalog
+ * and per-call spending caps to prevent malicious/inflated resource quotes.
+ */
+export function verifyQuoteAgainstCatalog(params: {
+  toolId: string;
+  quotedAmountAtomic: bigint;
+}): { valid: boolean; rule?: string; reason?: string } {
+  const tool = toolCatalog[params.toolId];
+  if (!tool) {
+    return {
+      valid: false,
+      rule: 'UNKNOWN_TOOL',
+      reason: `Tool '${params.toolId}' not found in catalog`,
+    };
+  }
+  if (params.quotedAmountAtomic > tool.priceAtomic) {
+    return {
+      valid: false,
+      rule: 'PRICE_MISMATCH',
+      reason: `Quote price ${params.quotedAmountAtomic} exceeds catalog price ${tool.priceAtomic}`,
+    };
+  }
+  if (params.quotedAmountAtomic > tool.perCallCap) {
+    return {
+      valid: false,
+      rule: 'OVER_PER_CALL_CAP',
+      reason: `Quote price ${params.quotedAmountAtomic} exceeds per-call cap ${tool.perCallCap}`,
+    };
+  }
+  return { valid: true };
+}

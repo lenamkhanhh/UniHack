@@ -16,9 +16,13 @@ import {
   executeUpstreamAndSettle,
 } from '@/lib/payments';
 import { appendAuditEntry } from '@/lib/audit';
+import { validateLiveFujiConfig } from '@/lib/config';
 
 export async function POST(req: NextRequest) {
   try {
+    // KEY-02: Enforce zero-leakage security in LIVE_FUJI mode
+    validateLiveFujiConfig();
+
     // 1. Mandatory spend token authentication (Finding AG-01)
     const authHeader = req.headers.get('authorization') || '';
     const token = authHeader.replace(/^Bearer\s+/i, '');
@@ -27,18 +31,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing spend token' }, { status: 401 });
     }
 
+    const systemState = await prisma.systemState.findUnique({ where: { id: 1 } });
+    if (systemState?.systemPaused || systemState?.maintenance) {
+      return NextResponse.json(
+        { error: 'System is paused or in maintenance' },
+        { status: 503 }
+      );
+    }
+
     let claims: any;
     try {
-      claims = await verifyToken(token);
+      claims = await verifyToken(token, {
+        expectedStage: (systemState?.stage as 'S1' | 'S2') || 'S1',
+      });
     } catch {
-      return NextResponse.json({ error: 'Invalid or expired spend token' }, { status: 401 });
+      return NextResponse.json(
+        { error: 'Invalid or expired spend token' },
+        { status: 401 }
+      );
     }
 
     if (claims.type !== 'spend') {
-      return NextResponse.json({ error: 'Spend token required' }, { status: 403 });
+      return NextResponse.json(
+        { error: 'Spend token required for agent execution' },
+        { status: 403 }
+      );
     }
 
-    // 2. Active mission verification against database
+    // 2. Mission validation & active state check
     const mission = await prisma.mission.findUnique({
       where: { slug: claims.missionSlug },
     });
@@ -48,25 +68,19 @@ export async function POST(req: NextRequest) {
     }
 
     if (mission.status !== 'ACTIVE') {
-      return NextResponse.json({ error: `Mission is ${mission.status}` }, { status: 403 });
+      return NextResponse.json(
+        { error: `Mission is ${mission.status}, cannot execute agent` },
+        { status: 403 }
+      );
     }
 
     if (new Date() >= mission.expiresAt) {
       return NextResponse.json({ error: 'Mission has expired' }, { status: 403 });
     }
 
-    const systemState = await prisma.systemState.findUnique({
-      where: { id: 1 },
-    });
-
-    if (systemState?.systemPaused) {
-      return NextResponse.json({ error: 'System is paused' }, { status: 403 });
-    }
-
-    // Parse body for optional custom goal or override proposal
     const body = await req.json().catch(() => ({}));
     const goal =
-      typeof body.goal === 'string' && body.goal.trim()
+      typeof body.goal === 'string' && body.goal.trim().length > 0
         ? body.goal.trim()
         : 'Tóm tắt 3 nguồn về Avalanche blockchain architecture và transaction fees';
 
@@ -84,15 +98,19 @@ export async function POST(req: NextRequest) {
     while (!isDone && turn < 6) {
       turn++;
 
-      // Allow testing override proposal on turn 1 (e.g. prompt injection / rogue tool test)
+      // AG-04: body.overrideProposal is strictly gated by ALLOW_AGENT_TEST_OVERRIDE=1 and non-production
       let plan: any;
-      if (turn === 1 && body.overrideProposal) {
+      const allowTestOverride =
+        process.env.ALLOW_AGENT_TEST_OVERRIDE === '1' &&
+        process.env.NODE_ENV !== 'production';
+
+      if (turn === 1 && body.overrideProposal && allowTestOverride) {
         plan = {
           action: body.overrideProposal.kind === 'treasury_payout' ? 'PAYOUT' : 'TOOL',
-          thought: 'Test override proposal from client',
+          thought: 'Test override proposal from client (ALLOW_AGENT_TEST_OVERRIDE active)',
           proposal: body.overrideProposal,
-          plannerMode: 'FALLBACK_DETERMINISTIC',
-          plannerModel: 'test-override',
+          plannerMode: 'CLIENT_OVERRIDE',
+          plannerModel: 'client-test-override',
           promptVersion: 'v1.0',
           isDone: false,
         };
@@ -150,6 +168,11 @@ export async function POST(req: NextRequest) {
         }
 
         // Construct live validation context from DB
+        const allowlistEnv = process.env.TREASURY_ALLOWLIST;
+        const treasuryAllowlist = allowlistEnv
+          ? allowlistEnv.split(',').map((s) => s.trim()).filter(Boolean)
+          : [currentMission.ownerAddress];
+
         const validationCtx: ValidationContext = {
           tokenClaims: claims,
           systemPaused: systemState?.systemPaused ?? false,
@@ -168,6 +191,7 @@ export async function POST(req: NextRequest) {
             treasuryCap: BigInt(currentMission.treasuryCap.toString()),
             configVersion: currentMission.configVersion,
           },
+          treasuryAllowlist,
         };
 
         // Strict code-level policy validation (Finding AG-01)
@@ -216,10 +240,51 @@ export async function POST(req: NextRequest) {
         }
 
         if (verdict.outcome === 'QUEUE') {
+          // AG-05: Record treasury queue request in DB and audit ledger
+          const operationId = randomUUID();
+          if (proposal.kind === 'treasury_payout') {
+            const requestHash =
+              '0x' + createHash('sha256').update(JSON.stringify(proposal)).digest('hex');
+
+            await prisma.treasuryRequest.create({
+              data: {
+                operationId,
+                missionSlug: currentMission.slug,
+                requestHash,
+                state: 'QUEUED',
+                chainId: claims.chainId || 43113,
+                guardAddress: systemState?.guardAddress || 'none',
+              },
+            });
+
+            await withLockOrder(
+              async (tx) => {
+                await appendAuditEntry(tx, {
+                  actor: claims.sub,
+                  amount: proposal.amount_atomic,
+                  chain_id: claims.chainId.toString(),
+                  kind: 'QUEUED',
+                  mission_id: currentMission.slug,
+                  operation_id: operationId,
+                  policy_hash: currentMission.policyHash,
+                  policy_version: currentMission.configVersion.toString(),
+                  reason: `[QUEUED:${verdict.rule}] ${verdict.reason || proposal.reason}`,
+                  result_hash: requestHash,
+                  rule: verdict.rule || 'RULE_QUEUE',
+                  source_key: `queued:${currentMission.slug}:${turn}:${operationId}`,
+                  to: proposal.to,
+                  tx_hash: '',
+                });
+              },
+              { missionSlug: currentMission.slug, lockAuditHead: true }
+            );
+          }
+
           stepLogs.push({
             turn,
             thought: plan.thought,
             action: 'PROPOSAL_QUEUED',
+            operationId,
             toolId: (proposal as any).tool_id || proposal.kind,
             amountAtomic: proposal.amount_atomic,
             reason: proposal.reason,
@@ -231,7 +296,66 @@ export async function POST(req: NextRequest) {
           break;
         }
 
-        // verdict.outcome === 'PASS': Execute via real payment rail (Finding AG-01)
+        // AG-05: Separate branches for treasury_payout vs tool_purchase
+        if (proposal.kind === 'treasury_payout') {
+          // In S2, small payouts within per-tx cap pass validator.
+          // The agent loop NEVER automatically executes payout; it creates a TreasuryRequest and terminates.
+          const operationId = randomUUID();
+          const requestHash =
+            '0x' + createHash('sha256').update(JSON.stringify(proposal)).digest('hex');
+
+          await prisma.treasuryRequest.create({
+            data: {
+              operationId,
+              missionSlug: currentMission.slug,
+              requestHash,
+              state: 'CREATED',
+              chainId: claims.chainId || 43113,
+              guardAddress: systemState?.guardAddress || 'none',
+            },
+          });
+
+          await withLockOrder(
+            async (tx) => {
+              await appendAuditEntry(tx, {
+                actor: claims.sub,
+                amount: proposal.amount_atomic,
+                chain_id: claims.chainId.toString(),
+                kind: 'PROPOSED',
+                mission_id: currentMission.slug,
+                operation_id: operationId,
+                policy_hash: currentMission.policyHash,
+                policy_version: currentMission.configVersion.toString(),
+                reason: proposal.reason,
+                result_hash: requestHash,
+                rule: 'TREASURY_PROPOSED',
+                source_key: `treasury:${currentMission.slug}:${turn}:${operationId}`,
+                to: proposal.to,
+                tx_hash: '',
+              });
+            },
+            { missionSlug: currentMission.slug, lockAuditHead: true }
+          );
+
+          stepLogs.push({
+            turn,
+            thought: plan.thought,
+            action: 'TREASURY_PROPOSED',
+            operationId,
+            to: proposal.to,
+            amountAtomic: proposal.amount_atomic,
+            reason: proposal.reason,
+            verdict,
+            plannerMode: plan.plannerMode,
+            plannerModel: plan.plannerModel,
+            promptVersion: plan.promptVersion,
+          });
+
+          // Terminate loop — agent does not auto-disburse treasury funds
+          break;
+        }
+
+        // verdict.outcome === 'PASS' for tool_purchase: Execute via real payment rail (Finding AG-01)
         const tp = proposal as ToolPurchaseProposal;
         const operationId = randomUUID();
 
@@ -355,8 +479,10 @@ export async function POST(req: NextRequest) {
       promptVersion: 'v1.0',
     });
   } catch (err: any) {
+    // AG-07: General error code, internal details logged to server only
+    console.error('[AGENT_RUN_ERROR]', err);
     return NextResponse.json(
-      { error: err.message || 'Agent run execution failed' },
+      { error: 'Internal agent execution error' },
       { status: 500 }
     );
   }

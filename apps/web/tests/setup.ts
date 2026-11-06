@@ -79,7 +79,16 @@ export async function createTestMission(params?: {
   treasuryCap?: bigint;
   durationSeconds?: number;
   status?: string;
+  stage?: 'S1' | 'S2';
 }) {
+  const stage = params?.stage || 'S1';
+  if (stage === 'S2') {
+    await prisma.systemState.update({
+      where: { id: 1 },
+      data: { stage: 'S2' },
+    });
+  }
+
   const slug = params?.slug || `test-mission-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const missionId = hashUtf8(slug);
   const toolCap = params?.toolCap || 5_000_000n;
@@ -107,7 +116,7 @@ export async function createTestMission(params?: {
 
   const spendToken = await issueSpendToken({
     deploymentId: 'unihack-test-deployment',
-    stage: 'S1',
+    stage,
     authVersion: 1,
     missionSlug: mission.slug,
     missionId: mission.missionId,

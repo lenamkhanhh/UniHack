@@ -21,3 +21,5 @@ contracts/broadcast/
 test-results/
 playwright-report/
 apps/web/playwright-report/
+
+*.tsbuildinfo

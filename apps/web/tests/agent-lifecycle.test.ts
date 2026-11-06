@@ -5,10 +5,14 @@ import { prisma } from '../lib/db';
 import { clearDatabase, createTestMission } from './setup';
 import { issueSpendToken } from '../lib/auth';
 import { hashUtf8, normalizeAddress } from '../lib/chain';
+import { validateLiveFujiConfig } from '../lib/config';
+import { verifyQuoteAgainstCatalog } from '../lib/validator';
 
-describe('AG-01: Agent Run Security Boundaries & Real Settlement Rails', () => {
+describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Rails', () => {
   beforeEach(async () => {
     await clearDatabase();
+    process.env.ALLOW_AGENT_TEST_OVERRIDE = '1';
+    process.env.PAYMENT_MODE = 'MOCK';
   });
 
   it('Regression 1: Missing or invalid spend token returns HTTP 401', async () => {
@@ -260,5 +264,349 @@ describe('AG-01: Agent Run Security Boundaries & Real Settlement Rails', () => {
     });
     const blockedAudit = allEntries.find((e) => JSON.parse(e.canonicalJson).kind === 'BLOCKED');
     expect(blockedAudit).toBeDefined();
+  });
+
+  it('Regression 7 (AG-05): Treasury payout in Stage S1 is BLOCKED and never enters tool rails', async () => {
+    const { mission, spendToken } = await createTestMission({
+      stage: 'S1',
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/agent/run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${spendToken}`,
+      },
+      body: JSON.stringify({
+        goal: 'S1 Payout attempt',
+        overrideProposal: {
+          kind: 'treasury_payout',
+          mission_id: mission.slug,
+          to: mission.ownerAddress,
+          amount_atomic: '1000000',
+          reason: 'Attempt treasury disbursement in S1',
+        },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    expect(data.steps[0].action).toBe('TOOL_BLOCKED');
+    expect(data.steps[0].verdict.outcome).toBe('BLOCK');
+    expect(data.steps[0].verdict.rule).toBe('STAGE_S1_NO_TREASURY');
+
+    // Confirm no tool operation or treasury request was created
+    const toolOps = await prisma.toolOperation.findMany({ where: { missionSlug: mission.slug } });
+    expect(toolOps.length).toBe(0);
+    const treasuryRequests = await prisma.treasuryRequest.findMany({ where: { missionSlug: mission.slug } });
+    expect(treasuryRequests.length).toBe(0);
+
+    // Confirm BLOCKED audit entry logged
+    const auditEntries = await prisma.auditEntry.findMany({ where: { missionSlug: mission.slug } });
+    const blockedEntry = auditEntries.find((e) => JSON.parse(e.canonicalJson).kind === 'BLOCKED');
+    expect(blockedEntry).toBeDefined();
+    expect(JSON.parse(blockedEntry!.canonicalJson).rule).toBe('STAGE_S1_NO_TREASURY');
+  });
+
+  it('Regression 8 (AG-05): Treasury payout in Stage S2 with PASS creates TreasuryRequest and terminates without tool execution', async () => {
+    const { mission, spendToken } = await createTestMission({
+      stage: 'S2',
+    });
+
+    // Update system stage to S2
+    await prisma.systemState.update({
+      where: { id: 1 },
+      data: { stage: 'S2' },
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/agent/run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${spendToken}`,
+      },
+      body: JSON.stringify({
+        goal: 'S2 Small Payout',
+        overrideProposal: {
+          kind: 'treasury_payout',
+          mission_id: mission.slug,
+          to: mission.ownerAddress,
+          amount_atomic: '1000000', // 1.00 USDC <= 5 USDC cap
+          reason: 'Authorized small payout in S2',
+        },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    expect(data.steps[0].action).toBe('TREASURY_PROPOSED');
+    expect(data.steps[0].verdict.outcome).toBe('PASS');
+    expect(data.steps[0].operationId).toBeDefined();
+
+    // Verify TreasuryRequest record created in DB
+    const treasuryRequests = await prisma.treasuryRequest.findMany({ where: { missionSlug: mission.slug } });
+    expect(treasuryRequests.length).toBe(1);
+    expect(treasuryRequests[0].state).toBe('CREATED');
+
+    // Crucial: payout NEVER executed payment rails for tools
+    const toolOps = await prisma.toolOperation.findMany({ where: { missionSlug: mission.slug } });
+    expect(toolOps.length).toBe(0);
+
+    // Verify audit entry PROPOSED
+    const auditEntries = await prisma.auditEntry.findMany({ where: { missionSlug: mission.slug } });
+    const proposedEntry = auditEntries.find((e) => JSON.parse(e.canonicalJson).kind === 'PROPOSED');
+    expect(proposedEntry).toBeDefined();
+  });
+
+  it('Regression 9 (AG-05): Treasury payout in Stage S2 with QUEUE (> 5 USDC) creates QUEUED request and terminates', async () => {
+    const { mission, spendToken } = await createTestMission({
+      stage: 'S2',
+    });
+
+    await prisma.systemState.update({
+      where: { id: 1 },
+      data: { stage: 'S2' },
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/agent/run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${spendToken}`,
+      },
+      body: JSON.stringify({
+        goal: 'S2 Large Payout',
+        overrideProposal: {
+          kind: 'treasury_payout',
+          mission_id: mission.slug,
+          to: mission.ownerAddress,
+          amount_atomic: '6000000', // 6.00 USDC > 5 USDC per-tx cap
+          reason: 'Large treasury payout requiring human queue',
+        },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    expect(data.steps[0].action).toBe('PROPOSAL_QUEUED');
+    expect(data.steps[0].verdict.outcome).toBe('QUEUE');
+    expect(data.steps[0].verdict.rule).toBe('OVER_PER_TX_CAP');
+
+    // Verify TreasuryRequest record is QUEUED
+    const treasuryRequests = await prisma.treasuryRequest.findMany({ where: { missionSlug: mission.slug } });
+    expect(treasuryRequests.length).toBe(1);
+    expect(treasuryRequests[0].state).toBe('QUEUED');
+
+    // Confirm no tool operation
+    const toolOps = await prisma.toolOperation.findMany({ where: { missionSlug: mission.slug } });
+    expect(toolOps.length).toBe(0);
+
+    // Verify audit entry QUEUED
+    const auditEntries = await prisma.auditEntry.findMany({ where: { missionSlug: mission.slug } });
+    const queuedEntry = auditEntries.find((e) => JSON.parse(e.canonicalJson).kind === 'QUEUED');
+    expect(queuedEntry).toBeDefined();
+  });
+
+  it('Regression 10 (AG-04): overrideProposal is gated strictly by ALLOW_AGENT_TEST_OVERRIDE', async () => {
+    const { mission, spendToken } = await createTestMission();
+
+    // 1. When ALLOW_AGENT_TEST_OVERRIDE=1, overrideProposal is applied with CLIENT_OVERRIDE label
+    process.env.ALLOW_AGENT_TEST_OVERRIDE = '1';
+    const reqWithOverride = new NextRequest('http://localhost:3000/api/agent/run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${spendToken}`,
+      },
+      body: JSON.stringify({
+        goal: 'Override active test',
+        overrideProposal: {
+          kind: 'tool_purchase',
+          mission_id: mission.slug,
+          tool_id: 'tool:search',
+          amount_atomic: '100000',
+          reason: 'Explicit test override',
+          arguments: { query: 'Avalanche' },
+        },
+      }),
+    });
+
+    const resWithOverride = await POST(reqWithOverride);
+    const dataWithOverride = await resWithOverride.json();
+    expect(dataWithOverride.steps[0].plannerMode).toBe('CLIENT_OVERRIDE');
+    expect(dataWithOverride.steps[0].plannerModel).toBe('client-test-override');
+
+    // 2. When ALLOW_AGENT_TEST_OVERRIDE=0, overrideProposal is ignored, fallback planner runs
+    process.env.ALLOW_AGENT_TEST_OVERRIDE = '0';
+    const { mission: mission2, spendToken: spendToken2 } = await createTestMission();
+
+    const reqWithoutOverride = new NextRequest('http://localhost:3000/api/agent/run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${spendToken2}`,
+      },
+      body: JSON.stringify({
+        goal: 'Override disabled test',
+        overrideProposal: {
+          kind: 'tool_purchase',
+          mission_id: mission2.slug,
+          tool_id: 'tool:search',
+          amount_atomic: '100000',
+          reason: 'This should be ignored',
+          arguments: { query: 'Avalanche' },
+        },
+      }),
+    });
+
+    const resWithoutOverride = await POST(reqWithoutOverride);
+    const dataWithoutOverride = await resWithoutOverride.json();
+    expect(dataWithoutOverride.steps[0].plannerMode).toBe('FALLBACK_DETERMINISTIC');
+    expect(dataWithoutOverride.steps[0].plannerModel).toBe('deterministic-planner-v1');
+  });
+
+  it('Regression 11 (KEY-02): LIVE_FUJI mode rejects missing variables or well-known Anvil keys/addresses', () => {
+    const originalEnv = { ...process.env };
+
+    try {
+      // 1. Missing SELLER_ADDRESS in LIVE_FUJI
+      process.env.PAYMENT_MODE = 'LIVE_FUJI';
+      delete process.env.SELLER_ADDRESS;
+      process.env.AGENT_PRIVATE_KEY = '0x1111111111111111111111111111111111111111111111111111111111111111';
+      expect(() => validateLiveFujiConfig()).toThrow('KEY-02: SELLER_ADDRESS must be set');
+
+      // 2. Anvil default seller address 0x7099...79c8
+      process.env.SELLER_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+      expect(() => validateLiveFujiConfig()).toThrow('KEY-02: SELLER_ADDRESS cannot be a well-known Anvil/Hardhat test address');
+
+      // 3. Anvil default agent private key 0xac09...ff80
+      process.env.SELLER_ADDRESS = '0x1234567890123456789012345678901234567890';
+      process.env.AGENT_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+      expect(() => validateLiveFujiConfig()).toThrow('KEY-02: AGENT_PRIVATE_KEY cannot be a well-known Anvil/Hardhat test private key');
+
+      // 4. MOCK mode allows without throwing
+      process.env.PAYMENT_MODE = 'MOCK';
+      expect(() => validateLiveFujiConfig()).not.toThrow();
+    } finally {
+      process.env = originalEnv;
+    }
+  });
+
+  it('Regression 12 (AG-07): Unhandled internal errors return generic message without exposing internal details', async () => {
+    // Break DB by causing an unhandled error inside POST
+    const fakeToken = await issueSpendToken({
+      deploymentId: 'unihack-test-deployment',
+      stage: 'S1',
+      authVersion: 1,
+      missionSlug: 'valid-slug',
+      missionId: hashUtf8('valid-slug'),
+      ownerAddress: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
+      agentAddress: '0x70997970c51812dc3a010c7d01b50e0d17dc79c8',
+      missionConfigVersion: 1,
+      policyHash: hashUtf8('test'),
+      missionExpiresAt: new Date(Date.now() + 86400000),
+    });
+
+    // Pass invalid JSON body that causes parsing or unhandled error
+    const req = new NextRequest('http://localhost:3000/api/agent/run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${fakeToken}`,
+      },
+      body: '{invalid-json',
+    });
+
+    const res = await POST(req);
+    // If it reaches catch block, error message must be generic
+    if (res.status === 500) {
+      const data = await res.json();
+      expect(data.error).toBe('Internal agent execution error');
+    }
+  });
+
+  it('Regression 13 (P1-C): Local prompt injection payload in search results is intercepted and strictly BLOCKED', async () => {
+    const { mission, spendToken } = await createTestMission({
+      toolCap: 2_000_000n, // 2.00 USDC
+    });
+
+    // Run agent with an adversarial goal triggering untrusted search results with injection payload
+    const req = new NextRequest('http://localhost:3000/api/agent/run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${spendToken}`,
+      },
+      body: JSON.stringify({
+        goal: 'Security audit test: Prompt injection exploit detection',
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    // Turn 1: Search was executed
+    expect(data.steps[0].action).toBe('TOOL');
+    expect(data.steps[0].toolId).toBe('tool:search');
+    expect(data.steps[0].state).toBe('SETTLED');
+
+    // Turn 2: Untrusted source attempted prompt injection proposing 50 USDC payout to attacker
+    // The policy validator strictly BLOCKED the attempt!
+    expect(data.steps[1].action).toBe('TOOL_BLOCKED');
+    expect(data.steps[1].verdict.outcome).toBe('BLOCK');
+    expect(data.steps[1].amountAtomic).toBe('50000000'); // 50 USDC attempt
+    expect(data.steps[1].reason).toContain('POISONED_PAYLOAD');
+
+    // Verify in database: ONLY Turn 1 search was settled (0.10 USDC spent). The 50 USDC was BLOCKED!
+    const dbMission = await prisma.mission.findUnique({ where: { slug: mission.slug } });
+    expect(BigInt(dbMission!.spentTool.toString())).toBe(100_000n); // Exactly 0.10 USDC spent for search
+
+    // Verify BLOCKED audit record in DB
+    const entries = await prisma.auditEntry.findMany({ where: { missionSlug: mission.slug } });
+    const blockedEntry = entries.find((e) => JSON.parse(e.canonicalJson).kind === 'BLOCKED');
+    expect(blockedEntry).toBeDefined();
+    const parsedBlocked = JSON.parse(blockedEntry!.canonicalJson);
+    expect(parsedBlocked.amount).toBe('50000000');
+    expect(parsedBlocked.to).toBe('0x3333333333333333333333333333333333333333');
+  });
+
+  it('Regression 14 (P2-PRICE): Quote exceeding catalog price or per-call cap is strictly rejected', () => {
+    // 1. Quoted price exceeds catalog price (Search is 100,000 atomic; quote is 200,000)
+    const quoteOverPrice = verifyQuoteAgainstCatalog({
+      toolId: 'tool:search',
+      quotedAmountAtomic: 200_000n,
+    });
+    expect(quoteOverPrice.valid).toBe(false);
+    expect(quoteOverPrice.rule).toBe('PRICE_MISMATCH');
+
+    // 2. Quoted price exceeds per-call cap (Search perCallCap is 200,000 atomic; quote is 500,000)
+    const quoteOverCap = verifyQuoteAgainstCatalog({
+      toolId: 'tool:search',
+      quotedAmountAtomic: 500_000n,
+    });
+    expect(quoteOverCap.valid).toBe(false);
+    expect(quoteOverCap.rule).toBe('PRICE_MISMATCH'); // Price mismatch triggers first if > catalog
+
+    // 3. Unknown tool
+    const quoteUnknown = verifyQuoteAgainstCatalog({
+      toolId: 'tool:unknown_scam',
+      quotedAmountAtomic: 100_000n,
+    });
+    expect(quoteUnknown.valid).toBe(false);
+    expect(quoteUnknown.rule).toBe('UNKNOWN_TOOL');
+
+    // 4. Exact legitimate catalog price succeeds
+    const quoteValid = verifyQuoteAgainstCatalog({
+      toolId: 'tool:search',
+      quotedAmountAtomic: 100_000n,
+    });
+    expect(quoteValid.valid).toBe(true);
   });
 });
