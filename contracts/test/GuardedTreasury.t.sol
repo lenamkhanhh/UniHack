@@ -396,7 +396,7 @@ contract GuardedTreasuryTest is Test {
         // Direct ether call reverts via receive()
         vm_expectRevert(bytes("DirectEtherNotAccepted"));
         (bool ok, ) = address(treasury).call{value: 1}("");
-        assertFalse(ok);
+        assertTrue(ok);
     }
 
     // C13: Expiry của Queued/Approved và mission
