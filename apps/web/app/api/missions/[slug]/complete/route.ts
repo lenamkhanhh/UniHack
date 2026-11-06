@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma, withLockOrder } from '@/lib/db';
 import { verifyAndConsumeChallenge, ChallengeError } from '@/lib/challenges';
 import { appendAuditEntry } from '@/lib/audit';
+import { encodeFunctionData, parseAbiItem } from 'viem';
+import { verifyAnchorReceiptOnFuji } from '@/lib/fuji-receipts';
+
+const anchorMissionProofAbi = parseAbiItem(
+  'function anchorMissionProof(bytes32 missionId, bytes32 headHash) external'
+);
 
 export async function POST(
   req: NextRequest,
@@ -50,7 +56,7 @@ export async function POST(
           appOrigin,
         });
 
-        // P1-WIRE: In Stage S2, wire proof anchoring into completion lifecycle
+        // WIRE-01: In Stage S2, wire proof anchoring into completion lifecycle
         if (challengeResult.state.stage === 'S2') {
           const latestEntry = await tx.auditEntry.findFirst({
             where: { missionSlug: slug },
@@ -58,30 +64,98 @@ export async function POST(
           });
 
           const headHash = latestEntry?.entryHash || deliverableHash;
-          anchoredProofInfo = {
-            headHash,
-            missionId: mission.missionId,
-            mode: challengeResult.state.paymentMode,
-            txHash: null, // Honest null in MOCK mode (ERC-02)
-            anchored: true,
+          const guardedTreasuryAddress = (challengeResult.state.guardAddress ||
+            process.env.GUARDED_TREASURY_ADDRESS ||
+            '0x0000000000000000000000000000000000000000') as `0x${string}`;
+
+          const missionIdBytes32 = (
+            mission.missionId.startsWith('0x')
+              ? mission.missionId.padEnd(66, '0')
+              : `0x${mission.missionId}`.padEnd(66, '0')
+          ) as `0x${string}`;
+
+          const headHashBytes32 = (
+            headHash.startsWith('0x')
+              ? headHash.padEnd(66, '0')
+              : `0x${headHash}`.padEnd(66, '0')
+          ) as `0x${string}`;
+
+          const anchorCalldata = encodeFunctionData({
+            abi: [anchorMissionProofAbi],
+            functionName: 'anchorMissionProof',
+            args: [missionIdBytes32, headHashBytes32],
+          });
+
+          const unsignedTx = {
+            to: guardedTreasuryAddress,
+            data: anchorCalldata,
+            value: '0',
+            chainId: 43113,
           };
 
-          await appendAuditEntry(tx, {
-            actor: mission.ownerAddress,
-            amount: '0',
-            chain_id: '43113',
-            kind: 'PROOF_ANCHORED',
-            mission_id: mission.slug,
-            operation_id: '',
-            policy_hash: mission.policyHash,
-            policy_version: '1',
-            reason: 'Anchor proof headHash to GuardedTreasury',
-            result_hash: '',
-            rule: 'STAGE_S2_PROOF_ANCHOR',
-            source_key: `anchor:${mission.slug}:${nonce}`,
-            to: challengeResult.state.guardAddress || '',
-            tx_hash: '',
-          });
+          const anchorTxHash = payload.anchorTxHash || (body as any).anchorTxHash;
+
+          if (challengeResult.state.paymentMode === 'LIVE_FUJI') {
+            if (anchorTxHash) {
+              const verification = await verifyAnchorReceiptOnFuji({
+                txHash: anchorTxHash,
+                missionId: mission.missionId,
+                expectedHeadHash: headHash,
+                treasuryAddress: guardedTreasuryAddress,
+              });
+
+              if (!verification.valid) {
+                throw new ChallengeError(`On-chain anchor verification failed: ${verification.error}`, 400);
+              }
+
+              await appendAuditEntry(tx, {
+                actor: mission.ownerAddress,
+                amount: '0',
+                chain_id: '43113',
+                kind: 'PROOF_ANCHORED',
+                mission_id: mission.slug,
+                operation_id: '',
+                policy_hash: mission.policyHash,
+                policy_version: '1',
+                reason: 'Anchor proof headHash to GuardedTreasury',
+                result_hash: '',
+                rule: 'STAGE_S2_PROOF_ANCHOR',
+                source_key: `anchor:${mission.slug}:${anchorTxHash}`,
+                to: guardedTreasuryAddress,
+                tx_hash: anchorTxHash,
+              });
+
+              anchoredProofInfo = {
+                headHash,
+                missionId: mission.missionId,
+                mode: 'LIVE_FUJI',
+                txHash: anchorTxHash,
+                anchored: true,
+                status: 'ANCHORED',
+              };
+            } else {
+              anchoredProofInfo = {
+                headHash,
+                missionId: mission.missionId,
+                mode: 'LIVE_FUJI',
+                txHash: null,
+                anchored: false,
+                status: 'PENDING_ONCHAIN_ANCHOR',
+                unsignedTx,
+              };
+            }
+          } else {
+            // MOCK mode: Do not write false on-chain events to audit ledger
+            anchoredProofInfo = {
+              headHash,
+              missionId: mission.missionId,
+              mode: 'MOCK',
+              txHash: null,
+              anchored: false,
+              status: 'ANCHOR_MOCK_NOT_SENT',
+              unsignedTx,
+            };
+          }
         }
 
         return await tx.mission.update({

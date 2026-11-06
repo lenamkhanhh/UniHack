@@ -187,7 +187,8 @@ export async function POST(req: NextRequest) {
     if (
       err.message === 'SYSTEM_PAUSED' ||
       err.message === 'AUTH_VERSION_MISMATCH' ||
-      err.message === 'MISSION_NOT_ACTIVE_OR_EXPIRED'
+      err.message === 'MISSION_NOT_ACTIVE_OR_EXPIRED' ||
+      err.message === 'SESSION_WALLET_NOT_FUNDED_ON_CHAIN'
     ) {
       return NextResponse.json({ error: err.message }, { status: 403 });
     }

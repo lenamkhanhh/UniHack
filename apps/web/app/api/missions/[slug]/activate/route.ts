@@ -4,6 +4,12 @@ import { issueSpendToken } from '@/lib/auth';
 import { verifyAndConsumeChallenge, ChallengeError } from '@/lib/challenges';
 import { getSessionWalletForMission } from '@/lib/session-wallets';
 import { appendAuditEntry } from '@/lib/audit';
+import { encodeFunctionData, parseAbiItem } from 'viem';
+import { verifyFundingReceiptOnFuji } from '@/lib/fuji-receipts';
+
+const fundMissionWalletAbi = parseAbiItem(
+  'function fundMissionWallet(bytes32 missionId, address wallet, uint256 amount) external'
+);
 
 export async function POST(
   req: NextRequest,
@@ -52,33 +58,99 @@ export async function POST(
         appOrigin,
       });
 
-      // P1-WIRE: In Stage S2, wire session wallet funding into activation lifecycle
+      // WIRE-01: In Stage S2, wire session wallet funding into activation lifecycle
       if (res.state.stage === 'S2') {
         const sessionWallet = getSessionWalletForMission(mission.slug);
-        sessionWalletInfo = {
-          address: sessionWallet.address,
-          toolCap: mission.toolCap.toString(),
-          funded: true,
-          mode: res.state.paymentMode,
-          txHash: null, // Honest null in MOCK mode (ERC-02 / SW-01)
+        const guardedTreasuryAddress = (process.env.GUARDED_TREASURY_ADDRESS ||
+          '0x0000000000000000000000000000000000000000') as `0x${string}`;
+
+        const missionIdBytes32 = (
+          mission.missionId.startsWith('0x')
+            ? mission.missionId.padEnd(66, '0')
+            : `0x${mission.missionId}`.padEnd(66, '0')
+        ) as `0x${string}`;
+
+        const fundCalldata = encodeFunctionData({
+          abi: [fundMissionWalletAbi],
+          functionName: 'fundMissionWallet',
+          args: [
+            missionIdBytes32,
+            sessionWallet.address as `0x${string}`,
+            BigInt(mission.toolCap.toString()),
+          ],
+        });
+
+        const unsignedTx = {
+          to: guardedTreasuryAddress,
+          data: fundCalldata,
+          value: '0',
+          chainId: 43113,
         };
 
-        await appendAuditEntry(tx, {
-          actor: mission.ownerAddress,
-          amount: mission.toolCap.toString(),
-          chain_id: '43113',
-          kind: 'SESSION_WALLET_FUNDED',
-          mission_id: mission.slug,
-          operation_id: '',
-          policy_hash: mission.policyHash,
-          policy_version: '1',
-          reason: 'Fund on-chain session wallet with mission toolCap',
-          result_hash: '',
-          rule: 'STAGE_S2_SESSION_WALLET_FUNDED',
-          source_key: `fund:${mission.slug}:${nonce}`,
-          to: sessionWallet.address,
-          tx_hash: '',
-        });
+        const fundingTxHash = payload.fundingTxHash || (body as any).fundingTxHash;
+
+        if (res.state.paymentMode === 'LIVE_FUJI') {
+          if (fundingTxHash) {
+            const verification = await verifyFundingReceiptOnFuji({
+              txHash: fundingTxHash,
+              missionId: mission.missionId,
+              sessionWallet: sessionWallet.address,
+              expectedAmount: BigInt(mission.toolCap.toString()),
+              treasuryAddress: guardedTreasuryAddress,
+            });
+
+            if (!verification.valid) {
+              throw new ChallengeError(`On-chain funding verification failed: ${verification.error}`, 400);
+            }
+
+            await appendAuditEntry(tx, {
+              actor: mission.ownerAddress,
+              amount: mission.toolCap.toString(),
+              chain_id: '43113',
+              kind: 'SESSION_WALLET_FUNDED',
+              mission_id: mission.slug,
+              operation_id: '',
+              policy_hash: mission.policyHash,
+              policy_version: '1',
+              reason: 'Fund on-chain session wallet with mission toolCap',
+              result_hash: '',
+              rule: 'STAGE_S2_SESSION_WALLET_FUNDED',
+              source_key: `fund:${mission.slug}:${fundingTxHash}`,
+              to: sessionWallet.address,
+              tx_hash: fundingTxHash,
+            });
+
+            sessionWalletInfo = {
+              address: sessionWallet.address,
+              toolCap: mission.toolCap.toString(),
+              funded: true,
+              mode: 'LIVE_FUJI',
+              txHash: fundingTxHash,
+              status: 'FUNDED',
+            };
+          } else {
+            sessionWalletInfo = {
+              address: sessionWallet.address,
+              toolCap: mission.toolCap.toString(),
+              funded: false,
+              mode: 'LIVE_FUJI',
+              txHash: null,
+              status: 'PENDING_ONCHAIN_FUNDING',
+              unsignedTx,
+            };
+          }
+        } else {
+          // MOCK mode: Do not write false on-chain events to audit ledger
+          sessionWalletInfo = {
+            address: sessionWallet.address,
+            toolCap: mission.toolCap.toString(),
+            funded: false,
+            mode: 'MOCK',
+            txHash: null,
+            status: 'FUNDING_MOCK_NOT_SENT',
+            unsignedTx,
+          };
+        }
       }
 
       return res;

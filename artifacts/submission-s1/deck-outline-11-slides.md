@@ -33,7 +33,7 @@
 - **The MissionPay Solution**:
   - Alex creates a **Mission**: specifies the goal, a **10.00 USDC Treasury Cap**, and a **5.00 USDC Tool Cap**, signing once with MetaMask.
   - The agent receives an isolated, gasless **Session Wallet** locked on Avalanche to exactly 5.00 USDC.
-  - Even if the agent is hijacked by an adversarial injection, the loss is mathematically bounded on-chain to $5.00, and Alex receives a tamper-evident audit receipt.
+  - By architectural design, even if the agent is hijacked by an adversarial injection, the loss is mathematically bounded on-chain to the allocated toolCap (e.g. $5.00 USDC, PENDING_FUJI live broadcast), and Alex receives a tamper-evident audit receipt.
 
 ---
 
@@ -55,21 +55,21 @@
                                          [ERC-8004 Reputation Registry Feedback]
 ```
 - **Dual Budget Separation**: Tool budget (micropayments via EIP-3009) vs. Treasury budget (settlement milestones).
-- **Session Wallets**: Derived via HKDF-SHA256 with isolated seed per mission, funded on-chain.
-- **Verifiable Proof**: Hash-chained audit ledger, anchored permanently into Avalanche Fuji smart contracts.
+- **Session Wallets**: Derived via HKDF-SHA256 with isolated seed per mission, designed to be funded on-chain by owner transaction (`fundMissionWallet`, PENDING_FUJI).
+- **Verifiable Proof**: Hash-chained audit ledger, anchored permanently into Avalanche Fuji smart contracts (PENDING_FUJI).
 
 ---
 
 ## Slide 5: Vertical Workflow Walkthrough
 1. **Mission Initialization**: Owner defines scope, sets hard caps, and signs EIP-191 activation challenge.
-2. **On-Chain Budget Funding**: `GuardedTreasury.fundMissionWallet` transfers tool budget directly to the mission's session wallet on Avalanche Fuji.
+2. **On-Chain Budget Funding**: Owner signs and submits `GuardedTreasury.fundMissionWallet` to transfer tool budget directly to the mission's session wallet on Avalanche Fuji (PENDING_FUJI live broadcast).
 3. **Autonomous Execution**:
    - Agent performs live web research (`tool:search`).
    - Agent calls continuous resource metering (`tool:talkmeter` @ $0.05/min with strict anti-premature-tick validation).
    - Agent requests deep summarization (`tool:summary`).
 4. **Idempotent x402 Settlement**: EIP-3009 signed authorizations settled gaslessly via Ultravioleta / PayAI facilitators.
-5. **Mission Completion & Anchoring**: Agent computes deliverable hash; backend anchors `auditHeadHash` to `GuardedTreasury.sol` via `anchorMissionProof`.
-6. **Reputation Feedback**: Mission owner calls official Fuji ERC-8004 `ReputationRegistry.giveFeedback` (8-argument ABI).
+5. **Mission Completion & Anchoring**: Agent computes deliverable hash; owner anchors `auditHeadHash` to `GuardedTreasury.sol` via MetaMask (`anchorMissionProof`, PENDING_FUJI live broadcast).
+6. **Reputation Feedback**: Mission owner calls official Fuji ERC-8004 `ReputationRegistry.giveFeedback` (8-argument ABI, PENDING_FUJI live broadcast).
 
 ---
 
@@ -92,7 +92,7 @@
   - Uses native EIP-3009 `receiveWithAuthorization` & `transferWithAuthorization`.
   - Facilitators (Ultravioleta / PayAI) pay gas, eliminating AVAX onboarding friction for AI agents.
 - **2. GuardedTreasury.sol (Fuji Contract)**:
-  - Deployed & verified on Avalanche Fuji C-Chain.
+  - Contract implementation verified by 31/31 Foundry tests; testnet deployment & Snowtrace verification: `PENDING_FUJI`.
   - Multi-tier caps: Per-transaction cap, UTC-reset daily cap, mission lifetime cap.
   - Gasless sweep via EIP-3009 authorization (contract owner pays gas to reclaim unspent funds).
   - Proof anchoring: Emits `MissionProofAnchored(bytes32 missionId, bytes32 headHash)`.

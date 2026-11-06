@@ -54,6 +54,24 @@ export interface ActionPayloadMap {
     slug: string;
     publicPublished: boolean;
   };
+  SUBMIT_FEEDBACK: {
+    operationId: string;
+    score?: number;
+    tag1?: string;
+    tag2?: string;
+    txHash?: string;
+    targetMissionSlug?: string;
+  };
+  CONFIRM_FUNDING: {
+    slug: string;
+    txHash: string;
+    targetMissionSlug?: string;
+  };
+  CONFIRM_ANCHOR: {
+    slug: string;
+    txHash: string;
+    targetMissionSlug?: string;
+  };
 }
 
 export type ActionType = keyof ActionPayloadMap;

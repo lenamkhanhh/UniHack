@@ -265,6 +265,33 @@ export async function reserveOperation(params: {
         throw new Error('MISSION_CONFIG_VERSION_MISMATCH');
       }
 
+      // WIRE-01: In Stage S2 LIVE mode, agent cannot spend until session wallet has been confirmed funded on Fuji
+      if (
+        (params.tokenClaims.stage === 'S2' || state.stage === 'S2') &&
+        (getPaymentMode() === 'LIVE_FUJI' || (op as any).paymentMode === 'LIVE_FUJI')
+      ) {
+        const auditEntries = await tx.auditEntry.findMany({
+          where: { missionSlug: op.missionSlug },
+        });
+        const isFunded = auditEntries.some((e: any) => {
+          try {
+            const p = JSON.parse(e.canonicalJson);
+            return (
+              p.kind === 'SESSION_WALLET_FUNDED' &&
+              p.tx_hash &&
+              p.tx_hash.startsWith('0x') &&
+              p.tx_hash.length >= 64
+            );
+          } catch {
+            return false;
+          }
+        });
+
+        if (!isFunded) {
+          throw new Error('SESSION_WALLET_NOT_FUNDED_ON_CHAIN');
+        }
+      }
+
       const terms = JSON.parse(op.paymentTerms);
       const price = BigInt(terms.priceAtomic);
 
@@ -430,6 +457,30 @@ export async function signOperationAuthorization(params: {
         const sessionWallet = getSessionWalletForMission(op.missionSlug);
         effectivePrivateKey = sessionWallet.privateKey;
         effectivePayer = sessionWallet.address;
+
+        // WIRE-01: In Stage S2 LIVE mode, session wallet must be confirmed funded on Fuji before signing
+        if (mode === 'LIVE_FUJI') {
+          const auditEntries = await tx.auditEntry.findMany({
+            where: { missionSlug: op.missionSlug },
+          });
+          const isFunded = auditEntries.some((e: any) => {
+            try {
+              const p = JSON.parse(e.canonicalJson);
+              return (
+                p.kind === 'SESSION_WALLET_FUNDED' &&
+                p.tx_hash &&
+                p.tx_hash.startsWith('0x') &&
+                p.tx_hash.length >= 64
+              );
+            } catch {
+              return false;
+            }
+          });
+
+          if (!isFunded) {
+            throw new Error('SESSION_WALLET_NOT_FUNDED_ON_CHAIN');
+          }
+        }
       }
 
       let signature = 'mock_signature_for_testing';

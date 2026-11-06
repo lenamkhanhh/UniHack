@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { toFunctionSelector, encodeFunctionData } from 'viem';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { toFunctionSelector, encodeFunctionData, encodeEventTopics, encodeAbiParameters } from 'viem';
 import {
   submitErc8004Feedback,
   ERC8004_FUJI_IDENTITY_REGISTRY,
@@ -9,6 +9,15 @@ import {
 } from '../lib/erc8004';
 import { getSessionWalletForMission } from '../lib/session-wallets';
 import { validateLiveFujiConfig } from '../lib/config';
+import {
+  verifyFundingReceiptOnFuji,
+  verifyAnchorReceiptOnFuji,
+  verifyFeedbackReceiptOnFuji,
+  setReceiptFetcherForTesting,
+  missionFundedEventAbi,
+  missionProofAnchoredEventAbi,
+  feedbackGivenEventAbi,
+} from '../lib/fuji-receipts';
 
 describe('SW-01 & ERC-01/02: Security Invariants & Real ERC-8004 Verification Suite', () => {
   beforeEach(() => {
@@ -154,5 +163,219 @@ describe('SW-01 & ERC-01/02: Security Invariants & Real ERC-8004 Verification Su
     expect(resSuccess.txHash).toBeNull(); // Strictly null, NO fake hashes!
     expect(resSuccess.simulated).toBe(true);
     expect(resSuccess.calldata).toBeDefined();
+  });
+
+  // --- WIRE-01 & FB-01 On-Chain Verification Tests ---
+  describe('WIRE-01 & FB-01: On-Chain Receipt & Event Verification', () => {
+    const treasury = '0x5aAdFB43eF8dAF45DD80F4676345b7676f1D70e3';
+    const testMissionId = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
+    const testWallet = '0x976EA74026E726554dB657fA54763abd0C3a0aa9';
+    const testToolCap = 5_000_000n; // 5 USDC
+
+    afterEach(() => {
+      setReceiptFetcherForTesting(null);
+    });
+
+    it('WIRE-01: verifyFundingReceiptOnFuji validates matching MissionFunded events and rejects mismatches', async () => {
+      // 1. Success case
+      const topics = encodeEventTopics({
+        abi: [missionFundedEventAbi],
+        eventName: 'MissionFunded',
+        args: {
+          missionId: testMissionId as `0x${string}`,
+          wallet: testWallet as `0x${string}`,
+        },
+      });
+      const data = encodeAbiParameters([{ type: 'uint256', name: 'amount' }], [testToolCap]);
+
+      setReceiptFetcherForTesting(async () => ({
+        status: 'success',
+        to: treasury,
+        blockNumber: 123456n,
+        logs: [{ data, topics }],
+      }));
+
+      const res = await verifyFundingReceiptOnFuji({
+        txHash: '0xgoodfundedtx',
+        missionId: testMissionId,
+        sessionWallet: testWallet,
+        expectedAmount: testToolCap,
+        treasuryAddress: treasury,
+      });
+      expect(res.valid).toBe(true);
+      expect(res.blockNumber).toBe(123456n);
+
+      // 2. Reverted tx
+      setReceiptFetcherForTesting(async () => ({
+        status: 'reverted',
+        to: treasury,
+        logs: [],
+      }));
+      const resRev = await verifyFundingReceiptOnFuji({
+        txHash: '0xrevertedtx',
+        missionId: testMissionId,
+        sessionWallet: testWallet,
+        expectedAmount: testToolCap,
+        treasuryAddress: treasury,
+      });
+      expect(resRev.valid).toBe(false);
+      expect(resRev.error).toContain('reverted');
+
+      // 3. Amount less than expected tool cap
+      const shortData = encodeAbiParameters([{ type: 'uint256', name: 'amount' }], [testToolCap - 1n]);
+      setReceiptFetcherForTesting(async () => ({
+        status: 'success',
+        to: treasury,
+        logs: [{ data: shortData, topics }],
+      }));
+      const resShort = await verifyFundingReceiptOnFuji({
+        txHash: '0xshorttx',
+        missionId: testMissionId,
+        sessionWallet: testWallet,
+        expectedAmount: testToolCap,
+        treasuryAddress: treasury,
+      });
+      expect(resShort.valid).toBe(false);
+      expect(resShort.error).toContain('insufficient');
+
+      // 4. Wallet mismatch
+      const wrongWalletTopics = encodeEventTopics({
+        abi: [missionFundedEventAbi],
+        eventName: 'MissionFunded',
+        args: {
+          missionId: testMissionId as `0x${string}`,
+          wallet: '0x0000000000000000000000000000000000000001',
+        },
+      });
+      setReceiptFetcherForTesting(async () => ({
+        status: 'success',
+        to: treasury,
+        logs: [{ data, topics: wrongWalletTopics }],
+      }));
+      const resWrongWallet = await verifyFundingReceiptOnFuji({
+        txHash: '0xwrongwallettx',
+        missionId: testMissionId,
+        sessionWallet: testWallet,
+        expectedAmount: testToolCap,
+        treasuryAddress: treasury,
+      });
+      expect(resWrongWallet.valid).toBe(false);
+      expect(resWrongWallet.error).toContain('wallet mismatch');
+
+      // 5. Contract recipient mismatch
+      setReceiptFetcherForTesting(async () => ({
+        status: 'success',
+        to: '0x0000000000000000000000000000000000000099',
+        logs: [{ data, topics }],
+      }));
+      const resWrongTo = await verifyFundingReceiptOnFuji({
+        txHash: '0xwrongtotx',
+        missionId: testMissionId,
+        sessionWallet: testWallet,
+        expectedAmount: testToolCap,
+        treasuryAddress: treasury,
+      });
+      expect(resWrongTo.valid).toBe(false);
+      expect(resWrongTo.error).toContain('recipient mismatch');
+    });
+
+    it('WIRE-01: verifyAnchorReceiptOnFuji validates MissionProofAnchored events and rejects discrepancies', async () => {
+      const headHash = '0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
+      const topics = encodeEventTopics({
+        abi: [missionProofAnchoredEventAbi],
+        eventName: 'MissionProofAnchored',
+        args: {
+          missionId: testMissionId as `0x${string}`,
+          headHash: headHash as `0x${string}`,
+        },
+      });
+      const data = encodeAbiParameters([{ type: 'uint256', name: 'timestamp' }], [1700000000n]);
+
+      // 1. Valid anchor
+      setReceiptFetcherForTesting(async () => ({
+        status: 'success',
+        to: treasury,
+        blockNumber: 789101n,
+        logs: [{ data, topics }],
+      }));
+
+      const res = await verifyAnchorReceiptOnFuji({
+        txHash: '0xgoodanchortx',
+        missionId: testMissionId,
+        expectedHeadHash: headHash,
+        treasuryAddress: treasury,
+      });
+      expect(res.valid).toBe(true);
+      expect(res.blockNumber).toBe(789101n);
+
+      // 2. HeadHash mismatch
+      const wrongHash = '0x1111222233334444555566667777888899990000111122223333444455556666';
+      const resWrongHash = await verifyAnchorReceiptOnFuji({
+        txHash: '0xwronghashtx',
+        missionId: testMissionId,
+        expectedHeadHash: wrongHash,
+        treasuryAddress: treasury,
+      });
+      expect(resWrongHash.valid).toBe(false);
+      expect(resWrongHash.error).toContain('headHash mismatch');
+    });
+
+    it('FB-01: verifyFeedbackReceiptOnFuji validates ReputationRegistry transactions and agentId', async () => {
+      const repRegistry = ERC8004_FUJI_REPUTATION_REGISTRY;
+      const agentId = 1001n;
+
+      const topics = encodeEventTopics({
+        abi: [feedbackGivenEventAbi],
+        eventName: 'FeedbackGiven',
+        args: {
+          agentId,
+          client: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
+        },
+      });
+      const data = encodeAbiParameters(
+        [
+          { type: 'uint64', name: 'feedbackIndex' },
+          { type: 'int128', name: 'value' },
+          { type: 'uint8', name: 'valueDecimals' },
+          { type: 'string', name: 'tag1' },
+          { type: 'string', name: 'tag2' },
+        ],
+        [1n, 87n, 0, 'starred', 'unihack-s2']
+      );
+
+      // 1. Success feedback
+      setReceiptFetcherForTesting(async () => ({
+        status: 'success',
+        to: repRegistry,
+        logs: [{ data, topics }],
+      }));
+
+      const res = await verifyFeedbackReceiptOnFuji({
+        txHash: '0xfeedbacktx',
+        expectedAgentId: agentId,
+      });
+      expect(res.valid).toBe(true);
+
+      // 2. AgentId mismatch
+      const resWrongAgent = await verifyFeedbackReceiptOnFuji({
+        txHash: '0xfeedbacktx',
+        expectedAgentId: 9999n,
+      });
+      expect(resWrongAgent.valid).toBe(false);
+      expect(resWrongAgent.error).toContain('agentId mismatch');
+
+      // 3. Recipient mismatch
+      setReceiptFetcherForTesting(async () => ({
+        status: 'success',
+        to: '0x0000000000000000000000000000000000000088',
+        logs: [{ data, topics }],
+      }));
+      const resWrongTo = await verifyFeedbackReceiptOnFuji({
+        txHash: '0xwrongtotx',
+        expectedAgentId: agentId,
+      });
+      expect(resWrongTo.valid).toBe(false);
+      expect(resWrongTo.error).toContain('recipient mismatch');
+    });
   });
 });

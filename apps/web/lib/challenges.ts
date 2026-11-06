@@ -17,13 +17,16 @@ export class ChallengeError extends Error {
 
 const ALLOWED_PAYLOAD_KEYS: Record<ActionType, string[]> = {
   CREATE_MISSION: ['slug', 'agentAddress', 'treasuryCap', 'toolCap', 'durationSeconds', 'targetMissionSlug'],
-  ACTIVATE: ['missionId', 'ownerAddress', 'agentAddress', 'treasuryCap', 'toolCap', 'configVersion', 'policyHash', 'targetMissionSlug'],
+  ACTIVATE: ['missionId', 'ownerAddress', 'agentAddress', 'treasuryCap', 'toolCap', 'configVersion', 'policyHash', 'targetMissionSlug', 'fundingTxHash'],
   READ_MISSION: ['slug', 'targetMissionSlug'],
   PAUSE_S1: ['desiredPaused'],
   CLOSE_MISSION_S1: ['slug', 'targetMissionSlug'],
-  COMPLETE_MISSION: ['slug', 'deliverableHash', 'targetMissionSlug'],
+  COMPLETE_MISSION: ['slug', 'deliverableHash', 'targetMissionSlug', 'anchorTxHash'],
   PREPARE_FEEDBACK: ['slug', 'deliverableHash', 'agentId', 'score', 'feedbackHash', 'targetMissionSlug'],
   PUBLISH_MISSION: ['slug', 'publicPublished', 'targetMissionSlug'],
+  SUBMIT_FEEDBACK: ['operationId', 'score', 'tag1', 'tag2', 'txHash', 'targetMissionSlug'],
+  CONFIRM_FUNDING: ['slug', 'txHash', 'targetMissionSlug'],
+  CONFIRM_ANCHOR: ['slug', 'txHash', 'targetMissionSlug'],
 };
 
 export function validatePayloadTarget(
@@ -124,6 +127,30 @@ export function validatePayloadTarget(
       }
       if (targetMissionSlug && payload.slug !== targetMissionSlug) {
         throw new ChallengeError('PUBLISH_MISSION target slug mismatch', 400);
+      }
+      break;
+    }
+    case 'SUBMIT_FEEDBACK': {
+      if (!payload.operationId || typeof payload.operationId !== 'string') {
+        throw new ChallengeError('SUBMIT_FEEDBACK payload missing operationId', 400);
+      }
+      break;
+    }
+    case 'CONFIRM_FUNDING': {
+      if (!payload.slug || typeof payload.slug !== 'string' || !payload.txHash) {
+        throw new ChallengeError('CONFIRM_FUNDING payload missing slug or txHash', 400);
+      }
+      if (targetMissionSlug && payload.slug !== targetMissionSlug) {
+        throw new ChallengeError('CONFIRM_FUNDING slug mismatch with target', 400);
+      }
+      break;
+    }
+    case 'CONFIRM_ANCHOR': {
+      if (!payload.slug || typeof payload.slug !== 'string' || !payload.txHash) {
+        throw new ChallengeError('CONFIRM_ANCHOR payload missing slug or txHash', 400);
+      }
+      if (targetMissionSlug && payload.slug !== targetMissionSlug) {
+        throw new ChallengeError('CONFIRM_ANCHOR slug mismatch with target', 400);
       }
       break;
     }

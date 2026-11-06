@@ -884,7 +884,7 @@ describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Ra
     // 2. Create mission in S2
     const { mission, spendToken } = await createTestMission();
 
-    // 3. Activate in S2: triggers session wallet funding logic
+    // 3. Activate in S2: triggers session wallet unsigned tx generation (WIRE-01)
     const actPayload = {
       missionId: mission.missionId,
       ownerAddress: mission.ownerAddress,
@@ -918,17 +918,20 @@ describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Ra
     expect(actRes.status).toBe(200);
     const actData = await actRes.json();
     expect(actData.sessionWallet).toBeDefined();
-    expect(actData.sessionWallet.funded).toBe(true);
-    expect(actData.sessionWallet.txHash).toBeNull(); // Honest null in MOCK mode (ERC-02)
+    // WIRE-01: In MOCK mode, does not claim funded on-chain; returns unsignedTx and FUNDING_MOCK_NOT_SENT
+    expect(actData.sessionWallet.funded).toBe(false);
+    expect(actData.sessionWallet.status).toBe('FUNDING_MOCK_NOT_SENT');
+    expect(actData.sessionWallet.txHash).toBeNull();
+    expect(actData.sessionWallet.unsignedTx).toBeDefined();
 
-    // Verify SESSION_WALLET_FUNDED audit entry in DB
+    // Verify WIRE-01: NO false SESSION_WALLET_FUNDED audit entry in DB in MOCK mode
     const entriesAfterAct = await prisma.auditEntry.findMany({
       where: { missionSlug: mission.slug },
     });
     const fundAudit = entriesAfterAct
       .map((e) => JSON.parse(e.canonicalJson))
       .find((p) => p.kind === 'SESSION_WALLET_FUNDED');
-    expect(fundAudit).toBeDefined();
+    expect(fundAudit).toBeUndefined();
 
     // 4. Execute a tool operation so we have a SETTLED operation
     const orchReq = new NextRequest('http://localhost:3000/api/tools/orchestrate', {
@@ -947,7 +950,7 @@ describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Ra
     const orchData = await orchRes.json();
     expect(orchData.operation.state).toBe('SETTLED');
 
-    // 5. Complete mission in S2: triggers proof anchor logic
+    // 5. Complete mission in S2: triggers proof anchor logic (WIRE-01)
     const compPayload = {
       slug: mission.slug,
       deliverableHash: '0x1111222233334444555566667777888899990000111122223333444455556666',
@@ -978,20 +981,23 @@ describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Ra
     expect(compRes.status).toBe(200);
     const compData = await compRes.json();
     expect(compData.anchoredProof).toBeDefined();
-    expect(compData.anchoredProof.anchored).toBe(true);
-    expect(compData.anchoredProof.txHash).toBeNull(); // Honest null in MOCK mode (ERC-02)
+    // WIRE-01: In MOCK mode, does not claim anchored on-chain; returns unsignedTx and ANCHOR_MOCK_NOT_SENT
+    expect(compData.anchoredProof.anchored).toBe(false);
+    expect(compData.anchoredProof.status).toBe('ANCHOR_MOCK_NOT_SENT');
+    expect(compData.anchoredProof.txHash).toBeNull();
+    expect(compData.anchoredProof.unsignedTx).toBeDefined();
 
-    // Verify PROOF_ANCHORED audit entry in DB
+    // Verify WIRE-01: NO false PROOF_ANCHORED audit entry in DB in MOCK mode
     const entriesAfterComp = await prisma.auditEntry.findMany({
       where: { missionSlug: mission.slug },
     });
     const anchorAudit = entriesAfterComp
       .map((e) => JSON.parse(e.canonicalJson))
       .find((p) => p.kind === 'PROOF_ANCHORED');
-    expect(anchorAudit).toBeDefined();
+    expect(anchorAudit).toBeUndefined();
 
-    // 6. Submit feedback for the settled operation
-    const fbReq = new NextRequest('http://localhost:3000/api/feedback', {
+    // 6. FB-01: Feedback route requires owner EIP-191 signature; agent token is rejected
+    const agentFbReq = new NextRequest('http://localhost:3000/api/feedback', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1000,23 +1006,60 @@ describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Ra
       body: JSON.stringify({
         operationId: orchData.operation.operationId,
         score: 95,
-        tag1: 'starred',
+      }),
+    });
+    const agentFbRes = await feedbackPOST(agentFbReq);
+    expect(agentFbRes.status).toBe(400); // Rejects agent request without owner challenge nonce & signature
+
+    // 7. FB-01: Owner signs challenge to submit feedback
+    const fbPayload = {
+      operationId: orchData.operation.operationId,
+      score: 95,
+      tag1: 'starred',
+      tag2: 'unihack-s2',
+    };
+    const fbChallReq = new NextRequest('http://localhost:3000/api/auth/challenge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'SUBMIT_FEEDBACK',
+        payload: fbPayload,
+        expectedSigner: ownerAccount.address,
+      }),
+    });
+    const fbChallRes = await challengePOST(fbChallReq);
+    expect(fbChallRes.status).toBe(200);
+    const { nonce: fbNonce, message: fbMessage } = await fbChallRes.json();
+    const fbSig = await ownerAccount.signMessage({ message: fbMessage });
+
+    const fbReq = new NextRequest('http://localhost:3000/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nonce: fbNonce,
+        signature: fbSig,
+        payload: fbPayload,
       }),
     });
     const fbRes = await feedbackPOST(fbReq);
     expect(fbRes.status).toBe(200);
     const fbData = await fbRes.json();
     expect(fbData.success).toBe(true);
-    expect(fbData.txHash).toBeNull(); // Honest null in MOCK mode (ERC-02)
+    expect(fbData.mode).toBe('MOCK');
+    expect(fbData.status).toBe('FEEDBACK_MOCK_NOT_SENT');
+    expect(fbData.txHash).toBeNull();
+    // FB-01: agentId is looked up from toolCatalog (search = 1001), not client body
+    expect(fbData.agentId).toBe('1001');
+    expect(fbData.unsignedTx).toBeDefined();
 
-    // Verify ERC8004_FEEDBACK audit entry in DB
+    // Verify FB-01: NO false ERC8004_FEEDBACK audit entry in DB in MOCK mode
     const entriesAfterFb = await prisma.auditEntry.findMany({
       where: { missionSlug: mission.slug },
     });
     const fbAudit = entriesAfterFb
       .map((e) => JSON.parse(e.canonicalJson))
       .find((p) => p.kind === 'ERC8004_FEEDBACK');
-    expect(fbAudit).toBeDefined();
+    expect(fbAudit).toBeUndefined();
 
     // Reset back to S1 for subsequent tests
     await prisma.systemState.update({

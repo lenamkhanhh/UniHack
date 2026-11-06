@@ -20,8 +20,16 @@ export interface ToolDefinition {
   priceAtomic: bigint;
   perCallCap: bigint;
   description: string;
+  erc8004AgentId?: bigint;
   validateInput: (args: any) => { valid: boolean; error?: string; canonicalInput: any };
   execute: (args: any) => Promise<any>;
+}
+
+export function getErc8004AgentIdForTool(toolId: string): bigint {
+  if (toolId === 'tool:search') return BigInt(process.env.ERC8004_SEARCH_AGENT_ID || '1001');
+  if (toolId === 'tool:summary') return BigInt(process.env.ERC8004_SUMMARY_AGENT_ID || '1002');
+  if (toolId === 'tool:talkmeter') return BigInt(process.env.ERC8004_TALKMETER_AGENT_ID || '1003');
+  return 1001n;
 }
 
 export const toolCatalog: Record<string, ToolDefinition> = {

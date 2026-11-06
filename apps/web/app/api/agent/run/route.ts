@@ -59,6 +59,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // WIRE-01: In Stage S2 LIVE mode, agent cannot run if session wallet has not been confirmed funded on Fuji
+    if (systemState?.stage === 'S2' && process.env.PAYMENT_MODE === 'LIVE_FUJI') {
+      const entries = await prisma.auditEntry.findMany({
+        where: { missionSlug: claims.missionSlug },
+      });
+      const isFunded = entries.some((e: any) => {
+        try {
+          const p = JSON.parse(e.canonicalJson);
+          return (
+            p.kind === 'SESSION_WALLET_FUNDED' &&
+            p.tx_hash &&
+            p.tx_hash.startsWith('0x') &&
+            p.tx_hash.length >= 64
+          );
+        } catch {
+          return false;
+        }
+      });
+      if (!isFunded) {
+        return NextResponse.json(
+          { error: 'Cannot execute agent: mission session wallet is not funded on-chain' },
+          { status: 403 }
+        );
+      }
+    }
+
     // 2. Mission validation & active state check
     const mission = await prisma.mission.findUnique({
       where: { slug: claims.missionSlug },

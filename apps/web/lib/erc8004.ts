@@ -113,6 +113,7 @@ export interface Erc8004FeedbackParams {
   endpoint?: string;
   feedbackURI?: string;
   feedbackHash?: `0x${string}`;
+  txHash?: string | null;
 }
 
 export interface Erc8004FeedbackResult {

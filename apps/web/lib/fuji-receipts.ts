@@ -1,0 +1,274 @@
+import { createPublicClient, http, parseAbiItem, decodeEventLog } from 'viem';
+import { avalancheFuji } from 'viem/chains';
+import { normalizeAddress } from './chain';
+
+const DEFAULT_RPC_URL = process.env.AVALANCHE_FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
+const REPUTATION_REGISTRY_ADDRESS = '0x8004B663056A597Dffe9eCcC1965A193B7388713';
+
+export const missionFundedEventAbi = parseAbiItem(
+  'event MissionFunded(bytes32 indexed missionId, address indexed wallet, uint256 amount)'
+);
+
+export const missionProofAnchoredEventAbi = parseAbiItem(
+  'event MissionProofAnchored(bytes32 indexed missionId, bytes32 indexed headHash, uint256 timestamp)'
+);
+
+export const feedbackGivenEventAbi = parseAbiItem(
+  'event FeedbackGiven(uint256 indexed agentId, address indexed client, uint64 feedbackIndex, int128 value, uint8 valueDecimals, string tag1, string tag2)'
+);
+
+export interface ReceiptVerificationResult {
+  valid: boolean;
+  error?: string;
+  blockNumber?: bigint;
+  txHash?: string;
+}
+
+export type ReceiptFetcher = (txHash: string) => Promise<any>;
+let customReceiptFetcher: ReceiptFetcher | null = null;
+
+export function setReceiptFetcherForTesting(fetcher: ReceiptFetcher | null) {
+  customReceiptFetcher = fetcher;
+}
+
+async function getReceipt(txHash: string, rpcUrl: string = DEFAULT_RPC_URL): Promise<any> {
+  if (customReceiptFetcher) {
+    return await customReceiptFetcher(txHash);
+  }
+
+  const client = createPublicClient({
+    chain: avalancheFuji,
+    transport: http(rpcUrl),
+  });
+
+  return await client.getTransactionReceipt({ hash: txHash as `0x${string}` }).catch(() => null);
+}
+
+function normalizeBytes32(val: string): string {
+  const clean = val.startsWith('0x') ? val.toLowerCase() : `0x${val.toLowerCase()}`;
+  return clean.padEnd(66, '0');
+}
+
+/**
+ * WIRE-01: Verifies on-chain MissionFunded event on Avalanche Fuji.
+ * Rejects if tx reverted, contract mismatch, missionId mismatch, wallet mismatch, or amount < expected.
+ */
+export async function verifyFundingReceiptOnFuji(params: {
+  txHash: string;
+  missionId: string;
+  sessionWallet: string;
+  expectedAmount: bigint;
+  treasuryAddress?: string;
+}): Promise<ReceiptVerificationResult> {
+  const receipt = await getReceipt(params.txHash);
+  if (!receipt) {
+    return { valid: false, error: 'Transaction receipt not found on Avalanche Fuji' };
+  }
+
+  if (receipt.status !== 'success') {
+    return { valid: false, error: 'Transaction reverted on-chain' };
+  }
+
+  if (params.treasuryAddress && receipt.to) {
+    if (normalizeAddress(receipt.to) !== normalizeAddress(params.treasuryAddress)) {
+      return {
+        valid: false,
+        error: `Transaction recipient mismatch: expected ${params.treasuryAddress}, got ${receipt.to}`,
+      };
+    }
+  }
+
+  const expectedMissionId = normalizeBytes32(params.missionId);
+  const expectedWallet = normalizeAddress(params.sessionWallet);
+
+  let foundFundedEvent = false;
+
+  for (const log of receipt.logs || []) {
+    try {
+      const decoded = decodeEventLog({
+        abi: [missionFundedEventAbi],
+        data: log.data,
+        topics: log.topics,
+      }) as any;
+
+      if (decoded.eventName === 'MissionFunded') {
+        const eventMissionId = normalizeBytes32(decoded.args.missionId);
+        const eventWallet = normalizeAddress(decoded.args.wallet);
+        const eventAmount = BigInt(decoded.args.amount.toString());
+
+        if (eventMissionId !== expectedMissionId) {
+          return {
+            valid: false,
+            error: `MissionFunded missionId mismatch: expected ${expectedMissionId}, got ${eventMissionId}`,
+          };
+        }
+
+        if (eventWallet !== expectedWallet) {
+          return {
+            valid: false,
+            error: `MissionFunded wallet mismatch: expected ${expectedWallet}, got ${eventWallet}`,
+          };
+        }
+
+        if (eventAmount < params.expectedAmount) {
+          return {
+            valid: false,
+            error: `MissionFunded amount insufficient: expected >= ${params.expectedAmount}, got ${eventAmount}`,
+          };
+        }
+
+        foundFundedEvent = true;
+        break;
+      }
+    } catch {
+      // Not a MissionFunded log, continue
+    }
+  }
+
+  if (!foundFundedEvent) {
+    return { valid: false, error: 'MissionFunded event not found in transaction logs' };
+  }
+
+  return {
+    valid: true,
+    blockNumber: receipt.blockNumber ? BigInt(receipt.blockNumber.toString()) : undefined,
+    txHash: params.txHash,
+  };
+}
+
+/**
+ * WIRE-01: Verifies on-chain MissionProofAnchored event on Avalanche Fuji.
+ * Rejects if tx reverted, contract mismatch, missionId mismatch, or headHash mismatch.
+ */
+export async function verifyAnchorReceiptOnFuji(params: {
+  txHash: string;
+  missionId: string;
+  expectedHeadHash: string;
+  treasuryAddress?: string;
+}): Promise<ReceiptVerificationResult> {
+  const receipt = await getReceipt(params.txHash);
+  if (!receipt) {
+    return { valid: false, error: 'Transaction receipt not found on Avalanche Fuji' };
+  }
+
+  if (receipt.status !== 'success') {
+    return { valid: false, error: 'Transaction reverted on-chain' };
+  }
+
+  if (params.treasuryAddress && receipt.to) {
+    if (normalizeAddress(receipt.to) !== normalizeAddress(params.treasuryAddress)) {
+      return {
+        valid: false,
+        error: `Transaction recipient mismatch: expected ${params.treasuryAddress}, got ${receipt.to}`,
+      };
+    }
+  }
+
+  const expectedMissionId = normalizeBytes32(params.missionId);
+  const expectedHeadHash = normalizeBytes32(params.expectedHeadHash);
+
+  let foundAnchorEvent = false;
+
+  for (const log of receipt.logs || []) {
+    try {
+      const decoded = decodeEventLog({
+        abi: [missionProofAnchoredEventAbi],
+        data: log.data,
+        topics: log.topics,
+      }) as any;
+
+      if (decoded.eventName === 'MissionProofAnchored') {
+        const eventMissionId = normalizeBytes32(decoded.args.missionId);
+        const eventHeadHash = normalizeBytes32(decoded.args.headHash);
+
+        if (eventMissionId !== expectedMissionId) {
+          return {
+            valid: false,
+            error: `MissionProofAnchored missionId mismatch: expected ${expectedMissionId}, got ${eventMissionId}`,
+          };
+        }
+
+        if (eventHeadHash !== expectedHeadHash) {
+          return {
+            valid: false,
+            error: `MissionProofAnchored headHash mismatch: expected ${expectedHeadHash}, got ${eventHeadHash}`,
+          };
+        }
+
+        foundAnchorEvent = true;
+        break;
+      }
+    } catch {
+      // Not a MissionProofAnchored log, continue
+    }
+  }
+
+  if (!foundAnchorEvent) {
+    return { valid: false, error: 'MissionProofAnchored event not found in transaction logs' };
+  }
+
+  return {
+    valid: true,
+    blockNumber: receipt.blockNumber ? BigInt(receipt.blockNumber.toString()) : undefined,
+    txHash: params.txHash,
+  };
+}
+
+/**
+ * FB-01: Verifies on-chain feedback transaction on Avalanche Fuji Reputation Registry.
+ * Rejects if tx reverted, recipient mismatch, or agentId mismatch.
+ */
+export async function verifyFeedbackReceiptOnFuji(params: {
+  txHash: string;
+  expectedAgentId: bigint;
+  registryAddress?: string;
+}): Promise<ReceiptVerificationResult> {
+  const receipt = await getReceipt(params.txHash);
+  if (!receipt) {
+    return { valid: false, error: 'Transaction receipt not found on Avalanche Fuji' };
+  }
+
+  if (receipt.status !== 'success') {
+    return { valid: false, error: 'Transaction reverted on-chain' };
+  }
+
+  const expectedRegistry = normalizeAddress(params.registryAddress || REPUTATION_REGISTRY_ADDRESS);
+  if (receipt.to && normalizeAddress(receipt.to) !== expectedRegistry) {
+    return {
+      valid: false,
+      error: `Transaction recipient mismatch: expected ${expectedRegistry}, got ${receipt.to}`,
+    };
+  }
+
+  // Check for FeedbackGiven event if present in logs
+  let eventFound = false;
+  for (const log of receipt.logs || []) {
+    try {
+      const decoded = decodeEventLog({
+        abi: [feedbackGivenEventAbi],
+        data: log.data,
+        topics: log.topics,
+      }) as any;
+
+      if (decoded.eventName === 'FeedbackGiven') {
+        eventFound = true;
+        const loggedAgentId = BigInt(decoded.args.agentId.toString());
+        if (loggedAgentId !== params.expectedAgentId) {
+          return {
+            valid: false,
+            error: `FeedbackGiven agentId mismatch: expected ${params.expectedAgentId}, got ${loggedAgentId}`,
+          };
+        }
+        break;
+      }
+    } catch {
+      // continue
+    }
+  }
+
+  return {
+    valid: true,
+    blockNumber: receipt.blockNumber ? BigInt(receipt.blockNumber.toString()) : undefined,
+    txHash: params.txHash,
+  };
+}
