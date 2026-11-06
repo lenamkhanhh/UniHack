@@ -1,0 +1,178 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+model SystemState {
+  id             Int      @id
+  deploymentId   String
+  stage          String   // S1 or S2
+  guardAddress   String?
+  authVersion    Int      @default(1)
+  systemPaused   Boolean  @default(false)
+  maintenance    Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+}
+
+model Mission {
+  slug           String   @id
+  missionId      String   @unique
+  ownerAddress   String
+  agentAddress   String
+  treasuryCap    Decimal  @db.Decimal(78, 0)
+  toolCap        Decimal  @db.Decimal(78, 0)
+  spentTool      Decimal  @default(0) @db.Decimal(78, 0)
+  reservedTool   Decimal  @default(0) @db.Decimal(78, 0)
+  expiresAt      DateTime
+  status         String   // ACTIVE/CLOSED; expiry checked from expiresAt on every spend
+  completedAt    DateTime?
+  deliverableHash String?
+  configVersion  Int      @default(1)
+  policyHash     String
+  auditHeadHash  String   @default("0x0000000000000000000000000000000000000000000000000000000000000000")
+  auditEntryCount Int     @default(0)
+  publicPublished Boolean @default(false)
+  publicationVersion Int  @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  operations     ToolOperation[]
+  sessions       ToolSession[]
+}
+
+model AuthChallenge {
+  nonce          String   @id
+  action         String   // CREATE_MISSION/ACTIVATE/READ_MISSION/PAUSE_S1/CLOSE_MISSION_S1/COMPLETE_MISSION/PREPARE_FEEDBACK
+  payloadHash    String
+  expectedSigner String
+  deploymentId   String
+  authVersion    Int
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime @default(now())
+}
+
+model ToolSession {
+  id             String   @id @db.Uuid
+  missionSlug    String
+  mission        Mission  @relation(fields: [missionSlug], references: [slug], onDelete: Restrict)
+  payerAddress   String
+  rate           Decimal  @db.Decimal(78, 0)
+  cap            Decimal  @db.Decimal(78, 0)
+  spent          Decimal  @default(0) @db.Decimal(78, 0)
+  reserved       Decimal  @default(0) @db.Decimal(78, 0)
+  status         String   // ACTIVE/STOPPED/CAPPED
+  startedAt      DateTime @default(now())
+  stoppedAt      DateTime?
+  operations     ToolOperation[]
+}
+
+model ToolOperation {
+  operationId    String   @id @db.Uuid
+  deploymentId   String
+  missionSlug    String
+  mission        Mission  @relation(fields: [missionSlug], references: [slug], onDelete: Restrict)
+  payerAddress   String
+  toolId         String
+  inputHash      String
+  paymentTerms   String   // canonical immutable JSON
+  paymentTermsHash String
+  policyHash     String
+  paymentMode    String   @default("LIVE_FUJI")
+  chainId        Int
+  asset          String
+  state          String
+  version        Int      @default(0)
+  authDeploymentVersion Int
+  quoteExpiresAt DateTime
+  reservationExpiresAt DateTime?
+  reservedAmount Decimal  @default(0) @db.Decimal(78, 0)
+  authFrom       String?
+  authTo         String?
+  authValue      Decimal? @db.Decimal(78, 0)
+  authNonce      String?
+  validAfter     BigInt?
+  validBefore    BigInt?
+  authSignature  String?  // server-only, immutable after SIGNED
+  heldResult     String?
+  heldResultHash String?
+  workerLeaseUntil DateTime?
+  workerLeaseOwner String?
+  workerLeaseGeneration Int @default(0)
+  submissionStartedAt DateTime?
+  facilitator    String?
+  facilitatorTxHash String?
+  txHash         String?
+  receiptBlockNumber BigInt?
+  receiptBlockHash String?
+  authorizationLogIndex Int?
+  transferLogIndex Int?
+  lastReconciledAt DateTime?
+  reconcileBlockNumber BigInt?
+  reconcileBlockHash String?
+  reconcileBlockTimestamp BigInt?
+  failureReason  String?
+  sessionId      String?  @db.Uuid
+  session        ToolSession? @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  minuteIndex    Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([sessionId, minuteIndex])
+  @@unique([chainId, asset, authFrom, authNonce])
+  @@index([missionSlug, state])
+}
+
+model TreasuryRequest {
+  operationId    String   @id @db.Uuid
+  missionSlug    String
+  requestHash    String
+  state          String   // CREATED/SUBMITTING/UNKNOWN/CONFIRMED/FAILED
+  agentNonce     BigInt?
+  rawTxHash      String?
+  proposalId     String?
+  chainId        Int
+  guardAddress   String
+  createdAt      DateTime @default(now())
+}
+
+model AuditHead {
+  id             Int      @id
+  lastHash       String
+}
+
+model AuditEntry {
+  id                   BigInt   @id @default(autoincrement())
+  sourceKey            String   @unique
+  prevHash             String
+  entryHash            String   @unique
+  canonicalJson        String
+  missionSlug          String?
+  missionSequence      Int?
+  missionPrevHash      String?
+  missionEntryHash     String?
+  missionCanonicalJson String?
+  createdAt            DateTime
+
+  @@unique([missionSlug, missionSequence])
+}
+
+model MissionFeedback {
+  missionSlug    String   @id
+  agentId        String
+  chainId        Int
+  registry       String
+  clientAddress  String
+  txHash         String?
+  feedbackIndex  String?
+  feedbackURI    String?
+  feedbackHash   String?
+  preparedValue  Int?
+  preparedResultHash String?
+  state          String   // PREPARED/SUBMITTED/CONFIRMED
+}

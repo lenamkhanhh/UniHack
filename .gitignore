@@ -17,3 +17,7 @@ private-evidence/
 contracts/cache/
 contracts/out/
 contracts/broadcast/
+.cache/
+test-results/
+playwright-report/
+apps/web/playwright-report/

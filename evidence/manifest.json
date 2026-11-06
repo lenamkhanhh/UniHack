@@ -1,0 +1,67 @@
+{
+  "stage": "S1",
+  "deploymentId": "unihack-s1-demo",
+  "protocol": {
+    "name": "x402",
+    "version": 1,
+    "scheme": "exact",
+    "header": "X-PAYMENT",
+    "responseHeader": "X-PAYMENT-RESPONSE"
+  },
+  "chain": {
+    "name": "Avalanche Fuji",
+    "chainId": 43113,
+    "rpc": "https://api.avax-test.network/ext/bc/C/rpc",
+    "explorer": "https://testnet.snowtrace.io",
+    "finalityRule": "rpc_finalized_or_confirmations_12"
+  },
+  "token": {
+    "name": "USD Coin",
+    "symbol": "USDC",
+    "address": "0x5425890298aed601595a70ab815c96711a31bc65",
+    "decimals": 6,
+    "eip712": {
+      "name": "USD Coin",
+      "version": "2",
+      "chainId": 43113,
+      "verifyingContract": "0x5425890298aed601595a70ab815c96711a31bc65"
+    }
+  },
+  "caps": {
+    "perTxTreasuryCap": "5000000",
+    "utcDailyTreasuryCap": "20000000",
+    "missionTreasuryCapDefault": "10000000",
+    "missionToolCapDefault": "5000000",
+    "talkmeterSessionCap": "2000000"
+  },
+  "tools": {
+    "tool:search": {
+      "priceAtomic": "100000",
+      "perCallCap": "100000",
+      "description": "Web search returning up to 3 points and source URLs"
+    },
+    "tool:summary": {
+      "priceAtomic": "500000",
+      "perCallCap": "500000",
+      "description": "Document summary up to 500 characters"
+    },
+    "tool:talkmeter": {
+      "priceAtomic": "50000",
+      "sessionCap": "2000000",
+      "description": "Simulated meeting minute billing"
+    }
+  },
+  "registries": {
+    "identity": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+    "reputation": "0x8004B663056A597Dffe9eCcC1965A193B7388713"
+  },
+  "facilitator": {
+    "preferredUrl": "https://facilitator.ultravioletadao.xyz",
+    "supportedSnapshot": ["exact:avalanche-fuji:0x5425890298aed601595a70ab815c96711a31bc65"]
+  },
+  "walletRoles": {
+    "owner": "0x0000000000000000000000000000000000000000",
+    "agent": "0x0000000000000000000000000000000000000001",
+    "seller": "0x0000000000000000000000000000000000000002"
+  }
+}
