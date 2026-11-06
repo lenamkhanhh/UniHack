@@ -58,8 +58,12 @@ export async function verifyFundingReceiptOnFuji(params: {
   missionId: string;
   sessionWallet: string;
   expectedAmount: bigint;
-  treasuryAddress?: string;
+  treasuryAddress: string;
 }): Promise<ReceiptVerificationResult> {
+  if (!params.treasuryAddress || params.treasuryAddress === '0x0000000000000000000000000000000000000000') {
+    return { valid: false, error: 'Valid non-zero treasuryAddress is required for verification' };
+  }
+
   const receipt = await getReceipt(params.txHash);
   if (!receipt) {
     return { valid: false, error: 'Transaction receipt not found on Avalanche Fuji' };
@@ -69,7 +73,7 @@ export async function verifyFundingReceiptOnFuji(params: {
     return { valid: false, error: 'Transaction reverted on-chain' };
   }
 
-  if (params.treasuryAddress && receipt.to) {
+  if (receipt.to) {
     if (normalizeAddress(receipt.to) !== normalizeAddress(params.treasuryAddress)) {
       return {
         valid: false,
@@ -80,10 +84,16 @@ export async function verifyFundingReceiptOnFuji(params: {
 
   const expectedMissionId = normalizeBytes32(params.missionId);
   const expectedWallet = normalizeAddress(params.sessionWallet);
+  const expectedTreasury = normalizeAddress(params.treasuryAddress);
 
   let foundFundedEvent = false;
 
   for (const log of receipt.logs || []) {
+    // RCPT-01: log.address MUST match treasury contract! Ignore logs from other contracts
+    if (!log.address || normalizeAddress(log.address) !== expectedTreasury) {
+      continue;
+    }
+
     try {
       const decoded = decodeEventLog({
         abi: [missionFundedEventAbi],
@@ -126,7 +136,7 @@ export async function verifyFundingReceiptOnFuji(params: {
   }
 
   if (!foundFundedEvent) {
-    return { valid: false, error: 'MissionFunded event not found in transaction logs' };
+    return { valid: false, error: 'MissionFunded event not found from expected treasury contract' };
   }
 
   return {
@@ -144,8 +154,12 @@ export async function verifyAnchorReceiptOnFuji(params: {
   txHash: string;
   missionId: string;
   expectedHeadHash: string;
-  treasuryAddress?: string;
+  treasuryAddress: string;
 }): Promise<ReceiptVerificationResult> {
+  if (!params.treasuryAddress || params.treasuryAddress === '0x0000000000000000000000000000000000000000') {
+    return { valid: false, error: 'Valid non-zero treasuryAddress is required for verification' };
+  }
+
   const receipt = await getReceipt(params.txHash);
   if (!receipt) {
     return { valid: false, error: 'Transaction receipt not found on Avalanche Fuji' };
@@ -155,7 +169,7 @@ export async function verifyAnchorReceiptOnFuji(params: {
     return { valid: false, error: 'Transaction reverted on-chain' };
   }
 
-  if (params.treasuryAddress && receipt.to) {
+  if (receipt.to) {
     if (normalizeAddress(receipt.to) !== normalizeAddress(params.treasuryAddress)) {
       return {
         valid: false,
@@ -166,10 +180,16 @@ export async function verifyAnchorReceiptOnFuji(params: {
 
   const expectedMissionId = normalizeBytes32(params.missionId);
   const expectedHeadHash = normalizeBytes32(params.expectedHeadHash);
+  const expectedTreasury = normalizeAddress(params.treasuryAddress);
 
   let foundAnchorEvent = false;
 
   for (const log of receipt.logs || []) {
+    // RCPT-01: log.address MUST match treasury contract! Ignore logs from other contracts
+    if (!log.address || normalizeAddress(log.address) !== expectedTreasury) {
+      continue;
+    }
+
     try {
       const decoded = decodeEventLog({
         abi: [missionProofAnchoredEventAbi],
@@ -204,7 +224,7 @@ export async function verifyAnchorReceiptOnFuji(params: {
   }
 
   if (!foundAnchorEvent) {
-    return { valid: false, error: 'MissionProofAnchored event not found in transaction logs' };
+    return { valid: false, error: 'MissionProofAnchored event not found from expected treasury contract' };
   }
 
   return {
@@ -215,8 +235,8 @@ export async function verifyAnchorReceiptOnFuji(params: {
 }
 
 /**
- * FB-01: Verifies on-chain feedback transaction on Avalanche Fuji Reputation Registry.
- * Rejects if tx reverted, recipient mismatch, or agentId mismatch.
+ * FB-01 & RCPT-01: Verifies on-chain feedback transaction on Avalanche Fuji Reputation Registry.
+ * Rejects if tx reverted, recipient mismatch, log address mismatch, or agentId mismatch.
  */
 export async function verifyFeedbackReceiptOnFuji(params: {
   txHash: string;
@@ -240,9 +260,15 @@ export async function verifyFeedbackReceiptOnFuji(params: {
     };
   }
 
+  let foundFeedbackEvent = false;
+
   // Check for FeedbackGiven event if present in logs
-  let eventFound = false;
   for (const log of receipt.logs || []) {
+    // RCPT-01: Log MUST be emitted by the ReputationRegistry contract!
+    if (!log.address || normalizeAddress(log.address) !== expectedRegistry) {
+      continue;
+    }
+
     try {
       const decoded = decodeEventLog({
         abi: [feedbackGivenEventAbi],
@@ -251,7 +277,6 @@ export async function verifyFeedbackReceiptOnFuji(params: {
       }) as any;
 
       if (decoded.eventName === 'FeedbackGiven') {
-        eventFound = true;
         const loggedAgentId = BigInt(decoded.args.agentId.toString());
         if (loggedAgentId !== params.expectedAgentId) {
           return {
@@ -259,11 +284,16 @@ export async function verifyFeedbackReceiptOnFuji(params: {
             error: `FeedbackGiven agentId mismatch: expected ${params.expectedAgentId}, got ${loggedAgentId}`,
           };
         }
+        foundFeedbackEvent = true;
         break;
       }
     } catch {
       // continue
     }
+  }
+
+  if (!foundFeedbackEvent) {
+    return { valid: false, error: 'FeedbackGiven event not found from expected ReputationRegistry contract' };
   }
 
   return {

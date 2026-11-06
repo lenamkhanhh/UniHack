@@ -22,7 +22,7 @@ import { validateLiveFujiConfig } from '@/lib/config';
 export async function POST(req: NextRequest) {
   try {
     // KEY-02: Enforce zero-leakage security in LIVE_FUJI mode
-    validateLiveFujiConfig();
+    await validateLiveFujiConfig();
 
     // 1. Mandatory spend token authentication (Finding AG-01)
     const authHeader = req.headers.get('authorization') || '';

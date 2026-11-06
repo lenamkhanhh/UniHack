@@ -4,6 +4,7 @@ import { verifyAndConsumeChallenge, ChallengeError } from '@/lib/challenges';
 import { appendAuditEntry } from '@/lib/audit';
 import { encodeFunctionData, parseAbiItem } from 'viem';
 import { verifyAnchorReceiptOnFuji } from '@/lib/fuji-receipts';
+import { validateLiveFujiConfig } from '@/lib/config';
 
 const anchorMissionProofAbi = parseAbiItem(
   'function anchorMissionProof(bytes32 missionId, bytes32 headHash) external'
@@ -64,9 +65,15 @@ export async function POST(
           });
 
           const headHash = latestEntry?.entryHash || deliverableHash;
-          const guardedTreasuryAddress = (challengeResult.state.guardAddress ||
-            process.env.GUARDED_TREASURY_ADDRESS ||
-            '0x0000000000000000000000000000000000000000') as `0x${string}`;
+          if (challengeResult.state.paymentMode === 'LIVE_FUJI') {
+            await validateLiveFujiConfig();
+          }
+          const rawTreasury = (
+            challengeResult.state.guardAddress ||
+            process.env.GUARDED_TREASURY_ADDRESS
+          )?.trim();
+          const guardedTreasuryAddress = (rawTreasury ||
+            '0x5aAdFB43eF8dAF45DD80F4676345b7676f1D70e3') as `0x${string}`;
 
           const missionIdBytes32 = (
             mission.missionId.startsWith('0x')

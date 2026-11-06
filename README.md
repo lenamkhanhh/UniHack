@@ -168,7 +168,83 @@ forge script script/Deploy.s.sol
 forge script script/Deploy.s.sol --rpc-url https://api.avax-test.network/ext/bc/C/rpc
 ```
 
-> **Security Guardrail (KEY-02):** `Deploy.s.sol` strictly rejects well-known Anvil/Hardhat private keys and aborts execution if an insecure test key is supplied. Broadcasting to Fuji testnet requires an explicitly funded owner key and explicit owner authorization.
+> **Security Guardrail (KEY-02 & CFG-01):** `Deploy.s.sol` and `validateLiveFujiConfig()` strictly reject well-known Anvil/Hardhat private keys and zero addresses, aborting execution if insecure test keys are supplied. Broadcasting to Fuji testnet requires an explicitly funded owner key and explicit owner authorization.
+
+---
+
+## Avalanche Fuji Live Operations Runbook (Stage S1 & S2)
+
+> [!IMPORTANT]
+> **Safety Guardrail:** Do NOT execute or broadcast this runbook until dedicated, fresh testnet wallets (Owner, Agent, Seller) are generated and funded via official faucets. Never use Anvil/Hardhat default keys.
+
+This runbook specifies the exact sequence to take MissionPay live on the Avalanche Fuji C-Chain testnet once fresh keypairs are authorized.
+
+### Phase 0: Fuji Environment Setup & Verification
+1. **Fund Testnet Accounts**:
+   - **Owner EOA**: Needs ~0.5 AVAX for gas + 20 Fuji USDC (`0x5425890298aed601595a70AB815c96711a31Bc65`).
+   - **Agent EOA**: No AVAX required (Facilitators pay gas for x402 tool spending).
+   - **Seller EOA**: Receives tool micropayment settlements.
+2. **Deploy GuardedTreasury Contract**:
+   - **Signer**: Owner Account (via Foundry `forge script`)
+   - **Command**:
+     ```bash
+     cd contracts
+     forge script script/Deploy.s.sol:Deploy --rpc-url https://api.avax-test.network/ext/bc/C/rpc --broadcast --verify
+     ```
+   - **Evidence to Record**: Deployed contract address (`GUARDED_TREASURY_ADDRESS`) and Snowtrace contract verification URL.
+3. **Configure Production Environment**:
+   - Set `GUARDED_TREASURY_ADDRESS` in `.env.local` / production environment.
+   - Set `PAYMENT_MODE="LIVE_FUJI"`.
+   - Set dedicated `SESSION_WALLET_SEED` and `MISSION_TOKEN_SECRET` (distinct, >= 32 chars).
+
+---
+
+### Phase 1: Stage S1 LIVE Verification (Gasless x402 Micropayments)
+1. **Create Mission**: Owner signs `CREATE_MISSION` challenge (10.00 USDC treasuryCap, 5.00 USDC toolCap).
+   - **Signer**: Owner (MetaMask / EIP-191 off-chain challenge).
+2. **Activate Mission (S1)**: Owner signs `ACTIVATE` challenge; backend issues scoped spend token.
+   - **Signer**: Owner (MetaMask / EIP-191).
+3. **Execute 2 Live Tool Settlements via x402 Rails**:
+   - Agent requests research search (`tool:search` @ 0.10 USDC) & summarization (`tool:summary` @ 0.20 USDC).
+   - Agent signs EIP-3009 `TransferWithAuthorization` authorizations off-chain.
+   - Facilitator (Ultravioleta or PayAI) relays the transaction on Avalanche Fuji, paying gas.
+   - **Signer**: Agent (signs EIP-3009 authorization off-chain); Facilitator (submits & pays gas on Fuji).
+   - **Evidence to Record**: 2x x402 Settlement Transaction Hashes (`txHash`) on Snowtrace.
+4. **Complete Mission**: Computes deliverable hash and closes S1 lifecycle.
+   - **Signer**: Owner (MetaMask / EIP-191).
+
+---
+
+### Phase 2: Stage S2 Cutover & On-Chain Guarded Lifecycle
+1. **Cutover to S2**: Update system state stage to `S2` in database.
+   - **Signer**: Owner (MetaMask challenge `PAUSE_S1` / cutover).
+2. **Fund Session Wallet on-chain**:
+   - Owner receives unsigned calldata for `fundMissionWallet(missionId, sessionWallet, toolCap)` from `POST /api/missions/[slug]/activate`.
+   - Owner signs and broadcasts transaction on Fuji using MetaMask.
+   - Client sends `txHash` to backend; backend verifies `MissionFunded` event on Fuji and commits `SESSION_WALLET_FUNDED` audit entry.
+   - **Signer**: Owner (MetaMask, pays transaction gas on Fuji).
+   - **Evidence to Record**: `fundMissionWallet` Transaction Hash on Snowtrace.
+3. **Agent Autonomous Spend within Session Cap**:
+   - Agent spends tool budget via session wallet (gasless x402 EIP-3009).
+   - Contract tool cap strictly bounds maximum loss on-chain.
+   - **Signer**: Agent / Session Wallet (signs EIP-3009 off-chain); Facilitator (broadcasts).
+4. **Treasury Payout Verification (Within Cap vs. Exceeding Cap)**:
+   - Within per-tx cap: Propose payout -> auto-executes on Fuji.
+   - Exceeding per-tx cap: Propose payout -> queued -> Owner signs `approve()` and `execute()` via MetaMask.
+   - **Signer**: Owner (MetaMask, pays gas).
+   - **Evidence to Record**: Treasury Payout Transaction Hash (`execute`) on Snowtrace.
+5. **Complete Mission & Anchor Proof On-Chain**:
+   - Owner receives unsigned calldata for `anchorMissionProof(missionId, auditHeadHash)` from `POST /api/missions/[slug]/complete`.
+   - Owner signs and broadcasts transaction on Fuji using MetaMask.
+   - Backend verifies `MissionProofAnchored` event on Fuji and commits `PROOF_ANCHORED` audit entry.
+   - **Signer**: Owner (MetaMask, pays gas).
+   - **Evidence to Record**: `anchorMissionProof` Transaction Hash on Snowtrace.
+6. **Reputation Feedback on Official Fuji ERC-8004 Registry**:
+   - Owner calls `POST /api/feedback`; backend returns unsigned calldata for `giveFeedback(agentId, value, valueDecimals, tag1, tag2, endpoint, uri, hash)`.
+   - Owner signs and broadcasts transaction to Reputation Registry (`0x8004B663056A597Dffe9eCcC1965A193B7388713`).
+   - Backend verifies receipt via `verifyFeedbackReceiptOnFuji` and commits `ERC8004_FEEDBACK` audit entry.
+   - **Signer**: Owner (MetaMask, pays gas).
+   - **Evidence to Record**: `giveFeedback` Transaction Hash on Snowtrace.
 
 ---
 

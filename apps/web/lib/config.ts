@@ -1,5 +1,7 @@
 import { normalizeAddress } from './chain';
 import { privateKeyToAccount } from 'viem/accounts';
+import { createPublicClient, http } from 'viem';
+import { avalancheFuji } from 'viem/chains';
 
 export function getJwtSecret(): Uint8Array {
   const secret = process.env.MISSION_TOKEN_SECRET;
@@ -79,11 +81,17 @@ export const KNOWN_INSECURE_ANVIL_KEYS = new Set([
   '0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073746b220c22',
 ]);
 
+export type BytecodeFetcher = (address: string) => Promise<string | undefined>;
+let customBytecodeFetcher: BytecodeFetcher | null = null;
+
+export function setBytecodeFetcherForTesting(fetcher: BytecodeFetcher | null) {
+  customBytecodeFetcher = fetcher;
+}
+
 /**
- * KEY-02 Security Guard: Validates that when operating in LIVE_FUJI mode,
- * public Anvil/Hardhat test accounts and private keys are strictly rejected.
+ * Synchronous validation of LIVE_FUJI configuration parameters (format, length, insecure keys).
  */
-export function validateLiveFujiConfig(): void {
+export function validateLiveFujiConfigSync(): void {
   const mode = getPaymentMode();
   if (mode !== 'LIVE_FUJI') return;
 
@@ -127,5 +135,51 @@ export function validateLiveFujiConfig(): void {
   ]);
   if (KNOWN_INSECURE_SEEDS.has(sessionSeed.toLowerCase())) {
     throw new Error('SW-01: SESSION_WALLET_SEED cannot be a placeholder or well-known sample value in LIVE_FUJI mode');
+  }
+
+  // CFG-01 Security Guard: GUARDED_TREASURY_ADDRESS must be set, valid hex, non-zero, and not Anvil address
+  const treasuryAddress = process.env.GUARDED_TREASURY_ADDRESS?.trim();
+  if (!treasuryAddress || !/^0x[0-9a-fA-F]{40}$/.test(treasuryAddress)) {
+    throw new Error('CFG-01: GUARDED_TREASURY_ADDRESS must be set to a valid 20-byte hex address when PAYMENT_MODE=LIVE_FUJI');
+  }
+  if (treasuryAddress.toLowerCase() === '0x0000000000000000000000000000000000000000') {
+    throw new Error('CFG-01: GUARDED_TREASURY_ADDRESS cannot be the zero address in LIVE_FUJI mode');
+  }
+  if (KNOWN_INSECURE_ANVIL_ADDRESSES.has(treasuryAddress.toLowerCase())) {
+    throw new Error('CFG-01: GUARDED_TREASURY_ADDRESS cannot be a well-known Anvil/Hardhat test address in LIVE_FUJI mode');
+  }
+}
+
+/**
+ * KEY-02 & CFG-01 Security Guard: Validates that when operating in LIVE_FUJI mode,
+ * public Anvil/Hardhat test accounts and private keys are strictly rejected, and
+ * GUARDED_TREASURY_ADDRESS is a valid deployed contract with bytecode on Avalanche Fuji.
+ */
+export async function validateLiveFujiConfig(): Promise<void> {
+  validateLiveFujiConfigSync();
+
+  const mode = getPaymentMode();
+  if (mode !== 'LIVE_FUJI') return;
+
+  const treasuryAddress = process.env.GUARDED_TREASURY_ADDRESS?.trim()!;
+
+  // CFG-01: Verify that GUARDED_TREASURY_ADDRESS is a deployed contract with bytecode on Avalanche Fuji
+  let bytecode: string | undefined;
+  if (customBytecodeFetcher) {
+    bytecode = await customBytecodeFetcher(treasuryAddress);
+  } else {
+    try {
+      const client = createPublicClient({
+        chain: avalancheFuji,
+        transport: http(process.env.AVALANCHE_FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc'),
+      });
+      bytecode = await client.getBytecode({ address: treasuryAddress as `0x${string}` });
+    } catch (err: any) {
+      throw new Error(`CFG-01: Failed to query bytecode for GUARDED_TREASURY_ADDRESS on Avalanche Fuji: ${err?.message || err}`);
+    }
+  }
+
+  if (!bytecode || bytecode === '0x' || bytecode === '0x0') {
+    throw new Error('CFG-01: GUARDED_TREASURY_ADDRESS must be a deployed contract with bytecode on Avalanche Fuji');
   }
 }

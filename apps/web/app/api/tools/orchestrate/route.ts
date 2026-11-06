@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   try {
     // KEY-02b: Validate Live Fuji configuration on tools orchestrate route
     if (getPaymentMode() === 'LIVE_FUJI') {
-      validateLiveFujiConfig();
+      await validateLiveFujiConfig();
     }
     const systemState = await prisma.systemState.findUnique({ where: { id: 1 } });
     if (systemState?.systemPaused || systemState?.maintenance) {

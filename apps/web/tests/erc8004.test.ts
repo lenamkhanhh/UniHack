@@ -8,7 +8,7 @@ import {
   ERC8004_IDENTITY_ABI,
 } from '../lib/erc8004';
 import { getSessionWalletForMission } from '../lib/session-wallets';
-import { validateLiveFujiConfig } from '../lib/config';
+import { validateLiveFujiConfig, setBytecodeFetcherForTesting } from '../lib/config';
 import {
   verifyFundingReceiptOnFuji,
   verifyAnchorReceiptOnFuji,
@@ -59,26 +59,61 @@ describe('SW-01 & ERC-01/02: Security Invariants & Real ERC-8004 Verification Su
     expect(() => getSessionWalletForMission('slug-err')).toThrow(/must not be identical to MISSION_TOKEN_SECRET/);
   });
 
-  it('SW-01: validateLiveFujiConfig strictly rejects missing, shared, or sample placeholder seeds in LIVE_FUJI mode', () => {
+  it('SW-01: validateLiveFujiConfig strictly rejects missing, shared, or sample placeholder seeds in LIVE_FUJI mode', async () => {
     process.env.PAYMENT_MODE = 'LIVE_FUJI';
     process.env.SELLER_ADDRESS = '0x1111111111111111111111111111111111111111';
     process.env.AGENT_PRIVATE_KEY = '0x1234567890123456789012345678901234567890123456789012345678901234';
+    process.env.GUARDED_TREASURY_ADDRESS = '0x1234567890123456789012345678901234567890';
+    setBytecodeFetcherForTesting(async () => '0x608060405234801561001057600080fd5b50');
 
     // 1. Missing seed
     delete process.env.SESSION_WALLET_SEED;
-    expect(() => validateLiveFujiConfig()).toThrow(/SESSION_WALLET_SEED must be set/);
+    await expect(validateLiveFujiConfig()).rejects.toThrow(/SESSION_WALLET_SEED must be set/);
 
     // 2. Shared with token secret
     const shared = 'a-very-long-and-secure-custom-key-that-was-accidentally-reused!';
     process.env.MISSION_TOKEN_SECRET = shared;
     process.env.SESSION_WALLET_SEED = shared;
-    expect(() => validateLiveFujiConfig()).toThrow(/must not be identical/);
+    await expect(validateLiveFujiConfig()).rejects.toThrow(/must not be identical/);
 
     // 3. Known sample placeholder from README/.env.example
     process.env.MISSION_TOKEN_SECRET = 'completely-unique-jwt-token-secret-32chars-min!';
     process.env.SESSION_WALLET_SEED = 'unihack-session-wallet-secret-dev-fallback-key-32chars';
-    expect(() => validateLiveFujiConfig()).toThrow(/placeholder or well-known sample value/);
+    await expect(validateLiveFujiConfig()).rejects.toThrow(/placeholder or well-known sample value/);
 
+    setBytecodeFetcherForTesting(null);
+    process.env.PAYMENT_MODE = 'MOCK';
+  });
+
+  it('CFG-01: validateLiveFujiConfig strictly requires valid, non-zero, non-Anvil GUARDED_TREASURY_ADDRESS with bytecode in LIVE_FUJI mode', async () => {
+    process.env.PAYMENT_MODE = 'LIVE_FUJI';
+    process.env.SELLER_ADDRESS = '0x1111111111111111111111111111111111111111';
+    process.env.AGENT_PRIVATE_KEY = '0x1234567890123456789012345678901234567890123456789012345678901234';
+    process.env.SESSION_WALLET_SEED = 'a-secure-custom-seed-32chars-minimum-length-unique!';
+    process.env.MISSION_TOKEN_SECRET = 'a-secure-jwt-token-secret-32chars-minimum-length!';
+
+    // 1. Missing GUARDED_TREASURY_ADDRESS
+    delete process.env.GUARDED_TREASURY_ADDRESS;
+    await expect(validateLiveFujiConfig()).rejects.toThrow(/GUARDED_TREASURY_ADDRESS must be set/);
+
+    // 2. Zero address
+    process.env.GUARDED_TREASURY_ADDRESS = '0x0000000000000000000000000000000000000000';
+    await expect(validateLiveFujiConfig()).rejects.toThrow(/cannot be the zero address/);
+
+    // 3. Known Anvil address
+    process.env.GUARDED_TREASURY_ADDRESS = '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266';
+    await expect(validateLiveFujiConfig()).rejects.toThrow(/cannot be a well-known Anvil/);
+
+    // 4. Non-contract address (empty bytecode / EOA on Fuji)
+    process.env.GUARDED_TREASURY_ADDRESS = '0x1234567890123456789012345678901234567890';
+    setBytecodeFetcherForTesting(async () => '0x');
+    await expect(validateLiveFujiConfig()).rejects.toThrow(/must be a deployed contract with bytecode/);
+
+    // 5. Valid contract address with bytecode passes
+    setBytecodeFetcherForTesting(async () => '0x608060405234801561001057600080fd5b50');
+    await expect(validateLiveFujiConfig()).resolves.not.toThrow();
+
+    setBytecodeFetcherForTesting(null);
     process.env.PAYMENT_MODE = 'MOCK';
   });
 
@@ -192,7 +227,7 @@ describe('SW-01 & ERC-01/02: Security Invariants & Real ERC-8004 Verification Su
         status: 'success',
         to: treasury,
         blockNumber: 123456n,
-        logs: [{ data, topics }],
+        logs: [{ address: treasury, data, topics }],
       }));
 
       const res = await verifyFundingReceiptOnFuji({
@@ -226,7 +261,7 @@ describe('SW-01 & ERC-01/02: Security Invariants & Real ERC-8004 Verification Su
       setReceiptFetcherForTesting(async () => ({
         status: 'success',
         to: treasury,
-        logs: [{ data: shortData, topics }],
+        logs: [{ address: treasury, data: shortData, topics }],
       }));
       const resShort = await verifyFundingReceiptOnFuji({
         txHash: '0xshorttx',
@@ -250,7 +285,7 @@ describe('SW-01 & ERC-01/02: Security Invariants & Real ERC-8004 Verification Su
       setReceiptFetcherForTesting(async () => ({
         status: 'success',
         to: treasury,
-        logs: [{ data, topics: wrongWalletTopics }],
+        logs: [{ address: treasury, data, topics: wrongWalletTopics }],
       }));
       const resWrongWallet = await verifyFundingReceiptOnFuji({
         txHash: '0xwrongwallettx',
@@ -266,7 +301,7 @@ describe('SW-01 & ERC-01/02: Security Invariants & Real ERC-8004 Verification Su
       setReceiptFetcherForTesting(async () => ({
         status: 'success',
         to: '0x0000000000000000000000000000000000000099',
-        logs: [{ data, topics }],
+        logs: [{ address: treasury, data, topics }],
       }));
       const resWrongTo = await verifyFundingReceiptOnFuji({
         txHash: '0xwrongtotx',
@@ -277,9 +312,25 @@ describe('SW-01 & ERC-01/02: Security Invariants & Real ERC-8004 Verification Su
       });
       expect(resWrongTo.valid).toBe(false);
       expect(resWrongTo.error).toContain('recipient mismatch');
+
+      // 6. RCPT-01: Log from different contract address rejected even if topics match
+      setReceiptFetcherForTesting(async () => ({
+        status: 'success',
+        to: treasury,
+        logs: [{ address: '0x0000000000000000000000000000000000000088', data, topics }],
+      }));
+      const resWrongLogAddr = await verifyFundingReceiptOnFuji({
+        txHash: '0xwronglogaddrtx',
+        missionId: testMissionId,
+        sessionWallet: testWallet,
+        expectedAmount: testToolCap,
+        treasuryAddress: treasury,
+      });
+      expect(resWrongLogAddr.valid).toBe(false);
+      expect(resWrongLogAddr.error).toContain('from expected treasury contract');
     });
 
-    it('WIRE-01: verifyAnchorReceiptOnFuji validates MissionProofAnchored events and rejects discrepancies', async () => {
+    it('WIRE-01 & RCPT-01: verifyAnchorReceiptOnFuji validates MissionProofAnchored events and rejects discrepancies', async () => {
       const headHash = '0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
       const topics = encodeEventTopics({
         abi: [missionProofAnchoredEventAbi],
@@ -296,7 +347,7 @@ describe('SW-01 & ERC-01/02: Security Invariants & Real ERC-8004 Verification Su
         status: 'success',
         to: treasury,
         blockNumber: 789101n,
-        logs: [{ data, topics }],
+        logs: [{ address: treasury, data, topics }],
       }));
 
       const res = await verifyAnchorReceiptOnFuji({
@@ -318,9 +369,24 @@ describe('SW-01 & ERC-01/02: Security Invariants & Real ERC-8004 Verification Su
       });
       expect(resWrongHash.valid).toBe(false);
       expect(resWrongHash.error).toContain('headHash mismatch');
+
+      // 3. RCPT-01: Log from different contract address rejected even if topics match
+      setReceiptFetcherForTesting(async () => ({
+        status: 'success',
+        to: treasury,
+        logs: [{ address: '0x0000000000000000000000000000000000000088', data, topics }],
+      }));
+      const resWrongAnchorLog = await verifyAnchorReceiptOnFuji({
+        txHash: '0xwronglogaddrtx',
+        missionId: testMissionId,
+        expectedHeadHash: headHash,
+        treasuryAddress: treasury,
+      });
+      expect(resWrongAnchorLog.valid).toBe(false);
+      expect(resWrongAnchorLog.error).toContain('from expected treasury contract');
     });
 
-    it('FB-01: verifyFeedbackReceiptOnFuji validates ReputationRegistry transactions and agentId', async () => {
+    it('FB-01 & RCPT-01: verifyFeedbackReceiptOnFuji validates ReputationRegistry transactions and agentId', async () => {
       const repRegistry = ERC8004_FUJI_REPUTATION_REGISTRY;
       const agentId = 1001n;
 
@@ -347,7 +413,7 @@ describe('SW-01 & ERC-01/02: Security Invariants & Real ERC-8004 Verification Su
       setReceiptFetcherForTesting(async () => ({
         status: 'success',
         to: repRegistry,
-        logs: [{ data, topics }],
+        logs: [{ address: repRegistry, data, topics }],
       }));
 
       const res = await verifyFeedbackReceiptOnFuji({
@@ -368,7 +434,7 @@ describe('SW-01 & ERC-01/02: Security Invariants & Real ERC-8004 Verification Su
       setReceiptFetcherForTesting(async () => ({
         status: 'success',
         to: '0x0000000000000000000000000000000000000088',
-        logs: [{ data, topics }],
+        logs: [{ address: repRegistry, data, topics }],
       }));
       const resWrongTo = await verifyFeedbackReceiptOnFuji({
         txHash: '0xwrongtotx',
@@ -376,6 +442,19 @@ describe('SW-01 & ERC-01/02: Security Invariants & Real ERC-8004 Verification Su
       });
       expect(resWrongTo.valid).toBe(false);
       expect(resWrongTo.error).toContain('recipient mismatch');
+
+      // 4. RCPT-01: Log from different contract address rejected even if topics match
+      setReceiptFetcherForTesting(async () => ({
+        status: 'success',
+        to: repRegistry,
+        logs: [{ address: '0x0000000000000000000000000000000000000088', data, topics }],
+      }));
+      const resWrongLogAddr = await verifyFeedbackReceiptOnFuji({
+        txHash: '0xwronglogaddrtx',
+        expectedAgentId: agentId,
+      });
+      expect(resWrongLogAddr.valid).toBe(false);
+      expect(resWrongLogAddr.error).toContain('from expected ReputationRegistry contract');
     });
   });
 });

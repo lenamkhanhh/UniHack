@@ -40,7 +40,7 @@ export interface QuoteParams {
 export async function createQuote(params: QuoteParams) {
   // KEY-02b: Validate Live Fuji configuration before quoting
   if (getPaymentMode() === 'LIVE_FUJI') {
-    validateLiveFujiConfig();
+    await validateLiveFujiConfig();
   }
 
   if (params.tokenClaims.type !== 'spend') {
@@ -154,7 +154,7 @@ export async function reserveOperation(params: {
 }) {
   // KEY-02b: Validate Live Fuji configuration before reserving
   if (getPaymentMode() === 'LIVE_FUJI') {
-    validateLiveFujiConfig();
+    await validateLiveFujiConfig();
   }
 
   if (params.tokenClaims.type !== 'spend') {
@@ -380,7 +380,7 @@ export async function signOperationAuthorization(params: {
 }) {
   // KEY-02b: Validate Live Fuji configuration before signing
   if (getPaymentMode() === 'LIVE_FUJI') {
-    validateLiveFujiConfig();
+    await validateLiveFujiConfig();
   }
 
   const opPre = await prisma.toolOperation.findUnique({

@@ -6,6 +6,7 @@ import { getSessionWalletForMission } from '@/lib/session-wallets';
 import { appendAuditEntry } from '@/lib/audit';
 import { encodeFunctionData, parseAbiItem } from 'viem';
 import { verifyFundingReceiptOnFuji } from '@/lib/fuji-receipts';
+import { validateLiveFujiConfig } from '@/lib/config';
 
 const fundMissionWalletAbi = parseAbiItem(
   'function fundMissionWallet(bytes32 missionId, address wallet, uint256 amount) external'
@@ -58,11 +59,15 @@ export async function POST(
         appOrigin,
       });
 
-      // WIRE-01: In Stage S2, wire session wallet funding into activation lifecycle
+      // WIRE-01 & CFG-01: In Stage S2, wire session wallet funding into activation lifecycle
       if (res.state.stage === 'S2') {
         const sessionWallet = getSessionWalletForMission(mission.slug);
-        const guardedTreasuryAddress = (process.env.GUARDED_TREASURY_ADDRESS ||
-          '0x0000000000000000000000000000000000000000') as `0x${string}`;
+        if (res.state.paymentMode === 'LIVE_FUJI') {
+          await validateLiveFujiConfig();
+        }
+        const rawTreasury = process.env.GUARDED_TREASURY_ADDRESS?.trim();
+        const guardedTreasuryAddress = (rawTreasury ||
+          '0x5aAdFB43eF8dAF45DD80F4676345b7676f1D70e3') as `0x${string}`;
 
         const missionIdBytes32 = (
           mission.missionId.startsWith('0x')

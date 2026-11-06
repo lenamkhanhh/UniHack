@@ -482,7 +482,7 @@ describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Ra
     expect(dataWithoutOverride.steps[0].plannerModel).toBe('deterministic-planner-v1');
   });
 
-  it('Regression 11 (KEY-02): LIVE_FUJI mode rejects missing variables or well-known Anvil keys/addresses', () => {
+  it('Regression 11 (KEY-02): LIVE_FUJI mode rejects missing variables or well-known Anvil keys/addresses', async () => {
     const originalEnv = { ...process.env };
 
     try {
@@ -490,20 +490,20 @@ describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Ra
       process.env.PAYMENT_MODE = 'LIVE_FUJI';
       delete process.env.SELLER_ADDRESS;
       process.env.AGENT_PRIVATE_KEY = '0x1111111111111111111111111111111111111111111111111111111111111111';
-      expect(() => validateLiveFujiConfig()).toThrow('KEY-02: SELLER_ADDRESS must be set');
+      await expect(validateLiveFujiConfig()).rejects.toThrow('KEY-02: SELLER_ADDRESS must be set');
 
       // 2. Anvil default seller address 0x7099...79c8
       process.env.SELLER_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
-      expect(() => validateLiveFujiConfig()).toThrow('KEY-02: SELLER_ADDRESS cannot be a well-known Anvil/Hardhat test address');
+      await expect(validateLiveFujiConfig()).rejects.toThrow('KEY-02: SELLER_ADDRESS cannot be a well-known Anvil/Hardhat test address');
 
       // 3. Anvil default agent private key 0xac09...ff80
       process.env.SELLER_ADDRESS = '0x1234567890123456789012345678901234567890';
       process.env.AGENT_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
-      expect(() => validateLiveFujiConfig()).toThrow('KEY-02: AGENT_PRIVATE_KEY cannot be a well-known Anvil/Hardhat test private key');
+      await expect(validateLiveFujiConfig()).rejects.toThrow('KEY-02: AGENT_PRIVATE_KEY cannot be a well-known Anvil/Hardhat test private key');
 
       // 4. MOCK mode allows without throwing
       process.env.PAYMENT_MODE = 'MOCK';
-      expect(() => validateLiveFujiConfig()).not.toThrow();
+      await expect(validateLiveFujiConfig()).resolves.not.toThrow();
     } finally {
       process.env = originalEnv;
     }
