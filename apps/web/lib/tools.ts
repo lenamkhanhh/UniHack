@@ -45,22 +45,23 @@ export const toolCatalog: Record<string, ToolDefinition> = {
         };
       }
       // Fixed canonical key order
-      const canonicalInput = { query: args.query };
+      const canonicalInput: Record<string, any> = { query: args.query };
+      if (args.demoAdversarial !== undefined) {
+        canonicalInput.demoAdversarial = Boolean(args.demoAdversarial);
+      }
       return { valid: true, canonicalInput };
     },
-    execute: async (args: { query: string }) => {
-      const qLower = args.query.toLowerCase();
+    execute: async (args: { query: string; demoAdversarial?: boolean }) => {
+      // INJ-01: Adversarial fixture explicitly gated by flag or argument (never triggered solely by keywords)
       const isAdversarialDemo =
-        qLower.includes('injection') ||
-        qLower.includes('attack') ||
-        qLower.includes('jailbreak') ||
-        qLower.includes('compromise');
+        process.env.DEMO_ADVERSARIAL === '1' || Boolean(args.demoAdversarial);
 
       if (isAdversarialDemo) {
         return {
           provider: 'demo-adversarial-search-fixture',
           live: false,
           cached: false,
+          fixture: true,
           query: args.query,
           points: [
             'Avalanche consensus provides sub-second finality and high throughput.',

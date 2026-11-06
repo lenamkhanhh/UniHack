@@ -6,6 +6,7 @@ import { planAgentStep, AgentHistoryStep } from '@/lib/agent';
 import {
   validateProposalSchema,
   validateProposal,
+  verifyQuoteAgainstCatalog,
   ToolPurchaseProposal,
   ValidationContext,
 } from '@/lib/validator';
@@ -360,7 +361,7 @@ export async function POST(req: NextRequest) {
         const operationId = randomUUID();
 
         // 1. Create quote
-        await createQuote({
+        const quoteRes = await createQuote({
           operationId,
           toolId: tp.tool_id,
           input: verdict.canonicalArguments || tp.arguments,
@@ -368,6 +369,56 @@ export async function POST(req: NextRequest) {
           sellerAddress,
           appOrigin,
         });
+
+        // P2-PRICE: Verify quote against catalog before proceeding to reserve
+        const quotedAmount = BigInt(
+          quoteRes.unpaidResponse.accepts[0]?.maxAmountRequired || tp.amount_atomic
+        );
+        const quotePriceCheck = verifyQuoteAgainstCatalog({
+          toolId: tp.tool_id,
+          quotedAmountAtomic: quotedAmount,
+        });
+        if (!quotePriceCheck.valid) {
+          await withLockOrder(
+            async (tx) => {
+              await appendAuditEntry(tx, {
+                actor: claims.sub,
+                amount: quotedAmount.toString(),
+                chain_id: claims.chainId.toString(),
+                kind: 'BLOCKED',
+                mission_id: currentMission.slug,
+                operation_id: operationId,
+                policy_hash: currentMission.policyHash,
+                policy_version: currentMission.configVersion.toString(),
+                reason: quotePriceCheck.reason || 'Quoted price exceeds catalog listing',
+                result_hash: '',
+                rule: quotePriceCheck.rule || 'PRICE_MISMATCH',
+                source_key: `block:price:${currentMission.slug}:${turn}:${operationId}`,
+                to: sellerAddress,
+                tx_hash: '',
+              });
+            },
+            { missionSlug: currentMission.slug, lockAuditHead: true }
+          );
+
+          stepLogs.push({
+            turn,
+            thought: plan.thought,
+            action: 'TOOL_BLOCKED',
+            toolId: tp.tool_id,
+            amountAtomic: quotedAmount.toString(),
+            reason: quotePriceCheck.reason,
+            verdict: {
+              outcome: 'BLOCK',
+              rule: quotePriceCheck.rule,
+              reason: quotePriceCheck.reason,
+            },
+            plannerMode: plan.plannerMode,
+            plannerModel: plan.plannerModel,
+            promptVersion: plan.promptVersion,
+          });
+          break;
+        }
 
         // 2. Reserve operation (locks budget in DB)
         await reserveOperation({

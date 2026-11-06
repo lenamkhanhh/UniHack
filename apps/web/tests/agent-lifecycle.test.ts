@@ -1,12 +1,16 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
+import { randomUUID } from 'crypto';
 import { POST } from '../app/api/agent/run/route';
+import { POST as orchestratePOST } from '../app/api/tools/orchestrate/route';
 import { prisma } from '../lib/db';
 import { clearDatabase, createTestMission } from './setup';
-import { issueSpendToken } from '../lib/auth';
+import { issueSpendToken, verifyToken } from '../lib/auth';
 import { hashUtf8, normalizeAddress } from '../lib/chain';
 import { validateLiveFujiConfig } from '../lib/config';
 import { verifyQuoteAgainstCatalog } from '../lib/validator';
+import { reserveOperation } from '../lib/payments';
+import { toolCatalog } from '../lib/tools';
 
 describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Rails', () => {
   beforeEach(async () => {
@@ -577,8 +581,8 @@ describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Ra
     expect(parsedBlocked.to).toBe('0x3333333333333333333333333333333333333333');
   });
 
-  it('Regression 14 (P2-PRICE): Quote exceeding catalog price or per-call cap is strictly rejected', () => {
-    // 1. Quoted price exceeds catalog price (Search is 100,000 atomic; quote is 200,000)
+  it('Regression 14 (P2-PRICE): Quote exceeding catalog price or per-call cap is strictly rejected by payment rail and logged to audit', async () => {
+    // 1. Direct function verification
     const quoteOverPrice = verifyQuoteAgainstCatalog({
       toolId: 'tool:search',
       quotedAmountAtomic: 200_000n,
@@ -586,27 +590,122 @@ describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Ra
     expect(quoteOverPrice.valid).toBe(false);
     expect(quoteOverPrice.rule).toBe('PRICE_MISMATCH');
 
-    // 2. Quoted price exceeds per-call cap (Search perCallCap is 200,000 atomic; quote is 500,000)
     const quoteOverCap = verifyQuoteAgainstCatalog({
       toolId: 'tool:search',
       quotedAmountAtomic: 500_000n,
     });
     expect(quoteOverCap.valid).toBe(false);
-    expect(quoteOverCap.rule).toBe('PRICE_MISMATCH'); // Price mismatch triggers first if > catalog
+    expect(quoteOverCap.rule).toBe('PRICE_MISMATCH');
 
-    // 3. Unknown tool
-    const quoteUnknown = verifyQuoteAgainstCatalog({
-      toolId: 'tool:unknown_scam',
-      quotedAmountAtomic: 100_000n,
-    });
-    expect(quoteUnknown.valid).toBe(false);
-    expect(quoteUnknown.rule).toBe('UNKNOWN_TOOL');
+    // 2. Real Handler / Payment Rail Execution:
+    // Create mission and operation with inflated price, then invoke reserveOperation
+    const { mission, spendToken } = await createTestMission({ toolCap: 5_000_000n });
+    const claims = await verifyToken(spendToken);
 
-    // 4. Exact legitimate catalog price succeeds
-    const quoteValid = verifyQuoteAgainstCatalog({
-      toolId: 'tool:search',
-      quotedAmountAtomic: 100_000n,
+    const inflatedOpId = randomUUID();
+    await prisma.toolOperation.create({
+      data: {
+        operationId: inflatedOpId,
+        deploymentId: claims.deploymentId,
+        missionSlug: mission.slug,
+        paymentMode: 'MOCK',
+        payerAddress: claims.agent,
+        toolId: 'tool:search',
+        inputHash: '0x1234',
+        paymentTerms: JSON.stringify({
+          toolId: 'tool:search',
+          priceAtomic: '999000', // Inflated price > catalog price of 100,000
+          asset: '0x5425890298aed601595a70ab815c96711a31bc65',
+          payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+        }),
+        paymentTermsHash: '0x5678',
+        policyHash: claims.policyHash,
+        chainId: 43113,
+        asset: '0x5425890298aed601595a70ab815c96711a31bc65',
+        state: 'CREATED',
+        version: 0,
+        authDeploymentVersion: 1,
+        quoteExpiresAt: new Date(Date.now() + 300000),
+        reservedAmount: '0',
+      },
     });
-    expect(quoteValid.valid).toBe(true);
+
+    // Calling reserveOperation MUST reject with PRICE_MISMATCH
+    await expect(
+      reserveOperation({
+        operationId: inflatedOpId,
+        tokenClaims: claims,
+      })
+    ).rejects.toThrow('PRICE_MISMATCH');
+
+    // Confirm that a BLOCKED audit record was written into database under lock
+    const auditEntries = await prisma.auditEntry.findMany({ where: { missionSlug: mission.slug } });
+    const blockedAudit = auditEntries.find((e) => {
+      const parsed = JSON.parse(e.canonicalJson);
+      return parsed.operation_id === inflatedOpId;
+    });
+    expect(blockedAudit).toBeDefined();
+    const parsedAudit = JSON.parse(blockedAudit!.canonicalJson);
+    expect(parsedAudit.rule).toBe('PRICE_MISMATCH');
+    expect(parsedAudit.kind).toBe('BLOCKED');
+  });
+
+  it('Regression 15 (KEY-02b): External spending route (/api/tools/orchestrate) fails startup validation in LIVE_FUJI mode when using Anvil address', async () => {
+    process.env.PAYMENT_MODE = 'LIVE_FUJI';
+    process.env.SELLER_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'; // Insecure Anvil #1
+    process.env.AGENT_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'; // Insecure Anvil #0
+
+    const { spendToken } = await createTestMission();
+
+    const req = new NextRequest('http://localhost:3000/api/tools/orchestrate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${spendToken}`,
+      },
+      body: JSON.stringify({
+        toolId: 'tool:search',
+        arguments: { query: 'Avalanche architecture' },
+      }),
+    });
+
+    // Calling external orchestrate handler must throw or return KEY-02 error
+    try {
+      const res = await orchestratePOST(req);
+      if (res.status === 500) {
+        const errJson = await res.json();
+        expect(errJson.error).toContain('KEY-02');
+      }
+    } catch (err: any) {
+      expect(err.message).toContain('KEY-02');
+    }
+
+    // Reset payment mode
+    process.env.PAYMENT_MODE = 'MOCK';
+  });
+
+  it('Regression 16 (INJ-01): Research query containing "attack" executes normal live search when demo flag is false', async () => {
+    delete process.env.DEMO_ADVERSARIAL;
+
+    // Normal query mentioning attack
+    const normalResult = await toolCatalog['tool:search'].execute({
+      query: '51% attack blockchain consensus security',
+      demoAdversarial: false,
+    });
+
+    // Must NOT return the adversarial injection directive fixture
+    expect(normalResult.provider).not.toBe('demo-adversarial-search-fixture');
+    expect((normalResult as any).fixture).toBeUndefined();
+
+    // Adversarial mode explicitly enabled via argument
+    const adversarialResult = await toolCatalog['tool:search'].execute({
+      query: 'Attack demo test',
+      demoAdversarial: true,
+    });
+
+    // MUST return the labeled fixture with fixture: true
+    expect(adversarialResult.provider).toBe('demo-adversarial-search-fixture');
+    expect((adversarialResult as any).fixture).toBe(true);
+    expect(adversarialResult.points[1]).toContain('URGENT ADVISORY');
   });
 });

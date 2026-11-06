@@ -20,7 +20,8 @@ import {
 } from './chain';
 import { canonicalJson, computePayloadHash, TokenClaims } from './auth';
 import { reconcileOperation, ChainEvidence } from './reconcile';
-import { getPaymentMode } from './config';
+import { getPaymentMode, validateLiveFujiConfig } from './config';
+import { verifyQuoteAgainstCatalog } from './validator';
 
 export { getPaymentMode };
 
@@ -36,6 +37,11 @@ export interface QuoteParams {
 }
 
 export async function createQuote(params: QuoteParams) {
+  // KEY-02b: Validate Live Fuji configuration before quoting
+  if (getPaymentMode() === 'LIVE_FUJI') {
+    validateLiveFujiConfig();
+  }
+
   if (params.tokenClaims.type !== 'spend') {
     throw new Error('Spend token required to create a quote');
   }
@@ -140,17 +146,76 @@ export async function reserveOperation(params: {
   operationId: string;
   tokenClaims: TokenClaims;
 }) {
+  // KEY-02b: Validate Live Fuji configuration before reserving
+  if (getPaymentMode() === 'LIVE_FUJI') {
+    validateLiveFujiConfig();
+  }
+
   if (params.tokenClaims.type !== 'spend') {
     throw new Error('Spend token required for reservation');
   }
 
   const opPre = await prisma.toolOperation.findUnique({
     where: { operationId: params.operationId },
-    select: { operationId: true, missionSlug: true, sessionId: true },
+    select: {
+      operationId: true,
+      missionSlug: true,
+      sessionId: true,
+      toolId: true,
+      paymentTerms: true,
+      policyHash: true,
+      chainId: true,
+    },
   });
 
   if (!opPre || opPre.missionSlug !== params.tokenClaims.missionSlug) {
     throw new Error('OPERATION_NOT_FOUND');
+  }
+
+  // P2-PRICE: Verify quote against catalog before reserving
+  const termsPre = JSON.parse(opPre.paymentTerms);
+  const pricePre = BigInt(termsPre.priceAtomic);
+  const priceCheckPre = verifyQuoteAgainstCatalog({
+    toolId: opPre.toolId,
+    quotedAmountAtomic: pricePre,
+  });
+
+  if (!priceCheckPre.valid) {
+    await withLockOrder(
+      async (tx) => {
+        await tx.toolOperation.update({
+          where: { operationId: params.operationId },
+          data: {
+            state: 'FAILED',
+            failureReason: priceCheckPre.rule || 'PRICE_MISMATCH',
+            version: { increment: 1 },
+          },
+        });
+        await appendAuditEntry(tx, {
+          actor: params.tokenClaims.agent,
+          amount: pricePre.toString(),
+          chain_id: opPre.chainId.toString(),
+          kind: 'BLOCKED',
+          mission_id: opPre.missionSlug,
+          operation_id: opPre.operationId,
+          policy_hash: opPre.policyHash,
+          policy_version: '1',
+          reason: priceCheckPre.reason || 'Price mismatch with catalog',
+          result_hash: '',
+          rule: priceCheckPre.rule || 'PRICE_MISMATCH',
+          source_key: `block:price:${opPre.operationId}:${Date.now()}`,
+          to: termsPre.payTo || '',
+          tx_hash: '',
+        });
+      },
+      {
+        missionSlug: opPre.missionSlug,
+        sessionId: opPre.sessionId || undefined,
+        operationId: params.operationId,
+        lockAuditHead: true,
+      }
+    );
+    throw new Error(priceCheckPre.rule || 'PRICE_MISMATCH');
   }
 
   return await withLockOrder(
@@ -280,6 +345,11 @@ export async function signOperationAuthorization(params: {
   agentPrivateKey?: `0x${string}`;
   tokenClaims?: TokenClaims;
 }) {
+  // KEY-02b: Validate Live Fuji configuration before signing
+  if (getPaymentMode() === 'LIVE_FUJI') {
+    validateLiveFujiConfig();
+  }
+
   const opPre = await prisma.toolOperation.findUnique({
     where: { operationId: params.operationId },
     select: { operationId: true, missionSlug: true, sessionId: true },

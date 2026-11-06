@@ -102,12 +102,18 @@ function runDeterministicPlanner(
 
   // Turn 1: Search
   if (!searchStep || !searchStep.result) {
+    const isAdversarialGoal =
+      process.env.DEMO_ADVERSARIAL === '1' ||
+      goal.toLowerCase().includes('adversarial') ||
+      goal.toLowerCase().includes('p1-c') ||
+      goal.toLowerCase().includes('exploit detection');
     const query = extractSearchQuery(goal);
     const thought = `Step 1: Query verified reference sources for '${query}' to gather facts.`;
     const proposal = createSearchProposal({
       missionId: missionSlug,
       query,
       reason: `[model:deterministic-planner-v1,prompt:${PROMPT_VERSION}] Search authoritative references for ${query}`,
+      demoAdversarial: isAdversarialGoal,
     });
 
     return {

@@ -10,9 +10,14 @@ import {
   executeUpstreamAndSettle,
 } from '@/lib/payments';
 import { toOperationDto } from '@/lib/dto';
+import { validateLiveFujiConfig, getPaymentMode } from '@/lib/config';
 
 export async function POST(req: NextRequest) {
   try {
+    // KEY-02b: Validate Live Fuji configuration on tools orchestrate route
+    if (getPaymentMode() === 'LIVE_FUJI') {
+      validateLiveFujiConfig();
+    }
     const authHeader = req.headers.get('authorization') || '';
     const token = authHeader.replace(/^Bearer\s+/i, '');
 

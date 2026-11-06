@@ -1,9 +1,85 @@
 import { test, expect } from './fixtures/wallet';
 import path from 'path';
+import { keccak256, stringToBytes } from 'viem';
+
+const INITIAL_PREV_HASH = '0x0000000000000000000000000000000000000000000000000000000000000000';
+
+function createValidProofPayload() {
+  const canon0 = JSON.stringify({
+    actor: '0x1111111111111111111111111111111111111111',
+    amount: '0',
+    chain_id: '43113',
+    created_at: '2026-11-07T00:00:00.000Z',
+    kind: 'CUTOVER',
+    mission_id: 'agent-mission-demo',
+    operation_id: '',
+    policy_hash: '0x0',
+    policy_version: '1',
+    prev_hash: INITIAL_PREV_HASH,
+    reason: 'Genesis checkpoint',
+    result_hash: '',
+    rule: 'GENESIS',
+    source_key: 'genesis:0',
+    to: '',
+    tx_hash: '',
+  });
+  const hash0 = keccak256(stringToBytes(canon0));
+
+  const canon1 = JSON.stringify({
+    actor: '0x1111111111111111111111111111111111111111',
+    amount: '100000',
+    chain_id: '43113',
+    created_at: '2026-11-07T00:01:00.000Z',
+    kind: 'TOOL_PAID',
+    mission_id: 'agent-mission-demo',
+    operation_id: 'op-search-1',
+    policy_hash: '0x0',
+    policy_version: '1',
+    prev_hash: hash0,
+    reason: 'Search tool execution',
+    result_hash: '',
+    rule: 'RULE_TOOL_WITHIN_CAP',
+    source_key: 'tool:search:1',
+    to: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+    tx_hash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+  });
+  const hash1 = keccak256(stringToBytes(canon1));
+
+  return {
+    schemaVersion: 1,
+    ledgerScope: 'mission',
+    missionSlug: 'agent-mission-demo',
+    audit: {
+      checkpoint: {
+        headHash: hash1,
+        entryCount: 2,
+        timestamp: '2026-11-07T00:01:00.000Z',
+      },
+      entries: [
+        {
+          sourceKey: 'genesis:0',
+          prevHash: INITIAL_PREV_HASH,
+          entryHash: hash0,
+          canonicalJson: canon0,
+        },
+        {
+          sourceKey: 'tool:search:1',
+          prevHash: hash0,
+          entryHash: hash1,
+          canonicalJson: canon1,
+        },
+      ],
+    },
+  };
+}
 
 test.describe('P2 Mission Control & P1-C Adversarial Defense E2E Verification', () => {
-  test('Renders 5-part Mission Control, exercises in-browser proof, kill-switch, and P1-C defense', async ({ page }) => {
-    // 1. Mock policy route
+  test('Renders 5-part Mission Control, exercises in-browser proof, kill-switch, and P1-C defense', async ({ page, wallet }) => {
+    await wallet.injectMockWallet(page);
+
+    let serverPaused = false;
+
+    // 1. Policy route reflecting server state
     await page.route('/api/policy', async (route) => {
       await route.fulfill({
         status: 200,
@@ -12,16 +88,56 @@ test.describe('P2 Mission Control & P1-C Adversarial Defense E2E Verification', 
           stage: 'S1',
           chainId: 43113,
           paymentMode: 'MOCK',
-          systemPaused: false,
+          systemPaused: serverPaused,
           maintenance: false,
           deploymentId: 'unihack-mission-control-test',
-          configuredOwner: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
+          configuredOwner: wallet.ownerAddress,
         }),
       });
     });
 
-    // 2. Mock adversarial attack agent run (P1-C)
+    // 2. Auth challenge route
+    await page.route('/api/auth/challenge', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          nonce: 'test-pause-nonce-1234567890abcdef',
+          message: 'UniHack Auth Challenge: Pause action verification',
+          expiresAt: new Date(Date.now() + 300000).toISOString(),
+        }),
+      });
+    });
+
+    // 3. System pause route
+    await page.route('/api/system/pause', async (route) => {
+      const data = route.request().postDataJSON();
+      serverPaused = data.payload?.desiredPaused ?? true;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, systemPaused: serverPaused }),
+      });
+    });
+
+    // 4. Valid proof route
+    await page.route(/\/api\/missions\/[^/]+\/proof/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(createValidProofPayload()),
+      });
+    });
+
+    // 5. Mock adversarial attack agent run (P1-C)
     await page.route('/api/agent/run', async (route) => {
+      if (serverPaused) {
+        return route.fulfill({
+          status: 403,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'System is paused' }),
+        });
+      }
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -73,13 +189,18 @@ test.describe('P2 Mission Control & P1-C Adversarial Defense E2E Verification', 
     await expect(page.locator('text=Total Cap:')).toBeVisible();
     await expect(page.locator('text=5.00 USDC Cap')).toBeVisible();
 
-    // Section 2: Assert In-browser Proof Verification
+    // Section 2: Assert In-browser Proof Verification (Real mathematical verification)
     const verifyProofBtn = page.locator('button:has-text("Verify Proof")');
     await expect(verifyProofBtn).toBeVisible();
     await verifyProofBtn.click();
     await expect(page.locator('text=Cryptographic Audit Proof Verified (Client-Side)')).toBeVisible();
+    await expect(page.locator('text=2 records, unbroken chain')).toBeVisible();
 
     // Section 3: Assert Emergency Pause Kill-Switch
+    // First connect wallet
+    await page.click('button:has-text("Connect MetaMask")');
+    await expect(page.locator(`button:has-text("Connected: ${wallet.ownerAddress.slice(0, 6)}")`)).toBeVisible();
+
     const pauseBtn = page.locator('button:has-text("Pause Kill-Switch")');
     await expect(pauseBtn).toBeVisible();
     await pauseBtn.click();
@@ -126,5 +247,139 @@ test.describe('P2 Mission Control & P1-C Adversarial Defense E2E Verification', 
     const mcScreenshot = path.resolve(process.cwd(), 'evidence/p2-mission-control-ui.png');
     await page.screenshot({ path: mcScreenshot, fullPage: true });
     console.log(`Saved Mission Control screenshot to: ${mcScreenshot}`);
+  });
+
+  test('UI-01 Case 1: Valid proof mathematically verified in-browser', async ({ page }) => {
+    await page.route('/api/policy', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          stage: 'S1',
+          chainId: 43113,
+          paymentMode: 'MOCK',
+          systemPaused: false,
+          maintenance: false,
+          deploymentId: 'unihack-case1',
+          configuredOwner: '0x1111111111111111111111111111111111111111',
+        }),
+      });
+    });
+
+    await page.route(/\/api\/missions\/[^/]+\/proof/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(createValidProofPayload()),
+      });
+    });
+
+    await page.goto('/demo');
+    await page.click('button:has-text("Verify Proof")');
+    await expect(page.locator('text=Cryptographic Audit Proof Verified (Client-Side)')).toBeVisible();
+    await expect(page.locator('text=2 records, unbroken chain')).toBeVisible();
+  });
+
+  test('UI-01 Case 2: Tampered proof detected and rejected in-browser (FAIL)', async ({ page }) => {
+    await page.route('/api/policy', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          stage: 'S1',
+          chainId: 43113,
+          paymentMode: 'MOCK',
+          systemPaused: false,
+          maintenance: false,
+          deploymentId: 'unihack-case2',
+          configuredOwner: '0x1111111111111111111111111111111111111111',
+        }),
+      });
+    });
+
+    // Provide a tampered proof payload where canonicalJson does not match entryHash
+    const tamperedPayload = createValidProofPayload();
+    tamperedPayload.audit.entries[1].canonicalJson = JSON.stringify({
+      ...JSON.parse(tamperedPayload.audit.entries[1].canonicalJson),
+      amount: '9999999999', // Maliciously tampered amount
+    });
+
+    await page.route(/\/api\/missions\/[^/]+\/proof/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(tamperedPayload),
+      });
+    });
+
+    await page.goto('/demo');
+    await page.click('button:has-text("Verify Proof")');
+    await expect(page.locator('text=Cryptographic Audit Proof Verification FAILED')).toBeVisible();
+    await expect(page.locator('p:has-text("Hash mismatch at index 1")')).toBeVisible();
+  });
+
+  test('UI-01 Case 3: 401 Unauthorized proof denied and renders UNVERIFIED in-browser', async ({ page }) => {
+    await page.route('/api/policy', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          stage: 'S1',
+          chainId: 43113,
+          paymentMode: 'MOCK',
+          systemPaused: false,
+          maintenance: false,
+          deploymentId: 'unihack-case3',
+          configuredOwner: '0x1111111111111111111111111111111111111111',
+        }),
+      });
+    });
+
+    await page.route(/\/api\/missions\/[^/]+\/proof/, async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Unauthorized: scoped credential required for private mission proof' }),
+      });
+    });
+
+    await page.goto('/demo');
+    await page.click('button:has-text("Verify Proof")');
+    await expect(page.locator('text=Cryptographic Audit Proof UNVERIFIED')).toBeVisible();
+    await expect(page.locator('p:has-text("Unauthorized: scoped credential")')).toBeVisible();
+  });
+
+  test('UI-02: Server Pause Kill-Switch halts agent operations with HTTP 403', async ({ page, wallet }) => {
+    await wallet.injectMockWallet(page);
+
+    await page.route('/api/policy', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          stage: 'S1',
+          chainId: 43113,
+          paymentMode: 'MOCK',
+          systemPaused: true, // System is paused on server
+          maintenance: false,
+          deploymentId: 'unihack-pause-test',
+          configuredOwner: wallet.ownerAddress,
+        }),
+      });
+    });
+
+    await page.goto('/demo');
+    await expect(page.getByText('SYSTEM PAUSED', { exact: true })).toBeVisible();
+
+    await page.route('/api/agent/run', async (route) => {
+      await route.fulfill({
+        status: 403,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'System is paused' }),
+      });
+    });
+
+    await page.click('[data-testid="execute-agent-btn"]');
+    await expect(page.locator('text=Agent execution failed: HTTP 403 System is paused')).toBeVisible();
   });
 });

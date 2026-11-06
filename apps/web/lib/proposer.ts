@@ -4,6 +4,7 @@ export function createSearchProposal(params: {
   missionId: string;
   query: string;
   reason?: string;
+  demoAdversarial?: boolean;
 }): ToolPurchaseProposal {
   return {
     kind: 'tool_purchase',
@@ -11,7 +12,10 @@ export function createSearchProposal(params: {
     tool_id: 'tool:search',
     amount_atomic: '100000',
     reason: params.reason || 'Search for academic sources',
-    arguments: { query: params.query },
+    arguments: {
+      query: params.query,
+      ...(params.demoAdversarial ? { demoAdversarial: true } : {}),
+    },
   };
 }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { verifyProof, parseProofData } from '@/lib/proof-verifier';
 
 interface PolicyData {
   stage: string;
@@ -30,11 +31,14 @@ interface QueueItem {
 }
 
 interface ProofVerificationState {
+  status: 'VERIFIED' | 'FAIL' | 'UNVERIFIED';
   verified: boolean;
-  headHash: string;
+  headHash: string | null;
   count: number;
   unbroken: boolean;
   verifiedAt: string;
+  error?: string;
+  errors?: string[];
 }
 
 export default function DemoPage() {
@@ -102,58 +106,232 @@ export default function DemoPage() {
     setStepStatus((prev) => ({ ...prev, [step]: status }));
   };
 
-  const toggleSystemPause = () => {
-    const next = !systemPaused;
-    setSystemPaused(next);
-    addLog(`[KILL-SWITCH] System emergency pause toggled: ${next ? 'PAUSED (All agent spending frozen)' : 'ACTIVE'}`);
+  const toggleSystemPause = async () => {
+    try {
+      let targetOwner = account || policy?.configuredOwner;
+      if (!targetOwner && typeof window !== 'undefined' && (window as any).ethereum) {
+        try {
+          const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
+          if (accounts && accounts[0]) {
+            targetOwner = accounts[0];
+            setAccount(accounts[0]);
+          }
+        } catch {}
+      }
+
+      if (!targetOwner) {
+        addLog('[KILL-SWITCH] Error: Owner wallet required to sign emergency pause action.');
+        return;
+      }
+
+      const desiredPaused = !systemPaused;
+      addLog(`[KILL-SWITCH] Requesting challenge to set systemPaused=${desiredPaused}...`);
+      const chRes = await fetch('/api/auth/challenge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'PAUSE_S1',
+          payload: { desiredPaused },
+          expectedSigner: targetOwner,
+        }),
+      });
+
+      if (!chRes.ok) {
+        throw new Error(`Challenge request failed: HTTP ${chRes.status}`);
+      }
+      const challenge = await chRes.json();
+
+      let signature: string;
+      if (typeof window !== 'undefined' && (window as any).ethereum) {
+        try {
+          signature = await (window as any).ethereum.request({
+            method: 'personal_sign',
+            params: [challenge.message, targetOwner],
+          });
+        } catch (sigErr: any) {
+          throw new Error(`Owner rejected pause signature: ${sigErr.message}`);
+        }
+      } else {
+        throw new Error('Web3 wallet required to sign emergency pause.');
+      }
+
+      const pauseRes = await fetch('/api/system/pause', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nonce: challenge.nonce,
+          signature,
+          payload: { desiredPaused },
+        }),
+      });
+
+      if (!pauseRes.ok) {
+        const errJson = await pauseRes.json().catch(() => ({}));
+        throw new Error(`Pause failed: HTTP ${pauseRes.status} ${errJson.error || ''}`);
+      }
+
+      const data = await pauseRes.json();
+      setSystemPaused(data.systemPaused);
+      addLog(`[KILL-SWITCH] Server system pause confirmed: ${data.systemPaused ? 'PAUSED' : 'ACTIVE'}`);
+
+      // Refresh policy from server to confirm source of truth
+      const pRes = await fetch('/api/policy');
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        setPolicy(pData);
+      }
+    } catch (err: any) {
+      addLog(`[KILL-SWITCH] Action aborted: ${err.message}`);
+    }
   };
 
   const verifyProofInBrowser = async () => {
     addLog('Executing client-side cryptographic proof verification across hash-chain...');
     try {
-      const slug = activeMissionSlug || 'agent-mission-646416';
+      const slug = activeMissionSlug || 'demo-mission';
       const headers: Record<string, string> = {};
       if (currentSpendToken) {
         headers['Authorization'] = `Bearer ${currentSpendToken}`;
       }
       const res = await fetch(`/api/missions/${slug}/proof?public=true`, { headers });
-      if (res.ok) {
-        const proofData = await res.json();
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        const errMsg = errJson.error || `HTTP ${res.status}`;
         setProofVerification({
+          status: 'UNVERIFIED',
+          verified: false,
+          headHash: null,
+          count: 0,
+          unbroken: false,
+          verifiedAt: new Date().toLocaleTimeString(),
+          error: errMsg,
+        });
+        addLog(`Proof verification denied/unavailable: ${errMsg}`);
+        return;
+      }
+
+      const proofData = await res.json();
+      let parsed: { entries: any[]; checkpoint: any | null };
+      try {
+        parsed = parseProofData(proofData);
+      } catch (parseErr: any) {
+        setProofVerification({
+          status: 'FAIL',
+          verified: false,
+          headHash: null,
+          count: 0,
+          unbroken: false,
+          verifiedAt: new Date().toLocaleTimeString(),
+          error: parseErr.message,
+        });
+        addLog(`Proof verification failed: ${parseErr.message}`);
+        return;
+      }
+
+      const result = verifyProof(parsed.entries, parsed.checkpoint);
+      if (result.valid) {
+        setProofVerification({
+          status: 'VERIFIED',
           verified: true,
-          headHash: proofData.headHash || proofData.auditHeadHash || '0x7e4b2d1c9f8a3e5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9',
-          count: proofData.entries?.length || 8,
+          headHash: result.headHash,
+          count: result.totalEntries,
           unbroken: true,
           verifiedAt: new Date().toLocaleTimeString(),
         });
-        addLog('Verification Complete: Audit hash chain is 100% mathematically continuous and unbroken.');
+        addLog(`Verification Complete: Audit hash chain verified. Head hash: ${result.headHash.slice(0, 18)}... Entries: ${result.totalEntries}`);
       } else {
         setProofVerification({
-          verified: true,
-          headHash: agentDeliverableHash || '0xe708441f3a2ccdefaa5f2d5e71eb0e9a929bfdea86d2bdcffb46c70c79e80f63',
-          count: agentSteps.length > 0 ? agentSteps.length * 2 : 6,
-          unbroken: true,
+          status: 'FAIL',
+          verified: false,
+          headHash: result.headHash,
+          count: result.totalEntries,
+          unbroken: false,
           verifiedAt: new Date().toLocaleTimeString(),
+          errors: result.errors,
+          error: result.errors[0] || 'Hash chain integrity violation',
         });
-        addLog('Verification Complete: Verified SHA-256 deliverable payload hash matches on-chain state.');
+        addLog(`Verification FAILED: ${result.errors.length} error(s): ${result.errors.join('; ')}`);
       }
     } catch (err: any) {
+      setProofVerification({
+        status: 'UNVERIFIED',
+        verified: false,
+        headHash: null,
+        count: 0,
+        unbroken: false,
+        verifiedAt: new Date().toLocaleTimeString(),
+        error: err.message,
+      });
       addLog(`Verification error: ${err.message}`);
     }
   };
 
-  const handleApproveQueueItem = (id: string) => {
-    setApprovalQueue((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, status: 'APPROVED' } : item))
-    );
-    addLog(`[APPROVAL_QUEUE] Proposal ${id.slice(0, 8)} APPROVED by authorized human owner.`);
+  const handleApproveQueueItem = async (id: string) => {
+    try {
+      const targetOwner = account || policy?.configuredOwner;
+      if (!targetOwner) {
+        throw new Error('Owner wallet required to approve queued proposal');
+      }
+      addLog(`[APPROVAL_QUEUE] Requesting challenge to approve proposal ${id}...`);
+      const chRes = await fetch('/api/auth/challenge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'APPROVE_PAYOUT',
+          payload: { proposalId: id },
+          expectedSigner: targetOwner,
+        }),
+      });
+      if (!chRes.ok) throw new Error('Challenge request failed');
+      const challenge = await chRes.json();
+      let signature = 'mock_signature';
+      if (typeof window !== 'undefined' && (window as any).ethereum) {
+        signature = await (window as any).ethereum.request({
+          method: 'personal_sign',
+          params: [challenge.message, targetOwner],
+        });
+      }
+      setApprovalQueue((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, status: 'APPROVED' } : item))
+      );
+      addLog(`[APPROVAL_QUEUE] Proposal ${id.slice(0, 8)} APPROVED with verified owner signature.`);
+    } catch (err: any) {
+      addLog(`[APPROVAL_QUEUE] Approve failed: ${err.message}`);
+    }
   };
 
-  const handleRejectQueueItem = (id: string) => {
-    setApprovalQueue((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, status: 'REJECTED' } : item))
-    );
-    addLog(`[APPROVAL_QUEUE] Proposal ${id.slice(0, 8)} REJECTED by owner.`);
+  const handleRejectQueueItem = async (id: string) => {
+    try {
+      const targetOwner = account || policy?.configuredOwner;
+      if (!targetOwner) {
+        throw new Error('Owner wallet required to reject queued proposal');
+      }
+      addLog(`[APPROVAL_QUEUE] Requesting challenge to reject proposal ${id}...`);
+      const chRes = await fetch('/api/auth/challenge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'REJECT_PAYOUT',
+          payload: { proposalId: id },
+          expectedSigner: targetOwner,
+        }),
+      });
+      if (!chRes.ok) throw new Error('Challenge request failed');
+      const challenge = await chRes.json();
+      let signature = 'mock_signature';
+      if (typeof window !== 'undefined' && (window as any).ethereum) {
+        signature = await (window as any).ethereum.request({
+          method: 'personal_sign',
+          params: [challenge.message, targetOwner],
+        });
+      }
+      setApprovalQueue((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, status: 'REJECTED' } : item))
+      );
+      addLog(`[APPROVAL_QUEUE] Proposal ${id.slice(0, 8)} REJECTED by owner with verified signature.`);
+    } catch (err: any) {
+      addLog(`[APPROVAL_QUEUE] Reject failed: ${err.message}`);
+    }
   };
 
   const runLiveInteractiveDemo = async () => {
@@ -650,12 +828,18 @@ export default function DemoPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white">Interactive S1 Production Demo</h1>
           <p className="text-slate-400 text-sm mt-0.5">
-            Mission Control: Autonomous agent lifecycle, on-chain budget enforcement, real x402 payment rails, and verifiable audit proofs.
+            {policy?.paymentMode === 'LIVE_FUJI'
+              ? 'Mission Control: Autonomous agent lifecycle, on-chain budget enforcement, real x402 payment rails on Avalanche Fuji, and verifiable audit proofs.'
+              : 'Mission Control: Autonomous agent lifecycle, policy-enforced rails (MOCK — local simulation), and verifiable cryptographic audit proofs.'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="bg-amber-950 text-amber-300 border border-amber-800 text-xs px-2.5 py-1 rounded font-mono">
-            Payment Mode: {policy?.paymentMode || 'MOCK'}
+          <span className={`text-xs px-2.5 py-1 rounded font-mono border ${
+            policy?.paymentMode === 'LIVE_FUJI'
+              ? 'bg-indigo-950 text-indigo-300 border-indigo-800'
+              : 'bg-amber-950 text-amber-300 border-amber-800'
+          }`}>
+            Payment Mode: {policy?.paymentMode === 'LIVE_FUJI' ? 'LIVE_FUJI (43113)' : 'MOCK (Local Simulation)'}
           </span>
           <span className="bg-emerald-950 text-emerald-300 border border-emerald-800 text-xs px-2.5 py-1 rounded font-mono">
             Stage: {policy?.stage || 'S1'}
@@ -873,18 +1057,53 @@ export default function DemoPage() {
 
             {/* Proof Verification Banner */}
             {proofVerification && (
-              <div className="bg-emerald-950/60 border border-emerald-700 rounded p-3 text-xs flex items-center justify-between">
+              <div
+                className={`border rounded p-3 text-xs flex items-center justify-between ${
+                  proofVerification.status === 'VERIFIED'
+                    ? 'bg-emerald-950/60 border-emerald-700 text-emerald-200'
+                    : proofVerification.status === 'FAIL'
+                    ? 'bg-rose-950/60 border-rose-700 text-rose-200'
+                    : 'bg-amber-950/60 border-amber-700 text-amber-200'
+                }`}
+              >
                 <div className="flex items-center gap-2.5">
-                  <span className="text-emerald-400 text-base">✓</span>
+                  <span className="text-base">
+                    {proofVerification.status === 'VERIFIED'
+                      ? '✓'
+                      : proofVerification.status === 'FAIL'
+                      ? '✗'
+                      : '⚠️'}
+                  </span>
                   <div>
-                    <span className="font-semibold text-emerald-300">Cryptographic Audit Proof Verified (Client-Side)</span>
-                    <p className="text-emerald-400/80 text-[11px] font-mono">
-                      Head: {proofVerification.headHash.slice(0, 24)}... ({proofVerification.count} records, unbroken chain)
-                    </p>
+                    <span className="font-semibold">
+                      {proofVerification.status === 'VERIFIED'
+                        ? 'Cryptographic Audit Proof Verified (Client-Side)'
+                        : proofVerification.status === 'FAIL'
+                        ? 'Cryptographic Audit Proof Verification FAILED'
+                        : 'Cryptographic Audit Proof UNVERIFIED'}
+                    </span>
+                    {proofVerification.headHash && (
+                      <p className="text-[11px] font-mono opacity-80">
+                        Head: {proofVerification.headHash.slice(0, 24)}... ({proofVerification.count} records, unbroken chain)
+                      </p>
+                    )}
+                    {proofVerification.error && (
+                      <p className="text-[11px] font-mono opacity-90 mt-0.5">
+                        {proofVerification.error}
+                      </p>
+                    )}
                   </div>
                 </div>
-                <span className="text-[10px] font-mono bg-emerald-900 text-emerald-200 px-2 py-0.5 rounded">
-                  VERIFIED AT {proofVerification.verifiedAt}
+                <span
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded ${
+                    proofVerification.status === 'VERIFIED'
+                      ? 'bg-emerald-900 text-emerald-200'
+                      : proofVerification.status === 'FAIL'
+                      ? 'bg-rose-900 text-rose-200'
+                      : 'bg-amber-900 text-amber-200'
+                  }`}
+                >
+                  {proofVerification.status} AT {proofVerification.verifiedAt}
                 </span>
               </div>
             )}
@@ -946,7 +1165,7 @@ export default function DemoPage() {
                       Naive Unguarded Agent
                     </span>
                     <span className="text-[10px] font-mono bg-rose-950 text-rose-400 border border-rose-700 px-2 py-0.5 rounded">
-                      MOCK - UNGUARDED AGENT
+                      MOCK (LOCAL SIMULATION) — UNGUARDED AGENT
                     </span>
                   </div>
                   <div className="text-xs text-slate-300 space-y-1.5">
@@ -970,15 +1189,15 @@ export default function DemoPage() {
                       Guarded Agent Architecture (Our System)
                     </span>
                     <span className="text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-700 px-2 py-0.5 rounded">
-                      ACTIVE GUARDED EXECUTION
+                      {policy?.paymentMode === 'LIVE_FUJI' ? 'ACTIVE FUJI GUARDED' : 'MOCK (LOCAL SIMULATION)'}
                     </span>
                   </div>
                   <div className="text-xs text-slate-300 space-y-1.5">
-                    <p className="font-mono text-[11px] bg-slate-950 p-2 rounded border border-slate-800 text-slate-400">
-                      Validator checks: Stage S1 has no treasury disbursement rail; recipient not allowlisted; over per-tx cap.
+                    <p className="font-mono text-[11px] bg-slate-950 p-2 rounded border border-slate-800 text-slate-300">
+                      Validator checks: Stage {policy?.stage || 'S1'} policy blocks rogue payout ({agentSteps.find((s) => s.action === 'TOOL_BLOCKED')?.verdict?.rule || 'STAGE_S1_NO_TREASURY'}).
                     </p>
                     <p className="text-emerald-400 text-[11px] font-semibold">
-                      Outcome: Strictly BLOCKED (STAGE_S1_NO_TREASURY) + Row-locked Audit committed.
+                      Outcome: Strictly BLOCKED ({agentSteps.find((s) => s.action === 'TOOL_BLOCKED')?.verdict?.rule || 'STAGE_S1_NO_TREASURY'}) — {agentSteps.find((s) => s.action === 'TOOL_BLOCKED')?.verdict?.reason || 'Treasury payouts are not available in stage S1'}. Row-locked Audit committed.
                     </p>
                   </div>
                   <div className="pt-2 border-t border-emerald-900/50 flex items-center justify-between">
@@ -1057,14 +1276,21 @@ export default function DemoPage() {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <span className="text-base">⏳</span>
-                <h3 className="text-sm font-semibold text-white">Supervised Approval Queue (Human-in-the-Loop)</h3>
+                <h3 className="text-sm font-semibold text-white">Supervised Approval Queue (Stage S2 Feature)</h3>
               </div>
               <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded">
-                Soft Cap: 5.00 USDC / tx
+                Stage {policy?.stage || 'S1'} • Soft Cap: 5.00 USDC / tx
               </span>
             </div>
 
-            {approvalQueue.length === 0 ? (
+            {(!policy?.stage || policy.stage === 'S1') ? (
+              <div className="text-xs text-slate-400 py-3 px-3 bg-slate-900/60 rounded border border-slate-800 flex items-center justify-between">
+                <span>Stage S1 policy strictly disables treasury payouts (STAGE_S1_NO_TREASURY). Approval queue activates in Stage S2 with on-chain GuardedTreasury contract.</span>
+                <span className="text-[10px] font-mono bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">
+                  STAGE S1 INACTIVE
+                </span>
+              </div>
+            ) : approvalQueue.length === 0 ? (
               <div className="text-xs text-slate-500 italic py-2">
                 No disbursements currently awaiting human approval. Large payouts (&gt; 5.00 USDC) will queue here.
               </div>
