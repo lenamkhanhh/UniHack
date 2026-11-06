@@ -20,6 +20,15 @@ export default function DemoPage() {
   const [account, setAccount] = useState<string | null>(null);
   const [stepStatus, setStepStatus] = useState<Record<string, 'IDLE' | 'RUNNING' | 'PENDING' | 'SUCCESS' | 'ERROR'>>({});
 
+  // Autonomous AI Agent State (AGENT-01)
+  const [agentGoal, setAgentGoal] = useState('Tóm tắt 3 nguồn về Avalanche blockchain architecture và transaction fees');
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentSteps, setAgentSteps] = useState<any[]>([]);
+  const [agentDeliverable, setAgentDeliverable] = useState<any>(null);
+  const [agentDeliverableHash, setAgentDeliverableHash] = useState<string | null>(null);
+  const [agentMode, setAgentMode] = useState<string | null>(null);
+  const [agentModel, setAgentModel] = useState<string | null>(null);
+
   useEffect(() => {
     fetch('/api/policy')
       .then((res) => res.json())
@@ -451,6 +460,42 @@ export default function DemoPage() {
     }
   };
 
+  const runAutonomousAgentMission = async () => {
+    setAgentRunning(true);
+    setAgentSteps([]);
+    setAgentDeliverable(null);
+    setAgentDeliverableHash(null);
+    addLog(`[AGENT-01] Initializing autonomous AI Agent with goal: "${agentGoal}"...`);
+
+    try {
+      const res = await fetch('/api/agent/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goal: agentGoal }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Agent execution failed: HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      setAgentMode(data.plannerMode);
+      setAgentModel(data.plannerModel);
+      setAgentSteps(data.steps || []);
+      setAgentDeliverable(data.deliverable);
+      setAgentDeliverableHash(data.deliverableHash);
+
+      addLog(`[AGENT-01] Autonomous run completed. Mode: ${data.plannerMode}, Turns: ${data.turnCount}, DeliverableHash: ${data.deliverableHash.slice(0, 18)}...`);
+      data.steps?.forEach((st: any) => {
+        addLog(`[AGENT-01] Turn ${st.turn} [${st.action}]: ${st.thought}`);
+      });
+    } catch (err: any) {
+      addLog(`[AGENT-01] Error: ${err.message}`);
+    } finally {
+      setAgentRunning(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -527,6 +572,149 @@ export default function DemoPage() {
               </div>
             );
           })}
+        </div>
+
+        {/* AGENT-01: Autonomous AI Agent Section */}
+        <div className="bg-slate-900/90 border border-indigo-900/60 rounded-lg p-5 space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold text-white">Autonomous AI Agent Planner (AGENT-01)</h2>
+                {agentMode && (
+                  <span
+                    className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded border ${
+                      agentMode === 'LIVE_LLM'
+                        ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                        : 'bg-amber-950 text-amber-300 border-amber-700'
+                    }`}
+                  >
+                    {agentMode}
+                  </span>
+                )}
+                {agentModel && (
+                  <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                    {agentModel} (v1.0)
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Autonomous multi-turn planner: LLM reasons dynamically, proposes tool purchases or payouts, complies with strict code validators, and synthesizes cited deliverable.
+              </p>
+            </div>
+
+            <button
+              onClick={runAutonomousAgentMission}
+              disabled={agentRunning}
+              data-testid="execute-agent-btn"
+              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2 rounded transition whitespace-nowrap"
+            >
+              {agentRunning ? 'Agent Planning & Executing...' : 'Execute Autonomous Agent Mission'}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-slate-300">Mission Goal / Objective:</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={agentGoal}
+                onChange={(e) => setAgentGoal(e.target.value)}
+                className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+              />
+              <button
+                type="button"
+                onClick={() => setAgentGoal('Tóm tắt 3 nguồn về Avalanche blockchain architecture và transaction fees')}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] px-2.5 py-1.5 rounded border border-slate-700"
+              >
+                Preset: Avalanche
+              </button>
+            </div>
+          </div>
+
+          {/* Agent Step Execution Timeline */}
+          {agentSteps.length > 0 && (
+            <div className="space-y-3 pt-2">
+              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Agent Reasoning & Step Ledger</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {agentSteps.map((st) => (
+                  <div key={st.turn} className="bg-slate-950/80 border border-slate-800 rounded p-3 text-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-indigo-400">Turn {st.turn}: {st.action}</span>
+                      {st.amountAtomic && (
+                        <span className="text-[10px] font-mono bg-indigo-950 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-800">
+                          {Number(st.amountAtomic) / 1000000} USDC
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-slate-300 text-[11px] italic font-sans leading-relaxed">
+                      &ldquo;{st.thought}&rdquo;
+                    </p>
+                    {st.verdict && (
+                      <div className="flex items-center gap-1.5 text-[10px]">
+                        <span className="text-emerald-400 font-semibold">Verdict:</span>
+                        <span className="font-mono text-emerald-300">{st.verdict.outcome} ({st.verdict.rule})</span>
+                      </div>
+                    )}
+                    {st.sources && st.sources.length > 0 && (
+                      <div className="text-[10px] space-y-1">
+                        <span className="text-slate-400 font-medium">Sources:</span>
+                        <div className="space-y-0.5">
+                          {st.sources.map((src: string, i: number) => (
+                            <a
+                              key={i}
+                              href={src}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-indigo-400 hover:underline block truncate"
+                            >
+                              {src}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Verified Deliverable Output */}
+          {agentDeliverable && (
+            <div className="bg-emerald-950/40 border border-emerald-700/60 rounded p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                  Verified Deliverable Output
+                </span>
+                {agentDeliverableHash && (
+                  <span className="font-mono text-[10px] bg-emerald-900/80 text-emerald-200 px-2 py-0.5 rounded border border-emerald-700">
+                    Hash: {agentDeliverableHash.slice(0, 18)}...
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-200 leading-relaxed">
+                {agentDeliverable.summary}
+              </p>
+              {agentDeliverable.sources && agentDeliverable.sources.length > 0 && (
+                <div className="pt-2 border-t border-emerald-900/50 space-y-1">
+                  <span className="text-[11px] font-medium text-emerald-300">Cited Real Reference Sources:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {agentDeliverable.sources.map((src: string, i: number) => (
+                      <a
+                        key={i}
+                        href={src}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] font-mono text-indigo-300 hover:text-indigo-200 underline bg-slate-950 px-2 py-0.5 rounded border border-slate-800 truncate max-w-xs"
+                      >
+                        {src}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Output console log */}

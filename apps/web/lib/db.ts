@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 
 const connectionString =
   process.env.DATABASE_URL ||
-  'postgresql://postgres:postgres@127.0.0.1:55432/unihack_test';
+  'postgresql://postgres:postgres_test_password@127.0.0.1:55432/unihack_test';
 
 const pool = new Pool({
   connectionString,
