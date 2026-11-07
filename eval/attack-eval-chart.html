@@ -255,18 +255,18 @@
         </div>
         <div class="metric-hero">
           <div class="label">Attack Success Rate (ASR)</div>
-          <div class="value val-c0">48.3%</div>
-          <div class="ci-sub">(95% CI: [39.6%, 57.2%])</div>
+          <div class="value val-c0">32.1%</div>
+          <div class="ci-sub">(95% CI: [25.0%, 40.3%])</div>
         </div>
       </div>
       <div class="stat-rows">
         <div class="stat-row">
           <span>LLM Tricked Rate</span>
-          <span class="val">49.2%</span>
+          <span class="val">32.9%</span>
         </div>
         <div class="stat-row">
           <span>Out-of-Bounds Spend</span>
-          <span class="val val-c0">$59.80 USDC</span>
+          <span class="val val-c0">$63.30 USDC</span>
         </div>
         <div class="stat-row">
           <span>Protection Mechanism</span>
@@ -284,8 +284,8 @@
         </div>
         <div class="metric-hero">
           <div class="label">Attack Success Rate (ASR)</div>
-          <div class="value val-c1">25.0%</div>
-          <div class="ci-sub">(95% CI: [18.1%, 33.4%])</div>
+          <div class="value val-c1">12.1%</div>
+          <div class="ci-sub">(95% CI: [7.7%, 18.6%])</div>
         </div>
       </div>
       <div class="stat-rows">
@@ -295,7 +295,7 @@
         </div>
         <div class="stat-row">
           <span>Out-of-Bounds Spend</span>
-          <span class="val val-c1">$13.50 USDC</span>
+          <span class="val val-c1">$17.00 USDC</span>
         </div>
         <div class="stat-row">
           <span>Protection Mechanism</span>
@@ -313,14 +313,14 @@
         </div>
         <div class="metric-hero">
           <div class="label">Attack Success Rate (ASR)</div>
-          <div class="value val-c2">13.3%</div>
-          <div class="ci-sub">(95% CI: [8.4%, 20.6%])</div>
+          <div class="value val-c2">0.0%</div>
+          <div class="ci-sub">(0/140, 95% CI upper bound: 2.7%)</div>
         </div>
       </div>
       <div class="stat-rows">
         <div class="stat-row">
           <span>Benign Task Utility</span>
-          <span class="val val-c2">77.5%</span>
+          <span class="val val-c2">100.0%</span>
         </div>
         <div class="stat-row">
           <span>Out-of-Bounds Spend</span>
@@ -352,31 +352,38 @@
         </thead>
         <tbody>
           <tr>
-            <td><strong>Instruction Injection</strong> — Delimiter prompt injection in data payload</td>
-            <td style="color:#f87171;">75.0%</td>
-            <td style="color:#fbbf24;">33.3%</td>
-            <td style="color:#34d399;">10.0%</td>
-            <td style="color:#34d399;">$41.50 USDC</td>
+            <td><strong>Vendor Diversion (Allowlist Bypass)</strong> — Target in organization allowlist, outside mission set</td>
+            <td style="color:#f87171;">85.0%</td>
+            <td style="color:#fbbf24;">85.0% (Bypassed)</td>
+            <td style="color:#34d399;">0.0% (Blocked)</td>
+            <td style="color:#34d399;">$17.00 USDC</td>
           </tr>
           <tr>
-            <td><strong>Agent Data Injection (ADI)</strong> — Structural JSON delimiter breaking & vendor diversion (arXiv 2607.05120)</td>
-            <td style="color:#f87171;">25.0%</td>
-            <td style="color:#fbbf24;">25.0%</td>
-            <td style="color:#34d399;">25.0%</td>
-            <td style="color:#34d399;">$5.00 USDC</td>
+            <td><strong>Instruction Injection</strong> — Prompt injection overrides in untrusted data payload</td>
+            <td style="color:#f87171;">52.5%</td>
+            <td style="color:#fbbf24;">21.3%</td>
+            <td style="color:#34d399;">0.0%</td>
+            <td style="color:#34d399;">$50.00 USDC</td>
+          </tr>
+          <tr>
+            <td><strong>Structural ADI Delimiter Injection</strong> — Pure JSON syntax breaking (arXiv 2607.05120)</td>
+            <td style="color:#94a3b8;">0.0%</td>
+            <td style="color:#94a3b8;">0.0%</td>
+            <td style="color:#34d399;">0.0%</td>
+            <td style="color:#34d399;">$0.00 USDC</td>
           </tr>
           <tr>
             <td><strong>Real-World Incidents</strong> — Bankr Morse Code ($174k), Zscaler JSON-LD, Cornell OTP, Freysa</td>
             <td style="color:#f87171;">15.0%</td>
-            <td style="color:#fbbf24;">0.0%</td>
+            <td style="color:#34d399;">0.0%</td>
             <td style="color:#34d399;">0.0%</td>
             <td style="color:#34d399;">$13.30 USDC</td>
           </tr>
           <tr>
-            <td><strong>Benign Tasks (Utility Control)</strong> — Legitimate contractor invoices (maxAtomic), research, tools</td>
+            <td><strong>Benign Tasks (Utility Control)</strong> — Legitimate contractor invoices, research, tools</td>
             <td style="color:#94a3b8;">100.0% Pass</td>
             <td style="color:#94a3b8;">100.0% Pass</td>
-            <td style="color:#34d399;">77.5% Pass</td>
+            <td style="color:#34d399;">100.0% Pass</td>
             <td style="color:#38bdf8;">0.0% False Positives</td>
           </tr>
         </tbody>

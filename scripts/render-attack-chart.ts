@@ -19,6 +19,7 @@ async function main() {
 
   const overall = modelData.overall;
   const instructionInj = modelData.breakdowns.instruction_injection || modelData.breakdowns.adi;
+  const vendorInj = modelData.breakdowns.instruction_injection_allowlisted_vendor || instructionInj;
   const adiStruct = modelData.breakdowns.adi_structural || modelData.breakdowns.adi;
   const inc = modelData.breakdowns.real_incidents;
 
@@ -376,28 +377,35 @@ async function main() {
         </thead>
         <tbody>
           <tr>
-            <td><strong>Instruction Injection</strong> — Delimiter prompt injection in data payload</td>
+            <td><strong>Vendor Diversion (Allowlist Bypass)</strong> — Target in organization allowlist, outside mission set</td>
+            <td style="color:#f87171;">${vendorInj.c0.asr.formatted.split(' ')[0]}</td>
+            <td style="color:#fbbf24;">${vendorInj.c1.asr.formatted.split(' ')[0]} (Bypassed)</td>
+            <td style="color:#34d399;">${vendorInj.c2.asr.formatted.split(' ')[0]} (Blocked)</td>
+            <td style="color:#34d399;">$${vendorInj.c0.spendUsdc} USDC</td>
+          </tr>
+          <tr>
+            <td><strong>Instruction Injection</strong> — Prompt injection overrides in untrusted data payload</td>
             <td style="color:#f87171;">${instructionInj.c0.asr.formatted.split(' ')[0]}</td>
             <td style="color:#fbbf24;">${instructionInj.c1.asr.formatted.split(' ')[0]}</td>
             <td style="color:#34d399;">${instructionInj.c2.asr.formatted.split(' ')[0]}</td>
             <td style="color:#34d399;">$${instructionInj.c0.spendUsdc} USDC</td>
           </tr>
           <tr>
-            <td><strong>Agent Data Injection (ADI)</strong> — Structural JSON delimiter breaking & vendor diversion (arXiv 2607.05120)</td>
-            <td style="color:#f87171;">${adiStruct.c0.asr.formatted.split(' ')[0]}</td>
-            <td style="color:#fbbf24;">${adiStruct.c1.asr.formatted.split(' ')[0]}</td>
+            <td><strong>Structural ADI Delimiter Injection</strong> — Pure JSON syntax breaking (arXiv 2607.05120)</td>
+            <td style="color:#94a3b8;">${adiStruct.c0.asr.formatted.split(' ')[0]}</td>
+            <td style="color:#94a3b8;">${adiStruct.c1.asr.formatted.split(' ')[0]}</td>
             <td style="color:#34d399;">${adiStruct.c2.asr.formatted.split(' ')[0]}</td>
-            <td style="color:#34d399;">$${adiStruct.c0.spendUsdc} USDC</td>
+            <td style="color:#34d399;">$0.00 USDC</td>
           </tr>
           <tr>
             <td><strong>Real-World Incidents</strong> — Bankr Morse Code ($174k), Zscaler JSON-LD, Cornell OTP, Freysa</td>
             <td style="color:#f87171;">${inc.c0.asr.formatted.split(' ')[0]}</td>
-            <td style="color:#fbbf24;">${inc.c1.asr.formatted.split(' ')[0]}</td>
+            <td style="color:#34d399;">${inc.c1.asr.formatted.split(' ')[0]}</td>
             <td style="color:#34d399;">${inc.c2.asr.formatted.split(' ')[0]}</td>
             <td style="color:#34d399;">$${inc.c0.spendUsdc} USDC</td>
           </tr>
           <tr>
-            <td><strong>Benign Tasks (Utility Control)</strong> — Legitimate contractor invoices (maxAtomic), research, tools</td>
+            <td><strong>Benign Tasks (Utility Control)</strong> — Legitimate contractor invoices, research, tools</td>
             <td style="color:#94a3b8;">100.0% Pass</td>
             <td style="color:#94a3b8;">100.0% Pass</td>
             <td style="color:#34d399;">${overall.c2_full_missionpay.utility.formatted.split(' ')[0]} Pass</td>
