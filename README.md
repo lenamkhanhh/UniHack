@@ -3,9 +3,9 @@
 > **"Giao cho AI agent một nhiệm vụ và một ngân sách. Avalanche bảo đảm nó không tiêu quá, và bạn thấy từng đồng đi đâu."**  
 > *(Give your AI agent a mission and a budget. Avalanche makes sure it can't overspend — and shows you every cent.)*
 
-- **Verification Status**: S1 Payment & Audit Slice Verified; Stage S2 Lifecycle Wired (fund / anchor / feedback).
-- **Test Suite**: **101/101 Vitest tests pass** across 8 test suites on PostgreSQL 16 + PGlite.
-- **Smart Contracts**: **31/31 Foundry tests pass** (`contracts/test/GuardedTreasury.t.sol`), including gasless EIP-3009 sweep and strict tool cap guardrails.
+- **Verification Status**: S1 Payment & Audit Slice Verified; Stage S2 Lifecycle Wired (fund / anchor / feedback); x402 Hardening (ATC'26) Completed.
+- **Test Suite**: **169/169 Vitest tests pass** across 21 test suites on PostgreSQL 16 + PGlite.
+- **Smart Contracts**: **37/37 Foundry tests pass** (`contracts/test/GuardedTreasury.t.sol`), including Merkle payee root verification, gasless EIP-3009 sweep, and strict tool cap guardrails.
 - **ERC-8004 Support**: Pinned and verified against official Fuji Identity (`0x8004A818...`) and Reputation (`0x8004B663...`) registries.
 - **Proof Verifier**: Standalone cryptographic verifier pass (`scripts/verify-proof.ts`, keccak256 hash-chaining + checkpoint matching).
 - **Open Code Findings**: 0 (SW-01, SW-02, SW-03, ERC-01, ERC-02, P1-WIRE closed).
@@ -149,6 +149,19 @@ The verifier independently checks:
 | **Prompt Injection proposing payout** | Strictly blocked by `STAGE_S1_NO_TREASURY` | Contract enforces recipient allowlist and proposal review queue; reverts on Avalanche Fuji | **0 USDC** (unallowlisted recipient payout impossible). |
 | **Server / Database Compromised** | Off-chain checks vulnerable | `GuardedTreasury` contract independently enforces per-tx, daily (UTC-reset), and mission caps on-chain | **Bounded by contract daily/mission cap**. Owner emergency pause immediately freezes treasury. |
 | **Tool Price-Mismatch (> advertised)** | Price comparison guard blocks payment | Payment authorization not signed | **0 USDC**. |
+
+---
+
+## x402 Protocol Hardening (ATC'26)
+
+Căn cứ nghiên cứu *"Free-Riding the Agentic Web: A Security Analysis of the x402 Ecosystem"* (USENIX ATC '26, [arXiv:2605.30998](https://arxiv.org/abs/2605.30998)), MissionPay chủ động vá toàn diện 4 lớp lỗ hổng giao thức x402 ở cả tầng mật mã học (cryptographic request binding) lẫn tầng lưu trữ (storage invariants):
+
+| Lớp lỗi (Flaw Class) | Nguy cơ tấn công | Trạng thái | Giải pháp kỹ thuật | Test kiểm chứng |
+|---|---|---|---|---|
+| **F1: Resource Binding & Parameter Tampering** | Kẻ tấn công lấy chữ ký thanh toán của tài nguyên này (hoặc query này) để đòi kết quả của tài nguyên đắt hơn hoặc tráo đổi query (`Cross-Resource Free-Riding`). | **ĐÃ VÁ** | **Request-Bound EIP-3009 Nonce** (`computeBoundNonce` trong `lib/x402-binding.ts`): Nonce EIP-3009 không còn là số ngẫu nhiên mà được tính bằng $\text{keccak256}(\text{encodeAbi}(\text{version}, \text{opId}, \text{POST /api/tools/} + \text{toolId}, \text{inputHash}, \text{price}, \text{payTo}, \text{chainId}))$. Seller route tính lại và trả ngay **HTTP 403 `PAYMENT_NOT_BOUND_TO_REQUEST`** trước khi gọi upstream nếu phát hiện lệch. | `tests/x402-atc26.test.ts` (F1a, F1b, F1c với deterministic test vector) |
+| **F2: Concurrent Replay & Double Settlement** | Kẻ tấn công gửi nhiều request song song với cùng một header `X-PAYMENT` để cố tình kích hoạt thanh toán lặp hoặc nhận nhiều dịch vụ (`Double-Spending`). | **ĐÃ VÁ** | Ràng buộc duy nhất `@@unique([chainId, asset, authFrom, authNonce])` trên bảng `ToolOperation` trong PostgreSQL, kết hợp Atomic CAS Claim Lease (`workerLeaseOwner`) và xử lý idempotent. Đúng 1 lần settle được chấp thuận, không bao giờ trừ tiền gấp đôi. | `tests/x402-atc26.test.ts` (F2), `tests/p-series.test.ts` (P20, P22) |
+| **F3: Overdraft via `upto` Scheme** | Kẻ tấn công lợi dụng cơ chế ủy quyền mở `upto` để rút vượt số dư hoặc tiêu lạm quỹ. | **KHÔNG ÁP DỤNG** | MissionPay **chỉ hỗ trợ duy nhất cơ chế `exact`** (tuyệt đối không dùng `upto`). Toàn bộ luồng thanh toán quy định số tiền chính xác, được khóa bởi hạn mức nhiệm vụ (`toolCap`). | Thiết kế kiến trúc (`pipeline/02-x402-tools.md`, `contracts/src/GuardedTreasury.sol`) |
+| **F4: Premature Result Disclosure** | Seller trả kết quả upstream trước khi giao dịch thanh toán thực sự được xác nhận trên chain (`Settlement Gating`). Kẻ tấn công có thể hủy ủy quyền để nhận tài nguyên miễn phí. | **ĐÃ VÁ** | **Atomic Result Gating**: Kết quả tính toán (`heldResult`) được mã hóa lưu trữ tạm thời trong DB và **chỉ được giải phóng cho client khi giao dịch đạt trạng thái `SETTLED`** (đã xác minh receipt trên Fuji hoặc mock evidence). Khi settlement thất bại hoặc bị hủy (`FAILED`), API trả về `result: null`, tuyệt đối không rò rỉ dữ liệu upstream. | `tests/x402-atc26.test.ts` (F4), `tests/p-series.test.ts` (P21) |
 
 ---
 
