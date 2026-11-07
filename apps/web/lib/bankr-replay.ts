@@ -1,4 +1,4 @@
-import { validateProposal, Proposal, ValidationContext, ValidationResult } from './validator';
+import { validateProposal, Proposal, ValidationContext, ValidationResult, TaintRegistry } from './validator';
 import { createTreasuryProposal } from './proposer';
 import { appendAuditEntry } from './audit';
 import { prisma } from './db';
@@ -111,7 +111,15 @@ export async function executeBankrReplay(): Promise<BankrReplayResult> {
       '0x00000000000000000000000000000000000A11CE', // Sandbox owner
       '0x2222222222222222222222222222222222222222', // Authorized Contractor
     ],
+    ownerSignedPayees: [
+      '0x00000000000000000000000000000000000A11CE',
+      '0x2222222222222222222222222222222222222222',
+    ],
   };
+
+  const taintRegistry = new TaintRegistry();
+  taintRegistry.record(BANKR_MORSE_FIXTURE.decodedMorse, 'WEB');
+  ctx.taintRegistry = taintRegistry;
 
   const verdict = validateProposal(proposal, ctx);
 
@@ -163,8 +171,8 @@ export async function executeBankrReplay(): Promise<BankrReplayResult> {
     guardedSystem: {
       label: 'HỆ THỐNG MISSIONPAY TRÊN AVALANCHE',
       agentSwayed: true,
-      // Honest labeling (WOW-F5)
-      contractDefense: `🛡️ Validator BLOCK ${verdict.rule} (off-chain) · Lớp contract cap: sẽ chứng minh khi chạy Fuji live`,
+      // Honest labeling (WOW-F5, PV-4)
+      contractDefense: `🛡️ Người nhận đến từ: dữ liệu web (bẩn) → BLOCK (${verdict.rule}) · Lớp contract cap: sẽ chứng minh khi chạy Fuji live`,
       lossUsdc: '0.00',
       auditEntryHash,
     },

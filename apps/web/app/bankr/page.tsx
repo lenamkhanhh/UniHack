@@ -165,6 +165,12 @@ export default function BankrReplayPage() {
                   <span className="text-gray-400">Trạng thái Agent (LLM):</span>
                   <span className="text-amber-400 font-bold">🧠 ĐÃ BỊ THUYẾT PHỤC ✅</span>
                 </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400">Nguồn gốc người nhận:</span>
+                  <span className="text-rose-400 font-bold bg-rose-950/60 px-2 py-0.5 rounded border border-rose-800 text-[10px]">
+                    {result.validatorVerdict?.toProvenance ? `NGUỒN: ${result.validatorVerdict.toProvenance} (DỮ LIỆU BẨN)` : 'NGUỒN: WEB (DỮ LIỆU BẨN)'}
+                  </span>
+                </div>
                 <div className="flex flex-col space-y-1">
                   <span className="text-gray-400">Validator Guard:</span>
                   <span className="text-red-400 font-bold text-xs bg-red-950/40 p-2 rounded border border-red-900/50">

@@ -17,6 +17,7 @@ const DEFAULT_ARENA_STATS: ArenaStats = {
   blockedAttacks: 0,
   queuedAttacks: 0,
   passedAttacks: 0,
+  provenanceBlockedAttacks: 0,
   preventedLossUsdc: '0.00',
   lastUpdated: '',
 };
@@ -137,6 +138,7 @@ export default function ArenaStagePage() {
           <div className="mt-2 text-xs font-mono text-gray-400 flex flex-col items-center space-y-0.5">
             <span>Chi trong ngân sách: <strong className="text-white">${spentBudgetUsdc}</strong></span>
             <span>Đòn hợp lệ lọt: <strong className="text-cyan-300">{formatSafeNumber(stats.passedAttacks, 0)}</strong></span>
+            <span>Chặn vì nguồn gốc: <strong className="text-rose-400 font-bold">{formatSafeNumber(stats.provenanceBlockedAttacks, 0)}</strong></span>
           </div>
         </div>
       </div>
@@ -219,6 +221,21 @@ export default function ArenaStagePage() {
                       {atk.agentConvinced && (
                         <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-mono text-[10px] font-bold">
                           🧠 LLM THUYẾT PHỤC ✅
+                        </span>
+                      )}
+                      {(atk.toProvenance || atk.verdict?.toProvenance) && (
+                        <span
+                          className={`font-mono font-bold text-[10px] px-2 py-0.5 rounded border ${
+                            (atk.toProvenance || atk.verdict?.toProvenance) === 'OWNER_MISSION'
+                              ? 'bg-emerald-950/40 text-emerald-300 border-emerald-700/60'
+                              : (atk.toProvenance || atk.verdict?.toProvenance) === 'TOOL_OUTPUT'
+                              ? 'bg-purple-950/40 text-purple-300 border-purple-700/60'
+                              : (atk.toProvenance || atk.verdict?.toProvenance) === 'WEB'
+                              ? 'bg-rose-950/50 text-rose-300 border-rose-700/60'
+                              : 'bg-amber-950/40 text-amber-300 border-amber-700/60'
+                          }`}
+                        >
+                          NGUỒN: {atk.toProvenance || atk.verdict?.toProvenance}
                         </span>
                       )}
                       <span
