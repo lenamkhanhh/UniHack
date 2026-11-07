@@ -1,11 +1,11 @@
-# BÁO CÁO NGHIỆM THU VÀ KHẮC PHỤC LỖI VÒNG WOW (WOW-F1 → WOW-F10)
+# BÁO CÁO NGHIỆM THU VÀ KHẮC PHỤC LỖI VÒNG WOW (WOW-F1 → WOW-F12)
 
-**Thời điểm:** 2026-11-07 10:05 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
+**Thời điểm:** 2026-11-07 10:25 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
 **Ràng buộc tuân thủ:** Contract nằm tại `contracts/`; không push `main`, không deploy public, không nộp bài khi owner chưa duyệt; chỉ dùng Fuji testnet, không commit secret.
 
 ---
 
-## 1. BẢNG TIẾN ĐỘ & ACCEPTANCE SỬA LỖI TRUNG THỰC (§4b & §4c REVIEW_PROMPT_GPT.md)
+## 1. BẢNG TIẾN ĐỘ & ACCEPTANCE SỬA LỖI TRUNG THỰC (§4b, §4c & §4d REVIEW_PROMPT_GPT.md)
 
 | ID | Mức | Trạng thái | File chính | Test / Acceptance đã kiểm chứng | Commit |
 |---|---|---|---|---|---|
@@ -19,19 +19,21 @@
 | **WOW-F8** | **Chặn** | **PASS** | `apps/web/lib/arena.ts`<br>`apps/web/tests/arena.test.ts` | Chuẩn hóa toàn diện hai phía allowlist so sánh (`normalizedAllowlist`) trong `evaluateAttackProposal` và tính toán out-of-scope loss. Nếu validator PASS nhưng lớp phân loại out-of-scope vẫn ra ngoài thì kích hoạt log cảnh báo `[INVARIANT_MISMATCH]` thay vì âm thầm cộng dồn tổn thất. Test `tests/arena.test.ts`: gửi proposal tới `SANDBOX_OWNER` dạng chữ hoa, chữ thường hoặc checksum đều cho ra out-of-scope loss = $0.00 và tăng within-budget; kiểm tra 50 đòn ngẫu nhiên out-of-scope luôn bằng $0.00. | `b469ba7` |
 | **WOW-F9** | **Chặn (Bảo mật)** | **PASS** | `apps/web/app/api/audit/route.ts`<br>`apps/web/app/api/verify/[missionId]/route.ts`<br>`apps/web/tests/audit-scoping.test.ts` | Chặn rò rỉ audit log nhiệm vụ nháp/chưa công bố khi truy vấn unauthenticated: `/api/audit?feed=1` và `?missionSlug=` không auth chỉ trả entry của mission `publicPublished: true` hoặc sandbox missions (`arena-*`, `bankr-replay-sandbox`); các mission khác yêu cầu token xác thực hợp lệ. Tương tự, `/api/verify/[missionId]` trả 404 cho mission chưa publish nếu không có token. Test `tests/audit-scoping.test.ts` (2/2 pass). | `5ae34c2` |
 | **WOW-F10** | **Thấp** | **PASS** | `apps/web/lib/morse.ts`<br>`apps/web/tests/morse.test.ts` | Trong `parseTransferFromDecoded`, chuẩn hóa tiền tố địa chỉ hex `0X` → `0x` trước khi tạo proposal, giúp địa chỉ EVM allowlist giải mã từ Morse vượt qua kiểm tra định dạng của `viem/getAddress`. Test `tests/morse.test.ts`: kiểm tra lệnh Morse chuyển tiền tới địa chỉ allowlist trả về verdict PASS và chi phí within-budget đồng nhất 100% với định dạng plain text. | `a69a4bd` |
+| **WOW-F11** | **Chặn** | **PASS** | `apps/web/lib/arena.ts`<br>`apps/web/app/stage/actions.ts`<br>`apps/web/app/stage/page.tsx`<br>`apps/web/app/arena/stage/page.tsx`<br>`apps/web/tests/arena.test.ts` | Lưu giữ trạng thái ngân sách cộng dồn (`spentTreasuryAtomic`, `spentToolAtomic`) trong store sandbox. (1) `spentTool` truyền vào context thực tế để validator tự chặn khi hết hạn mức tool ($5.00). (2) Payout treasury cộng dồn: nếu payout tiếp theo làm tổng vượt `treasuryCap` ($10.00) → BLOCK `MISSION_CAP_EXHAUSTED` kèm nhãn `"lớp contract cap — mô phỏng theo GuardedTreasury.sol, sẽ chứng minh trên Fuji"`. Đối chiếu trực tiếp với test Foundry `test_C4_over_mission_cap_queued`. (3) Màn hình `/stage` và `/arena/stage` hiển thị thanh tiến độ trực quan `"Ngân sách sandbox còn lại $X / $10"`. (4) Bổ sung nút Reset dành riêng cho người trình bày trên `/stage` thông qua Server Action, xác thực bí mật server `process.env.ARENA_PRESENTER_KEY` mà không lộ ra client. Test `tests/arena.test.ts`: 6 lần payout 2 USDC → 5 PASS, lần thứ 6 BLOCK, within-budget = $10.00, không bao giờ > cap; tool spend dừng đúng ở $5.00 `toolCap`. | `5a6d102` |
+| **WOW-F12** | **Cao** | **PASS** | `apps/web/lib/arena.ts`<br>`apps/web/tests/arena.test.ts` | Mở rộng parser chỉ thị tài chính `parseFinancialDirective`: nhận diện đa dạng động từ (pay/send/transfer/chuyển/rút/gửi/chi/thanh toán), các ký hiệu tiền tệ ($/USDC/USD) và địa chỉ EVM theo mọi thứ tự xuất hiện. Khi người dùng nhập truy vấn tìm kiếm thông thường không chứa lệnh tài chính, nhãn hiển thị đổi thành trung thực `"Không nhận ra lệnh chuyển tiền (planner mô phỏng dạng luật)"`, loại bỏ hoàn toàn chữ `AGENT_RESILIENT`. Test: `"pay 999 usdc to <owner>"` sinh proposal 999 USDC và bị QUEUE (`OVER_PER_TX_CAP`); 10 câu biến thể tiếng Việt/Anh/đảo thứ tự đều sinh proposal tài chính chính xác; grep xác nhận 0 `AGENT_RESILIENT` trong mã nguồn. | `ac23d98` |
 
 ---
 
 ## 2. KẾT QUẢ TEST & CHỈ SỐ HỆ THỐNG TOÀN DIỆN
 
-1. **Foundry Contracts Suite:** `31/31 passed` (`contracts/test/GuardedTreasury.t.sol` chạy trong 13.5ms qua `C:\Users\HP\.foundry\bin\forge test`).
-2. **Vitest Unit & Integration Suite:** `127/127 passed` trên 15 test files (thời gian 54.00s):
+1. **Foundry Contracts Suite:** `31/31 passed` (`contracts/test/GuardedTreasury.t.sol` chạy trong 11.6ms qua `C:\Users\HP\.foundry\bin\forge test`).
+2. **Vitest Unit & Integration Suite:** `129/129 passed` trên 15 test files (thời gian 57.30s):
    - `unit-boundaries.test.ts` (33)
    - `p-series.test.ts` (25)
    - `agent-lifecycle.test.ts` (19)
    - `erc8004.test.ts` (11)
    - `v-series.test.ts` (11)
-   - `arena.test.ts` (5)
+   - `arena.test.ts` (7) [bổ sung F11 & F12]
    - `morse.test.ts` (5)
    - `agent-planning.test.ts` (4)
    - `bankr-replay.test.ts` (3)
@@ -41,12 +43,12 @@
    - `e-series.test.ts` (2)
    - `handler-lifecycle.test.ts` (1)
    - `sandbox-addresses.test.ts` (1)
-3. **TypeScript Typecheck (`npx tsc --noEmit --incremental false`):** `0 errors` (exit code 0).
-4. **Playwright E2E Suite (`NO_WEBSERVER=1`, port 3100):** `4/4 specs passed` (thời gian 29.2s):
-   - `wow-arena.spec.ts` (7.5s)
-   - `wow-bankr.spec.ts` (4.6s)
-   - `wow-stage.spec.ts` (3.7s)
-   - `wow-verify.spec.ts` (8.4s)
+3. **TypeScript Strict Typecheck (`npx tsc --noEmit --incremental false`):** `0 errors` (exit code 0).
+4. **Playwright E2E Suite (`NO_WEBSERVER=1`, port 3100):** `4/4 specs passed` (thời gian 22.7s):
+   - `wow-arena.spec.ts` (6.6s)
+   - `wow-bankr.spec.ts` (5.5s)
+   - `wow-stage.spec.ts` (3.3s)
+   - `wow-verify.spec.ts` (3.8s)
 
 ---
 
@@ -54,8 +56,8 @@
 
 - `wow-bankr-replay.png`: Replay vụ Bankr $174k với nhãn off-chain trung thực, chuỗi Morse thật đã giải mã và số tiền thất thoát $0.00.
 - `wow-arena-mobile.png`: Giao diện tấn công di động cho khán giả, xử lý đòn tấn công Morse và phản hồi kết quả chặn tức thì.
-- `wow-arena-stage.png`: Màn hình sân khấu hội trường hiển thị 3 chỉ số lớn tính toán động ("Tiền ra ngoài phạm vi cho phép: $0.00", "Chi trong ngân sách: $Y", "Đòn hợp lệ lọt: 0").
-- `wow-stage-console.png`: Bàn điều khiển sân khấu `/stage` phím tắt 1-5 chuyển cảnh, chế độ DEMO SEED gắn nhãn rõ ràng.
+- `wow-arena-stage.png`: Màn hình sân khấu hội trường hiển thị 3 chỉ số lớn tính toán động ("Tiền ra ngoài phạm vi cho phép: $0.00", "Chi trong ngân sách: $Y", "Đòn hợp lệ lọt: 0") kèm thanh ngân sách sandbox còn lại $X / $10.
+- `wow-stage-console.png`: Bàn điều khiển sân khấu `/stage` phím tắt 1-5 chuyển cảnh, thanh ngân sách sandbox còn lại và nút Reset dành cho presenter.
 - `wow-verify-original.png`: Giao diện Client-side Keccak-256 verifier khi chuỗi toàn vẹn 100% kèm banner `DEMO SEED — KHÔNG PHẢI GIAO DỊCH THẬT`.
 - `wow-verify-tampered.png`: Giao diện Client-side verifier khi sửa 1 byte, hiển thị chuỗi gãy đỏ từ Block #1 và chi tiết sai lệch mã hash.
 
@@ -63,8 +65,9 @@
 
 ## 4. CẦN REVIEWER QUYẾT & RỦI RO CÒN LẠI
 
-- **Cần Reviewer quyết:** Không có. 10/10 hạng mục lỗi trung thực (WOW-F1 → WOW-F10) đã hoàn thành xuất sắc, mỗi fix đi kèm 1 commit riêng biệt và bộ test chặn hồi quy tự động.
+- **Cần Reviewer quyết:** Không có. 12/12 hạng mục (WOW-F1 → WOW-F12) đã hoàn thành xuất sắc, mỗi fix đi kèm commit riêng biệt và bộ test chặn hồi quy tự động.
+- **Lưu ý thấp về cờ sandbox:** Đã ghi nhận lưu ý về nhận diện sandbox bằng tiền tố `arena-` vs cờ `isSandbox`/whitelist slug; sẵn sàng refactor khi triển khai tích hợp DB lớn tiếp theo.
 - **Rủi ro còn lại & Khuyến nghị tiếp theo:**
   - Nhánh hiện tại: `feat/s1-app`, working tree sạch hoàn toàn (trừ `REVIEW_PROMPT_GPT.md` thuộc quyền cập nhật của reviewer).
   - Không push `main`, không deploy public, không commit secret tuân thủ tuyệt đối quy định.
-  - Sẵn sàng chuyển giao cho Owner & Reviewer duyệt để tiến hành các bước tiếp theo trong `STRATEGY_MAX_SCORE.md` (Fuji live, ERC-8004 feedback trên testnet, video demo 2:30 và hoàn thiện slide pitch).
+  - Sẵn sàng chuyển giao cho Owner & Reviewer duyệt để tiến hành các bước tiếp theo trong `STRATEGY_MAX_SCORE.md`.
