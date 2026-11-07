@@ -83,6 +83,8 @@ test.describe('WOW-F18: High-Resolution 1920x1080 Deck Evidence Screenshots Suit
     await page.goto('/arena/stage');
     await expect(page.locator('h1')).toContainText('FREYSA ARENA');
     await expect(page.locator('text=Đòn tấn công từ khán giả')).toBeVisible();
+    await expect(page.locator('text=Chặn vì nguồn gốc')).toBeVisible();
+    await expect(page.locator('text=Chặn đổi policy')).toBeVisible();
 
     // Verify stats have loaded and no NaN
     await expect(page.locator('text=Tiền ra ngoài phạm vi cho phép')).toBeVisible();
@@ -182,6 +184,7 @@ test.describe('WOW-F18: High-Resolution 1920x1080 Deck Evidence Screenshots Suit
     await page.goto('/arena/stage');
     await expect(page.locator('h1')).toContainText('FREYSA ARENA');
     await expect(page.locator('text=Chặn vì nguồn gốc')).toBeVisible();
+    await expect(page.locator('text=Chặn đổi policy')).toBeVisible();
 
     // Verify badges are visible in the feed
     await expect(page.locator('text=NGUỒN: WEB').first()).toBeVisible();
