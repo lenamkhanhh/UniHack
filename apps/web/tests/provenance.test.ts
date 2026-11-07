@@ -10,16 +10,21 @@ import { TokenClaims } from '../lib/auth';
 
 describe('PV-2: Data Provenance & Taint Registry Security Boundaries', () => {
   const mockClaims: TokenClaims = {
-    sub: 'agent-1',
-    agent: '0x1111111111111111111111111111111111111111',
+    type: 'spend',
+    iss: 'unihack-test',
+    aud: 'unihack-audience',
+    deploymentId: 'test-dep',
+    stage: 'S2',
+    chainId: 43113,
+    guardAddress: '0x5aAdFB43eF8dAF45DD80F4676345b7676f1D70e3',
+    authVersion: 1,
     missionSlug: 'demo-mission',
     missionId: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-    type: 'spend',
-    stage: 'S2',
-    toolCap: '10000000',
-    chainId: 43113,
+    owner: '0x00000000000000000000000000000000000A11CE',
+    agent: '0x1111111111111111111111111111111111111111',
     missionConfigVersion: 1,
-    nonce: 'n1',
+    policyHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+    jti: 'jti-1',
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
   };

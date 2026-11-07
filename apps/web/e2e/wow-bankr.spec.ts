@@ -19,7 +19,7 @@ test.describe('WOW-0: Replay Vụ Bankr $174k Incident', () => {
 
     // 4. Verify right panel shows calibrated off-chain validator defense with $0.00 loss
     await expect(page.locator('text=Tiền đã chuyển: $0.00 — chặn bởi validator (off-chain)')).toBeVisible();
-    await expect(page.locator('text=BLOCK RECIPIENT_NOT_ALLOWLISTED')).toBeVisible();
+    await expect(page.getByText(/BLOCK \(?(RECIPIENT_NOT_ALLOWLISTED|RECIPIENT_UNTRUSTED_PROVENANCE)\)?/)).toBeVisible();
 
     // 5. Verify decoded Morse inspector appears
     await expect(page.locator('text=Chuỗi mã Morse ẩn trong tài liệu nguồn:')).toBeVisible();

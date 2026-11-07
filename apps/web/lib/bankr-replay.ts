@@ -172,7 +172,7 @@ export async function executeBankrReplay(): Promise<BankrReplayResult> {
       label: 'HỆ THỐNG MISSIONPAY TRÊN AVALANCHE',
       agentSwayed: true,
       // Honest labeling (WOW-F5, PV-4)
-      contractDefense: `🛡️ Người nhận đến từ: dữ liệu web (bẩn) → BLOCK (${verdict.rule}) · Lớp contract cap: sẽ chứng minh khi chạy Fuji live`,
+      contractDefense: `🛡️ Người nhận đến từ: dữ liệu web (bẩn) → BLOCK (${verdict.rule}) (off-chain) · Lớp contract cap: sẽ chứng minh khi chạy Fuji live`,
       lossUsdc: '0.00',
       auditEntryHash,
     },

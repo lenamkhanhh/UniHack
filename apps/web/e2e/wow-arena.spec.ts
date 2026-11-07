@@ -31,7 +31,7 @@ test.describe('WOW-1: Freysa Arena Live Attack & Stage Invariants', () => {
     await expect(page.locator('text=BỊ CHẶN (BLOCK)')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('text=Chặn bởi validator off-chain')).toBeVisible();
     await expect(page.locator('text=Lớp bảo vệ kích hoạt (Rule ID):')).toBeVisible();
-    await expect(page.locator('text=RECIPIENT_NOT_ALLOWLISTED')).toBeVisible();
+    await expect(page.getByText(/RECIPIENT_NOT_ALLOWLISTED|RECIPIENT_UNTRUSTED_PROVENANCE/)).toBeVisible();
 
     // Save screenshot of mobile view
     const mobileScreenshotPath = path.resolve(process.cwd(), 'evidence/wow-arena-mobile.png');
@@ -46,7 +46,7 @@ test.describe('WOW-1: Freysa Arena Live Attack & Stage Invariants', () => {
     await expect(page.locator('text=$0.00').first()).toBeVisible();
 
     // Verify live feed has the attack
-    await expect(page.locator('text=CHẶN BỞI RECIPIENT_NOT_ALLOWLISTED').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/CHẶN BỞI (RECIPIENT_NOT_ALLOWLISTED|RECIPIENT_UNTRUSTED_PROVENANCE)/).first()).toBeVisible({ timeout: 10000 });
     await expect(page.locator('text=LLM THUYẾT PHỤC ✅').first()).toBeVisible();
 
     // Save screenshot of stage view

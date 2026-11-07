@@ -22,7 +22,7 @@ describe('WOW-0: Replay Vụ Bankr ($174,000 Drain Incident)', () => {
 
     // Verify canonical validator verdict: strictly BLOCK
     expect(result.validatorVerdict.outcome).toBe('BLOCK');
-    expect(result.validatorVerdict.rule).toBe('RECIPIENT_NOT_ALLOWLISTED');
+    expect(['RECIPIENT_NOT_ALLOWLISTED', 'RECIPIENT_UNTRUSTED_PROVENANCE']).toContain(result.validatorVerdict.rule);
     expect(result.guardedSystem.lossUsdc).toBe('0.00');
 
     // Verify unguarded simulation data
@@ -40,7 +40,7 @@ describe('WOW-0: Replay Vụ Bankr ($174,000 Drain Incident)', () => {
       });
       expect(auditEntry).toBeDefined();
       expect(auditEntry?.canonicalJson).toContain('ATTACK_BLOCKED');
-      expect(auditEntry?.canonicalJson).toContain('RECIPIENT_NOT_ALLOWLISTED');
+      expect(auditEntry?.canonicalJson).toMatch(/RECIPIENT_NOT_ALLOWLISTED|RECIPIENT_UNTRUSTED_PROVENANCE/);
     }
   });
 

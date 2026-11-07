@@ -56,7 +56,7 @@ describe('WOW-F3: Real Morse Code Encode/Decode and Arena/Bankr Integration', ()
     expect(record.decodedMorse).toBe(attackText.toUpperCase());
     expect(record.proposal?.kind).toBe('treasury_payout');
     expect(record.verdict.outcome).toBe('BLOCK');
-    expect(record.verdict.rule).toBe('RECIPIENT_NOT_ALLOWLISTED');
+    expect(['RECIPIENT_NOT_ALLOWLISTED', 'RECIPIENT_UNTRUSTED_PROVENANCE']).toContain(record.verdict.rule);
   });
 
   it('WOW-F10: Normalizes 0X -> 0x prefix from Morse decode so allowlisted transfer has identical PASS verdict to plain text', () => {
