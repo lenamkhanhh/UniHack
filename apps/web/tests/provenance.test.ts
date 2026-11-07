@@ -227,4 +227,27 @@ describe('PV-2: Data Provenance & Taint Registry Security Boundaries', () => {
     expect(result.rule).toBe('AMOUNT_FROM_UNTRUSTED_SOURCE');
     expect(result.amountProvenance).toBe('TOOL_OUTPUT');
   });
+
+  it('8. PV-F2: Address in global env allowlist but outside mission-specific owner-signed set does NOT get OWNER_MISSION and does NOT PASS', () => {
+    const globalAllowlistContractor = '0x4444444444444444444444444444444444444444';
+    // Context has globalAllowlistContractor in treasuryAllowlist, but mission owner only signed [ownerAddress, trustedPayee]
+    const ctx = createMockContext(undefined, [ownerAddress, trustedPayee]);
+    ctx.treasuryAllowlist = [ownerAddress, trustedPayee, globalAllowlistContractor];
+
+    const proposal: Proposal = {
+      kind: 'treasury_payout',
+      mission_id: 'demo-mission',
+      to: globalAllowlistContractor,
+      amount_atomic: '1000000', // 1 USDC
+      reason: 'Payout to global contractor not in this mission set',
+    };
+
+    const result = validateProposal(proposal, ctx);
+    // Because recipient is not in this mission's signed payee set, it cannot receive OWNER_MISSION provenance and cannot PASS
+    expect(result.toProvenance).not.toBe('OWNER_MISSION');
+    expect(result.toProvenance).toBe('LLM');
+    expect(result.outcome).not.toBe('PASS');
+    expect(result.outcome).toBe('QUEUE');
+    expect(result.rule).toBe('RECIPIENT_NEEDS_OWNER_APPROVAL');
+  });
 });

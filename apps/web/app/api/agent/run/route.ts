@@ -19,6 +19,7 @@ import {
 } from '@/lib/payments';
 import { appendAuditEntry } from '@/lib/audit';
 import { validateLiveFujiConfig } from '@/lib/config';
+import { getMissionPayees } from '@/lib/merkle';
 
 export async function POST(req: NextRequest) {
   try {
@@ -225,7 +226,20 @@ export async function POST(req: NextRequest) {
             configVersion: currentMission.configVersion,
           },
           treasuryAllowlist,
-          ownerSignedPayees: treasuryAllowlist,
+          ownerSignedPayees: (() => {
+            // PV-F2: Use owner-signed payee set for this specific mission, falling back to treasuryAllowlist only if unset
+            let dbPayees: string[] | null = null;
+            if ((currentMission as any).payeesJson) {
+              try {
+                const parsed = JSON.parse((currentMission as any).payeesJson);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  dbPayees = parsed;
+                }
+              } catch {}
+            }
+            const missionPayees = dbPayees || getMissionPayees(currentMission.slug);
+            return (missionPayees && missionPayees.length > 0) ? missionPayees : treasuryAllowlist;
+          })(),
           taintRegistry,
         };
 
