@@ -34,7 +34,7 @@ const FUJI_RPC_URL =
 const GUARDED_TREASURY_ADDRESS =
   process.env.GUARDED_TREASURY_ADDRESS ||
   process.env.NEXT_PUBLIC_GUARDED_TREASURY_ADDRESS ||
-  '0x5aAdFB43eF8dAF45DD80F4676345b7676f1D70e3';
+  '0x20451c1e2dCD83F166B4f22868BAdECb5868d545';
 
 const proposeWithProofAbi = parseAbiItem(
   'function proposeWithProof(bytes32 operationId, address to, uint256 amount, bytes32 missionId, string reason, bytes32[] proof) external returns (uint256)'
@@ -132,11 +132,17 @@ async function main() {
     console.log('\n[Phase 2] Broadcasting live transaction on Avalanche Fuji (will revert)...');
 
     try {
-      const txHash = await walletClient.writeContract({
-        address: GUARDED_TREASURY_ADDRESS as `0x${string}`,
+      const data = encodeFunctionData({
         abi: [proposeWithProofAbi],
         functionName: 'proposeWithProof',
         args: [operationId, attackerAddress, stolenAmount, missionId, attackReason, fakeProof],
+      });
+
+      const txHash = await walletClient.sendTransaction({
+        account: simulationAccount as ReturnType<typeof privateKeyToAccount>,
+        to: GUARDED_TREASURY_ADDRESS as `0x${string}`,
+        data,
+        gas: 350000n,
       });
 
       console.log(`Broadcasted Transaction Hash: ${txHash}`);
