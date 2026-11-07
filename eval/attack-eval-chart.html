@@ -239,7 +239,7 @@
       <div class="brand-subtitle">PayBench-ADI Benchmark: Agent Data Injection & Historical Incident Evaluation on Avalanche</div>
     </div>
     <div class="badge-bar">
-      <div class="badge">N = 20 Independent Turns</div>
+      <div class="badge">N = undefined Independent Turns</div>
       <div class="badge">Fuji On-Chain eth_call Verified</div>
       <div class="badge">Temperature: 0.0</div>
     </div>
@@ -255,18 +255,18 @@
         </div>
         <div class="metric-hero">
           <div class="label">Attack Success Rate (ASR)</div>
-          <div class="value val-c0">100.0%</div>
-          <div class="ci-sub">(95% CI: [83.9%, 100.0%])</div>
+          <div class="value val-c0">48.3%</div>
+          <div class="ci-sub">(95% CI: [39.6%, 57.2%])</div>
         </div>
       </div>
       <div class="stat-rows">
         <div class="stat-row">
           <span>LLM Tricked Rate</span>
-          <span class="val">100.0%</span>
+          <span class="val">49.2%</span>
         </div>
         <div class="stat-row">
           <span>Out-of-Bounds Spend</span>
-          <span class="val val-c0">$20.00 USDC</span>
+          <span class="val val-c0">$59.80 USDC</span>
         </div>
         <div class="stat-row">
           <span>Protection Mechanism</span>
@@ -284,8 +284,8 @@
         </div>
         <div class="metric-hero">
           <div class="label">Attack Success Rate (ASR)</div>
-          <div class="value val-c1">0.0%</div>
-          <div class="ci-sub">(95% CI: [0.0%, 16.1%])</div>
+          <div class="value val-c1">25.0%</div>
+          <div class="ci-sub">(95% CI: [18.1%, 33.4%])</div>
         </div>
       </div>
       <div class="stat-rows">
@@ -295,7 +295,7 @@
         </div>
         <div class="stat-row">
           <span>Out-of-Bounds Spend</span>
-          <span class="val val-c1">$0.00 USDC</span>
+          <span class="val val-c1">$13.50 USDC</span>
         </div>
         <div class="stat-row">
           <span>Protection Mechanism</span>
@@ -313,14 +313,14 @@
         </div>
         <div class="metric-hero">
           <div class="label">Attack Success Rate (ASR)</div>
-          <div class="value val-c2">0.0%</div>
-          <div class="ci-sub">(95% CI: [0.0%, 16.1%])</div>
+          <div class="value val-c2">13.3%</div>
+          <div class="ci-sub">(95% CI: [8.4%, 20.6%])</div>
         </div>
       </div>
       <div class="stat-rows">
         <div class="stat-row">
           <span>Benign Task Utility</span>
-          <span class="val val-c2">0.0%</span>
+          <span class="val val-c2">77.5%</span>
         </div>
         <div class="stat-row">
           <span>Out-of-Bounds Spend</span>
@@ -352,24 +352,31 @@
         </thead>
         <tbody>
           <tr>
-            <td><strong>Agent Data Injection (ADI)</strong> — Delimiter Recipient Hijack, Amount Inflation, Fake Badges</td>
-            <td style="color:#f87171;">100.0%</td>
-            <td style="color:#fbbf24;">0.0%</td>
-            <td style="color:#34d399;">0.0%</td>
-            <td style="color:#34d399;">$20.00 USDC</td>
+            <td><strong>Instruction Injection</strong> — Delimiter prompt injection in data payload</td>
+            <td style="color:#f87171;">75.0%</td>
+            <td style="color:#fbbf24;">33.3%</td>
+            <td style="color:#34d399;">10.0%</td>
+            <td style="color:#34d399;">$41.50 USDC</td>
+          </tr>
+          <tr>
+            <td><strong>Agent Data Injection (ADI)</strong> — Structural JSON delimiter breaking & vendor diversion (arXiv 2607.05120)</td>
+            <td style="color:#f87171;">25.0%</td>
+            <td style="color:#fbbf24;">25.0%</td>
+            <td style="color:#34d399;">25.0%</td>
+            <td style="color:#34d399;">$5.00 USDC</td>
           </tr>
           <tr>
             <td><strong>Real-World Incidents</strong> — Bankr Morse Code ($174k), Zscaler JSON-LD, Cornell OTP, Freysa</td>
-            <td style="color:#f87171;">0.0%</td>
+            <td style="color:#f87171;">15.0%</td>
             <td style="color:#fbbf24;">0.0%</td>
             <td style="color:#34d399;">0.0%</td>
-            <td style="color:#34d399;">$0.00 USDC</td>
+            <td style="color:#34d399;">$13.30 USDC</td>
           </tr>
           <tr>
-            <td><strong>Benign Tasks (Utility Control)</strong> — Legitimate contractor invoices, verifiable research, tool calls</td>
+            <td><strong>Benign Tasks (Utility Control)</strong> — Legitimate contractor invoices (maxAtomic), research, tools</td>
             <td style="color:#94a3b8;">100.0% Pass</td>
             <td style="color:#94a3b8;">100.0% Pass</td>
-            <td style="color:#34d399;">0.0% Pass</td>
+            <td style="color:#34d399;">77.5% Pass</td>
             <td style="color:#38bdf8;">0.0% False Positives</td>
           </tr>
         </tbody>
@@ -396,7 +403,7 @@
   </div>
 
   <footer>
-    <div>Model: gemini-3.8-flash · Evaluated via Google AI Gemini API · Output Format: JSON Mode · Temperature: 0.0</div>
+    <div>Model: gemini-3.5-flash-lite · Evaluated via Google AI Gemini API · Output Format: JSON Mode · Temperature: 0.0</div>
     <div>MissionPay · Autonomous Agent Guarded Treasury Architecture on Avalanche</div>
   </footer>
 </body>
