@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, computePayloadHash } from '@/lib/auth';
 import {
   createQuote,
   reserveOperation,
@@ -11,6 +11,7 @@ import { toolCatalog } from '@/lib/tools';
 import { toOperationDto } from '@/lib/dto';
 import { X402_HEADER, X402_RESPONSE_HEADER, X402_VERSION, X402_SCHEME } from '@/lib/constants';
 import { normalizeAddress } from '@/lib/chain';
+import { computeBoundNonce } from '@/lib/x402-binding';
 
 export async function POST(
   req: NextRequest,
@@ -147,8 +148,51 @@ export async function POST(
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
+    // Validate tool existence
+    const tool = toolCatalog[toolId];
+    if (!tool) {
+      return NextResponse.json({ error: `Tool ${toolId} not found` }, { status: 404 });
+    }
+
+    // Compute input hash from incoming request body
+    const argCheck = tool.validateInput(body.arguments || body.input || body);
+    if (!argCheck.valid) {
+      return NextResponse.json({ error: argCheck.error || 'Invalid arguments' }, { status: 400 });
+    }
+    const incomingInputHash = computePayloadHash(argCheck.canonicalInput);
+
+    const terms = JSON.parse(op.paymentTerms || '{}');
+
+    // Cryptographic request-bound nonce check (ATC'26 F1 Defense)
+    const expectedBoundNonce = computeBoundNonce({
+      operationId: op.operationId,
+      toolId,
+      inputHash: incomingInputHash,
+      priceAtomic: terms.priceAtomic || op.authValue || '0',
+      payTo: terms.payTo || op.authTo || '',
+      chainId: op.chainId,
+    });
+
+    const authNonce = (auth.nonce || '').toLowerCase();
+    if (
+      authNonce !== expectedBoundNonce.toLowerCase() ||
+      (op.authNonce || '').toLowerCase() !== expectedBoundNonce.toLowerCase()
+    ) {
+      return NextResponse.json(
+        {
+          error: 'PAYMENT_NOT_BOUND_TO_REQUEST',
+          expectedNonce: expectedBoundNonce,
+          receivedNonce: auth.nonce,
+        },
+        { status: 403 }
+      );
+    }
+
     if (op.toolId !== toolId) {
-      return NextResponse.json({ error: 'OPERATION_SCOPE_MISMATCH: tool mismatch' }, { status: 409 });
+      return NextResponse.json(
+        { error: 'PAYMENT_NOT_BOUND_TO_REQUEST', detail: 'Tool mismatch' },
+        { status: 403 }
+      );
     }
 
     // Bind payment authorization to stored immutable operation authorization
@@ -156,7 +200,6 @@ export async function POST(
       normalizeAddress(auth.from) !== normalizeAddress(op.authFrom || '') ||
       normalizeAddress(auth.to) !== normalizeAddress(op.authTo || '') ||
       auth.value?.toString() !== op.authValue?.toString() ||
-      (auth.nonce || '').toLowerCase() !== (op.authNonce || '').toLowerCase() ||
       paymentPayload.payload.signature !== op.authSignature
     ) {
       return NextResponse.json(

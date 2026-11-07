@@ -24,6 +24,7 @@ import { getPaymentMode, validateLiveFujiConfig } from './config';
 import { verifyQuoteAgainstCatalog } from './validator';
 import { getSessionWalletForMission } from './session-wallets';
 import { getMissionPayeeProof, buildProposeWithProofCalldata } from './merkle';
+import { computeBoundNonce } from './x402-binding';
 
 export { getPaymentMode };
 
@@ -442,8 +443,15 @@ export async function signOperationAuthorization(params: {
       const terms = JSON.parse(op.paymentTerms);
       const value = BigInt(terms.priceAtomic);
 
-      // Generate 32-byte CSPRNG nonce
-      const nonce = `0x${randomBytes(32).toString('hex')}` as `0x${string}`;
+      // Cryptographically bound nonce (ATC'26 F1 defense, STRATEGY / REVIEW §4l)
+      const nonce = computeBoundNonce({
+        operationId: op.operationId,
+        toolId: op.toolId,
+        inputHash: op.inputHash,
+        priceAtomic: terms.priceAtomic,
+        payTo: terms.payTo,
+        chainId: op.chainId,
+      });
       const nowSeconds = Math.floor(now.getTime() / 1000);
       const validAfter = BigInt(nowSeconds - 10); // clock skew tolerance
       const validBefore = BigInt(nowSeconds + AUTHORIZATION_TTL_SECONDS);
@@ -530,7 +538,7 @@ export async function signOperationAuthorization(params: {
         operation_id: op.operationId,
         policy_hash: op.policyHash,
         policy_version: '1',
-        reason: 'EIP-3009 authorization created and persisted before transmission',
+        reason: "EIP-3009 authorization created and persisted before transmission (nonce_binding: 'request-bound-v1')",
         result_hash: '',
         rule: 'SIGN_OK',
         source_key: `${op.operationId}:sign`,
