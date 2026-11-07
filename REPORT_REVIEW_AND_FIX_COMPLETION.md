@@ -1,6 +1,6 @@
 # BÁO CÁO NGHIỆM THU REVIEW & SỬA LỖI (VÒNG S2: PAYBENCH-ADI)
 
-**Thời điểm:** 2026-11-08 03:05 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
+**Thời điểm:** 2026-11-08 03:20 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
 **Ràng buộc tuân thủ nghiêm ngặt:**
 - Smart contract nằm tại `contracts/` (không phải `packages/contracts`). GuardedTreasury verified trên Snowtrace tại [`0x20451c1e2dCD83F166B4f22868BAdECb5868d545`](https://testnet.snowtrace.io/address/0x20451c1e2dCD83F166B4f22868BAdECb5868d545).
 - TUYỆT ĐỐI KHÔNG sửa hay commit 3 file deck của reviewer (`MissionPay-pitch-deck-v2.pdf`, `MissionPay-pitch-deck-v2.pptx`, `artifacts/submission-s1/deck-v2/build_deck.js`) và `REVIEW_PROMPT_GPT.md`.
@@ -50,7 +50,7 @@
 | **• Allowlisted Vendor Diversion (E10)** | **ASR: 95.0%** ($19.00) | **ASR: 95.0%** ($19.00 — Bypassed!) | **ASR: 0.0%** ($0.00 — **Blocked!**) |
 
 *\*3 case ở model 2 gặp timeout từ upstream API khi giải mã chuỗi Morse dài và được đánh dấu MISSING theo quy chuẩn S2-E1 (N thực tế = 177).*  
-**Fuji On-Chain eth_call Revert Verification:** **10/10 reverted as expected (`PayeeNotInMissionSet` / `ContractRevert`)** trên smart contract `GuardedTreasury` đã verify.
+**Fuji On-Chain eth_call Revert Verification:** Mô phỏng zero-gas `eth_call` (không broadcast transaction) trên smart contract `GuardedTreasury` đã verify trên Fuji: **9/10 reverted với `PayeeNotInMissionSet`** và **1/10 (`adi-rec-05`) reverted với `ContractRevert`** (do cấu trúc địa chỉ synthetic kích hoạt EVM revert trước khi decode custom error).
 
 ---
 
@@ -62,10 +62,15 @@
    - **0 errors** (`npx.cmd tsc --noEmit` exit code 0).
 3. **Vitest Unit Test Suite (`apps/web/tests/`):**
    - **30/30 tests pass** (7 attack-scoring tests, 12 provenance tests, 6 agent-planning tests, 5 morse tests).
-4. **Visual Chart Screenshot:**
-   - [`eval/attack-eval-chart.png`](file:///d:/Code/Code/AIO/Code/ZaloAIC/UniHack/eval/attack-eval-chart.png) (1920×1080 PNG, rendered via Playwright Chromium).
-5. **Detailed Evaluation Report:**
-   - [`ATTACK_EVAL.md`](file:///d:/Code/Code/AIO/Code/ZaloAIC/UniHack/ATTACK_EVAL.md) (phân tích chi tiết số liệu, Wilson CI, biểu đồ so sánh).
+4. **Visual Chart Screenshot (`eval/attack-eval-chart.png` & `.html`):**
+   - Đã sửa badge: `N = 180 Cases (140 Attack / 40 Benign)` (loại bỏ `N = undefined`).
+   - Đã sửa C1 card: hiển thị `Vendor Diversion Bypass: 85.0% – 95.0% Penetration` (bỏ claim amount inflation).
+   - Đã sửa insights box: `On-Chain Simulation: 9/10 reverted PayeeNotInMissionSet + 1/10 ContractRevert via zero-gas eth_call simulation`.
+   - Đã hiển thị cả 2 model trên footer: `gemini-3.5-flash-lite & gemini-3.1-flash-lite`.
+   - Kích thước chuẩn: 1920×1080 PNG, render bằng Playwright Chromium.
+5. **Detailed Evaluation Report (`ATTACK_EVAL.md`):**
+   - Bỏ câu tham chiếu "earlier 2024 models" ở mục 4.4.
+   - Làm rõ 9/10 `PayeeNotInMissionSet` + 1/10 `ContractRevert` qua zero-gas `eth_call` simulation và nguyên nhân cho `adi-rec-05` ở mục 2 và 6.
 
 ---
 

@@ -239,7 +239,7 @@
       <div class="brand-subtitle">PayBench-ADI Benchmark: Agent Data Injection & Historical Incident Evaluation on Avalanche</div>
     </div>
     <div class="badge-bar">
-      <div class="badge">N = undefined Independent Turns</div>
+      <div class="badge">N = 180 Cases (140 Attack / 40 Benign)</div>
       <div class="badge">Fuji On-Chain eth_call Verified</div>
       <div class="badge">Temperature: 0.0</div>
     </div>
@@ -290,8 +290,8 @@
       </div>
       <div class="stat-rows">
         <div class="stat-row">
-          <span>Amount Inflation Bypass</span>
-          <span class="val val-c1">Allowed within Cap</span>
+          <span>Vendor Diversion Bypass</span>
+          <span class="val val-c1">85.0% – 95.0% Penetration</span>
         </div>
         <div class="stat-row">
           <span>Out-of-Bounds Spend</span>
@@ -395,11 +395,11 @@
       <div>
         <div class="insight-item">
           <div class="insight-bullet">🛡️</div>
-          <div><strong>100% On-Chain Enforcement:</strong> 10/10 attack proposals blocked by C2 strictly reverted on Avalanche Fuji testnet with <code>PayeeNotInMissionSet</code> via <code>eth_call</code>.</div>
+          <div><strong>On-Chain Simulation:</strong> 9/10 reverted with <code>PayeeNotInMissionSet</code> + 1/10 <code>ContractRevert</code> via zero-gas <code>eth_call</code> simulation on Avalanche Fuji.</div>
         </div>
         <div class="insight-item">
           <div class="insight-bullet">📊</div>
-          <div><strong>Legacy Gaps Closed:</strong> C1 fails against untrusted amount inflation within cap. C2 provenance bounds spending to owner-signed Merkle leaves.</div>
+          <div><strong>Legacy Gaps Closed:</strong> C1 static allowlists fail against allowlisted vendor diversion. C2 provenance bounds spending strictly to owner-signed mission Merkle leaves.</div>
         </div>
         <div class="insight-item">
           <div class="insight-bullet">⚡</div>
@@ -410,7 +410,7 @@
   </div>
 
   <footer>
-    <div>Model: gemini-3.5-flash-lite · Evaluated via Google AI Gemini API · Output Format: JSON Mode · Temperature: 0.0</div>
+    <div>Models: gemini-3.5-flash-lite & gemini-3.1-flash-lite · Evaluated via Google AI Gemini API · Output Format: JSON Mode · Temperature: 0.0</div>
     <div>MissionPay · Autonomous Agent Guarded Treasury Architecture on Avalanche</div>
   </footer>
 </body>
