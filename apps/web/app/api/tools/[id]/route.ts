@@ -148,6 +148,20 @@ export async function POST(
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
+    // ATC'26 F4: Premature result disclosure gating on terminal failed state
+    if (op.state === 'FAILED') {
+      return NextResponse.json(
+        {
+          operationId,
+          state: 'FAILED',
+          result: null,
+          failureReason: op.failureReason,
+          error: op.failureReason || 'OPERATION_FAILED',
+        },
+        { status: 400 }
+      );
+    }
+
     // Validate tool existence
     const tool = toolCatalog[toolId];
     if (!tool) {

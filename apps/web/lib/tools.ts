@@ -102,8 +102,9 @@ export const toolCatalog: Record<string, ToolDefinition> = {
                 .replace(/<[^>]+>/g, '')
                 .replace(/&#039;/g, "'")
                 .replace(/&quot;/g, '"')
-                .replace(/&amp;/g, '&');
-              return `${p.title}: ${excerpt || p.description || 'Reference article'}`;
+                .replace(/&amp;/g, '&')
+                .replace(/[\u2000-\u200f\u2028-\u202f]/g, ' ');
+              return `${p.title}: ${excerpt || p.description || 'Reference article'}`.replace(/[\u2000-\u200f\u2028-\u202f]/g, ' ');
             });
             const sources = pages.map((p) => `https://en.wikipedia.org/wiki/${p.key}`);
             return {
