@@ -410,6 +410,7 @@ describe('PV-3: Owner-signed Payee Merkle Root & proposeWithProof Settlement', (
         kind: 'tool_purchase',
         mission_id: updatedMission!.slug,
         tool_id: 'tool:search',
+        arguments: { query: 'price check' },
         amount_atomic: '100000',
         reason: 'Authorized search operation',
       },

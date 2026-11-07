@@ -56,9 +56,9 @@ export async function POST(
     let payeeInfo: any = null;
     let newConfigVersion = mission.configVersion;
     let newPolicyHash = mission.policyHash;
-    let savedTreeResult: PayeeMerkleTreeResult | null = null;
 
-    const { state } = await prisma.$transaction(async (tx) => {
+    const txResult = await prisma.$transaction(async (tx) => {
+      let savedTreeResult: { root: `0x${string}`; payees: string[] } | null = null;
       const res = await verifyAndConsumeChallenge(tx, {
         nonce,
         signature,
@@ -276,8 +276,13 @@ export async function POST(
         }
       }
 
-      return res;
+      return {
+        ...res,
+        savedTreeResult,
+      };
     });
+
+    const { state, savedTreeResult } = txResult;
 
     // PV-F9: Only update cache after transaction commits
     if (savedTreeResult) {
