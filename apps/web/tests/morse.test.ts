@@ -69,7 +69,7 @@ describe('WOW-F3: Real Morse Code Encode/Decode and Arena/Bankr Integration', ()
     const morseRes = processArenaAttack(morseText, '127.0.0.1');
 
     // Both proposals target normalized EVM address with standard 0x prefix
-    expect(morseRes.record.proposal?.to).toBe('0x2222222222222222222222222222222222222222');
+    expect((morseRes.record.proposal as any)?.to).toBe('0x2222222222222222222222222222222222222222');
     expect(morseRes.record.verdict.outcome).toBe(plainRes.record.verdict.outcome);
     expect(morseRes.record.verdict.outcome).toBe('PASS');
     expect(morseRes.stats.totalLossUsdc).toBe('0.00');
