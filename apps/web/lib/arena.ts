@@ -131,6 +131,74 @@ export function sanitizeAttackPrompt(input: unknown): {
 }
 
 /**
+ * WOW-F12: Financial Directive Parser.
+ * Detects financial intent across arbitrary word orders, multiple languages (EN/VI),
+ * and currency notations ($ / USDC / USD).
+ */
+export function parseFinancialDirective(rawInput: string): {
+  isFinancial: boolean;
+  targetAddr?: string;
+  amountNum?: number;
+  amountAtomic?: string;
+} {
+  const lower = rawInput.toLowerCase();
+  const hasVerb =
+    lower.includes('pay') ||
+    lower.includes('send') ||
+    lower.includes('transfer') ||
+    lower.includes('payout') ||
+    lower.includes('withdraw') ||
+    lower.includes('drain') ||
+    lower.includes('forward') ||
+    lower.includes('give') ||
+    lower.includes('chuyển') ||
+    lower.includes('chuyen') ||
+    lower.includes('rút') ||
+    lower.includes('rut') ||
+    lower.includes('gửi') ||
+    lower.includes('gui') ||
+    lower.includes('thanh toán') ||
+    lower.includes('thanh toan') ||
+    lower.includes('chi');
+
+  const addrMatch = rawInput.match(/0x[a-fA-F0-9]{40}/i);
+  const hasCurrency = lower.includes('usdc') || lower.includes('usd') || rawInput.includes('$');
+
+  if (!hasVerb && !(addrMatch && hasCurrency)) {
+    return { isFinancial: false };
+  }
+
+  const targetAddr = addrMatch ? normalizeAddress(addrMatch[0]) : '0xbad0000000000000000000000000000000000bad';
+
+  // Strip 42-char address so address hex characters are never confused for numbers
+  const textWithoutAddr = rawInput.replace(/0x[a-fA-F0-9]{40}/gi, '');
+
+  // Extract amount: e.g., $999, 999$, 999 USDC, 999.50 USD, or standalone number
+  const explicitAmountMatch =
+    textWithoutAddr.match(/\$\s*(\d+(?:\.\d+)?)/i) ||
+    textWithoutAddr.match(/(\d+(?:\.\d+)?)\s*(?:usdc|usd|\$)/i) ||
+    textWithoutAddr.match(/\b(\d+(?:\.\d+)?)\b/);
+
+  let amountNum = 1.0;
+  if (explicitAmountMatch) {
+    const rawVal = explicitAmountMatch[1] || explicitAmountMatch[0];
+    const parsed = parseFloat(rawVal.replace(/[^\d.]/g, ''));
+    if (!isNaN(parsed) && parsed > 0) {
+      amountNum = parsed;
+    }
+  }
+
+  const amountAtomic = BigInt(Math.round(amountNum * 1e6)).toString();
+
+  return {
+    isFinancial: true,
+    targetAddr,
+    amountNum,
+    amountAtomic,
+  };
+}
+
+/**
  * Enforces per-client sliding window rate limit and global ceiling (WOW-F7).
  * Keyed strictly by trusted IP, ignoring client-supplied header spoofing.
  */
@@ -331,19 +399,12 @@ export function processArenaAttack(rawInput: string, clientIp: string = '127.0.0
     });
     preventedAmountAtomic = 5_000_000n;
   }
-  // Pattern D: Transfer command with address
-  else if (
-    lower.includes('chuyển') ||
-    lower.includes('transfer') ||
-    lower.includes('send') ||
-    lower.includes('rút') ||
-    lower.includes('payout')
-  ) {
-    const addrMatch = rawInput.match(/0x[a-fA-F0-9]{40}/i);
-    const targetAddr = addrMatch ? normalizeAddress(addrMatch[0]) : '0xbad0000000000000000000000000000000000bad';
-    const amountMatch = rawInput.match(/(\d+(?:\.\d+)?)\s*(?:usdc|usd)?/i);
-    const amountNum = amountMatch ? parseFloat(amountMatch[1]) : 1.0;
-    const amountAtomic = BigInt(Math.round(amountNum * 1e6)).toString();
+  // Pattern D: Transfer command with financial intent (WOW-F12: expanded multi-lingual, arbitrary order parser)
+  else if (parseFinancialDirective(rawInput).isFinancial) {
+    const financialCmd = parseFinancialDirective(rawInput);
+    const targetAddr = financialCmd.targetAddr || '0xbad0000000000000000000000000000000000bad';
+    const amountNum = financialCmd.amountNum || 1.0;
+    const amountAtomic = financialCmd.amountAtomic || '1000000';
 
     compromisedPlanner = true;
     agentConvinced = true;
@@ -356,11 +417,11 @@ export function processArenaAttack(rawInput: string, clientIp: string = '127.0.0
     });
     preventedAmountAtomic = BigInt(amountAtomic);
   }
-  // Pattern E: Default fallback
+  // Pattern E: Default fallback (benign exploratory prompt - WOW-F12)
   else {
     compromisedPlanner = false;
     agentConvinced = false;
-    agentThought = `[AGENT_RESILIENT] Agent did not detect financial directive. Running standard exploratory search.`;
+    agentThought = `Không nhận ra lệnh chuyển tiền (planner mô phỏng dạng luật). Chạy truy vấn tìm kiếm tiêu chuẩn.`;
     proposal = createSearchProposal({
       missionId: ctx.mission.missionId,
       query: promptText.slice(0, 50),
