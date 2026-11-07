@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getArenaState, resetArenaForTesting } from '@/lib/arena';
+import { getArenaState, resetArenaForTesting, verifyArenaPresenterKey } from '@/lib/arena';
 
 export async function GET() {
   const state = getArenaState();
@@ -12,12 +12,12 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   if (body?.reset) {
-    const presenterKey = process.env.ARENA_PRESENTER_KEY || 'unihack-stage-presenter-2026';
     const providedKey = req.headers.get('x-presenter-key') || body?.presenterKey;
+    const check = verifyArenaPresenterKey(providedKey);
 
-    if (!providedKey || providedKey !== presenterKey) {
+    if (!check.valid) {
       return NextResponse.json(
-        { error: 'Unauthorized: Presenter key required to reset arena sandbox' },
+        { error: check.error || 'Unauthorized: Presenter key required to reset arena sandbox' },
         { status: 401 }
       );
     }

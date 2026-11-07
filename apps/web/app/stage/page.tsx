@@ -68,9 +68,16 @@ export default function StageConsolePage() {
   const [resettingArena, setResettingArena] = useState(false);
 
   const handleResetArena = async () => {
+    const key = window.prompt('Nhập Presenter Key (ARENA_PRESENTER_KEY) để xác nhận reset:');
+    if (!key) return;
+
     setResettingArena(true);
     try {
-      await resetArenaAction();
+      const resAction = await resetArenaAction(key);
+      if (!resAction.success) {
+        alert(resAction.error || 'Presenter key không hợp lệ!');
+        return;
+      }
       const res = await fetch('/api/arena/stats');
       const json = await res.json();
       if (json.stats) {

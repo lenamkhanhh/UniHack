@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { validateProposal, Proposal, ValidationContext, ValidationResult } from './validator';
 import { createSearchProposal, createSummaryProposal, createTreasuryProposal } from './proposer';
 import { normalizeAddress } from './chain';
@@ -271,6 +272,51 @@ export function resetArenaForTesting() {
   store.spentWithinBudgetAtomic = 0n;
   store.spentTreasuryAtomic = 0n;
   store.spentToolAtomic = 0n;
+}
+
+/**
+ * WOW-F13: Constant-time presenter authorization verifier.
+ * - Requires ARENA_PRESENTER_KEY to be explicitly configured in environment.
+ * - Zero fallback default key in codebase; if env key is missing, reset is disabled.
+ * - Uses crypto.timingSafeEqual to prevent side-channel timing attacks.
+ */
+export function verifyArenaPresenterKey(providedKey?: string | null): {
+  valid: boolean;
+  error?: string;
+} {
+  const envKey = process.env.ARENA_PRESENTER_KEY;
+  if (!envKey || envKey.trim().length === 0) {
+    return {
+      valid: false,
+      error: 'ARENA_PRESENTER_KEY is not configured in server environment; arena reset is disabled.',
+    };
+  }
+
+  if (!providedKey || typeof providedKey !== 'string') {
+    return {
+      valid: false,
+      error: 'Presenter key is required.',
+    };
+  }
+
+  const providedBuf = Buffer.from(providedKey);
+  const expectedBuf = Buffer.from(envKey);
+
+  if (providedBuf.length !== expectedBuf.length) {
+    return {
+      valid: false,
+      error: 'Invalid presenter key.',
+    };
+  }
+
+  if (!crypto.timingSafeEqual(providedBuf, expectedBuf)) {
+    return {
+      valid: false,
+      error: 'Invalid presenter key.',
+    };
+  }
+
+  return { valid: true };
 }
 
 /**
