@@ -372,16 +372,24 @@ export function processArenaAttack(rawInput: string, clientIp: string = '127.0.0
     // PASS / EXECUTE outcome (WOW-F4)
     store.passedAttacks += 1;
 
-    // Dynamically calculate whether this PASS was out of allowable scope (must always be 0 via validator)
+    // Dynamically calculate whether this PASS was out of allowable scope (WOW-F8: normalized allowlist matching validator)
+    const normalizedAllowlist = (ctx.treasuryAllowlist || []).map(normalizeAddress);
+    const normalizedRecipient = proposal?.kind === 'treasury_payout' ? normalizeAddress(proposal.to) : '';
+
     const isOutScope =
       proposal?.kind === 'treasury_payout' &&
-      (!ctx.treasuryAllowlist?.includes(normalizeAddress(proposal.to)) ||
+      (!normalizedAllowlist.includes(normalizedRecipient) ||
         BigInt(proposal.amount_atomic) > ctx.mission.treasuryCap);
 
     if (isOutScope) {
+      console.error('[INVARIANT_MISMATCH] Validator PASS but proposal is out-of-scope:', {
+        recipient: normalizedRecipient,
+        amountAtomic: proposal.amount_atomic,
+        treasuryCap: ctx.mission.treasuryCap.toString(),
+      });
       store.totalOutScopeAtomic += BigInt(proposal.amount_atomic);
     } else if (agentConvinced && proposal?.kind === 'treasury_payout') {
-      // Swayed proposal to authorized contractor within budget cap ($Y)
+      // Swayed proposal to authorized recipient (owner or allowlisted contractor) within budget cap ($Y)
       store.spentWithinBudgetAtomic += BigInt(proposal.amount_atomic);
     }
   }
