@@ -114,6 +114,7 @@ contract GuardedTreasury {
     event MissionFunded(bytes32 indexed missionId, address indexed wallet, uint256 amount);
     event MissionSwept(bytes32 indexed missionId, address indexed wallet, uint256 amount);
     event MissionProofAnchored(bytes32 indexed missionId, bytes32 indexed headHash, uint256 timestamp);
+    event MissionPayeeRootSet(bytes32 indexed missionId, bytes32 indexed root, uint256 policyVersion);
 
     // --- State Variables (01 §3) ---
     address public immutable USDC; // 0x5425...Bc65 Fuji USDC
@@ -133,6 +134,7 @@ contract GuardedTreasury {
     mapping(bytes32 => bool) public missionFunded; // missionId -> true if session wallet funded
     mapping(bytes32 => address) public missionSessionWallet; // missionId -> funded session wallet
     mapping(bytes32 => bytes32) public anchoredMissionProofs; // missionId -> anchored audit headHash
+    mapping(bytes32 => bytes32) public missionPayeeRoot; // missionId -> Merkle root of authorized payees (PV-1)
 
     struct Mission {
         bytes32 id; // keccak256(UTF8(slug))
@@ -403,7 +405,33 @@ contract GuardedTreasury {
         emit MissionProofAnchored(missionId, headHash, block.timestamp);
     }
 
-    // --- Core Propose Function (01 §4, §5) ---
+    // --- Mission Payee Merkle Root (PV-1) ---
+    function setMissionPayeeRoot(bytes32 missionId, bytes32 root) external onlyOwner {
+        require(missions[missionId].exists, "MissionNotFound");
+        require(!missions[missionId].closed, "MissionAlreadyClosed");
+        require(block.timestamp < missions[missionId].expiresAt, "MissionExpired");
+
+        missionPayeeRoot[missionId] = root;
+        policyVersion++;
+        emit MissionPayeeRootSet(missionId, root, policyVersion);
+        emit PolicyVersionAdvanced(policyVersion);
+    }
+
+    // --- Merkle Proof Verification (PV-1) ---
+    function _verifyMerkle(bytes32[] calldata proof, bytes32 root, bytes32 leaf) internal pure returns (bool) {
+        bytes32 computedHash = leaf;
+        for (uint256 i = 0; i < proof.length; i++) {
+            bytes32 proofElement = proof[i];
+            if (computedHash <= proofElement) {
+                computedHash = keccak256(abi.encodePacked(computedHash, proofElement));
+            } else {
+                computedHash = keccak256(abi.encodePacked(proofElement, computedHash));
+            }
+        }
+        return computedHash == root;
+    }
+
+    // --- Core Propose Functions (01 §4, §5 & PV-1) ---
     function propose(
         bytes32 operationId,
         address to,
@@ -411,6 +439,33 @@ contract GuardedTreasury {
         bytes32 missionId,
         string calldata reason
     ) external nonReentrant returns (uint256 proposalId) {
+        require(missionPayeeRoot[missionId] == bytes32(0), "PayeeProofRequired");
+        return _propose(operationId, to, amount, missionId, reason);
+    }
+
+    function proposeWithProof(
+        bytes32 operationId,
+        address to,
+        uint256 amount,
+        bytes32 missionId,
+        string calldata reason,
+        bytes32[] calldata proof
+    ) external nonReentrant returns (uint256 proposalId) {
+        bytes32 root = missionPayeeRoot[missionId];
+        if (root != bytes32(0)) {
+            bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(to))));
+            require(_verifyMerkle(proof, root, leaf), "PayeeNotInMissionSet");
+        }
+        return _propose(operationId, to, amount, missionId, reason);
+    }
+
+    function _propose(
+        bytes32 operationId,
+        address to,
+        uint256 amount,
+        bytes32 missionId,
+        string calldata reason
+    ) internal returns (uint256 proposalId) {
         // Idempotency: operationId must be nonzero and unique in mission (01 §10, C19)
         require(operationId != bytes32(0), "InvalidOperationId");
         require(proposalIdPlusOneByOperation[missionId][operationId] == 0, "DuplicateOperation");

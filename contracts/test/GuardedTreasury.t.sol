@@ -790,4 +790,135 @@ contract GuardedTreasuryTest is Test {
         vm_prank(owner);
         treasury.anchorMissionProof(keccak256("unknown-mission"), headHash);
     }
+
+    // --- PV-1: Mission Payee Merkle Root & Proof Tests ---
+
+    function test_PV1_setMissionPayeeRoot_success_and_policy_advances() public {
+        bytes32 root = 0xc76421b7db26fc58390a222ae87eb47677faa580fa2d97459166a1125d031320;
+        uint256 pvBefore = treasury.policyVersion();
+
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, root);
+
+        assertEq(treasury.missionPayeeRoot(missionId), root);
+        assertEq(treasury.policyVersion(), pvBefore + 1);
+
+        // Non-owner reverts
+        vm_expectRevert(bytes("Ownable: caller is not the owner"));
+        vm_prank(agent);
+        treasury.setMissionPayeeRoot(missionId, root);
+
+        // Nonexistent mission reverts
+        vm_expectRevert(bytes("MissionNotFound"));
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(keccak256("unknown-mission"), root);
+
+        // Closed mission reverts
+        vm_prank(owner);
+        treasury.closeMission(missionId);
+        vm_expectRevert(bytes("MissionAlreadyClosed"));
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, root);
+    }
+
+    function test_PV1_root_empty_behaves_as_before() public {
+        // missionPayeeRoot is 0 by default
+        assertEq(treasury.missionPayeeRoot(missionId), bytes32(0));
+
+        // Classic propose works without proof
+        vm_prank(agent);
+        uint256 id1 = treasury.propose(keccak256("op-pv1-classic"), recipient, 1_000_000, missionId, "No root set");
+        assertEq(treasury.getProposal(id1).status, 3); // Executed
+
+        // proposeWithProof also succeeds when root is empty
+        bytes32[] memory emptyProof = new bytes32[](0);
+        vm_prank(agent);
+        uint256 id2 = treasury.proposeWithProof(keccak256("op-pv1-proof-empty-root"), recipient, 1_000_000, missionId, "Empty root", emptyProof);
+        assertEq(treasury.getProposal(id2).status, 3); // Executed
+    }
+
+    function test_PV1_propose_reverts_when_root_is_set() public {
+        bytes32 root = 0xc76421b7db26fc58390a222ae87eb47677faa580fa2d97459166a1125d031320;
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, root);
+
+        // Legacy propose must revert with PayeeProofRequired
+        vm_expectRevert(bytes("PayeeProofRequired"));
+        vm_prank(agent);
+        treasury.propose(keccak256("op-pv1-fail"), recipient, 1_000_000, missionId, "Must fail");
+    }
+
+    function test_PV1_proposeWithProof_valid_proof_executes_and_queues() public {
+        address payeeA = 0x2222222222222222222222222222222222222222;
+        bytes32 root = 0xc76421b7db26fc58390a222ae87eb47677faa580fa2d97459166a1125d031320;
+        bytes32[] memory proofA = new bytes32[](1);
+        proofA[0] = 0xbd164a4590db938a0b098da1b25cf37b155f857b38c37c016ad5b8f8fce80192;
+
+        vm_prank(owner);
+        treasury.setRecipient(payeeA, true);
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, root);
+
+        // Execute branch under perTxCap (1 USDC)
+        vm_prank(agent);
+        uint256 p1 = treasury.proposeWithProof(keccak256("op-pv1-exec"), payeeA, 1_000_000, missionId, "Valid proof exec", proofA);
+        assertEq(treasury.getProposal(p1).status, 3); // Executed
+        assertEq(usdc.balanceOf(payeeA), 1_000_000);
+
+        // Queue branch over perTxCap (6 USDC)
+        vm_prank(agent);
+        uint256 p2 = treasury.proposeWithProof(keccak256("op-pv1-queue"), payeeA, 6_000_000, missionId, "Valid proof queue", proofA);
+        assertEq(treasury.getProposal(p2).status, 1); // Queued
+        assertEq(treasury.getProposal(p2).queueReason, "OverPerTxCap");
+    }
+
+    function test_PV1_proposeWithProof_invalid_proof_or_unauthorized_payee_reverts() public {
+        address payeeA = 0x2222222222222222222222222222222222222222;
+        address outsider = 0x9999999999999999999999999999999999999999;
+        bytes32 root = 0xc76421b7db26fc58390a222ae87eb47677faa580fa2d97459166a1125d031320;
+
+        vm_prank(owner);
+        treasury.setRecipient(payeeA, true);
+        vm_prank(owner);
+        treasury.setRecipient(outsider, true);
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, root);
+
+        // Invalid proof for payeeA
+        bytes32[] memory badProof = new bytes32[](1);
+        badProof[0] = keccak256("fake-sibling");
+        vm_expectRevert(bytes("PayeeNotInMissionSet"));
+        vm_prank(agent);
+        treasury.proposeWithProof(keccak256("op-pv1-badproof"), payeeA, 1_000_000, missionId, "Bad proof", badProof);
+
+        // Valid proof of payeeA used for outsider
+        bytes32[] memory proofA = new bytes32[](1);
+        proofA[0] = 0xbd164a4590db938a0b098da1b25cf37b155f857b38c37c016ad5b8f8fce80192;
+        vm_expectRevert(bytes("PayeeNotInMissionSet"));
+        vm_prank(agent);
+        treasury.proposeWithProof(keccak256("op-pv1-outsider"), outsider, 1_000_000, missionId, "Outsider", proofA);
+    }
+
+    function test_PV1_cross_vector_typescript_vector_verifies() public {
+        // Cross-verification vector generated by @openzeppelin/merkle-tree in TypeScript
+        address payeeA = 0x2222222222222222222222222222222222222222;
+        address payeeB = 0x3333333333333333333333333333333333333333;
+        bytes32 root = 0xc76421b7db26fc58390a222ae87eb47677faa580fa2d97459166a1125d031320;
+
+        bytes32[] memory proofB = new bytes32[](1);
+        proofB[0] = 0x708e7cb9a75ffb24191120fba1c3001faa9078147150c6f2747569edbadee751;
+
+        vm_prank(owner);
+        treasury.setRecipient(payeeA, true);
+        vm_prank(owner);
+        treasury.setRecipient(payeeB, true);
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, root);
+
+        // Propose to payeeB with TypeScript generated proof
+        vm_prank(agent);
+        uint256 pId = treasury.proposeWithProof(keccak256("op-cross-vector"), payeeB, 2_000_000, missionId, "TS Cross Vector PayeeB", proofB);
+        assertEq(treasury.getProposal(pId).status, 3); // Executed
+        assertEq(usdc.balanceOf(payeeB), 2_000_000);
+    }
 }
