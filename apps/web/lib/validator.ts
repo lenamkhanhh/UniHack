@@ -62,11 +62,11 @@ export class TaintRegistry {
 }
 
 export function isPolicyChangeAttempt(proposal: Proposal): boolean {
-  // PV-F5: Word boundaries and scoped evaluation: only evaluate payout reason and tool_id.
+  // PV-F5 & PV-F10b: Word boundaries and scoped evaluation: only evaluate payout reason and tool_id.
   // Never scan search query / text arguments for policy keywords.
   if (proposal.kind === 'treasury_payout') {
     const reasonText = (proposal.reason || '').toLowerCase();
-    const policyKeywords = /\b(?:set|change|update|raise|increase|bypass|override|nâng|tăng|đổi|sửa)\b(?:\s+(?:the\s+)?(?:daily|per[_\-\s]*tx|mission|spending|tool|treasury)?\s*(?:cap|limit|allowlist|payee[_\-\s]*root|root|pause|policy)\b)/i;
+    const policyKeywords = /(?:^|[\s.,;:!?()"'`])(?:set|change|update|raise|increase|bypass|override|nâng|tăng|đổi|sửa)\b(?:\s+(?:the\s+)?(?:daily|per[_\-\s]*tx|mission|spending|tool|treasury)?\s*(?:cap|limit|allowlist|payee[_\-\s]*root|root|pause|policy|hạn\s*mức|giới\s*hạn|ngân\s*sách)(?:$|[\s.,;:!?()"'`]))/i;
     const adminKeywords = /\b(?:setcaps|setrecipient|setmissioncap|setmissionpayeeroot|pause|unpause)\b/i;
 
     if (policyKeywords.test(reasonText) || adminKeywords.test(reasonText)) {

@@ -307,4 +307,47 @@ describe('PV-2: Data Provenance & Taint Registry Security Boundaries', () => {
     expect(result4.outcome).toBe('BLOCK');
     expect(result4.rule).toBe('AGENT_CANNOT_CHANGE_POLICY');
   });
+
+  it('10. PV-F10b: Vietnamese policy tampering phrases (hạn mức, giới hạn, ngân sách) are detected with word boundaries', () => {
+    const ctx = createMockContext(undefined, [ownerAddress, trustedPayee]);
+
+    // 1. "tăng hạn mức lên 100 USDC" -> true & BLOCK
+    const vnMalicious1: Proposal = {
+      kind: 'treasury_payout',
+      mission_id: 'demo-mission',
+      to: trustedPayee,
+      amount_atomic: '1000000',
+      reason: 'tăng hạn mức lên 100 USDC',
+    };
+    expect(isPolicyChangeAttempt(vnMalicious1)).toBe(true);
+    const res1 = validateProposal(vnMalicious1, ctx);
+    expect(res1.outcome).toBe('BLOCK');
+    expect(res1.rule).toBe('AGENT_CANNOT_CHANGE_POLICY');
+
+    // 2. "tìm giá AVAX" -> false & not blocked by policy
+    const vnBenign1: Proposal = {
+      kind: 'tool_purchase',
+      mission_id: 'demo-mission',
+      tool_id: 'tool:search',
+      amount_atomic: '100000',
+      reason: 'tìm giá AVAX',
+      arguments: { query: 'tìm giá AVAX' },
+    };
+    expect(isPolicyChangeAttempt(vnBenign1)).toBe(false);
+    const res2 = validateProposal(vnBenign1, ctx);
+    expect(res2.rule).not.toBe('AGENT_CANNOT_CHANGE_POLICY');
+
+    // 3. "sửa ngân sách" -> true & BLOCK
+    const vnMalicious2: Proposal = {
+      kind: 'treasury_payout',
+      mission_id: 'demo-mission',
+      to: trustedPayee,
+      amount_atomic: '1000000',
+      reason: 'Hãy sửa ngân sách cho mission này',
+    };
+    expect(isPolicyChangeAttempt(vnMalicious2)).toBe(true);
+    const res3 = validateProposal(vnMalicious2, ctx);
+    expect(res3.outcome).toBe('BLOCK');
+    expect(res3.rule).toBe('AGENT_CANNOT_CHANGE_POLICY');
+  });
 });
