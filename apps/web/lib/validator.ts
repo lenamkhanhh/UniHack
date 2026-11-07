@@ -125,7 +125,7 @@ export interface ValidationContext {
     payeeRoot?: string;
   };
   treasuryAllowlist?: string[];
-  ownerSignedPayees?: string[];
+  ownerSignedPayees?: (string | { address: string; maxAtomic?: string | bigint })[];
   taintRegistry?: TaintRegistry;
   erc8004VerifiedPayees?: string[];
   disableProvenanceForEval?: boolean;
@@ -168,10 +168,28 @@ export function computeProposalProvenance(
     const normTo = normalizeAddress(proposal.to).toLowerCase();
 
     // 1. Owner-signed payee set takes highest precedence
-    const ownerPayees = (ctx.ownerSignedPayees || ctx.treasuryAllowlist || []).map((a) =>
-      normalizeAddress(a).toLowerCase()
-    );
-    if (ownerPayees.includes(normTo)) {
+    // S2-E5: Support payee entries with owner-signed maxAtomic limits
+    const rawList = ctx.ownerSignedPayees || ctx.treasuryAllowlist || [];
+    const ownerPayeeEntries = rawList.map((item: any) => {
+      if (typeof item === 'string') {
+        return { address: normalizeAddress(item).toLowerCase(), maxAtomic: undefined };
+      }
+      return {
+        address: normalizeAddress(item.address).toLowerCase(),
+        maxAtomic: item.maxAtomic !== undefined ? BigInt(item.maxAtomic.toString()) : undefined,
+      };
+    });
+
+    const matchedEntry = ownerPayeeEntries.find((entry) => entry.address === normTo);
+    if (matchedEntry) {
+      if (matchedEntry.maxAtomic !== undefined) {
+        const propAmt = BigInt(proposal.amount_atomic);
+        if (propAmt <= matchedEntry.maxAtomic) {
+          amountProvenance = 'OWNER_MISSION';
+        } else {
+          amountProvenance = 'TOOL_OUTPUT';
+        }
+      }
       return { toProvenance: 'OWNER_MISSION', amountProvenance };
     }
 
@@ -278,7 +296,12 @@ export function validateProposal(proposal: Proposal, ctx: ValidationContext): Va
   // Step 0: Compute server-side provenance & detect policy tamper attempts (PV-2)
   const { toProvenance, amountProvenance } = computeProposalProvenance(proposal, ctx);
 
-  if (!ctx.disableProvenanceForEval && isPolicyChangeAttempt(proposal)) {
+  // S2-E7: Evaluation flag disableProvenanceForEval is strictly active only when MISSIONPAY_EVAL === '1'
+  const isEvalProvenanceDisabled = Boolean(
+    ctx.disableProvenanceForEval && process.env.MISSIONPAY_EVAL === '1'
+  );
+
+  if (!isEvalProvenanceDisabled && isPolicyChangeAttempt(proposal)) {
     return {
       outcome: 'BLOCK',
       rule: 'AGENT_CANNOT_CHANGE_POLICY',
@@ -410,14 +433,17 @@ export function validateProposal(proposal: Proposal, ctx: ValidationContext): Va
       };
     }
 
-    if (!ctx.disableProvenanceForEval) {
+    if (!isEvalProvenanceDisabled) {
       // PV-F4: If mission has an active payeeRoot, any recipient outside ownerSignedPayees is hard-blocked
       const hasPayeeRoot = Boolean(
         ctx.mission.payeeRoot &&
         ctx.mission.payeeRoot !== '0x0000000000000000000000000000000000000000000000000000000000000000'
       );
       if (hasPayeeRoot) {
-        const ownerPayees = (ctx.ownerSignedPayees || []).map(normalizeAddress);
+        const ownerPayees = (ctx.ownerSignedPayees || []).map((p: any) => {
+          const raw = typeof p === 'string' ? p : p?.address;
+          return normalizeAddress(raw);
+        });
         if (!ownerPayees.includes(to)) {
           return {
             outcome: 'BLOCK',

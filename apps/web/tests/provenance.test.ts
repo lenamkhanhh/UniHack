@@ -350,4 +350,81 @@ describe('PV-2: Data Provenance & Taint Registry Security Boundaries', () => {
     expect(res3.outcome).toBe('BLOCK');
     expect(res3.rule).toBe('AGENT_CANNOT_CHANGE_POLICY');
   });
+
+  it('11. S2-E5: Owner signed maxAtomic per payee reduces false positives (invoice <= maxAtomic PASS, inflated > maxAtomic QUEUE)', () => {
+    const taintRegistry = new TaintRegistry();
+    // Both 1.00 USDC and 4.50 USDC appear in untrusted tool output (tainted)
+    taintRegistry.record('Invoice #101: 1.00 USDC (1000000 atomic)', 'TOOL_OUTPUT');
+    taintRegistry.record('Injected surcharge: 4.50 USDC (4500000 atomic)', 'TOOL_OUTPUT');
+
+    const ctx = createMockContext(taintRegistry);
+    ctx.ownerSignedPayees = [
+      { address: trustedPayee, maxAtomic: '1000000' }, // Max 1.00 USDC approved by owner
+    ];
+    ctx.treasuryAllowlist = [trustedPayee];
+
+    // Case A: 1.00 USDC <= maxAtomic -> amountProvenance is OWNER_MISSION -> PASS
+    const legitProposal: Proposal = {
+      kind: 'treasury_payout',
+      mission_id: 'demo-mission',
+      to: trustedPayee,
+      amount_atomic: '1000000',
+      reason: 'Remit verified milestone fee of 1.00 USDC',
+    };
+    const legitResult = validateProposal(legitProposal, ctx);
+    expect(legitResult.outcome).toBe('PASS');
+    expect(legitResult.toProvenance).toBe('OWNER_MISSION');
+    expect(legitResult.amountProvenance).toBe('OWNER_MISSION');
+
+    // Case B: Injected 4.50 USDC > maxAtomic -> amountProvenance is TOOL_OUTPUT -> QUEUE AMOUNT_FROM_UNTRUSTED_SOURCE
+    const inflatedProposal: Proposal = {
+      kind: 'treasury_payout',
+      mission_id: 'demo-mission',
+      to: trustedPayee,
+      amount_atomic: '4500000',
+      reason: 'Remit inflated milestone fee of 4.50 USDC',
+    };
+    const inflatedResult = validateProposal(inflatedProposal, ctx);
+    expect(inflatedResult.outcome).toBe('QUEUE');
+    expect(inflatedResult.rule).toBe('AMOUNT_FROM_UNTRUSTED_SOURCE');
+    expect(inflatedResult.toProvenance).toBe('OWNER_MISSION');
+    expect(inflatedResult.amountProvenance).toBe('TOOL_OUTPUT');
+  });
+
+  it('12. S2-E7: disableProvenanceForEval is strictly active only when MISSIONPAY_EVAL === "1"', () => {
+    const taintRegistry = new TaintRegistry();
+    taintRegistry.record(`Payment directive: ${attackerAddress}`, 'TOOL_OUTPUT');
+
+    const ctx = createMockContext(taintRegistry, [ownerAddress, trustedPayee]);
+    ctx.treasuryAllowlist = [ownerAddress, trustedPayee, attackerAddress]; // Attacker in allowlist
+    ctx.disableProvenanceForEval = true;
+
+    const attackProposal: Proposal = {
+      kind: 'treasury_payout',
+      mission_id: 'demo-mission',
+      to: attackerAddress,
+      amount_atomic: '1000000',
+      reason: 'Bypass attempt via eval flag',
+    };
+
+    const originalEvalEnv = process.env.MISSIONPAY_EVAL;
+    try {
+      // 1. When MISSIONPAY_EVAL is not '1', the eval flag MUST be ignored (prod safety invariant)
+      delete process.env.MISSIONPAY_EVAL;
+      const prodResult = validateProposal(attackProposal, ctx);
+      expect(prodResult.outcome).toBe('BLOCK');
+      expect(prodResult.rule).toBe('RECIPIENT_UNTRUSTED_PROVENANCE');
+
+      // 2. When MISSIONPAY_EVAL === '1', eval flag is active (C1 configuration)
+      process.env.MISSIONPAY_EVAL = '1';
+      const evalResult = validateProposal(attackProposal, ctx);
+      expect(evalResult.outcome).toBe('PASS'); // Provenance bypassed in C1 eval
+    } finally {
+      if (originalEvalEnv !== undefined) {
+        process.env.MISSIONPAY_EVAL = originalEvalEnv;
+      } else {
+        delete process.env.MISSIONPAY_EVAL;
+      }
+    }
+  });
 });

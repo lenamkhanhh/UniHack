@@ -17,17 +17,20 @@ export interface PayeeMerkleTreeResult {
   getProof: (address: string) => `0x${string}`[] | null;
 }
 
+export type PayeeInput = string | { address: string; maxAtomic?: string | bigint };
+
 /**
  * Computes an OpenZeppelin StandardMerkleTree over recipient addresses.
  * Leaf double-hash standard matches GuardedTreasury.sol:
  * keccak256(bytes.concat(keccak256(abi.encode(to))))
  */
-export function computePayeeMerkleTree(payees: string[]): PayeeMerkleTreeResult {
+export function computePayeeMerkleTree(payees: PayeeInput[]): PayeeMerkleTreeResult {
   const normalizedSet = new Set<string>();
   for (const p of payees) {
-    if (p && typeof p === 'string') {
+    const rawAddr = typeof p === 'string' ? p : p?.address;
+    if (rawAddr && typeof rawAddr === 'string') {
       try {
-        normalizedSet.add(normalizeAddress(p));
+        normalizedSet.add(normalizeAddress(rawAddr));
       } catch {}
     }
   }
