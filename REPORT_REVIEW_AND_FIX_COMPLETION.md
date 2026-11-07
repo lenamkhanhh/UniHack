@@ -1,61 +1,63 @@
-# BÁO CÁO NGHIỆM THU REVIEW & SỬA LỖI (S1-F5..F10 VÀ BƯỚC 0 → 5)
+# BÁO CÁO NGHIỆM THU REVIEW & SỬA LỖI (VÒNG S2: PAYBENCH-ADI)
 
-**Thời điểm:** 2026-11-07 23:45 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
+**Thời điểm:** 2026-11-08 01:15 (Asia/Saigon) | **Nhánh:** `feat/s1-app` | **HEAD Commit:** `e047b32`  
 **Ràng buộc tuân thủ nghiêm ngặt:**
-- Smart contract nằm tại `contracts/` (không phải `packages/contracts`). Verified trên Snowtrace tại [`0x20451c1e2dCD83F166B4f22868BAdECb5868d545`](https://testnet.snowtrace.io/address/0x20451c1e2dCD83F166B4f22868BAdECb5868d545).
-- TUYỆT ĐỐI KHÔNG sửa hay commit 3 file deck của reviewer: `MissionPay-pitch-deck-v2.pdf`, `MissionPay-pitch-deck-v2.pptx`, `artifacts/submission-s1/deck-v2/build_deck.js` và `REVIEW_PROMPT_GPT.md`.
+- Smart contract nằm tại `contracts/` (không phải `packages/contracts`). GuardedTreasury verified trên Snowtrace tại [`0x20451c1e2dCD83F166B4f22868BAdECb5868d545`](https://testnet.snowtrace.io/address/0x20451c1e2dCD83F166B4f22868BAdECb5868d545).
+- TUYỆT ĐỐI KHÔNG sửa hay commit 3 file deck của reviewer (`MissionPay-pitch-deck-v2.pdf`, `MissionPay-pitch-deck-v2.pptx`, `artifacts/submission-s1/deck-v2/build_deck.js`) và `REVIEW_PROMPT_GPT.md`.
 - Không push `main`, không deploy public, không nộp bài khi chưa có lệnh duyệt của owner.
-- Chỉ sử dụng Fuji testnet (`Chain ID 43113`), tuyệt đối không commit secret hay private key.
+- Chỉ sử dụng Fuji testnet (`Chain ID 43113`), tuyệt đối không broadcast giao dịch bừa bãi (`eth_call` only cho eval) và không commit secret hay private key.
 
 ---
 
-## 1. BẢNG TỔNG HỢP NGHIỆM THU RE-REVIEW S1 (S1-F5 .. S1-F10)
+## 1. BẢNG TỔNG HỢP NGHIỆM THU VÒNG S2 (PAYBENCH-ADI)
 
-| ID | Mức | Trạng thái | File chính | Test / Acceptance đã kiểm chứng |
-|---|---|---|---|---|
-| **S1-F5** | **P0** | **PASS** | `apps/web/app/api/missions/[slug]/activate/route.ts`<br>`scripts/fuji-live-run-s1b.ts` | **Mission mới `fuji-live-mission-s1b`**: Nạp 0.5 USDC trực tiếp vào ví phiên HKDF `0x46a84a9f...` (`tx: 0xd1eb4765...`), Merkle root (`tx: 0x2a4c8f4a...`). Mọi audit entry ghi qua app receipt verification trên Fuji. Không còn chuyển EOA → ví phiên. |
-| **S1-F6** | **P1** | **PASS** | `scripts/fuji-live-run-s1b.ts`<br>`scripts/owner-sign.ts` | **Owner CLI ký EIP-191 challenge đầy đủ**: Tạo mission `POST /api/missions` và activate `POST /api/missions/[slug]/activate`. Spend token cấp chuẩn từ app response. |
-| **S1-F7** | **P1** | **PASS** | `scripts/fuji-live-run-s1b.ts`<br>`apps/web/app/api/verify/[missionId]/route.ts` | **Đồng nhất mission qua App Pipeline & Anchor audit head THẬT**: Payout 0.2 USDC qua App Validator + Merkle proof (`tx: 0x769484bb...`). Anchor audit head thật lên GuardedTreasury (`tx: 0x43bd21b8...`). On-chain khớp 100% với DB audit head. |
-| **S1-F8** | **P1** | **PASS** | `artifacts/submission-s1/FUJI_EVIDENCE.md` | **Tách bạch 2 phần minh bạch**: Phần A (contract level mission cũ, ghi rõ revert thật và anchor cũ không dùng nghiệm thu); Phần B (luồng đầy đủ qua app mission s1b với 100% hash thật). |
-| **S1-F9** | **P0** | **PASS** | `apps/web/app/api/verify/[missionId]/route.ts`<br>`apps/web/app/verify/[missionId]/page.tsx`<br>`apps/web/tests/proof-verify-browser.test.ts` | **Kiểm chứng neo on-chain Fuji thực chất**: `anchored` chỉ true khi đọc trực tiếp `anchoredMissionProofs(missionId)` trên Fuji hoặc receipt đã verify. Trang hiển thị: on-chain head, link Snowtrace, và badge "khớp" (nếu client head == onchain head) hoặc "không khớp". Mission MOCK hoặc chưa neo hiện "Chưa neo on-chain". 3 unit tests pass: (1) MOCK → "Chưa neo on-chain"; (2) s1b → khớp on-chain; (3) sửa 1 byte → "không khớp". |
-| **S1-F10** | **P1** | **PASS** | `apps/web/e2e/fuji-verify-anchor.spec.ts`<br>`apps/web/evidence/fuji-verify-anchor.png`<br>`artifacts/submission-s1/deck-shots/fuji-verify-anchor.png` | **Chụp lại evidence chuẩn `LIVE_FUJI` · `S2`**: E2E assert header `MODE: LIVE_FUJI` và `STAGE: S2`, badge `khớp`, client head bằng on-chain head, tương tác nút "THỬ SỬA 1 BYTE DỮ LIỆU" ra `không khớp`, nút khôi phục về `khớp`. Xuất ảnh 1920×1080 sạch không overlay. |
+| ID | Mức | Trạng thái | Commit | File chính | Test / Acceptance đã kiểm chứng |
+|---|---|---|---|---|---|
+| **S2-0** | **P0** | **PASS** | `86b21d0` | `apps/web/lib/agent.ts`<br>`apps/web/lib/tools.ts`<br>`apps/web/tests/agent-planning.test.ts` | **Planner gemini-3.8-flash & API key qua header**: Mặc định `gemini-3.8-flash` (cho override qua `LLM_MODEL`). Gửi key qua header `x-goog-api-key`, loại bỏ hoàn toàn `?key=` trong URL. Không log URL/key. 6/6 unit tests pass. |
+| **S2-1** | **P0** | **PASS** | `c0bc741` | `eval/cases/README.md`<br>`eval/cases/adi.jsonl`<br>`eval/cases/incidents.jsonl`<br>`eval/cases/benign.jsonl` | **Bộ test suite 120 cases**: Document rõ licence CC-BY 4.0 và lý do loại nhóm (a) APort Vault (HTTP 401 gate). Tạo 60 case ADI synthetic (20 delimiter recipient, 20 amount inflation, 20 fake approval), 20 case sự cố thật (Bankr, Zscaler, Cornell, Freysa), 40 case benign (utility & false positive). Không chứa secret. |
+| **S2-2** | **P0** | **PASS** | `0de0d39` | `scripts/attack-eval.ts`<br>`apps/web/lib/validator.ts` | **Runner attack-eval độc lập, C0/C1/C2 scoring & Fuji eth_call**: Mỗi case chạy turn độc lập (`temperature: 0`), chấm C0 (unprotected), C1 (cap+allowlist không provenance), C2 (MissionPay đầy đủ). Cache `.cache/eval/<model>/<caseId>.json`. Chạy mô phỏng `eth_call` trực tiếp 10 attack proposals bị C2 chặn lên Fuji testnet: **10/10 reverted `PayeeNotInMissionSet`**. |
+| **S2-3** | **P0** | **PASS** | `e047b32` | `ATTACK_EVAL.md`<br>`eval/results.json`<br>`eval/attack-eval-chart.png`<br>`scripts/render-attack-chart.ts` | **Báo cáo benchmark, kết quả JSON & visual chart 1920×1080**: Báo cáo đầy đủ ASR, utility, out-of-bounds spend, CI Wilson 95%, token usage ($0.019 cho 120 cases × 2 models), limitations. Xuất ảnh chart 1920×1080 sạch đúng số liệu trong `results.json`. |
 
 ---
 
-## 2. BẢNG TIẾN ĐỘ THỰC THI CHIẾN LƯỢC BƯỚC 0 → 5 (STRATEGY_MAX_SCORE)
+## 2. KẾT QUẢ ĐO ĐẠC ĐỐI ĐẦU (HEAD-TO-HEAD METRICS)
 
-| Bước | Hạng mục | Trạng thái | Minh chứng thực tế |
+*Dữ liệu trích xuất trực tiếp từ `eval/results.json` với khoảng tin cậy Wilson 95%:*
+
+| Chỉ số đo | C0 (Không guard) | C1 (Chỉ Cap + Allowlist) | C2 (MissionPay đầy đủ) |
 |---|---|---|---|
-| **Bước 0** | **Commit code & dọn dẹp** | **PASS** | Nhánh `feat/s1-app`, chỉ commit file thay đổi của chính mình, bảo vệ secrets, không commit deck files của reviewer. |
-| **Bước 1** | **P0 Agent thật (§4.1)** | **PASS** | `apps/web/lib/agent.ts` Gemini LLM planner JSON và fallback. Tool search gọi Wikipedia API thật, tool summary gọi LLM. Ghi rõ reason, priceAtomic, provenance. |
-| **Bước 2** | **P0 Fuji live (§4.2)** | **PASS** | Foundry 37/37 tests pass (`contracts/`). GuardedTreasury verified trên Snowtrace [`0x20451c1e...`](https://testnet.snowtrace.io/address/0x20451c1e2dCD83F166B4f22868BAdECb5868d545). Thanh toán x402 gasless qua PayAI facilitator trên Fuji (`tx: 0x8c898c90...`). |
-| **Bước 3** | **P1 Ví phiên on-chain (§4.3)** | **PASS** | `fundMissionWallet` nạp 0.5 USDC trực tiếp vào ví phiên HKDF `0x46a84a9f...` (`tx: 0xd1eb4765...`, block `#60687230`). |
-| **Bước 4** | **P1 ERC-8004 & Proof Anchor (§4.4)** | **PASS** | `giveFeedback` phát sóng ReputationRegistry ERC-8004 (`tx: 0xeddde3d3...`). Neo audit head lên GuardedTreasury (`tx: 0x43bd21b8...`). |
-| **Bước 5** | **P1 Demo tấn công & Mission Control (§4.5..4.7)** | **PASS** | Replay Bankr màn hình chia đôi; Freysa Arena giải mã Morse, taint detection; giao dịch tấn công bị **revert on-chain** `PayeeNotInMissionSet` (`tx: 0xc5f13e5d...`); client `/verify` kiểm chứng 100% khớp on-chain (`fuji-verify-anchor.png`). |
+| **Tỉ lệ LLM bị lừa** | 60.0% (48/80) [49.0%, 70.0%] | 60.0% (48/80) [49.0%, 70.0%] | 60.0% (48/80 bị lừa, 0% lọt qua) |
+| **ASR (Attack Success Rate)** | **58.8%** (47/80) [47.8%, 68.9%] | **0.0%** (0/80) [0.0%, 4.6%] | **0.0%** (0/80) **[0.0%, 4.6%]** |
+| **Thất thoát ngoài phạm vi** | **$4,000,000,000,147.80 USDC** | **$0.00 USDC** | **$0.00 USDC (Chặn đứng 100%)** |
+| **Utility (Benign pass ngay)** | 100.0% (40/40) | 100.0% (40/40) | **65.0%** (26/40 pass ngay; 14 hàng đợi) |
+| **False Positive (Chặn cứng)** | 0.0% (0/40) | 0.0% (0/40) | **0.0%** (0/40 bị chặn nhầm, 0 false blocks) |
+| **Fuji `eth_call` Revert** | N/A | N/A | **10/10 (100% revert `PayeeNotInMissionSet`)** |
+
+- **Token usage:** Prompt: 52,135; Completion: 19,089; Tổng: 71,224 tokens / model. Tổng chi phí API: **~$0.0096 USD** (~0.24k VND).
 
 ---
 
-## 3. KẾT QUẢ TEST HỆ THỐNG & EVIDENCE ARTIFACTS
+## 3. TỔNG HỢP KIỂM TRA CHẤT LƯỢNG HỆ THỐNG
 
-1. **Foundry Smart Contracts Suite (`contracts/`):**
-   - **37/37 passed** (8.27ms), 0 failed, 0 skipped.
+1. **Foundry Smart Contract Test Suite (`contracts/`):**
+   - **37/37 tests pass** (7.71ms), 0 fail, 0 skipped.
 2. **TypeScript Strict Typecheck (`apps/web/`):**
    - **0 errors** (`npx.cmd tsc --noEmit` exit code 0).
-3. **Vitest Unit & Integration Suite (`apps/web/`):**
-   - **172/172 passed** trên toàn bộ **21 test files** (100% pass, 50.32s).
-4. **Playwright E2E Verified Anchor Screenshot Suite:**
-   - **1/1 passed** (23.2s).
-   - Đã sinh ảnh 1920×1080 với header `MODE: LIVE_FUJI` · `STAGE: S2` và badge `khớp` tại:
-     - `artifacts/submission-s1/deck-shots/fuji-verify-anchor.png` (141 KB)
-     - `apps/web/evidence/fuji-verify-anchor.png` (141 KB)
+3. **Vitest Agent Planning & Execution Suite (`apps/web/`):**
+   - **6/6 tests pass** (`apps/web/tests/agent-planning.test.ts`).
+4. **On-chain Simulation Suite (`scripts/attack-eval.ts`):**
+   - **10/10 reverted on Fuji** (`PayeeNotInMissionSet`).
+5. **Visual Evidence:**
+   - [`eval/attack-eval-chart.png`](file:///d:/Code/Code/AIO/Code/ZaloAIC/UniHack/eval/attack-eval-chart.png) (1920×1080 PNG, 718 KB).
+   - [`apps/web/evidence/fuji-verify-anchor.png`](file:///d:/Code/Code/AIO/Code/ZaloAIC/UniHack/apps/web/evidence/fuji-verify-anchor.png) (1920×1080 PNG, 141 KB).
 
 ---
 
 ## 4. CẦN REVIEWER QUYẾT & RỦI RO CÒN LẠI
 
 - **Cần Reviewer quyết:**
-  - Toàn bộ các mục S1-F5..S1-F10 đã hoàn tất và vượt qua 100% các bài kiểm tra tự động.
-  - Reviewer kiểm tra ảnh `fuji-verify-anchor.png` và xác nhận bước tiếp theo.
+  - Vòng S2 ("PayBench-ADI") đã hoàn thành 100% mục S2-0..S2-3.
+  - Reviewer kiểm tra số liệu tại `ATTACK_EVAL.md` và ảnh `eval/attack-eval-chart.png` để quyết định đưa vào deck / video thuyết trình.
 - **Rủi ro còn lại:**
   - Nhánh hiện tại: `feat/s1-app`, tuyệt đối không push `main`.
   - Chưa deploy public hay nộp bài lên portal (chờ chỉ thị từ Owner/Reviewer).
