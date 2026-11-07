@@ -6,7 +6,7 @@ import { getSessionWalletForMission } from '@/lib/session-wallets';
 import { appendAuditEntry } from '@/lib/audit';
 import { encodeFunctionData, parseAbiItem } from 'viem';
 import { verifyFundingReceiptOnFuji, verifyPayeeRootReceiptOnFuji } from '@/lib/fuji-receipts';
-import { validateLiveFujiConfig, getGuardedTreasuryAddress } from '@/lib/config';
+import { validateLiveFujiConfig, getGuardedTreasuryAddress, getPaymentMode } from '@/lib/config';
 import { hashUtf8 } from '@/lib/chain';
 import {
   saveMissionPayees,
@@ -74,9 +74,10 @@ export async function POST(
       const guardedTreasuryAddress = getGuardedTreasuryAddress();
 
       // WIRE-01 & CFG-01: In Stage S2, wire session wallet funding into activation lifecycle
+      const effectivePaymentMode = (res.state as any).paymentMode || getPaymentMode();
       if (res.state.stage === 'S2') {
         const sessionWallet = getSessionWalletForMission(mission.slug);
-        if (res.state.paymentMode === 'LIVE_FUJI') {
+        if (effectivePaymentMode === 'LIVE_FUJI') {
           await validateLiveFujiConfig();
         }
 
@@ -105,7 +106,7 @@ export async function POST(
 
         const fundingTxHash = payload.fundingTxHash || (body as any).fundingTxHash;
 
-        if (res.state.paymentMode === 'LIVE_FUJI') {
+        if (effectivePaymentMode === 'LIVE_FUJI') {
           if (fundingTxHash) {
             const verification = await verifyFundingReceiptOnFuji({
               txHash: fundingTxHash,
@@ -213,7 +214,7 @@ export async function POST(
 
         const payeeRootTxHash = payload.payeeRootTxHash || (body as any).payeeRootTxHash;
 
-        if (res.state.paymentMode === 'LIVE_FUJI') {
+        if (effectivePaymentMode === 'LIVE_FUJI') {
           if (payeeRootTxHash) {
             const verification = await verifyPayeeRootReceiptOnFuji({
               txHash: payeeRootTxHash,

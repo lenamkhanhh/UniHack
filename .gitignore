@@ -23,3 +23,6 @@ playwright-report/
 apps/web/playwright-report/
 
 *.tsbuildinfo
+
+# Builder Hub console wallet key exports
+console-wallet-*.txt

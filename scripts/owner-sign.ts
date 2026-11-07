@@ -79,6 +79,10 @@ function getOwnerPrivateKey(): Hex {
   return key as Hex;
 }
 
+export function getOwnerAccount() {
+  return privateKeyToAccount(getOwnerPrivateKey());
+}
+
 export interface OwnerTxPayload {
   to: string;
   data: string;

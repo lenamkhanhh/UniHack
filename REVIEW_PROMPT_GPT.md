@@ -319,6 +319,268 @@ Script chỉ chạy khi owner duyệt broadcast. Không broadcast trong vòng n�
 - Không broadcast Fuji; không đụng `.env`/key; không push `main`; không sửa deck (reviewer làm).
 - Cuối vòng chạy forge, vitest, tsc, Playwright; ghi đè report theo bảng PV-1..PV-5.
 
+## 4k. Review vòng PROVENANCE (HEAD `e2b2809`): contract đạt, app còn 8 mục, sửa trước khi chạy Fuji
+
+### Reviewer đã kiểm lại
+
+- forge 37/37 pass.
+- tsc 0 lỗi.
+- vitest 154/154 pass.
+
+### Phần đạt
+
+- **Contract (`c5e8ed6`):**
+  - `missionPayeeRoot` và `setMissionPayeeRoot` (`onlyOwner`, tăng `policyVersion`) đúng spec.
+  - `proposeWithProof` dùng leaf double-hash và sorted-pair verify.
+  - `propose` cũ revert `PayeeProofRequired` khi mission đã có root.
+  - Vector TS↔Solidity khớp (root `0xc764…1320`).
+- **Provenance từ client bị bỏ:** probe gửi `provenance:'OWNER_MISSION'` kèm địa chỉ đã bị taint. Trường này bị xóa và server tự tính lại.
+- **Thứ tự ưu tiên:** người nhận owner đã ký mà cũng xuất hiện trên web vẫn được tính `OWNER_MISSION` và PASS.
+- **Arena:**
+  - Địa chỉ khán giả gõ vào bị chặn `RECIPIENT_UNTRUSTED_PROVENANCE` (nguồn WEB).
+  - Template Cornell bị chặn `AGENT_CANNOT_CHANGE_POLICY`.
+- **Chữ ký owner:** `payees` nằm trong payload được ký (`ALLOWED_PAYLOAD_KEYS`) và địa chỉ được validate.
+- **MOCK:** trả `PAYEE_ROOT_MOCK_NOT_SENT`. Audit `PAYEE_ROOT_SET` chỉ ghi sau khi đã verify receipt.
+
+### Phải sửa (mỗi mục một commit, có test)
+
+| ID | Mức | Lỗi (reviewer đã probe) | Sửa | Acceptance |
+|---|---|---|---|---|
+| **PV-F1** | P0 | Template Zscaler (gõ "zscaler" hoặc "developer license") ra `QUEUE RECIPIENT_NEEDS_OWNER_APPROVAL`, nguồn `LLM`. Địa chỉ `0xbad…bad` nằm sẵn trong template, không đi qua taint registry. Kết quả trái với câu chuyện "trang web cài người nhận". | Template phải mô phỏng đúng việc agent đọc trang độc: nạp nội dung fixture JSON-LD (có `0xbad…bad`, `price 3.00`) vào `taintRegistry` với nguồn `WEB` trước khi validate. Áp dụng tương tự cho mọi template có địa chỉ cố định đến từ "trang web" hoặc "email" (Cornell, Freysa nếu có). | Test arena: input chỉ có chữ `zscaler` → `BLOCK RECIPIENT_UNTRUSTED_PROVENANCE`, `toProvenance=WEB`, counter "Chặn vì nguồn gốc" tăng 1. |
+| **PV-F2** | P0 | `agent/run` truyền `ownerSignedPayees: treasuryAllowlist` (allowlist toàn cục từ env). Validator vì thế không dùng tập người nhận owner đã ký cho từng mission, trong khi contract lại kiểm root của từng mission. App và chain không khớp. | Nếu mission có tập payee đã ký thì `ownerSignedPayees` = tập đó. Allowlist toàn cục chỉ là điều kiện thêm (giao), không phải nguồn `OWNER_MISSION`. Nếu mission không có tập thì giữ hành vi cũ. | Test: địa chỉ nằm trong allowlist toàn cục nhưng ngoài tập của mission → không được `OWNER_MISSION`, không PASS. |
+| **PV-F3** | P0 (cần trước khi deploy) | Tập payee chỉ lưu trong `Map` trong RAM (`lib/merkle.ts`). Mất khi restart, không chia sẻ giữa các instance serverless. Khi đó nhánh activate fallback `getMissionPayees()` trả rỗng. | Lưu vào DB: thêm cột vào `Mission` (`payeesJson`, `payeeRoot`) bằng migration Prisma. Ghi trong cùng transaction với CREATE_MISSION/ACTIVATE. Thống nhất địa chỉ treasury qua một hàm config: hiện `missions/route.ts` dùng `NEXT_PUBLIC_GUARDED_TREASURY_ADDRESS`, còn activate dùng `GUARDED_TREASURY_ADDRESS`. | Test: tạo mission có payees → xóa cache → activate vẫn ra đúng root. |
+| **PV-F4** | P1 | `executeTreasuryPayoutWithProof` chỉ có test gọi. Payout thật trong `agent/run` (`TREASURY_PROPOSED`) không gắn proof và calldata `proposeWithProof`. | Khi mission có root: tính proof server-side và lưu `proof` cùng calldata `proposeWithProof` vào `treasuryRequest`/stepLog để agent ký. Không có proof thì chặn ngay ở app với rule `PAYEE_NOT_IN_MISSION_SET`. Agent vẫn không tự giải ngân. | Test: payout tới người nhận trong tập có calldata `proposeWithProof` decode được. Người nhận ngoài tập bị chặn. |
+| **PV-F5** | P1 | `isPolicyChangeAttempt` không có word boundary và quét cả arguments của tool. Hai probe chặn nhầm tool hợp lệ: `"Search the price; reset limit of results to 5"` và query `"how to increase spending limit on a credit card"`. | Dùng `\b`. Chỉ xét `reason` của payout và `tool_id`, không xét query/text của tool search hoặc summary. Đổi mô tả rule cho thật: agent không có API đổi policy, rule này chỉ để gắn nhãn ý đồ. | Hai câu trên → `false`. "Raise daily cap to 100" và câu OTP Cornell → `true`. |
+| **PV-F6** | P1 | `scripts/fuji-tainted-payee-revert.ts`: khi dry-run, script fallback sang khóa Anvil #1 và gọi `simulateContract` lên RPC Fuji công khai. Vi phạm quy tắc "không dùng khóa Anvil trên mạng công khai". | Dry-run chỉ dùng địa chỉ (`AGENT_ADDRESS`, bắt buộc), không cần private key. Broadcast mới cần `AGENT_PRIVATE_KEY`, và vẫn chặn các khóa Anvil đã biết. | `grep 0x59c6995e scripts/` chỉ còn trong danh sách chặn. |
+| **PV-F7** | P2 | Activate ở LIVE_FUJI vẫn kích hoạt khi root mới ở trạng thái `PENDING_ONCHAIN_PAYEE_ROOT`. Trong lúc đó contract chưa kiểm payee. | Trang mission và Stage hiện badge "Payee root chưa lên chain" cho tới khi có `PAYEE_ROOT_SET`. Không ghi "on-chain" trước thời điểm đó. | Ảnh chụp trang mission ở cả hai trạng thái. |
+| **PV-F8** | P2 | `deck-provenance.png` không có Zscaler hoặc Cornell (chỉ có địa chỉ gõ tay). Khung "Quy tắc Arena" chưa nhắc tới nguồn gốc. Working tree còn 15 ảnh evidence và deck-shots bị sửa nhưng chưa commit. | Sau PV-F1: chụp lại 1920×1080. Feed phải có Zscaler (`NGUỒN: WEB`, chặn), Cornell (`AGENT_CANNOT_CHANGE_POLICY`), và một payout hợp lệ (`OWNER_MISSION`). Sửa text rule thành "chặn người nhận không truy về chữ ký owner, lệnh vượt cap, và mọi lệnh đổi policy". Commit ảnh trong commit riêng hoặc restore. **Không sửa `MissionPay-pitch-deck-v2.*` và `deck-v2/build_deck.js`**: reviewer đang sửa, chưa commit. | Reviewer xem ảnh. `git status` sạch, chỉ trừ 3 file deck của reviewer. |
+
+### Bổ sung sau khi review F1–F3 (`43b757e`, `decdd81`, `cf07c3a`)
+
+- F1 đạt.
+- F2 đạt: allowlist toàn cục giờ là điều kiện giao; địa chỉ chỉ có trong allowlist thì vào QUEUE, không PASS.
+- F3 có lỗ mới, cần sửa thêm:
+
+| ID | Mức | Lỗi | Sửa | Acceptance |
+|---|---|---|---|---|
+| **PV-F9** | P0 | Trong `POST /api/missions`, `saveMissionPayees(slug, payload.payees)` ghi cache RAM **trước** `verifyAndConsumeChallenge`. Request ký sai với slug của mission đang có vẫn ghi đè được cache. Khi DB chưa có `payeesJson`, `agent/run` fallback sang `getMissionPayees()`, nên địa chỉ của kẻ tấn công thành `OWNER_MISSION`. | DB là nguồn duy nhất: bỏ fallback `getMissionPayees()` ở `agent/run` và activate. Chỉ tính tree hoặc ghi cache sau khi chữ ký đã verify và transaction commit thành công. Đưa `payeeRoot` vào `policyHash` (hoặc tăng `configVersion` khi đổi tập payee), để token cũ bị thu hồi khi owner đổi người nhận. | Test: CREATE_MISSION ký sai kèm `payees=[0xbad…]` → 4xx, và `getMissionPayees` hoặc validator không nhận `0xbad…` là `OWNER_MISSION`. Test: đổi payees ở ACTIVATE → token cũ bị `CONFIG_VERSION_REVOKED`. |
+
+### Review F4–F9 (HEAD `1a1f0eb`): đạt, còn 1 vòng nhỏ PV-F10
+
+**Kết quả reviewer kiểm lại:** forge 37/37, tsc 0 lỗi, vitest 161/161.
+
+**Probe arena:**
+
+| Input | Kết quả |
+|---|---|
+| `zscaler` / `developer license` / `freysa` / địa chỉ gõ tay | BLOCK `RECIPIENT_UNTRUSTED_PROVENANCE`, nguồn WEB |
+| `cornell` | BLOCK `AGENT_CANNOT_CHANGE_POLICY` |
+
+**Probe F5:** 2 câu từng bị chặn nhầm giờ ra `false`. Câu "Raise daily cap", câu OTP và "increase the treasury limit" ra `true`.
+
+**Các mục đạt:**
+- **F9:** cache chỉ ghi sau khi transaction commit; `policyHash` gắn `payeeRoot`; ACTIVATE đổi payees thì `configVersion` tăng.
+- **F4:** `PAYEE_NOT_IN_MISSION_SET` và calldata `proposeWithProof` có trong luồng thật.
+- **F6, F7:** đạt.
+- **Ảnh `deck-provenance.png`:** có đủ Zscaler, Cornell và payout hợp lệ.
+
+| ID | Mức | Lỗi | Sửa | Acceptance |
+|---|---|---|---|---|
+| **PV-F10a** | P1 (số liệu hiển thị sai) | Counter "Chặn vì nguồn gốc" (`arena.ts` ~597–608) cộng cả `AGENT_CANNOT_CHANGE_POLICY` lẫn các outcome **QUEUE** (`RECIPIENT_NEEDS_OWNER_APPROVAL`, `AMOUNT_FROM_UNTRUSTED_SOURCE`). Ảnh deck hiện ghi 3, đúng ra là 2. | Counter này chỉ đếm BLOCK có rule `RECIPIENT_UNTRUSTED_PROVENANCE` hoặc `PAYEE_NOT_IN_MISSION_SET`. Thêm counter riêng "Chặn đổi policy" (`AGENT_CANNOT_CHANGE_POLICY`), hiển thị cạnh counter cũ. QUEUE đã nằm trong `queuedAttacks`. | Test: chuỗi zscaler + cornell + địa chỉ gõ tay → nguồn gốc = 2, policy = 1. |
+| **PV-F10b** | P2 | Câu tiếng Việt "tăng hạn mức lên 100 USDC" không bị nhận ra. | Thêm `hạn mức`, `giới hạn`, `ngân sách` vào nhóm danh từ, có word boundary. | "tăng hạn mức lên 100 USDC" → `true`; "tìm giá AVAX" → `false`. |
+| **PV-F10c** | P2 | `agent/run` lấy proof từ cache RAM trước rồi mới dùng DB. Trên môi trường nhiều instance, cache cũ có thể cho proof khác với root trong DB. | Luôn tính proof từ `payeesJson` của DB (`computePayeeMerkleTree(dbPayees).getProof`), và assert root tính ra bằng `mission.payeeRoot`. | Test: cache chứa tập cũ, DB chứa tập mới → proof khớp root mới. |
+| **PV-F10d** | — | Sau F10a: chụp lại `deck-provenance.png` và `deck-arena.png`. | Commit ảnh trong commit riêng. Không sửa 3 file deck của reviewer. | Reviewer xem ảnh. |
+
+### Kết luận vòng PROVENANCE (HEAD `516c423`): **ĐẠT, đóng vòng**
+
+**Reviewer kiểm lại:** forge 37/37, tsc 0 lỗi, vitest 164/164.
+
+**Probe:**
+- Chuỗi đòn zscaler + cornell + địa chỉ gõ tay ra counter nguồn gốc = 2, policy = 1, blocked = 3.
+- Nhận diện ý định đổi policy:
+
+| Câu | Kết quả |
+|---|---|
+| "tăng hạn mức lên 100 USDC" | `true` |
+| "đổi ngân sách nhiệm vụ" | `true` |
+| "pay contractor invoice #12" | `false` |
+| Query tool "tăng hạn mức thẻ" | `false` |
+
+**F10c:** proof tính từ `payeesJson` trong DB và assert khớp `payeeRoot`.
+
+**Ảnh `deck-provenance.png` và `deck-arena.png`:** reviewer đã xem, counter cộng đúng tổng số đòn. Reviewer chuyển slide 6 sang dùng `deck-provenance.png`, rebuild deck, validate pass, render slide 5 và 6 đã kiểm.
+
+**Vòng sau, chưa giao:** chạy Fuji live (cần owner nạp faucet và duyệt broadcast), sau đó chạy attack eval (cần `GEMINI_API_KEY`).
+
+### Ghi chú (không cần sửa)
+
+- Taint số tiền đánh dấu mọi con số trong tool output, nên có thể QUEUE nhầm một payout hợp lệ. Lệch về phía an toàn, chấp nhận được, nhưng cần ghi vào README.
+- Địa chỉ chưa rõ nguồn (LLM) đổi từ BLOCK sang QUEUE chờ owner duyệt, đúng spec `RECIPIENT_NEEDS_OWNER_APPROVAL`. Cần owner ký mới chi được, nên không phải nới luật.
+
+Giới hạn: giữ mục 5 và các giới hạn của 4j. Cuối vòng chạy đủ forge, vitest, tsc, Playwright. Ghi đè report theo bảng PV-F1..PV-F8.
+
+## 4l. Vòng S3: vá x402 theo paper ATC'26 (owner duyệt 07/11)
+
+Bối cảnh: paper "Free-Riding the Agentic Web" (ATC'26, arXiv 2605.30998) tìm ra 4 lớp lỗi x402. Chi tiết xem `SOTA_OPTIMIZATION_2026-11-07.md` mục 1.
+
+Reviewer đã kiểm code hiện tại:
+
+| Lớp lỗi | Trạng thái |
+|---|---|
+| F2 settle trùng | Đã có unique `(chainId, asset, authFrom, authNonce)` |
+| F4 giao kết quả trước khi settle | Đã có `heldResult` chỉ trả khi `SETTLED` |
+| F1 thanh toán cho tài nguyên khác | Chỉ chặn ở tầng app (`inputHash`, `toolId`, giá); nonce EIP-3009 vẫn ngẫu nhiên, nên **chữ ký** không gắn với request |
+| F3 overdraft `upto` | Không áp dụng, mình chỉ dùng `exact` |
+
+### S3-1 (P1): nonce gắn request (F1 bằng mật mã)
+
+- **`lib/x402-binding.ts` (mới):**
+  ```
+  computeBoundNonce({operationId, toolId, inputHash, priceAtomic, payTo, chainId}) =
+    keccak256(abi.encode("MissionPay-x402-bind-v1", keccak256(utf8(operationId)),
+      keccak256(utf8("POST /api/tools/" + toolId)), inputHash, priceAtomic, payTo, chainId))
+  ```
+  Đây vẫn là bytes32 hợp lệ cho EIP-3009, không đổi giao thức và không đổi facilitator.
+- **`lib/payments.ts`** (chỗ đang dùng `randomBytes(32)`): thay bằng `computeBoundNonce(...)` lấy từ các trường bất biến của operation.
+- **Seller `app/api/tools/[id]/route.ts`:**
+  - Tính lại nonce từ `toolId` của route, `inputHash` tính từ body đang trả, và terms đã lưu.
+  - Lệch thì trả 403 `PAYMENT_NOT_BOUND_TO_REQUEST`, **trước** khi chạy upstream.
+  - Giữ nguyên các check cũ.
+- **Uniqueness:** nonce kế thừa uniqueness của `operationId`. Giữ unique constraint cũ.
+- **Audit:** ghi `nonce_binding: 'request-bound-v1'` vào reason của entry SIGNED.
+
+### S3-2 (P1): test cho cả 4 lớp, file `tests/x402-atc26.test.ts`
+
+- **F1a:** ký cho `tool:search` rồi gửi sang `tool:summary` → 403, upstream không chạy.
+- **F1b:** cùng operation nhưng đổi body (query khác) → 403 `PAYMENT_NOT_BOUND_TO_REQUEST`.
+- **F1c:** nonce khớp đúng `computeBoundNonce` của request → PASS. Thêm một vector cố định (input → nonce hex) để giám khảo tự tính lại.
+- **F2:** gửi 2 request song song với cùng một `X-PAYMENT` → đúng 1 lần settle, lần còn lại trả kết quả idempotent hoặc 409, không settle lần 2.
+- **F4:** settle thất bại (mock facilitator lỗi) → response không chứa kết quả upstream, state `FAILED`.
+- **F3:** README ghi "không áp dụng (không dùng `upto`)". Không cần test.
+
+### S3-3 (P2): README
+
+- Thêm mục "x402 hardening (ATC'26)": bảng F1–F4 gồm trạng thái, cách vá, tên test, link paper.
+- Chỉ ghi "đã vá" cho mục có test pass.
+
+### Giới hạn
+
+- Giữ mục 5.
+- Không đổi header hay version x402 (v2 để sau Fuji live).
+- Không đổi contract, không broadcast, không đụng `.env`.
+- **Không sửa `MissionPay-pitch-deck-v2.*` và `deck-v2/build_deck.js`.** Reviewer đang sửa deck song song.
+- Mỗi mục một commit. Cuối vòng chạy forge, vitest, tsc, Playwright và ghi đè report.
+
+### Review S3 (HEAD `7b5f35a`): đạt, còn 3 mục nhỏ
+
+**Reviewer kiểm lại:**
+- tsc 0 lỗi, vitest 169/169, forge 37/37.
+- Vector nonce tính lại độc lập bằng `cast` ra đúng `0xebdd…e49e`.
+- F1a/F1b: upstream không chạy, `heldResult` null. F2: đúng 1 lần settle. F4: không lộ output.
+
+| ID | Mức | Lỗi | Sửa |
+|---|---|---|---|
+| S3-F1 | P2 | Response 403 `PAYMENT_NOT_BOUND_TO_REQUEST` trả `expectedNonce` cho caller. Không cần thiết, và lộ thông tin binding. | Bỏ `expectedNonce`/`receivedNonce` khỏi response; chỉ log phía server. Cập nhật test. |
+| S3-F2 | P2 | README ghi sai tên paper và venue ("USENIX ATC", "Security Analysis of the x402 Ecosystem"). | Đúng là: *Free-Riding the Agentic Web: A Systematic Security Analysis of x402 Payments*, ACM SIGOPS ATC '26 (Ling et al.). |
+| S3-F3 | P2 | README viết "vá toàn diện 4 lớp", nhưng F3 không áp dụng. Thay đổi `lib/tools.ts` (lọc ký tự Unicode) nằm ngoài scope và chưa được ghi lại. | Đổi thành "đã vá F1, F2, F4; F3 không áp dụng (chỉ dùng scheme `exact`)". Ghi lý do đổi `tools.ts` vào report. |
+
+**Kết luận S3 (HEAD `4fb6bf6`): ĐẠT, đóng vòng.**
+- S3-F1..F3 đã sửa: response 403 không còn trả nonce; README ghi đúng tên paper, đúng venue, và ghi F3 là không áp dụng.
+- Kết quả: tsc 0 lỗi, vitest 169/169.
+- Reviewer đã thêm dòng x402 vào slide 8 của deck.
+
+## 4m. Vòng S1: Fuji live (owner đã duyệt broadcast 07/11)
+
+### Trạng thái thật (reviewer đã làm và kiểm chứng trên chain)
+
+| Mục | Giá trị |
+|---|---|
+| Owner (ví Builder Hub console; key chỉ có trong `contracts/.env`) | `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c` · 0.5 AVAX · 20 USDC |
+| Agent | `0x374b8A126FDb9e5deEc8307da385076155Af3D72` · 20 USDC (trả gasless, không cần AVAX) |
+| GuardedTreasury | `0x20451c1e2dCD83F166B4f22868BAdECb5868d545` · deploy tx `0x631c92e4…fa38` · **Verified trên Snowtrace** (Routescan) · `owner()` đúng |
+| Env | `apps/web/.env` đã có `OWNER_ADDRESS`, `GUARDED_TREASURY_ADDRESS`, `NEXT_PUBLIC_GUARD_ADDRESS`. **Đừng đọc hay in key.** |
+
+**Quyết định của owner:** không dùng MetaMask. Mọi giao dịch của owner ký bằng CLI trên máy owner. Web backend vẫn **không** giữ owner key.
+
+### S1-1 (P0): `scripts/owner-sign.ts`
+
+- Nhận `unsignedTx` (JSON `{to, data, value, chainId}`) mà API trả về, hoặc nhận tên action.
+- Đọc `DEPLOYER_PRIVATE_KEY` từ `contracts/.env` ngay trong process. Không log key.
+- Dùng viem để ký, broadcast lên Fuji, chờ receipt, in `txHash` và status.
+- Guard:
+  - `chainId` phải là 43113.
+  - `to` chỉ được là treasury, USDC, hoặc registry ERC-8004 Fuji.
+  - Từ chối các key Anvil đã biết.
+- Có `--dry-run` (dùng `eth_call`).
+
+### S1-2 (P0): `scripts/fuji-live-run.ts`, chạy toàn bộ lifecycle theo runbook README
+
+- Server chạy local với `PAYMENT_MODE=LIVE_FUJI`, `STAGE=S2`. Bước nào cần chữ ký owner thì gọi `owner-sign`.
+- Thứ tự:
+  1. Tạo mission với `payees=[<contractor test address>]`.
+  2. `setRecipientAllowlist` (nếu contract yêu cầu).
+  3. Activate, rồi `fundMissionWallet` cho session wallet.
+  4. `setMissionPayeeRoot`.
+  5. Agent mua 1–2 tool qua x402 thật (Ultravioleta, fallback PayAI).
+  6. Payout nhỏ (≤ 1 USDC) bằng `proposeWithProof` tới payee hợp lệ.
+  7. `scripts/fuji-tainted-payee-revert.ts --broadcast` với `ALLOW_FUJI_BROADCAST=1`. Cần ra một **tx revert thật `PayeeNotInMissionSet`**.
+  8. `anchorMissionProof`.
+  9. Feedback ERC-8004.
+- Ngân sách: tổng USDC dùng ≤ 10, AVAX ≤ 0.2. Dừng ngay nếu số dư thấp hơn mức này.
+
+### S1-3 (P0): `artifacts/submission-s1/FUJI_EVIDENCE.md`
+
+- Bảng: bước | tx hash | link `https://testnet.snowtrace.io/tx/...` | event hoặc status đã verify.
+- Chỉ ghi tx đã có receipt. Không ghi bước nào chưa chạy.
+
+### Giới hạn
+
+- Không in hay commit key và `.env`.
+- Không dùng khóa Anvil.
+- Không deploy contract mới (dùng địa chỉ ở trên).
+- Không push `main`, không deploy public.
+- Không sửa 3 file deck.
+- Mỗi mục một commit. Cuối vòng chạy vitest và tsc, ghi đè report.
+
+### Review S1 (HEAD `f701b54`): CHƯA ĐẠT, có 2 lỗi trung thực mức P0
+
+**Reviewer đã kiểm cả 12 tx bằng `cast`** (status, from, to, selector, logs):
+
+**Đạt, là bằng chứng contract thật:**
+- `createMission`, `setRecipientAllowlist`, `setMissionToolCap`, `fundMissionWallet`, `setMissionPayeeRoot`.
+- `proposeWithProof`: chuyển 0.2 USDC tới `0x1111…`, có log Transfer.
+- **Revert thật `PayeeNotInMissionSet`** (`0xc5f13e5d…`): replay ở block trước đó ra đúng lỗi.
+- `giveFeedback` lên ReputationRegistry Fuji.
+- Key không lộ: không có trong git, `.env` đều bị ignore.
+
+**Lỗi:**
+
+| ID | Mức | Lỗi | Sửa |
+|---|---|---|---|
+| S1-F1 | P0 | **Bước 5 không phải x402.** Tx `0x58d5390c…` do **ví agent tự submit và tự trả gas** (vì vậy bước 0a mới phải chuyển 0.05 AVAX cho agent). Người trả là agent EOA chứ không phải ví phiên; người nhận là **owner** chứ không phải seller; **không có facilitator**. Vậy mà evidence ghi "x402 tool purchase", còn deck ghi "facilitator trả gas, agent không cần AVAX". | Chạy lại đúng luồng **qua app**: server `PAYMENT_MODE=LIVE_FUJI`, `/api/agent/run` (hoặc route tool) → 402 → ký EIP-3009 từ **ví phiên** → **facilitator Ultravioleta** (fallback PayAI) settle → payTo = `SELLER_ADDRESS`. Acceptance: `from` của tx settle là địa chỉ facilitator (không phải agent, không phải owner); `to` của transfer là seller; DB có operation `SETTLED` kèm `txHash` đó. |
+| S1-F2 | P0 | **Bước 8 neo hash giả.** `headHash = keccak256("audit-chain-head-<missionId>-<Date.now()>")` (script dòng 443) không phải audit head nào cả, nhưng evidence lại ghi "neo đỉnh chuỗi kiểm toán". Vi phạm quy tắc: không ghi kết quả mà hệ thống không thực sự tạo ra. | Lấy audit head **thật** từ DB của mission chạy qua app (các entry PROPOSED/SETTLED/PAYEE_ROOT_SET...), anchor head đó, rồi chứng minh `anchoredMissionProofs(missionId)` == head mà trang `/verify` tính lại trong trình duyệt. |
+| S1-F3 | P1 | `scripts/fuji-live-run.ts` gọi contract trực tiếp, bỏ qua app: không có validator, không audit, không provenance. | Script chỉ điều phối: mọi bước agent đi qua API của app. Riêng bước giả lập "server bị chiếm" (S1-2 bước 7) được phép gọi thẳng contract và phải ghi rõ như vậy. |
+| S1-F4 | P1 | `FUJI_EVIDENCE.md` ghi "100% REAL RECEIPTS ĐÃ KIỂM CHỨNG" trong khi bước 5 và 8 mô tả sai. | Sửa ngay mô tả bước 5 và 8 thành đúng sự thật, hoặc thay bằng tx của lần chạy lại. Mỗi dòng ghi rõ "qua app" hay "gọi trực tiếp contract". Bỏ các câu khẳng định tuyệt đối. |
+
+**Ngân sách còn lại:** owner khoảng 0.45 AVAX và 17 USDC; treasury khoảng 2.3 USDC; agent khoảng 19.99 USDC và 0.05 AVAX. Lần chạy lại không được vượt 5 USDC và 0.1 AVAX. Có thể dùng lại mission cũ hoặc tạo mission mới.
+
+Giới hạn: giữ như 4m.
+
+### Re-review S1 (HEAD `2080300`): x402 đạt, nhưng audit chứa bản ghi sai, CHƯA ĐẠT
+
+**Đạt:**
+- **Bước 5 `0x15ea7467…`:** người gửi là facilitator `0xc669…` (qua Multicall3); log ghi `AuthorizationUsed` và `Transfer 0.1 USDC` từ `0xd97a…` sang seller `0xd4ce…`. Đây là x402 thật.
+- **Bước 8:** `anchoredMissionProofs(0xd634…)` = `0x1555bba9…`, khớp với giá trị script ghi.
+
+| ID | Mức | Lỗi | Sửa |
+|---|---|---|---|
+| S1-F5 | P0 | **Audit entry sai sự thật.** Script tự ghi `SESSION_WALLET_FUNDED` với `to = 0xd97a…` (ví phiên) và `tx_hash = 0x4eff…`. Nhưng log của `0x4eff…` cho thấy USDC chuyển tới **`0x374b…` (agent EOA)**. Ví phiên thực ra nhận 0.2 USDC qua một lệnh `transfer` riêng từ agent EOA, không có trong evidence. Head `0x1555…` đã được neo lên chain đóng dấu luôn entry sai này. | Chạy lại với **mission mới** (`fuji-live-mission-s1b`): (1) owner `createMission` on-chain; (2) `fundMissionWallet(missionId, <session wallet thật lấy từ getSessionWalletForMission>, …)`; (3) `setMissionPayeeRoot`. Mọi audit entry phải do **code path của app** ghi (`verifyFundingReceiptOnFuji`, `verifyPayeeRootReceiptOnFuji`, các route), hoặc script phải gọi đúng các hàm verify đó rồi mới ghi bằng dữ liệu đã verify. **Không tự viết `to`/`tx_hash`.** Bỏ lệnh chuyển agent EOA → ví phiên. |
+| S1-F6 | P1 | Mission được tạo bằng `prisma.upsert`, token phát bằng `issueSpendToken`: bỏ qua bước owner ký challenge. | Dùng owner CLI ký challenge EIP-191, gọi `/api/missions` rồi `/api/missions/[slug]/activate`, lấy spend token từ response. |
+| S1-F7 | P1 | Payout (bước 6) và anchor phải thuộc cùng mission chạy qua app. | Payout qua `agent/run` hoặc `/api/propose` → validator → calldata `proposeWithProof` (PV-F4) → agent ký và gửi. Sau đó anchor audit head **thật** của mission s1b. Mở `/verify` của mission s1b: head tính trong trình duyệt == `anchoredMissionProofs(missionId)`. Chụp `fuji-verify-anchor.png`. |
+| S1-F8 | P1 | Evidence trộn hai mission. | `FUJI_EVIDENCE.md` chia 2 phần. **(A)** Bằng chứng ở mức contract, mission `0xd634…`: các tx cũ đúng sự thật, gồm revert `PayeeNotInMissionSet`; ghi rõ bước 3b nạp cho agent EOA, và tx anchor `0x6b3f…` neo head có chứa entry sai, **không dùng làm bằng chứng**. **(B)** Luồng đầy đủ qua app, mission s1b. |
+
+**Ngân sách:** tối đa 3 USDC và 0.1 AVAX. Có thể nạp thêm treasury từ owner (owner còn khoảng 17 USDC).
+
 ## 5. Giới hạn thực thi (không đổi)
 
 - Không ghi vào audit, UI, report hay deck bất kỳ sự kiện, giao dịch hay trạng thái nào mà hệ thống chưa thực sự tạo ra và kiểm chứng.

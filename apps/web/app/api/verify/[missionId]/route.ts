@@ -173,8 +173,8 @@ export async function GET(req: NextRequest, context: any) {
       missionId,
       isSeededDemo: false,
       anchorStatus: {
-        anchored: Boolean(mission.auditHeadHash && mission.status === 'COMPLETED'),
-        label: mission.auditHeadHash ? 'Đã neo on-chain (Fuji)' : 'Chưa neo on-chain (MOCK)',
+        anchored: Boolean(mission.auditHeadHash && mission.auditHeadHash !== '0x0000000000000000000000000000000000000000000000000000000000000000'),
+        label: mission.auditHeadHash && mission.auditHeadHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' ? 'Đã neo on-chain (Fuji)' : 'Chưa neo on-chain (MOCK)',
         note: 'Giao dịch thật từ cơ sở dữ liệu hệ thống.',
       },
       entries: formatted,
