@@ -7,7 +7,7 @@ test.describe('WOW-0: Replay Vụ Bankr $174k Incident', () => {
     await page.goto('/bankr');
     await expect(page.locator('h1')).toContainText('REPLAY VỤ BANKR / GROK');
     await expect(page.locator('text=MÔ PHỎNG — HỆ KHÔNG CÓ GUARD')).toBeVisible();
-    await expect(page.locator('text=HỆ THỐNG MISSIONPAY TRÊN AVALANCHE')).toBeVisible();
+    await expect(page.locator('text=HỆ THỐNG MISSIONPAY (MÔ PHỎNG SANDBOX)')).toBeVisible();
 
     // 2. Click Replay button
     const replayBtn = page.locator('[data-testid="run-bankr-replay-btn"]');
@@ -15,10 +15,10 @@ test.describe('WOW-0: Replay Vụ Bankr $174k Incident', () => {
     await replayBtn.click();
 
     // 3. Verify left panel drops balance to $0.00 and shows drained alert
-    await expect(page.locator('text=TOÀN BỘ SỐ DƯ BỊ RÚT SẠCH 100%')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('text=TOÀN BỘ SỐ DƯ BỊ RÚT SẠCH')).toBeVisible({ timeout: 15000 });
 
-    // 4. Verify right panel shows 100% funds preserved with $0.00 loss
-    await expect(page.locator('text=BẢO TOÀN 100% TIỀN TỆ TRÊN AVALANCHE')).toBeVisible();
+    // 4. Verify right panel shows calibrated off-chain validator defense with $0.00 loss
+    await expect(page.locator('text=Tiền đã chuyển: $0.00 — chặn bởi validator (off-chain)')).toBeVisible();
     await expect(page.locator('text=BLOCK RECIPIENT_NOT_ALLOWLISTED')).toBeVisible();
 
     // 5. Verify decoded Morse inspector appears

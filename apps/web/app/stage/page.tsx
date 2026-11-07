@@ -530,7 +530,7 @@ export default function StageConsolePage() {
                     FEED CÁC ĐÒN TẤN CÔNG REAL-TIME
                   </span>
                   <span className="text-xs font-mono text-emerald-400 font-bold">
-                    100% BLOCKED
+                    TẤT CẢ ĐỀU BỊ CHẶN
                   </span>
                 </div>
 

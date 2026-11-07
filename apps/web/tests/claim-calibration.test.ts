@@ -1,0 +1,68 @@
+import { describe, it, expect } from 'vitest';
+import fs from 'fs';
+import path from 'path';
+
+describe('WOW-F16: Calibrate Bankr & Arena UI Claims (Anti-Hyperbole)', () => {
+  const targetDirs = [
+    path.resolve(process.cwd(), 'app/bankr'),
+    path.resolve(process.cwd(), 'app/arena'),
+    path.resolve(process.cwd(), 'app/stage'),
+  ];
+
+  function getFiles(dir: string): string[] {
+    let results: string[] = [];
+    if (!fs.existsSync(dir)) return results;
+    const list = fs.readdirSync(dir);
+    for (const file of list) {
+      const fullPath = path.join(dir, file);
+      const stat = fs.statSync(fullPath);
+      if (stat && stat.isDirectory()) {
+        results = results.concat(getFiles(fullPath));
+      } else if (fullPath.endsWith('.tsx') || fullPath.endsWith('.ts')) {
+        results.push(fullPath);
+      }
+    }
+    return results;
+  }
+
+  it('contains zero ungrounded "100%" claims across app/bankr, app/stage, and app/arena', () => {
+    for (const dir of targetDirs) {
+      const files = getFiles(dir);
+      for (const file of files) {
+        const content = fs.readFileSync(file, 'utf8');
+        // Ignore files if any have LIVE_FUJI condition gating
+        const lines = content.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (line.includes('100%')) {
+            throw new Error(`Found ungrounded '100%' claim in ${file}:${i + 1} -> ${line.trim()}`);
+          }
+        }
+      }
+    }
+  });
+
+  it('contains zero ungrounded "On-Chain" claims in MOCK sandbox panels', () => {
+    for (const dir of targetDirs) {
+      const files = getFiles(dir);
+      for (const file of files) {
+        const content = fs.readFileSync(file, 'utf8');
+        const lines = content.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (/on-chain/i.test(line)) {
+            // Must not have unverified claims
+            throw new Error(`Found ungrounded 'On-Chain' in ${file}:${i + 1} -> ${line.trim()}`);
+          }
+        }
+      }
+    }
+  });
+
+  it('calibrated Bankr panel displays honest off-chain validator defense label', () => {
+    const bankrPage = fs.readFileSync(path.resolve(process.cwd(), 'app/bankr/page.tsx'), 'utf8');
+    expect(bankrPage).toContain('Tiền đã chuyển: $0.00 — chặn bởi validator (off-chain)');
+    expect(bankrPage).toContain('Lớp contract: chứng minh khi chạy Fuji');
+    expect(bankrPage).toContain('HỆ THỐNG MISSIONPAY (MÔ PHỎNG SANDBOX)');
+  });
+});

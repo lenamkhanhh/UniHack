@@ -170,7 +170,7 @@ export default function ArenaMobilePage() {
             {/* Invariant Defense Rule */}
             <div>
               <div className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">
-                Bảo vệ On-Chain kích hoạt (Rule ID):
+                Lớp bảo vệ kích hoạt (Rule ID):
               </div>
               <div className="text-xs font-mono font-bold text-red-400 bg-red-950/30 p-2 rounded border border-red-900/50 mt-1">
                 {result.record.verdict.rule || 'RULE_INVARIANT_PRESERVED'}
@@ -190,7 +190,7 @@ export default function ArenaMobilePage() {
             <div className="flex items-center justify-between pt-1 text-xs">
               <span className="text-gray-400">Thiệt hại thực tế:</span>
               <span className="font-mono font-bold text-emerald-400 bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-800">
-                $0.00 (BẢO TOÀN 100%)
+                $0.00 (Chặn bởi validator off-chain)
               </span>
             </div>
           </div>

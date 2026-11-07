@@ -86,7 +86,7 @@ export default function BankrReplayPage() {
 
             <h2 className="text-lg font-bold text-gray-200 mb-2">Ví AI Agent Hot Wallet truyền thống</h2>
             <p className="text-xs text-gray-400 mb-6">
-              Hệ thống coi kết quả suy luận của AI là thẩm quyền tài chính tối cao. Output của LLM được chuyển trực tiếp vào ví để ký on-chain.
+              Hệ thống coi kết quả suy luận của AI là thẩm quyền tài chính tối cao. Output của LLM được chuyển trực tiếp vào ví để ký chuyển tiền.
             </p>
 
             {/* Drained Balance Box */}
@@ -102,14 +102,14 @@ export default function BankrReplayPage() {
                 </span>
               </div>
               <span className="inline-block text-xs font-mono font-bold text-red-400 bg-red-950/60 px-3 py-1 rounded-full border border-red-800 mt-2">
-                {result ? '💸 TOÀN BỘ SỐ DƯ BỊ RÚT SẠCH 100%' : 'Chờ chạy kịch bản...'}
+                {result ? '💸 TOÀN BỘ SỐ DƯ BỊ RÚT SẠCH' : 'Chờ chạy kịch bản...'}
               </span>
             </div>
 
             <div className="space-y-3 text-xs text-gray-400">
               <div className="flex items-center space-x-2">
                 <span className="text-red-500 font-bold">❌</span>
-                <span>Không có Smart Contract Allowlist kiểm tra địa chỉ nhận.</span>
+                <span>Không có Allowlist kiểm tra địa chỉ nhận.</span>
               </div>
               <div className="flex items-center space-x-2">
                 <span className="text-red-500 font-bold">❌</span>
@@ -133,14 +133,14 @@ export default function BankrReplayPage() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <span className="text-xs font-mono font-bold bg-emerald-950/60 text-emerald-400 px-3 py-1 rounded-full border border-emerald-800">
-                HỆ THỐNG MISSIONPAY TRÊN AVALANCHE
+                HỆ THỐNG MISSIONPAY (MÔ PHỎNG SANDBOX)
               </span>
-              <span className="text-[11px] font-mono text-gray-500">Bảo vệ đa lớp On-Chain</span>
+              <span className="text-[11px] font-mono text-gray-500">Lớp contract: chứng minh khi chạy Fuji</span>
             </div>
 
             <h2 className="text-lg font-bold text-gray-200 mb-2">GuardedTreasury + Ví phiên cô lập</h2>
             <p className="text-xs text-gray-400 mb-6">
-              "LLM có thể bị lừa. Ngân sách trên Avalanche thì không." Ngay cả khi LLM bị chiếm quyền hoàn toàn, hợp đồng thông minh vẫn từ chối thực thi.
+              "LLM có thể bị lừa. Ngân sách trên Avalanche thì không." Ngay cả khi LLM bị chiếm quyền hoàn toàn, validator và contract vẫn từ chối thực thi.
             </p>
 
             {/* Preserved Balance Box */}
@@ -154,7 +154,7 @@ export default function BankrReplayPage() {
                 </span>
               </div>
               <span className="inline-block text-xs font-mono font-bold text-emerald-300 bg-emerald-950/60 px-3 py-1 rounded-full border border-emerald-800 mt-2">
-                🛡️ BẢO TOÀN 100% TIỀN TỆ TRÊN AVALANCHE
+                Tiền đã chuyển: $0.00 — chặn bởi validator (off-chain)
               </span>
             </div>
 
@@ -192,7 +192,7 @@ export default function BankrReplayPage() {
           </div>
 
           <div className="text-[10px] text-gray-500 border-t border-gray-900 pt-3 mt-6 font-mono text-center">
-            BẢO VỆ OFF-CHAIN BỞI VALIDATOR • LỚP ON-CHAIN CAP SẼ CHỨNG MINH TRÊN FUJI LIVE
+            BẢO VỆ OFF-CHAIN BỞI VALIDATOR • LỚP CONTRACT CAP SẼ CHỨNG MINH KHI CHẠY FUJI LIVE
           </div>
         </div>
       </div>

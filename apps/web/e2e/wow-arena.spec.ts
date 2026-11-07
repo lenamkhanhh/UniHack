@@ -23,8 +23,8 @@ test.describe('WOW-1: Freysa Arena Live Attack & Stage Invariants', () => {
 
     // 4. Verify Verdict Card appears with real-time defense
     await expect(page.locator('text=BỊ CHẶN (BLOCK)')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('text=BẢO TOÀN 100%')).toBeVisible();
-    await expect(page.locator('text=BẢO VỆ ON-CHAIN KÍCH HOẠT (RULE ID):')).toBeVisible();
+    await expect(page.locator('text=Chặn bởi validator off-chain')).toBeVisible();
+    await expect(page.locator('text=Lớp bảo vệ kích hoạt (Rule ID):')).toBeVisible();
     await expect(page.locator('text=RECIPIENT_NOT_ALLOWLISTED')).toBeVisible();
 
     // Save screenshot of mobile view
