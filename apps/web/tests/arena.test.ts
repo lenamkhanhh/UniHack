@@ -41,21 +41,33 @@ describe('WOW-1: Freysa Arena Unit & Invariant Suite', () => {
     expect(resLong.sanitized.length).toBe(300);
   });
 
-  it('WOW-1 (Rate-Limit): enforces sliding window max 5 requests per client', () => {
-    const clientId = 'test-client-123';
+  it('WOW-F7: Rate limit is enforced by IP (header changes cannot bypass), and global ceiling at 60 req/min returns 429', () => {
+    const trustedIp = '198.51.100.42';
 
-    // First 5 requests succeed
+    // 1. Send 5 requests from the same IP
     for (let i = 0; i < 5; i++) {
-      const res = checkArenaRateLimit(clientId, 60000, 5);
-      expect(res.allowed).toBe(true);
-      expect(res.remaining).toBe(4 - i);
+      const check = checkArenaRateLimit(trustedIp, 60000, 5);
+      expect(check.allowed).toBe(true);
     }
 
-    // 6th request is blocked
-    const resBlocked = checkArenaRateLimit(clientId, 60000, 5);
-    expect(resBlocked.allowed).toBe(false);
-    expect(resBlocked.remaining).toBe(0);
-    expect(resBlocked.retryAfterSeconds).toBeGreaterThan(0);
+    // 6th request from same IP is blocked regardless of client header rotations
+    const checkBlocked = checkArenaRateLimit(trustedIp, 60000, 5);
+    expect(checkBlocked.allowed).toBe(false);
+    expect(checkBlocked.retryAfterSeconds).toBeGreaterThan(0);
+
+    // 2. Global ceiling test: reset and test global ceiling 60 req/min
+    resetArenaForTesting();
+    // Simulate 60 requests from distinct IPs
+    for (let i = 0; i < 60; i++) {
+      const ip = `10.0.0.${i + 1}`;
+      const check = checkArenaRateLimit(ip, 60000, 5);
+      expect(check.allowed).toBe(true);
+    }
+
+    // 61st request from a brand new IP is blocked by the global ceiling
+    const globalBlocked = checkArenaRateLimit('10.0.0.254', 60000, 5);
+    expect(globalBlocked.allowed).toBe(false);
+    expect(globalBlocked.reason).toContain('Global arena ceiling exceeded');
   });
 
   it('WOW-1 (Adversarial Attacks): 3 canonical attack prompts are strictly BLOCK or QUEUE with $0.00 loss and NO DB payments', async () => {

@@ -3,19 +3,19 @@ import { sanitizeAttackPrompt, checkArenaRateLimit, processArenaAttack } from '@
 
 export async function POST(req: NextRequest) {
   try {
+    // Trusted IP extraction (WOW-F7): prioritize req.ip, never trust client-spoofed custom headers
     const forwarded = req.headers.get('x-forwarded-for');
-    const ip = forwarded ? forwarded.split(',')[0].trim() : '127.0.0.1';
-    const clientId = req.headers.get('x-arena-client-id') || ip;
+    const clientIp = req.ip || (forwarded ? forwarded.split(',')[0].trim() : '127.0.0.1');
 
-    // Rate-limit check
-    const rateCheck = checkArenaRateLimit(clientId);
+    // Rate-limit check: enforces per-client 5 req/min AND global ceiling 60 req/min (WOW-F7)
+    const rateCheck = checkArenaRateLimit(clientIp);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         {
-          error: `Rate limit exceeded. Please wait ${rateCheck.retryAfterSeconds} seconds before sending another attack.`,
+          error: rateCheck.reason || 'Rate limit exceeded.',
           retryAfterSeconds: rateCheck.retryAfterSeconds,
         },
-        { status: 429, headers: { 'Retry-After': String(rateCheck.retryAfterSeconds) } }
+        { status: 429, headers: { 'Retry-After': String(rateCheck.retryAfterSeconds || 60) } }
       );
     }
 
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: sanitizeRes.error || 'Invalid attack prompt' }, { status: 400 });
     }
 
-    const result = processArenaAttack(rawPrompt, clientId);
+    const result = processArenaAttack(rawPrompt, clientIp);
 
     return NextResponse.json({
       success: true,
