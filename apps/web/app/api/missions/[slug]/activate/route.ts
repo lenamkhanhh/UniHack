@@ -5,8 +5,13 @@ import { verifyAndConsumeChallenge, ChallengeError } from '@/lib/challenges';
 import { getSessionWalletForMission } from '@/lib/session-wallets';
 import { appendAuditEntry } from '@/lib/audit';
 import { encodeFunctionData, parseAbiItem } from 'viem';
-import { verifyFundingReceiptOnFuji } from '@/lib/fuji-receipts';
+import { verifyFundingReceiptOnFuji, verifyPayeeRootReceiptOnFuji } from '@/lib/fuji-receipts';
 import { validateLiveFujiConfig } from '@/lib/config';
+import {
+  saveMissionPayees,
+  getMissionPayees,
+  buildSetMissionPayeeRootCalldata,
+} from '@/lib/merkle';
 
 const fundMissionWalletAbi = parseAbiItem(
   'function fundMissionWallet(bytes32 missionId, address wallet, uint256 amount) external'
@@ -46,6 +51,7 @@ export async function POST(
     const appOrigin = process.env.APP_ORIGIN || 'http://localhost:3000';
 
     let sessionWalletInfo: any = null;
+    let payeeInfo: any = null;
 
     const { state } = await prisma.$transaction(async (tx) => {
       const res = await verifyAndConsumeChallenge(tx, {
@@ -158,6 +164,86 @@ export async function POST(
         }
       }
 
+      // PV-3: Handle owner-signed payee set and Merkle root transaction
+      const payeesList =
+        Array.isArray(payload.payees) && payload.payees.length > 0
+          ? payload.payees
+          : getMissionPayees(mission.slug);
+
+      if (payeesList && payeesList.length > 0) {
+        const treeResult = saveMissionPayees(mission.slug, payeesList);
+        const unsignedPayeeTx = {
+          to: guardedTreasuryAddress,
+          data: buildSetMissionPayeeRootCalldata(mission.missionId, treeResult.root),
+          value: '0',
+          chainId: 43113,
+        };
+
+        const payeeRootTxHash = payload.payeeRootTxHash || (body as any).payeeRootTxHash;
+
+        if (res.state.paymentMode === 'LIVE_FUJI') {
+          if (payeeRootTxHash) {
+            const verification = await verifyPayeeRootReceiptOnFuji({
+              txHash: payeeRootTxHash,
+              missionId: mission.missionId,
+              expectedRoot: treeResult.root,
+              treasuryAddress: guardedTreasuryAddress,
+            });
+
+            if (!verification.valid) {
+              throw new ChallengeError(
+                `On-chain payee root verification failed: ${verification.error}`,
+                400
+              );
+            }
+
+            await appendAuditEntry(tx, {
+              actor: mission.ownerAddress,
+              amount: '0',
+              chain_id: '43113',
+              kind: 'PAYEE_ROOT_SET',
+              mission_id: mission.slug,
+              operation_id: '',
+              policy_hash: mission.policyHash,
+              policy_version: verification.policyVersion?.toString() || '2',
+              reason: `Set mission payee Merkle root to ${treeResult.root}`,
+              result_hash: treeResult.root,
+              rule: 'STAGE_S2_PAYEE_ROOT_SET',
+              source_key: `payee_root:${mission.slug}:${payeeRootTxHash}`,
+              to: guardedTreasuryAddress,
+              tx_hash: payeeRootTxHash,
+            });
+
+            payeeInfo = {
+              root: treeResult.root,
+              payees: treeResult.payees,
+              mode: 'LIVE_FUJI',
+              txHash: payeeRootTxHash,
+              status: 'PAYEE_ROOT_SET',
+            };
+          } else {
+            payeeInfo = {
+              root: treeResult.root,
+              payees: treeResult.payees,
+              mode: 'LIVE_FUJI',
+              txHash: null,
+              status: 'PENDING_ONCHAIN_PAYEE_ROOT',
+              unsignedTx: unsignedPayeeTx,
+            };
+          }
+        } else {
+          // MOCK mode: Do not claim on-chain without receipt
+          payeeInfo = {
+            root: treeResult.root,
+            payees: treeResult.payees,
+            mode: 'MOCK',
+            txHash: null,
+            status: 'PAYEE_ROOT_MOCK_NOT_SENT',
+            unsignedTx: unsignedPayeeTx,
+          };
+        }
+      }
+
       return res;
     });
 
@@ -182,6 +268,7 @@ export async function POST(
       expiresAt: mission.expiresAt.toISOString(),
       type: 'spend',
       sessionWallet: sessionWalletInfo,
+      payeeInfo,
     });
   } catch (err: any) {
     if (err instanceof ChallengeError) {

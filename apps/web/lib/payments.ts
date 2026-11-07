@@ -23,6 +23,7 @@ import { reconcileOperation, ChainEvidence } from './reconcile';
 import { getPaymentMode, validateLiveFujiConfig } from './config';
 import { verifyQuoteAgainstCatalog } from './validator';
 import { getSessionWalletForMission } from './session-wallets';
+import { getMissionPayeeProof, buildProposeWithProofCalldata } from './merkle';
 
 export { getPaymentMode };
 
@@ -933,4 +934,74 @@ export async function executeUpstreamAndSettle(params: {
       };
     }
   }
+}
+
+export interface TreasuryPayoutWithProofParams {
+  missionSlug: string;
+  operationId: string;
+  to: string;
+  amountAtomic: string;
+  missionId: string;
+  reason: string;
+  agentPrivateKey?: `0x${string}`;
+}
+
+export interface TreasuryPayoutResult {
+  mode: 'MOCK' | 'LIVE_FUJI';
+  operationId: string;
+  to: string;
+  amountAtomic: string;
+  proof: `0x${string}`[];
+  calldata: `0x${string}`;
+  txHash?: string;
+  status: 'EXECUTED' | 'QUEUED' | 'REVERTED';
+}
+
+/**
+ * PV-3: Executes or simulates a treasury payout via proposeWithProof using the server-computed Merkle proof.
+ * Fails with PayeeNotInMissionSet if the payee is not in the owner-signed payee set.
+ */
+export async function executeTreasuryPayoutWithProof(
+  params: TreasuryPayoutWithProofParams
+): Promise<TreasuryPayoutResult> {
+  const proof = getMissionPayeeProof(params.missionSlug, params.to);
+  if (!proof) {
+    throw new Error(
+      `Payee ${params.to} is not in the owner-signed payee set for mission ${params.missionSlug}; Merkle proof cannot be generated`
+    );
+  }
+
+  const calldata = buildProposeWithProofCalldata({
+    operationId: params.operationId,
+    to: params.to,
+    amountAtomic: BigInt(params.amountAtomic),
+    missionId: params.missionId,
+    reason: params.reason,
+    proof,
+  });
+
+  const mode = getPaymentMode();
+
+  if (mode === 'LIVE_FUJI') {
+    return {
+      mode: 'LIVE_FUJI',
+      operationId: params.operationId,
+      to: params.to,
+      amountAtomic: params.amountAtomic,
+      proof,
+      calldata,
+      status: 'QUEUED',
+    };
+  }
+
+  // MOCK mode: returns mock executed or queued result with authentic proof and calldata
+  return {
+    mode: 'MOCK',
+    operationId: params.operationId,
+    to: params.to,
+    amountAtomic: params.amountAtomic,
+    proof,
+    calldata,
+    status: BigInt(params.amountAtomic) > 5_000_000n ? 'QUEUED' : 'EXECUTED',
+  };
 }

@@ -13,6 +13,10 @@ export const missionProofAnchoredEventAbi = parseAbiItem(
   'event MissionProofAnchored(bytes32 indexed missionId, bytes32 indexed headHash, uint256 timestamp)'
 );
 
+export const missionPayeeRootSetEventAbi = parseAbiItem(
+  'event MissionPayeeRootSet(bytes32 indexed missionId, bytes32 indexed root, uint256 policyVersion)'
+);
+
 export const feedbackGivenEventAbi = parseAbiItem(
   'event FeedbackGiven(uint256 indexed agentId, address indexed client, uint64 feedbackIndex, int128 value, uint8 valueDecimals, string tag1, string tag2)'
 );
@@ -229,6 +233,94 @@ export async function verifyAnchorReceiptOnFuji(params: {
 
   return {
     valid: true,
+    blockNumber: receipt.blockNumber ? BigInt(receipt.blockNumber.toString()) : undefined,
+    txHash: params.txHash,
+  };
+}
+
+/**
+ * PV-3: Verifies on-chain MissionPayeeRootSet event on Avalanche Fuji.
+ * Rejects if tx reverted, contract mismatch, missionId mismatch, or root mismatch.
+ */
+export async function verifyPayeeRootReceiptOnFuji(params: {
+  txHash: string;
+  missionId: string;
+  expectedRoot: string;
+  treasuryAddress: string;
+}): Promise<ReceiptVerificationResult & { policyVersion?: bigint }> {
+  if (!params.treasuryAddress || params.treasuryAddress === '0x0000000000000000000000000000000000000000') {
+    return { valid: false, error: 'Valid non-zero treasuryAddress is required for verification' };
+  }
+
+  const receipt = await getReceipt(params.txHash);
+  if (!receipt) {
+    return { valid: false, error: 'Transaction receipt not found on Avalanche Fuji' };
+  }
+
+  if (receipt.status !== 'success') {
+    return { valid: false, error: 'Transaction reverted on-chain' };
+  }
+
+  const expectedTreasury = normalizeAddress(params.treasuryAddress);
+  if (receipt.to && normalizeAddress(receipt.to) !== expectedTreasury) {
+    return {
+      valid: false,
+      error: `Transaction recipient mismatch: expected ${expectedTreasury}, got ${receipt.to}`,
+    };
+  }
+
+  const expectedMissionId = normalizeBytes32(params.missionId);
+  const expectedRoot = normalizeBytes32(params.expectedRoot);
+
+  let foundRootEvent = false;
+  let policyVersion: bigint | undefined = undefined;
+
+  for (const log of receipt.logs || []) {
+    if (!log.address || normalizeAddress(log.address) !== expectedTreasury) {
+      continue;
+    }
+
+    try {
+      const decoded = decodeEventLog({
+        abi: [missionPayeeRootSetEventAbi],
+        data: log.data,
+        topics: log.topics,
+      }) as any;
+
+      if (decoded.eventName === 'MissionPayeeRootSet') {
+        const eventMissionId = normalizeBytes32(decoded.args.missionId);
+        const eventRoot = normalizeBytes32(decoded.args.root);
+
+        if (eventMissionId !== expectedMissionId) {
+          return {
+            valid: false,
+            error: `MissionPayeeRootSet missionId mismatch: expected ${expectedMissionId}, got ${eventMissionId}`,
+          };
+        }
+
+        if (eventRoot !== expectedRoot) {
+          return {
+            valid: false,
+            error: `MissionPayeeRootSet root mismatch: expected ${expectedRoot}, got ${eventRoot}`,
+          };
+        }
+
+        policyVersion = BigInt(decoded.args.policyVersion.toString());
+        foundRootEvent = true;
+        break;
+      }
+    } catch {
+      // Continue searching
+    }
+  }
+
+  if (!foundRootEvent) {
+    return { valid: false, error: 'MissionPayeeRootSet event not found from expected treasury contract' };
+  }
+
+  return {
+    valid: true,
+    policyVersion,
     blockNumber: receipt.blockNumber ? BigInt(receipt.blockNumber.toString()) : undefined,
     txHash: params.txHash,
   };

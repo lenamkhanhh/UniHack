@@ -5,7 +5,7 @@ import {
   verifyOwnerSignature,
   ActionType,
 } from './auth';
-import { normalizeAddress } from './chain';
+import { normalizeAddress, isValidAddress } from './chain';
 import { getConfiguredOwner } from './config';
 
 export class ChallengeError extends Error {
@@ -16,8 +16,8 @@ export class ChallengeError extends Error {
 }
 
 const ALLOWED_PAYLOAD_KEYS: Record<ActionType, string[]> = {
-  CREATE_MISSION: ['slug', 'agentAddress', 'treasuryCap', 'toolCap', 'durationSeconds', 'targetMissionSlug'],
-  ACTIVATE: ['missionId', 'ownerAddress', 'agentAddress', 'treasuryCap', 'toolCap', 'configVersion', 'policyHash', 'targetMissionSlug', 'fundingTxHash'],
+  CREATE_MISSION: ['slug', 'agentAddress', 'treasuryCap', 'toolCap', 'durationSeconds', 'targetMissionSlug', 'payees'],
+  ACTIVATE: ['missionId', 'ownerAddress', 'agentAddress', 'treasuryCap', 'toolCap', 'configVersion', 'policyHash', 'targetMissionSlug', 'fundingTxHash', 'payees', 'payeeRootTxHash'],
   READ_MISSION: ['slug', 'targetMissionSlug'],
   PAUSE_S1: ['desiredPaused'],
   CLOSE_MISSION_S1: ['slug', 'targetMissionSlug'],
@@ -59,6 +59,16 @@ export function validatePayloadTarget(
       if (!payload.agentAddress || !payload.treasuryCap || !payload.toolCap || !payload.durationSeconds) {
         throw new ChallengeError('CREATE_MISSION payload missing required fields', 400);
       }
+      if (payload.payees !== undefined) {
+        if (!Array.isArray(payload.payees)) {
+          throw new ChallengeError('CREATE_MISSION payees must be an array of addresses', 400);
+        }
+        for (const p of payload.payees) {
+          if (!p || typeof p !== 'string' || !isValidAddress(p)) {
+            throw new ChallengeError(`Invalid payee address: '${p}'`, 400);
+          }
+        }
+      }
       break;
     }
     case 'ACTIVATE': {
@@ -67,6 +77,16 @@ export function validatePayloadTarget(
       }
       if (!payload.missionId || !payload.ownerAddress || !payload.agentAddress || !payload.treasuryCap || !payload.toolCap) {
         throw new ChallengeError('ACTIVATE payload missing required fields', 400);
+      }
+      if (payload.payees !== undefined) {
+        if (!Array.isArray(payload.payees)) {
+          throw new ChallengeError('ACTIVATE payees must be an array of addresses', 400);
+        }
+        for (const p of payload.payees) {
+          if (!p || typeof p !== 'string' || !isValidAddress(p)) {
+            throw new ChallengeError(`Invalid payee address: '${p}'`, 400);
+          }
+        }
       }
       break;
     }

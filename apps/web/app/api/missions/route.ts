@@ -5,6 +5,7 @@ import { getConfiguredOwner } from '@/lib/config';
 import { verifyAndConsumeChallenge, ChallengeError } from '@/lib/challenges';
 import { toMissionDto } from '@/lib/dto';
 import { verifyToken } from '@/lib/auth';
+import { saveMissionPayees, buildSetMissionPayeeRootCalldata } from '@/lib/merkle';
 
 export async function GET(req: NextRequest) {
   try {
@@ -95,7 +96,28 @@ export async function POST(req: NextRequest) {
       return mission;
     });
 
-    return NextResponse.json({ mission: result }, { status: 201 });
+    let payeeInfo: any = null;
+    if (Array.isArray(payload.payees) && payload.payees.length > 0) {
+      const treeResult = saveMissionPayees(slug, payload.payees);
+      const guardedTreasuryAddress =
+        process.env.NEXT_PUBLIC_GUARDED_TREASURY_ADDRESS ||
+        '0x5aAdFB43eF8dAF45DD80F4676345b7676f1D70e3';
+      const unsignedTx = {
+        to: guardedTreasuryAddress,
+        data: buildSetMissionPayeeRootCalldata(missionId, treeResult.root),
+        value: '0',
+        chainId: 43113,
+      };
+
+      payeeInfo = {
+        root: treeResult.root,
+        payees: treeResult.payees,
+        status: 'PAYEE_ROOT_MOCK_NOT_SENT',
+        unsignedTx,
+      };
+    }
+
+    return NextResponse.json({ mission: result, payeeInfo }, { status: 201 });
   } catch (err: any) {
     if (err instanceof ChallengeError) {
       return NextResponse.json({ error: err.message }, { status: err.statusCode });
