@@ -224,22 +224,39 @@ This runbook specifies the exact sequence to take MissionPay live on the Avalanc
    - Client sends `txHash` to backend; backend verifies `MissionFunded` event on Fuji and commits `SESSION_WALLET_FUNDED` audit entry.
    - **Signer**: Owner (MetaMask, pays transaction gas on Fuji).
    - **Evidence to Record**: `fundMissionWallet` Transaction Hash on Snowtrace.
-3. **Agent Autonomous Spend within Session Cap**:
+3. **Owner Sets Payee Merkle Root on-chain (PV-3 & PV-5)**:
+   - Owner signs list of authorized mission payees; backend computes standard OpenZeppelin Merkle tree and returns unsigned calldata for `setMissionPayeeRoot(missionId, root)`.
+   - Owner signs and broadcasts transaction on Fuji using MetaMask.
+   - Client sends `txHash` to backend; backend verifies `MissionPayeeRootSet` event on Fuji via `verifyPayeeRootReceiptOnFuji` and commits `PAYEE_ROOT_SET` audit entry (`policyVersion` advances).
+   - **Signer**: Owner (MetaMask, pays gas on Fuji).
+   - **Evidence to Record**: `setMissionPayeeRoot` Transaction Hash on Snowtrace.
+4. **Agent Autonomous Spend within Session Cap**:
    - Agent spends tool budget via session wallet (gasless x402 EIP-3009).
    - Contract tool cap strictly bounds maximum loss on-chain.
    - **Signer**: Agent / Session Wallet (signs EIP-3009 off-chain); Facilitator (broadcasts).
-4. **Treasury Payout Verification (Within Cap vs. Exceeding Cap)**:
-   - Within per-tx cap: Propose payout -> auto-executes on Fuji.
-   - Exceeding per-tx cap: Propose payout -> queued -> Owner signs `approve()` and `execute()` via MetaMask.
-   - **Signer**: Owner (MetaMask, pays gas).
-   - **Evidence to Record**: Treasury Payout Transaction Hash (`execute`) on Snowtrace.
-5. **Complete Mission & Anchor Proof On-Chain**:
+5. **Treasury Payout with Cryptographic Merkle Proof (`proposeWithProof`)**:
+   - Payout to recipient in owner-signed set: Agent calls `proposeWithProof(opId, to, amount, missionId, reason, proof)` with server-computed proof.
+     - Within per-tx cap (≤ 5 USDC): Auto-executes disbursement on Fuji.
+     - Exceeding per-tx cap (> 5 USDC): Queued -> Owner signs `approve()` and `execute()` via MetaMask.
+   - **Signer**: Agent (submits `proposeWithProof`); Owner (MetaMask approval if queued).
+   - **Evidence to Record**: `proposeWithProof` / `execute` Transaction Hash on Snowtrace.
+6. **Compromised Server Simulation (Tainted Payee Revert Proof)**:
+   - Simulates worst-case scenario where agent key is stolen or server compromised, attempting to divert treasury funds to an unlisted attacker address.
+   - Run simulation script:
+     ```bash
+     npx tsx scripts/fuji-tainted-payee-revert.ts # Safe dry-run simulation via eth_call
+     # When owner authorizes live broadcast:
+     ALLOW_FUJI_BROADCAST=1 npx tsx scripts/fuji-tainted-payee-revert.ts --broadcast
+     ```
+   - Transaction strictly **reverts on Avalanche Fuji** with error `PayeeNotInMissionSet`.
+   - **Evidence to Record**: Reverted Transaction Hash on Snowtrace proving smart contract independent enforcement.
+7. **Complete Mission & Anchor Proof On-Chain**:
    - Owner receives unsigned calldata for `anchorMissionProof(missionId, auditHeadHash)` from `POST /api/missions/[slug]/complete`.
    - Owner signs and broadcasts transaction on Fuji using MetaMask.
    - Backend verifies `MissionProofAnchored` event on Fuji and commits `PROOF_ANCHORED` audit entry.
    - **Signer**: Owner (MetaMask, pays gas).
    - **Evidence to Record**: `anchorMissionProof` Transaction Hash on Snowtrace.
-6. **Reputation Feedback on Official Fuji ERC-8004 Registry**:
+8. **Reputation Feedback on Official Fuji ERC-8004 Registry**:
    - Owner calls `POST /api/feedback`; backend returns unsigned calldata for `giveFeedback(agentId, value, valueDecimals, tag1, tag2, endpoint, uri, hash)`.
    - Owner signs and broadcasts transaction to Reputation Registry (`0x8004B663056A597Dffe9eCcC1965A193B7388713`).
    - Backend verifies receipt via `verifyFeedbackReceiptOnFuji` and commits `ERC8004_FEEDBACK` audit entry.
