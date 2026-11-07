@@ -1,11 +1,11 @@
-# BÁO CÁO NGHIỆM THU VÀ KHẮC PHỤC LỖI VÒNG WOW (WOW-F1 → WOW-F18)
+# BÁO CÁO NGHIỆM THU VÀ KHẮC PHỤC LỖI VÒNG WOW (WOW-F1 → WOW-F19)
 
-**Thời điểm:** 2026-11-07 11:25 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
-**Ràng buộc tuân thủ:** Contract nằm tại `contracts/`; không push `main`, không deploy public, không nộp bài khi owner chưa duyệt; chỉ dùng Fuji testnet, không commit secret.
+**Thời điểm:** 2026-11-07 11:35 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
+**Ràng buộc tuân thủ:** Contract nằm tại `contracts/`; không push `main`, không deploy public, không nộp bài khi owner chưa duyệt; chỉ dùng Fuji testnet, không commit secret; không sửa deck.
 
 ---
 
-## 1. BẢNG TIẾN ĐỘ & ACCEPTANCE SỬA LỖI TRUNG THỰC (§4b, §4c, §4d, §4e & §4g REVIEW_PROMPT_GPT.md)
+## 1. BẢNG TIẾN ĐỘ & ACCEPTANCE SỬA LỖI TRUNG THỰC (§4b, §4c, §4d, §4e, §4g & §4h REVIEW_PROMPT_GPT.md)
 
 | ID | Mức | Trạng thái | File chính | Test / Acceptance đã kiểm chứng | Commit |
 |---|---|---|---|---|---|
@@ -27,13 +27,14 @@
 | **WOW-F16** | **Cao** | **PASS** | `apps/web/app/bankr/page.tsx`<br>`apps/web/app/stage/page.tsx`<br>`apps/web/app/arena/page.tsx`<br>`apps/web/tests/claim-calibration.test.ts` | Hiệu chỉnh mọi tuyên bố chưa có cơ sở thực tế trên UI: đổi `"BẢO TOÀN 100% TIỀN TỆ TRÊN AVALANCHE"` thành `"Tiền đã chuyển: $0.00 — chặn bởi validator (off-chain)"`; đổi `"Bảo vệ đa lớp On-Chain"` thành `"Lớp contract: chứng minh khi chạy Fuji"`; đổi tiêu đề chế độ MOCK thành `"HỆ THỐNG MISSIONPAY (MÔ PHỎNG SANDBOX)"`. Test `tests/claim-calibration.test.ts` (3/3 pass): grep xác nhận 0 từ `"100%"` và 0 `"On-Chain"` ungrounded. | `a309d39` |
 | **WOW-F17** | **Trung bình** | **PASS** | `apps/web/app/layout.tsx`<br>`apps/web/app/stage/page.tsx`<br>`apps/web/app/arena/stage/page.tsx`<br>`apps/web/app/bankr/page.tsx`<br>`apps/web/tests/brand-alignment.test.ts` | Đồng nhất nhận diện thương hiệu thành **MissionPay** trên toàn bộ Header, Metadata title và Tab title. Sửa lỗi chính tả footer `"UNIHAX STAGE CONSOLE"` thành `"MissionPay · Avalanche Fuji"`. Test `tests/brand-alignment.test.ts` (3/3 pass): grep xác nhận 0 xuất hiện `"Guarded Agent Economy"` và `"UNIHAX STAGE CONSOLE"` trong `app/`. | `316f2f8` |
 | **WOW-F18** | **Trung bình** | **PASS** | `apps/web/next.config.mjs`<br>`apps/web/e2e/deck-screenshots.spec.ts`<br>`artifacts/submission-s1/deck-shots/deck-*.png` | Tắt overlay button của Next.js dev indicator (`devIndicators: false` trong `next.config.mjs`). Chụp 5 ảnh chứng cứ chất lượng cao chuẩn **1920×1080**, theme tối, không overlay, không `$NaN`: `deck-bankr.png`, `deck-arena.png`, `deck-verify-ok.png`, `deck-verify-tampered.png`, `deck-moneyflow.png`. Playwright spec `deck-screenshots.spec.ts` 5/5 pass; kiểm tra PNG header xác nhận kích thước chuẩn 1920×1080. | `a17cf51` |
+| **WOW-F19** | **Thấp** | **PASS** | `apps/web/app/arena/stage/page.tsx`<br>`apps/web/tests/claim-calibration.test.ts`<br>`artifacts/submission-s1/deck-shots/deck-arena.png` | Hiệu chỉnh câu mô tả quy tắc trong `app/arena/stage/page.tsx`: đổi *"Hợp đồng thông minh trên Avalanche sẽ tự động chặn mọi vi phạm"* thành *"Validator chặn mọi lệnh ngoài allowlist hoặc vượt cap; lớp contract sẽ được chứng minh khi chạy Fuji"*. Test `tests/claim-calibration.test.ts` pass (4/4); chụp lại `deck-arena.png` (chuẩn 1920×1080, cảnh 10 đòn tấn công, PASS/QUEUE/BLOCK, đúng sự thật). | `21bfb74` |
 
 ---
 
 ## 2. KẾT QUẢ TEST & CHỈ SỐ HỆ THỐNG TOÀN DIỆN
 
 1. **Foundry Smart Contracts Suite:** `31/31 passed` (`contracts/test/GuardedTreasury.t.sol` chạy trong 9.52ms qua `forge test`).
-2. **Vitest Unit & Integration Suite:** `140/140 passed` trên 18 test files (100% pass):
+2. **Vitest Unit & Integration Suite:** `141/141 passed` trên 18 test files (100% pass):
    - `unit-boundaries.test.ts` (33)
    - `p-series.test.ts` (25)
    - `agent-lifecycle.test.ts` (19)
@@ -42,10 +43,10 @@
    - `arena.test.ts` (9) [bao gồm F11, F12, F13 & F14]
    - `morse.test.ts` (5) [F3 & F10]
    - `agent-planning.test.ts` (4)
+   - `claim-calibration.test.ts` (4) [F16 & F19]
    - `bankr-replay.test.ts` (3) [F5]
    - `proof-verify-browser.test.ts` (3) [F2]
    - `qr-code.test.ts` (3) [F15]
-   - `claim-calibration.test.ts` (3) [F16]
    - `brand-alignment.test.ts` (3) [F17]
    - `audit-scoping.test.ts` (2) [F9]
    - `money-flow.test.ts` (2) [F1]
@@ -54,8 +55,8 @@
    - `sandbox-addresses.test.ts` (1) [F6]
 3. **TypeScript Strict Typecheck (`npx tsc --noEmit --incremental false`):** `0 errors` (exit code 0).
 4. **Playwright E2E Suite (`NO_WEBSERVER=1`, port 3100):**
-   - `deck-screenshots.spec.ts`: `5/5 passed` (33.1s, chụp 5 ảnh 1920×1080 không overlay).
-   - `wow-arena.spec.ts`: `passed`.
+   - `deck-screenshots.spec.ts`: `5/5 passed` (chụp lại `deck-arena.png` chuẩn 1920×1080 sau 10 đòn, không overlay).
+   - `wow-arena.spec.ts`: `passed` (cập nhật evidence `wow-arena-stage.png`).
    - `wow-bankr.spec.ts`: `passed`.
    - `wow-stage.spec.ts`: `passed`.
    - `wow-verify.spec.ts`: `passed`.
@@ -66,7 +67,7 @@
 
 ### 3.1 Ảnh màn hình cho Pitch Deck (1920×1080, không dev overlay, thư mục `artifacts/submission-s1/deck-shots/`)
 - `deck-bankr.png`: Màn hình chia đôi sau khi bấm Replay vụ Bankr $174k với nhãn validator off-chain trung thực và $0.00 thất thoát.
-- `deck-arena.png`: Đấu trường Arena sau 6 đòn tấn công, hiển thị cả PASS (chi trong ngân sách hợp lệ) và BLOCK (chặn rút ngoài allowlist), không có NaN.
+- `deck-arena.png`: Đấu trường Arena sau 10 đòn tấn công, hiển thị cả PASS (chi trong ngân sách $6.00 / $10.00) và BLOCK (chặn rút ngoài allowlist hoặc vượt cap), câu quy tắc trung thực không nói quá smart contract, không có NaN.
 - `deck-verify-ok.png`: Trình xác minh Keccak-256 client-side khi chuỗi proof còn nguyên vẹn 100%.
 - `deck-verify-tampered.png`: Trình xác minh client-side khi bị sửa 1 byte, hiển thị chuỗi gãy đỏ từ Block #1 và cảnh báo gian lận.
 - `deck-moneyflow.png`: Bàn điều khiển sân khấu `/stage` hiển thị Money Flow trực quan theo audit ledger thật.
@@ -83,8 +84,9 @@
 
 ## 4. CẦN REVIEWER QUYẾT & RỦI RO CÒN LẠI
 
-- **Cần Reviewer quyết:** Toàn bộ 18/18 hạng mục của vòng WOW (WOW-F1 → WOW-F18) đã hoàn tất và được nghiệm thu chặt chẽ. Sẵn sàng đóng vòng WOW và chuyển giao sang lộ trình nâng cấp điểm tối đa theo tài liệu chiến lược `STRATEGY_MAX_SCORE.md`.
+- **Cần Reviewer quyết:** Toàn bộ 19/19 hạng mục của vòng WOW (WOW-F1 → WOW-F19) đã hoàn tất và được nghiệm thu chặt chẽ. Sẵn sàng đóng vòng WOW và chuyển giao sang lộ trình nâng cấp điểm tối đa theo tài liệu chiến lược `STRATEGY_MAX_SCORE.md`.
 - **Rủi ro còn lại & Khuyến nghị tiếp theo:**
   - Nhánh hiện tại: `feat/s1-app`, mọi thay đổi đều có commit riêng lẻ.
-  - Tuân thủ tuyệt đối quy định: Không push `main`, không deploy public, không commit private key / secret lên Git.
+  - Tuân thủ tuyệt đối quy định: Không push `main`, không deploy public, không nộp bài, không commit private key / secret lên Git.
+  - Không sửa các file slide deck (`MissionPay-pitch-deck-v2.*`) do Reviewer quản lý.
   - Sẵn sàng phối hợp cùng Owner / Reviewer triển khai các bước P0/P1 kế tiếp (AI Agent thật, Fuji Live, Ví phiên on-chain) theo chỉ đạo.

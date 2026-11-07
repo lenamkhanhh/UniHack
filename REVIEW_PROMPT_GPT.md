@@ -203,6 +203,22 @@ Reviewer xem `evidence/wow-*.png` và thấy:
 
 Sau khi sửa: chạy tsc, vitest, Playwright `wow-*`. Mỗi ID một commit. Cập nhật report. **Không đụng vào deck**: reviewer tự làm deck.
 
+## 4h. Re-review F14..F18 (HEAD `c9b0037`) — đạt, còn 1 mục thấp
+
+Reviewer chạy lại: tsc exit 0, vitest **140/140**.
+
+Kiểm trực tiếp:
+- **F15:** decode QR trong `deck-arena.png` ra `http://localhost:3100/arena`, QR trong `deck-verify-ok.png` ra `…/verify/demo-seed`. QR là mã thật.
+- **F14:** ảnh arena hết NaN, hiện "$0.00 · Chi trong ngân sách $6.00 · còn lại $4.00 / $10.00".
+- **F16, F17:** đạt.
+- **F18:** 5 ảnh 1920×1080 sạch, đã dùng trong deck v2.
+
+| ID | Mức | Vấn đề | Yêu cầu sửa | Acceptance |
+|---|---|---|---|---|
+| WOW-F19 | Thấp | `app/arena/stage/page.tsx:183` còn câu "Hợp đồng thông minh trên Avalanche sẽ tự động chặn mọi vi phạm", trong khi sandbox chỉ có validator off-chain cộng với mô phỏng cap. | Đổi thành "Validator chặn mọi lệnh ngoài allowlist hoặc vượt cap; lớp contract sẽ được chứng minh khi chạy Fuji". Chụp lại `deck-arena.png` (cùng cảnh 10 đòn). | Grep không còn câu cũ. Ảnh mới khổ 1920×1080. |
+
+Deck do reviewer làm: `artifacts/submission-s1/MissionPay-pitch-deck-v2.pptx` (+ `.pdf`), dựng bằng script `artifacts/submission-s1/deck-v2/build_deck.js`. Gemini không sửa deck.
+
 ## 5. Giới hạn thực thi (không đổi)
 
 - Không ghi vào audit, UI, report hay deck bất kỳ sự kiện, giao dịch hay trạng thái nào mà hệ thống chưa thực sự tạo ra và kiểm chứng.

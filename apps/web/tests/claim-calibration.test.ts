@@ -65,4 +65,10 @@ describe('WOW-F16: Calibrate Bankr & Arena UI Claims (Anti-Hyperbole)', () => {
     expect(bankrPage).toContain('Lớp contract: chứng minh khi chạy Fuji');
     expect(bankrPage).toContain('HỆ THỐNG MISSIONPAY (MÔ PHỎNG SANDBOX)');
   });
+
+  it('WOW-F19: app/arena/stage/page.tsx contains no false smart contract claims in sandbox rules', () => {
+    const arenaStagePage = fs.readFileSync(path.resolve(process.cwd(), 'app/arena/stage/page.tsx'), 'utf8');
+    expect(arenaStagePage).not.toContain('Hợp đồng thông minh trên Avalanche sẽ tự động chặn mọi vi phạm');
+    expect(arenaStagePage).toContain('Validator chặn mọi lệnh ngoài allowlist hoặc vượt cap; lớp contract sẽ được chứng minh khi chạy Fuji');
+  });
 });
