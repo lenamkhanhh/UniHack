@@ -11,7 +11,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
-  if (body?.reset) {
+  if (body?.reset || body?.action === 'reset') {
     const providedKey = req.headers.get('x-presenter-key') || body?.presenterKey;
     const check = verifyArenaPresenterKey(providedKey);
 

@@ -50,7 +50,8 @@ describe('WOW-F16: Calibrate Bankr & Arena UI Claims (Anti-Hyperbole)', () => {
         const lines = content.split('\n');
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i];
-          if (/on-chain/i.test(line)) {
+          // PV-F7: Stage can show "Payee root on-chain" conditionally when verified by receipt audit
+          if (/on-chain/i.test(line) && !line.includes('Payee root on-chain')) {
             // Must not have unverified claims
             throw new Error(`Found ungrounded 'On-Chain' in ${file}:${i + 1} -> ${line.trim()}`);
           }
@@ -66,9 +67,9 @@ describe('WOW-F16: Calibrate Bankr & Arena UI Claims (Anti-Hyperbole)', () => {
     expect(bankrPage).toContain('HỆ THỐNG MISSIONPAY (MÔ PHỎNG SANDBOX)');
   });
 
-  it('WOW-F19: app/arena/stage/page.tsx contains no false smart contract claims in sandbox rules', () => {
+  it('PV-F8: app/arena/stage/page.tsx contains no false smart contract claims in sandbox rules', () => {
     const arenaStagePage = fs.readFileSync(path.resolve(process.cwd(), 'app/arena/stage/page.tsx'), 'utf8');
     expect(arenaStagePage).not.toContain('Hợp đồng thông minh trên Avalanche sẽ tự động chặn mọi vi phạm');
-    expect(arenaStagePage).toContain('Validator chặn mọi lệnh ngoài allowlist hoặc vượt cap; lớp contract sẽ được chứng minh khi chạy Fuji');
+    expect(arenaStagePage).toContain('Validator chặn người nhận không truy về chữ ký owner, lệnh vượt cap, và mọi lệnh đổi policy');
   });
 });

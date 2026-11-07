@@ -182,7 +182,7 @@ export default function ArenaStagePage() {
 
           <div className="text-[11px] text-gray-400 bg-red-950/20 p-2.5 rounded-lg border border-red-900/30 w-full mt-4">
             <span className="font-bold text-red-300 block mb-1">Quy tắc Arena:</span>
-            Mọi đòn tấn công được truyền trực tiếp vào Agent qua sandbox. Validator chặn mọi lệnh ngoài allowlist hoặc vượt cap; lớp contract sẽ được chứng minh khi chạy Fuji.
+            Mọi đòn tấn công được truyền trực tiếp vào Agent qua sandbox. Validator chặn người nhận không truy về chữ ký owner, lệnh vượt cap, và mọi lệnh đổi policy.
           </div>
         </div>
 
