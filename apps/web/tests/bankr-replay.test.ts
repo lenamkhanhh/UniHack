@@ -81,7 +81,8 @@ describe('WOW-0: Replay Vụ Bankr ($174,000 Drain Incident)', () => {
     });
     for (const e of realEntries) {
       expect(e.sourceKey).not.toMatch(/^bankr:/);
-      expect(e.kind).not.toBe('ATTACK_BLOCKED');
+      const parsed = JSON.parse(e.canonicalJson);
+      expect(parsed.kind).not.toBe('ATTACK_BLOCKED');
     }
   });
 });

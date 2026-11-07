@@ -5,7 +5,7 @@ export async function POST(req: NextRequest) {
   try {
     // Trusted IP extraction (WOW-F7): prioritize req.ip, never trust client-spoofed custom headers
     const forwarded = req.headers.get('x-forwarded-for');
-    const clientIp = req.ip || (forwarded ? forwarded.split(',')[0].trim() : '127.0.0.1');
+    const clientIp = (req as any).ip || (forwarded ? forwarded.split(',')[0].trim() : '127.0.0.1');
 
     // Rate-limit check: enforces per-client 5 req/min AND global ceiling 60 req/min (WOW-F7)
     const rateCheck = checkArenaRateLimit(clientIp);
