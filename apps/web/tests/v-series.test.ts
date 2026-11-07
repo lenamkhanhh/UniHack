@@ -364,4 +364,58 @@ describe('Auth / Validator / API V-series Integration Tests (06 §3)', () => {
     const res = validateProposal(maliciousTreasury, ctx);
     expect(res.outcome).toBe('BLOCK');
   });
+
+  // WOW-4: Emergency Kill Switch blocks subsequent agent step with MISSION_PAUSED or SYSTEM_PAUSED
+  it('WOW-4: Emergency Kill Switch blocks subsequent agent proposal with MISSION_PAUSED', () => {
+    const validProposal: any = {
+      kind: 'tool_purchase',
+      mission_id: 'test-mission',
+      tool_id: 'tool:summary',
+      amount_atomic: '500000',
+      reason: 'Summarize report',
+      arguments: { text: 'content' },
+    };
+
+    const ctxPausedMission: any = {
+      tokenClaims: {
+        type: 'spend',
+        sub: '0x2',
+        aud: 'unihack',
+        deploymentId: 'dep1',
+        stage: 'S1',
+        chainId: 43113,
+        guardAddress: 'none',
+        authVersion: 1,
+        missionSlug: 'test-mission',
+        missionId: '0x1',
+        owner: '0x1',
+        agent: '0x2',
+        missionConfigVersion: 1,
+        policyHash: '0x0',
+        jti: '1',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        iat: Math.floor(Date.now() / 1000),
+      },
+      systemPaused: false,
+      maintenance: false,
+      stage: 'S1',
+      mission: {
+        slug: 'test-mission',
+        missionId: '0x1',
+        status: 'PAUSED', // Mission emergency paused by owner
+        expiresAt: new Date(Date.now() + 86400000),
+        ownerAddress: '0x1',
+        agentAddress: '0x2',
+        toolCap: 5_000_000n,
+        spentTool: 0n,
+        reservedTool: 0n,
+        treasuryCap: 10_000_000n,
+        configVersion: 1,
+      },
+    };
+
+    const res = validateProposal(validProposal, ctxPausedMission);
+    expect(res.outcome).toBe('BLOCK');
+    expect(res.rule).toBe('MISSION_PAUSED');
+  });
 });

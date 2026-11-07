@@ -177,7 +177,7 @@ export function validateProposal(proposal: Proposal, ctx: ValidationContext): Va
   if (ctx.mission.status !== 'ACTIVE') {
     return {
       outcome: 'BLOCK',
-      rule: 'MISSION_NOT_ACTIVE',
+      rule: ctx.mission.status === 'PAUSED' ? 'MISSION_PAUSED' : 'MISSION_NOT_ACTIVE',
       reason: `Mission is ${ctx.mission.status}`,
     };
   }
