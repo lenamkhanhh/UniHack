@@ -197,8 +197,8 @@ export default function ArenaMobilePage() {
         )}
 
         {/* Footer */}
-        <div className="text-center text-[10px] text-gray-600 pt-4">
-          AVALANCHE FUJI GUARDED AGENT ECONOMY • UNIHAX
+        <div className="text-center text-[10px] text-gray-500 pt-4 font-mono">
+          MissionPay · Avalanche Fuji
         </div>
       </div>
     </div>

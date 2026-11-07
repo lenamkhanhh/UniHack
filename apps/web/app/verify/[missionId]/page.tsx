@@ -344,7 +344,7 @@ export default function VerifyMissionProofPage() {
           <span className="text-white font-bold">"Sửa 1 byte là chuỗi gãy. Mọi người đều tự verify được."</span>
         </div>
         <div>
-          <span>AVALANCHE FUJI • UNIHAX STAGE CONSOLE</span>
+          <span>MissionPay · Avalanche Fuji</span>
         </div>
       </div>
     </div>

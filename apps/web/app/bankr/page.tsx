@@ -221,7 +221,7 @@ export default function BankrReplayPage() {
           <span className="text-white font-bold">"LLM có thể bị lừa. Ngân sách trên Avalanche thì không."</span>
         </div>
         <div>
-          <span>AVALANCHE FUJI • UNIHAX STAGE CONSOLE</span>
+          <span>MissionPay · Avalanche Fuji</span>
         </div>
       </div>
     </div>

@@ -3,8 +3,8 @@ import './globals.css';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'UniHack — Guarded Agent Economy',
-  description: 'Guarded Agent Economy with x402 and GuardedTreasury',
+  title: 'MissionPay — Avalanche Fuji',
+  description: 'MissionPay: Mission-Scoped Budget & Cryptographic Proofs on Avalanche Fuji',
 };
 
 export default function RootLayout({
@@ -18,7 +18,7 @@ export default function RootLayout({
         <header className="border-b border-slate-800 bg-slate-950 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link href="/" className="font-bold text-lg text-emerald-400">
-              Guarded Agent Economy
+              MissionPay
             </Link>
             <nav className="flex gap-4 text-sm font-medium">
               <Link href="/" className="hover:text-emerald-400">

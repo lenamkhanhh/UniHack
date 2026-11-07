@@ -687,7 +687,7 @@ export default function StageConsolePage() {
           <span>Phím tắt: [1] Hook · [2] Bankr · [3] Arena · [4] Money Flow · [5] Punchline</span>
         </div>
         <div>
-          <span>MISSIONPAY STAGE CONSOLE • UNIHACK 2026</span>
+          <span>MissionPay · Avalanche Fuji</span>
         </div>
       </footer>
     </div>
