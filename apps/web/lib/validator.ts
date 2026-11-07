@@ -62,21 +62,22 @@ export class TaintRegistry {
 }
 
 export function isPolicyChangeAttempt(proposal: Proposal): boolean {
-  const reasonText = (proposal.reason || '').toLowerCase();
-  const policyKeywords = /(?:set|change|update|raise|increase|bypass|override|nâng|tăng|đổi|sửa)\s*(?:daily|per[_\-\s]*tx|mission|spending|tool)?\s*(?:cap|limit|allowlist|payee[_\-\s]*root|root|pause|policy)/i;
-  const adminKeywords = /(?:setcaps|setrecipient|setmissioncap|setmissionpayeeroot|pause|unpause)/i;
+  // PV-F5: Word boundaries and scoped evaluation: only evaluate payout reason and tool_id.
+  // Never scan search query / text arguments for policy keywords.
+  if (proposal.kind === 'treasury_payout') {
+    const reasonText = (proposal.reason || '').toLowerCase();
+    const policyKeywords = /\b(?:set|change|update|raise|increase|bypass|override|nâng|tăng|đổi|sửa)\b(?:\s+(?:the\s+)?(?:daily|per[_\-\s]*tx|mission|spending|tool|treasury)?\s*(?:cap|limit|allowlist|payee[_\-\s]*root|root|pause|policy)\b)/i;
+    const adminKeywords = /\b(?:setcaps|setrecipient|setmissioncap|setmissionpayeeroot|pause|unpause)\b/i;
 
-  if (policyKeywords.test(reasonText) || adminKeywords.test(reasonText)) {
-    return true;
+    if (policyKeywords.test(reasonText) || adminKeywords.test(reasonText)) {
+      return true;
+    }
   }
 
   if (proposal.kind === 'tool_purchase') {
     const toolId = (proposal.tool_id || '').toLowerCase();
-    if (toolId.includes('policy') || toolId.includes('cap') || toolId.includes('admin') || toolId.includes('root')) {
-      return true;
-    }
-    const argsStr = JSON.stringify(proposal.arguments || {}).toLowerCase();
-    if (policyKeywords.test(argsStr) || adminKeywords.test(argsStr)) {
+    const adminToolKeywords = /\b(?:policy|cap|admin|setcaps|setrecipient|setmissioncap|setmissionpayeeroot|pause|unpause)\b/i;
+    if (adminToolKeywords.test(toolId)) {
       return true;
     }
   }
@@ -280,7 +281,7 @@ export function validateProposal(proposal: Proposal, ctx: ValidationContext): Va
     return {
       outcome: 'BLOCK',
       rule: 'AGENT_CANNOT_CHANGE_POLICY',
-      reason: 'Agents are strictly forbidden from modifying caps, allowlists, payee roots, or pause state. Only the mission owner can configure policy.',
+      reason: 'Agents have no API to modify policy and are forbidden from modifying caps, allowlists, payee roots, or pause state (flagged policy change intent)',
       toProvenance,
       amountProvenance,
     };
