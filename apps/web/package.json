@@ -16,10 +16,13 @@
   "dependencies": {
     "@electric-sql/pglite": "^0.2.16",
     "@prisma/client": "5.22.0",
+    "@types/qrcode": "^1.5.6",
     "jose": "^5.9.6",
+    "jsqr": "^1.4.0",
     "next": "15.5.29",
     "pg": "^8.13.1",
     "pg-gateway": "^0.3.0-beta.4",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "viem": "^2.21.44"

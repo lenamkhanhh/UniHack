@@ -5,6 +5,7 @@ import Link from 'next/link';
 import MoneyFlowDiagram from '@/components/MoneyFlowDiagram';
 import { resetArenaAction } from './actions';
 import { formatUsdc, formatSafeNumber } from '@/lib/format';
+import QRCodeDisplay from '@/components/QRCodeDisplay';
 
 interface ArenaStats {
   totalAttacks: number;
@@ -29,9 +30,13 @@ export default function StageConsolePage() {
   const [mounted, setMounted] = useState(false);
   const [currentScene, setCurrentScene] = useState<number>(1);
   const [demoMode, setDemoMode] = useState<'LIVE' | 'DEMO SEED'>('LIVE');
+  const [arenaUrl, setArenaUrl] = useState<string>('http://localhost:3100/arena');
 
   useEffect(() => {
     setMounted(true);
+    if (typeof window !== 'undefined') {
+      setArenaUrl(`${window.location.origin}/arena`);
+    }
   }, []);
   const [arenaStats, setArenaStats] = useState<ArenaStats>({
     totalAttacks: 12,
@@ -507,32 +512,14 @@ export default function StageConsolePage() {
 
             {/* QR Code and Live Ticker Split */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-              {/* QR Code */}
+              {/* Real Scannable QR Code (WOW-F15) */}
               <div className="bg-[#0b0e14] border border-gray-800 rounded-2xl p-6 flex flex-col items-center justify-center text-center">
-                <div className="bg-white p-4 rounded-2xl shadow-2xl mb-4">
-                  <svg className="w-36 h-36" viewBox="0 0 100 100" fill="none">
-                    <rect x="5" y="5" width="26" height="26" rx="3" fill="black" />
-                    <rect x="9" y="9" width="18" height="18" fill="white" />
-                    <rect x="13" y="13" width="10" height="10" fill="black" />
-                    <rect x="69" y="5" width="26" height="26" rx="3" fill="black" />
-                    <rect x="73" y="9" width="18" height="18" fill="white" />
-                    <rect x="77" y="13" width="10" height="10" fill="black" />
-                    <rect x="5" y="69" width="26" height="26" rx="3" fill="black" />
-                    <rect x="9" y="73" width="18" height="18" fill="white" />
-                    <rect x="13" y="77" width="10" height="10" fill="black" />
-                    <rect x="42" y="42" width="16" height="16" rx="2" fill="#06b6d4" />
-                    <circle cx="50" cy="50" r="4" fill="white" />
-                    <rect x="36" y="8" width="6" height="6" fill="black" />
-                    <rect x="56" y="8" width="6" height="6" fill="black" />
-                    <rect x="76" y="46" width="8" height="8" fill="black" />
-                    <rect x="44" y="76" width="12" height="12" fill="black" />
-                  </svg>
-                </div>
-                <span className="font-mono text-sm font-bold text-cyan-400">
+                <QRCodeDisplay url={arenaUrl} size={150} showUrlText={false} />
+                <span className="font-mono text-sm font-bold text-cyan-400 mt-2">
                   QUÉT QR ĐỂ HACK AGENT
                 </span>
-                <span className="font-mono text-[10px] text-gray-500 mt-1">
-                  Mở trực tiếp trên di động: /arena
+                <span className="font-mono text-[11px] text-gray-400 mt-1 select-all break-all">
+                  {arenaUrl}
                 </span>
               </div>
 

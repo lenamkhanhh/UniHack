@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArenaStats, ArenaAttackRecord } from '@/lib/arena';
 import { formatUsdc, formatSafeNumber } from '@/lib/format';
+import QRCodeDisplay from '@/components/QRCodeDisplay';
 
 const DEFAULT_ARENA_STATS: ArenaStats = {
   totalAttacks: 0,
@@ -171,56 +172,10 @@ export default function ArenaStagePage() {
             </span>
             <h2 className="text-base font-bold text-white mb-4">Quét QR trên điện thoại</h2>
 
-            {/* QR Visual */}
-            <div className="bg-white p-4 rounded-xl inline-block shadow-2xl mb-4 border-2 border-gray-300">
-              {/* Clean Vector SVG QR Code representation */}
-              <svg className="w-44 h-44" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                {/* 3 Corner Markers */}
-                <rect x="5" y="5" width="26" height="26" rx="4" fill="black" />
-                <rect x="9" y="9" width="18" height="18" fill="white" />
-                <rect x="13" y="13" width="10" height="10" fill="black" />
-
-                <rect x="69" y="5" width="26" height="26" rx="4" fill="black" />
-                <rect x="73" y="9" width="18" height="18" fill="white" />
-                <rect x="77" y="13" width="10" height="10" fill="black" />
-
-                <rect x="5" y="69" width="26" height="26" rx="4" fill="black" />
-                <rect x="9" y="73" width="18" height="18" fill="white" />
-                <rect x="13" y="77" width="10" height="10" fill="black" />
-
-                {/* Pattern Data Dots */}
-                <rect x="36" y="8" width="6" height="6" fill="black" />
-                <rect x="46" y="8" width="6" height="6" fill="black" />
-                <rect x="56" y="8" width="6" height="6" fill="black" />
-                <rect x="36" y="18" width="6" height="6" fill="black" />
-                <rect x="50" y="20" width="8" height="6" fill="black" />
-                <rect x="8" y="36" width="6" height="6" fill="black" />
-                <rect x="18" y="36" width="6" height="6" fill="black" />
-                <rect x="28" y="36" width="6" height="6" fill="black" />
-                <rect x="8" y="46" width="6" height="6" fill="black" />
-                <rect x="18" y="54" width="6" height="6" fill="black" />
-
-                {/* Center Cluster */}
-                <rect x="38" y="38" width="24" height="24" rx="2" fill="#e11d48" />
-                <circle cx="50" cy="50" r="7" fill="white" />
-                <path d="M47 47 L53 53 M53 47 L47 53" stroke="#e11d48" strokeWidth="2" />
-
-                {/* Bottom right data */}
-                <rect x="68" y="38" width="6" height="6" fill="black" />
-                <rect x="78" y="46" width="6" height="6" fill="black" />
-                <rect x="88" y="54" width="6" height="6" fill="black" />
-                <rect x="38" y="72" width="6" height="6" fill="black" />
-                <rect x="48" y="82" width="6" height="6" fill="black" />
-                <rect x="58" y="72" width="6" height="6" fill="black" />
-                <rect x="68" y="82" width="6" height="6" fill="black" />
-                <rect x="80" y="72" width="12" height="6" fill="black" />
-                <rect x="76" y="82" width="16" height="8" fill="black" />
-              </svg>
+            {/* Real scannable QR Code (WOW-F15) */}
+            <div className="mb-2">
+              <QRCodeDisplay url={arenaUrl} size={176} />
             </div>
-
-            <p className="text-xs font-mono text-cyan-300 break-all select-all bg-[#111722] p-2 rounded border border-gray-800">
-              {arenaUrl}
-            </p>
           </div>
 
           <div className="text-[11px] text-gray-400 bg-red-950/20 p-2.5 rounded-lg border border-red-900/30 w-full mt-4">

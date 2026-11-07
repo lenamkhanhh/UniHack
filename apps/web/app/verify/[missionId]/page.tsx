@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { verifyProof, VerificationResult } from '@/lib/proof-verifier';
+import QRCodeDisplay from '@/components/QRCodeDisplay';
 
 export default function VerifyMissionProofPage() {
   const params = useParams();
@@ -236,7 +237,7 @@ export default function VerifyMissionProofPage() {
           )}
         </div>
 
-        {/* Audience QR Mobile Access */}
+        {/* Audience QR Mobile Access (WOW-F15) */}
         <div className="bg-[#0b0e14] border border-gray-800 rounded-2xl p-5 flex flex-col items-center justify-between text-center">
           <div>
             <span className="text-[10px] font-mono text-cyan-400 font-bold uppercase tracking-widest block mb-1">
@@ -246,28 +247,14 @@ export default function VerifyMissionProofPage() {
               Quét mã để tự tay bấm "Sửa 1 byte" trên máy bạn
             </p>
 
-            <div className="bg-white p-3 rounded-xl inline-block shadow-xl mb-3">
-              <svg className="w-28 h-28" viewBox="0 0 100 100" fill="none">
-                <rect x="5" y="5" width="26" height="26" rx="3" fill="black" />
-                <rect x="9" y="9" width="18" height="18" fill="white" />
-                <rect x="13" y="13" width="10" height="10" fill="black" />
-                <rect x="69" y="5" width="26" height="26" rx="3" fill="black" />
-                <rect x="73" y="9" width="18" height="18" fill="white" />
-                <rect x="77" y="13" width="10" height="10" fill="black" />
-                <rect x="5" y="69" width="26" height="26" rx="3" fill="black" />
-                <rect x="9" y="73" width="18" height="18" fill="white" />
-                <rect x="13" y="77" width="10" height="10" fill="black" />
-                <rect x="40" y="40" width="20" height="20" rx="2" fill="#0284c7" />
-                <circle cx="50" cy="50" r="5" fill="white" />
-                <rect x="36" y="8" width="6" height="6" fill="black" />
-                <rect x="56" y="8" width="6" height="6" fill="black" />
-                <rect x="76" y="46" width="8" height="8" fill="black" />
-                <rect x="44" y="76" width="12" height="12" fill="black" />
-              </svg>
-            </div>
+            <QRCodeDisplay
+              url={verifyUrl || `http://localhost:3100/verify/${missionId}`}
+              size={120}
+              showUrlText={false}
+            />
           </div>
 
-          <span className="text-[10px] font-mono text-gray-500 break-all select-all">
+          <span className="text-[10px] font-mono text-gray-400 break-all select-all mt-3">
             {verifyUrl || `/verify/${missionId}`}
           </span>
         </div>
