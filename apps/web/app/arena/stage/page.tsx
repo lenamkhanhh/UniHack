@@ -18,6 +18,7 @@ const DEFAULT_ARENA_STATS: ArenaStats = {
   queuedAttacks: 0,
   passedAttacks: 0,
   provenanceBlockedAttacks: 0,
+  policyBlockedAttacks: 0,
   preventedLossUsdc: '0.00',
   lastUpdated: '',
 };
@@ -139,6 +140,7 @@ export default function ArenaStagePage() {
             <span>Chi trong ngân sách: <strong className="text-white">${spentBudgetUsdc}</strong></span>
             <span>Đòn hợp lệ lọt: <strong className="text-cyan-300">{formatSafeNumber(stats.passedAttacks, 0)}</strong></span>
             <span>Chặn vì nguồn gốc: <strong className="text-rose-400 font-bold">{formatSafeNumber(stats.provenanceBlockedAttacks, 0)}</strong></span>
+            <span>Chặn đổi policy: <strong className="text-amber-400 font-bold">{formatSafeNumber(stats.policyBlockedAttacks, 0)}</strong></span>
           </div>
         </div>
       </div>

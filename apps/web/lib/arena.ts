@@ -36,6 +36,7 @@ export interface ArenaStats {
   queuedAttacks: number;
   passedAttacks: number;
   provenanceBlockedAttacks: number; // PV-4: "Chặn vì nguồn gốc" counter
+  policyBlockedAttacks: number; // PV-F10a: "Chặn đổi policy" counter
   preventedLossUsdc: string;
   lastUpdated: string;
 }
@@ -57,6 +58,7 @@ interface GlobalArenaStore {
   queuedAttacks: number;
   passedAttacks: number;
   provenanceBlockedAttacks: number;
+  policyBlockedAttacks: number;
   totalPreventedLossAtomic: bigint;
   totalOutScopeAtomic: bigint; // "Tiền ra ngoài phạm vi cho phép" (WOW-F4)
   spentWithinBudgetAtomic: bigint; // "Chi trong ngân sách đã cấp" (WOW-F4)
@@ -78,6 +80,7 @@ if (!globalForArena.__arenaStore) {
     queuedAttacks: 0,
     passedAttacks: 0,
     provenanceBlockedAttacks: 0,
+    policyBlockedAttacks: 0,
     totalPreventedLossAtomic: 0n,
     totalOutScopeAtomic: 0n,
     spentWithinBudgetAtomic: 0n,
@@ -88,6 +91,7 @@ if (!globalForArena.__arenaStore) {
   // Ensure all counters exist in long-lived or hot-reloaded environments (WOW-F14)
   const s = globalForArena.__arenaStore;
   if (s.provenanceBlockedAttacks === undefined) s.provenanceBlockedAttacks = 0;
+  if (s.policyBlockedAttacks === undefined) s.policyBlockedAttacks = 0;
   if (s.totalPreventedLossAtomic === undefined || typeof s.totalPreventedLossAtomic !== 'bigint') s.totalPreventedLossAtomic = 0n;
   if (s.totalOutScopeAtomic === undefined || typeof s.totalOutScopeAtomic !== 'bigint') s.totalOutScopeAtomic = 0n;
   if (s.spentWithinBudgetAtomic === undefined || typeof s.spentWithinBudgetAtomic !== 'bigint') s.spentWithinBudgetAtomic = 0n;
@@ -283,6 +287,7 @@ export function resetArenaForTesting() {
   store.queuedAttacks = 0;
   store.passedAttacks = 0;
   store.provenanceBlockedAttacks = 0;
+  store.policyBlockedAttacks = 0;
   store.totalPreventedLossAtomic = 0n;
   store.totalOutScopeAtomic = 0n;
   store.spentWithinBudgetAtomic = 0n;
@@ -594,19 +599,19 @@ export function processArenaAttack(rawInput: string, clientIp: string = '127.0.0
   if (verdict.outcome === 'BLOCK') {
     store.blockedAttacks += 1;
     store.totalPreventedLossAtomic += preventedAmountAtomic;
+    // PV-F10a: Only count BLOCK with provenance rules (RECIPIENT_UNTRUSTED_PROVENANCE or PAYEE_NOT_IN_MISSION_SET)
     if (
       verdict.rule === 'RECIPIENT_UNTRUSTED_PROVENANCE' ||
-      verdict.rule === 'AMOUNT_FROM_UNTRUSTED_SOURCE' ||
-      verdict.rule === 'AGENT_CANNOT_CHANGE_POLICY'
+      verdict.rule === 'PAYEE_NOT_IN_MISSION_SET'
     ) {
       store.provenanceBlockedAttacks = (store.provenanceBlockedAttacks || 0) + 1;
+    } else if (verdict.rule === 'AGENT_CANNOT_CHANGE_POLICY') {
+      store.policyBlockedAttacks = (store.policyBlockedAttacks || 0) + 1;
     }
   } else if (verdict.outcome === 'QUEUE') {
     store.queuedAttacks += 1;
     store.totalPreventedLossAtomic += preventedAmountAtomic;
-    if (verdict.rule === 'AMOUNT_FROM_UNTRUSTED_SOURCE' || verdict.rule === 'RECIPIENT_NEEDS_OWNER_APPROVAL') {
-      store.provenanceBlockedAttacks = (store.provenanceBlockedAttacks || 0) + 1;
-    }
+    // PV-F10a: QUEUE is already counted in queuedAttacks; do not count in provenanceBlockedAttacks
   } else {
     // PASS / EXECUTE outcome (WOW-F4 & WOW-F11)
     store.passedAttacks += 1;
@@ -684,6 +689,7 @@ function buildArenaStats(): ArenaStats {
     queuedAttacks: store.queuedAttacks || 0,
     passedAttacks: store.passedAttacks || 0,
     provenanceBlockedAttacks: store.provenanceBlockedAttacks || 0,
+    policyBlockedAttacks: store.policyBlockedAttacks || 0,
     preventedLossUsdc: formatUsdc(store.totalPreventedLossAtomic ?? 0n, '0.00'),
     lastUpdated: new Date().toISOString(),
   };
