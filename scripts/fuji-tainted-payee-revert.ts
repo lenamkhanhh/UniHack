@@ -23,6 +23,7 @@ import {
   http,
   parseAbiItem,
   encodeFunctionData,
+  getAddress,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { avalancheFuji } from 'viem/chains';
@@ -58,21 +59,41 @@ async function main() {
   console.log(`RPC Endpoint:      ${FUJI_RPC_URL}`);
   console.log(`Mode:              ${isBroadcast && allowBroadcast ? 'LIVE BROADCAST' : 'DRY-RUN SIMULATION (Safe)'}`);
 
-  const agentKey =
-    process.env.AGENT_PRIVATE_KEY ||
-    (!isBroadcast ? '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d' : undefined);
-  if (!agentKey || !agentKey.startsWith('0x')) {
-    console.error('Error: AGENT_PRIVATE_KEY is missing or invalid.');
-    process.exit(1);
-  }
+  let simulationAccount: `0x${string}` | ReturnType<typeof privateKeyToAccount>;
+  let walletClient: ReturnType<typeof createWalletClient> | null = null;
 
-  if (isBroadcast && INSECURE_KEYS.includes(agentKey.toLowerCase())) {
-    console.error('Security Guardrail: Insecure test private key cannot be broadcasted to live Fuji network.');
-    process.exit(1);
-  }
+  if (isBroadcast && allowBroadcast) {
+    const agentKey = process.env.AGENT_PRIVATE_KEY;
+    if (!agentKey || !agentKey.startsWith('0x')) {
+      console.error('Error: AGENT_PRIVATE_KEY is required for live broadcast.');
+      process.exit(1);
+    }
 
-  const account = privateKeyToAccount(agentKey as `0x${string}`);
-  console.log(`Agent Account:     ${account.address}`);
+    if (INSECURE_KEYS.includes(agentKey.toLowerCase())) {
+      console.error('Security Guardrail: Insecure test private key cannot be broadcasted to live Fuji network.');
+      process.exit(1);
+    }
+
+    const account = privateKeyToAccount(agentKey as `0x${string}`);
+    simulationAccount = account;
+    console.log(`Agent Account:     ${account.address}`);
+
+    walletClient = createWalletClient({
+      account,
+      chain: avalancheFuji,
+      transport: http(FUJI_RPC_URL),
+    });
+  } else {
+    // PV-F6: Dry-run strictly uses AGENT_ADDRESS without requiring any private key
+    const rawAddress = process.env.AGENT_ADDRESS || '0x000000000000000000000000000000000000a6e7';
+    if (!rawAddress.startsWith('0x') || rawAddress.length !== 42) {
+      console.error('Error: AGENT_ADDRESS is missing or invalid.');
+      process.exit(1);
+    }
+    const agentAddress = getAddress(rawAddress);
+    simulationAccount = agentAddress;
+    console.log(`Agent Address:     ${agentAddress} (Simulation, zero private key exposure)`);
+  }
 
   const publicClient = createPublicClient({
     chain: avalancheFuji,
@@ -92,7 +113,7 @@ async function main() {
   console.log('\n[Phase 1] Executing on-chain call simulation via eth_call...');
   try {
     await publicClient.simulateContract({
-      account,
+      account: simulationAccount,
       address: GUARDED_TREASURY_ADDRESS as `0x${string}`,
       abi: [proposeWithProofAbi],
       functionName: 'proposeWithProof',
@@ -107,13 +128,8 @@ async function main() {
     console.log(`   Revert Reason: ${errorMsg.includes('PayeeNotInMissionSet') ? 'PayeeNotInMissionSet' : errorMsg}`);
   }
 
-  if (isBroadcast && allowBroadcast) {
+  if (isBroadcast && allowBroadcast && walletClient) {
     console.log('\n[Phase 2] Broadcasting live transaction on Avalanche Fuji (will revert)...');
-    const walletClient = createWalletClient({
-      account,
-      chain: avalancheFuji,
-      transport: http(FUJI_RPC_URL),
-    });
 
     try {
       const txHash = await walletClient.writeContract({
