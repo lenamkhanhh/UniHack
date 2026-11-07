@@ -18,7 +18,8 @@ async function main() {
   const modelData = data.modelsData[modelKey] || Object.values(data.modelsData)[0];
 
   const overall = modelData.overall;
-  const adi = modelData.breakdowns.adi;
+  const instructionInj = modelData.breakdowns.instruction_injection || modelData.breakdowns.adi;
+  const adiStruct = modelData.breakdowns.adi_structural || modelData.breakdowns.adi;
   const inc = modelData.breakdowns.real_incidents;
 
   const html = `<!DOCTYPE html>
@@ -375,11 +376,18 @@ async function main() {
         </thead>
         <tbody>
           <tr>
-            <td><strong>Agent Data Injection (ADI)</strong> — Delimiter Recipient Hijack, Amount Inflation, Fake Badges</td>
-            <td style="color:#f87171;">${adi.c0.asr.formatted.split(' ')[0]}</td>
-            <td style="color:#fbbf24;">${adi.c1.asr.formatted.split(' ')[0]}</td>
-            <td style="color:#34d399;">${adi.c2.asr.formatted.split(' ')[0]}</td>
-            <td style="color:#34d399;">$${adi.c0.spendUsdc} USDC</td>
+            <td><strong>Instruction Injection</strong> — Delimiter prompt injection in data payload</td>
+            <td style="color:#f87171;">${instructionInj.c0.asr.formatted.split(' ')[0]}</td>
+            <td style="color:#fbbf24;">${instructionInj.c1.asr.formatted.split(' ')[0]}</td>
+            <td style="color:#34d399;">${instructionInj.c2.asr.formatted.split(' ')[0]}</td>
+            <td style="color:#34d399;">$${instructionInj.c0.spendUsdc} USDC</td>
+          </tr>
+          <tr>
+            <td><strong>Agent Data Injection (ADI)</strong> — Structural JSON delimiter breaking & vendor diversion (arXiv 2607.05120)</td>
+            <td style="color:#f87171;">${adiStruct.c0.asr.formatted.split(' ')[0]}</td>
+            <td style="color:#fbbf24;">${adiStruct.c1.asr.formatted.split(' ')[0]}</td>
+            <td style="color:#34d399;">${adiStruct.c2.asr.formatted.split(' ')[0]}</td>
+            <td style="color:#34d399;">$${adiStruct.c0.spendUsdc} USDC</td>
           </tr>
           <tr>
             <td><strong>Real-World Incidents</strong> — Bankr Morse Code ($174k), Zscaler JSON-LD, Cornell OTP, Freysa</td>
@@ -389,7 +397,7 @@ async function main() {
             <td style="color:#34d399;">$${inc.c0.spendUsdc} USDC</td>
           </tr>
           <tr>
-            <td><strong>Benign Tasks (Utility Control)</strong> — Legitimate contractor invoices, verifiable research, tool calls</td>
+            <td><strong>Benign Tasks (Utility Control)</strong> — Legitimate contractor invoices (maxAtomic), research, tools</td>
             <td style="color:#94a3b8;">100.0% Pass</td>
             <td style="color:#94a3b8;">100.0% Pass</td>
             <td style="color:#34d399;">${overall.c2_full_missionpay.utility.formatted.split(' ')[0]} Pass</td>
