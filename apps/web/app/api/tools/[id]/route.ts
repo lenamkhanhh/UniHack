@@ -193,11 +193,7 @@ export async function POST(
       (op.authNonce || '').toLowerCase() !== expectedBoundNonce.toLowerCase()
     ) {
       return NextResponse.json(
-        {
-          error: 'PAYMENT_NOT_BOUND_TO_REQUEST',
-          expectedNonce: expectedBoundNonce,
-          receivedNonce: auth.nonce,
-        },
+        { error: 'PAYMENT_NOT_BOUND_TO_REQUEST' },
         { status: 403 }
       );
     }

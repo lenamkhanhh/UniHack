@@ -183,6 +183,9 @@ describe("x402 ATC'26 Vulnerability Hardening Suite (arXiv:2605.30998)", () => {
 
     const data = await res.json();
     expect(data.error).toBe('PAYMENT_NOT_BOUND_TO_REQUEST');
+    // S3-F1: Ensure binding nonces are not leaked in the 403 response
+    expect(data.expectedNonce).toBeUndefined();
+    expect(data.receivedNonce).toBeUndefined();
 
     // Upstream execution must NOT have occurred
     const op = await prisma.toolOperation.findUnique({ where: { operationId } });
@@ -220,6 +223,9 @@ describe("x402 ATC'26 Vulnerability Hardening Suite (arXiv:2605.30998)", () => {
 
     const data = await res.json();
     expect(data.error).toBe('PAYMENT_NOT_BOUND_TO_REQUEST');
+    // S3-F1: Ensure binding nonces are not leaked in the 403 response
+    expect(data.expectedNonce).toBeUndefined();
+    expect(data.receivedNonce).toBeUndefined();
 
     // Verify operation was NOT settled with tampered query
     const op = await prisma.toolOperation.findUnique({ where: { operationId } });

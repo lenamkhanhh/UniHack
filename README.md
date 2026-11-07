@@ -154,7 +154,7 @@ The verifier independently checks:
 
 ## x402 Protocol Hardening (ATC'26)
 
-Căn cứ nghiên cứu *"Free-Riding the Agentic Web: A Security Analysis of the x402 Ecosystem"* (USENIX ATC '26, [arXiv:2605.30998](https://arxiv.org/abs/2605.30998)), MissionPay chủ động vá toàn diện 4 lớp lỗ hổng giao thức x402 ở cả tầng mật mã học (cryptographic request binding) lẫn tầng lưu trữ (storage invariants):
+Căn cứ nghiên cứu *"Free-Riding the Agentic Web: A Systematic Security Analysis of x402 Payments"*, ACM SIGOPS ATC '26 (Ling et al., [arXiv:2605.30998](https://arxiv.org/abs/2605.30998)), MissionPay đã vá F1, F2, F4; F3 không áp dụng (chỉ dùng scheme `exact`):
 
 | Lớp lỗi (Flaw Class) | Nguy cơ tấn công | Trạng thái | Giải pháp kỹ thuật | Test kiểm chứng |
 |---|---|---|---|---|
