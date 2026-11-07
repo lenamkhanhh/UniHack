@@ -1,11 +1,14 @@
 import { randomBytes, randomUUID } from 'crypto';
+import { createPublicClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
+import { avalancheFuji } from 'viem/chains';
 import { prisma, withLockOrder } from './db';
 import { appendAuditEntry } from './audit';
 import { toolCatalog, getCanonicalPaymentTerms } from './tools';
 import {
   CHAIN_ID,
   USDC_ADDRESS,
+  RPC_URL,
   QUOTE_TTL_SECONDS,
   RESERVATION_TTL_SECONDS,
   AUTHORIZATION_TTL_SECONDS,
@@ -809,7 +812,12 @@ export async function executeUpstreamAndSettle(params: {
   } else {
     // LIVE_FUJI mode:
     // Facilitator submission via HTTP POST to facilitatorUrl using standard x402 v1 schema (Finding R03, T08)
-    const facilitatorUrl = process.env.FACILITATOR_URL || FACILITATOR_DEFAULT_URL;
+    const primaryUrl = process.env.FACILITATOR_URL || FACILITATOR_DEFAULT_URL;
+    const candidateUrls = [primaryUrl];
+    if (!primaryUrl.includes('payai.network')) {
+      candidateUrls.push('https://facilitator.payai.network');
+    }
+
     const paymentPayload = {
       x402Version: 1,
       scheme: X402_SCHEME,
@@ -848,31 +856,49 @@ export async function executeUpstreamAndSettle(params: {
     };
 
     let facilitatorTxHash: string | null = null;
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+    for (const fUrl of candidateUrls) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
 
-      const resp = await fetch(`${facilitatorUrl}/settle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+        const resp = await fetch(`${fUrl}/settle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
 
-      if (resp.ok) {
-        const data = await resp.json();
-        // Support standard x402 v1 "transaction" field as well as "txHash" extension (Finding R03)
-        const candidateTx = data?.transaction || data?.txHash;
-        if (data && data.success && candidateTx) {
-          facilitatorTxHash = candidateTx;
+        if (resp.ok) {
+          const data = await resp.json();
+          // Support standard x402 v1 "transaction" field as well as "txHash" extension (Finding R03)
+          const candidateTx = data?.transaction || data?.txHash;
+          if (data && data.success && candidateTx) {
+            facilitatorTxHash = candidateTx;
+            break;
+          }
         }
+      } catch {
+        // Facilitator error or timeout - try next candidate
       }
-    } catch {
-      // Facilitator error or timeout
     }
 
     if (facilitatorTxHash) {
+      // In LIVE_FUJI mode, wait for receipt on Fuji to guarantee on-chain confirmation before reconcile
+      if (facilitatorTxHash.startsWith('0x')) {
+        try {
+          const publicClient = createPublicClient({
+            chain: avalancheFuji,
+            transport: http(process.env.AVALANCHE_FUJI_RPC_URL || RPC_URL),
+          });
+          await publicClient.waitForTransactionReceipt({
+            hash: facilitatorTxHash as `0x${string}`,
+            timeout: 20000,
+          });
+        } catch {
+          // Timeout waiting for receipt, reconcileOperation will handle state
+        }
+      }
       // Transition from SUBMITTING to SETTLING using CAS (T02, V4-01)
       const submitCas = await prisma.toolOperation.updateMany({
         where: {
