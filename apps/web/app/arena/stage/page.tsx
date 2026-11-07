@@ -1,0 +1,290 @@
+'use client';
+
+import React, { useEffect, useState } from 'react';
+
+export default function ArenaStagePage() {
+  const [data, setData] = useState<any>({
+    stats: {
+      totalAttacks: 0,
+      convincedAttacks: 0,
+      totalLossUsdc: '0.00',
+      blockedAttacks: 0,
+      queuedAttacks: 0,
+      passedAttacks: 0,
+      preventedLossUsdc: '0.00',
+    },
+    recentAttacks: [],
+  });
+  const [arenaUrl, setArenaUrl] = useState('http://localhost:3100/arena');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setArenaUrl(`${window.location.origin}/arena`);
+    }
+
+    const fetchStats = async () => {
+      try {
+        const res = await fetch('/api/arena/stats');
+        if (res.ok) {
+          const json = await res.json();
+          setData(json);
+        }
+      } catch {
+        // silent poll error
+      }
+    };
+
+    fetchStats();
+    const interval = setInterval(fetchStats, 1500);
+    return () => clearInterval(interval);
+  }, []);
+
+  const stats = data.stats || {
+    totalAttacks: 0,
+    convincedAttacks: 0,
+    totalLossUsdc: '0.00',
+    blockedAttacks: 0,
+  };
+
+  return (
+    <div className="min-h-screen bg-[#06080d] text-white p-6 font-sans flex flex-col justify-between">
+      {/* Top Banner */}
+      <div className="flex items-center justify-between border-b border-gray-800 pb-4">
+        <div className="flex items-center space-x-3">
+          <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+          <div>
+            <h1 className="text-2xl font-black tracking-tight text-white flex items-center space-x-2">
+              <span>FREYSA ARENA</span>
+              <span className="text-xs bg-red-500/20 text-red-400 border border-red-500/40 px-2 py-0.5 rounded font-mono">
+                STAGE LIVE
+              </span>
+            </h1>
+            <p className="text-xs text-gray-400">
+              "Freysa mất $45k vì guard nằm trong LLM. Thử lừa agent này xem."
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <span className="text-xs font-mono text-gray-500">PAYMENT_MODE:</span>
+          <span className="text-xs px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded font-mono font-bold">
+            MOCK SANDBOX (ZERO REAL LOSS)
+          </span>
+        </div>
+      </div>
+
+      {/* Main KPI Counters - 3 BIG NUMBERS */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 my-6">
+        {/* N: Total Attacks */}
+        <div className="bg-[#0c1018] border border-gray-800 rounded-2xl p-6 flex flex-col items-center justify-center text-center shadow-lg relative overflow-hidden group">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 to-blue-500" />
+          <span className="text-xs font-mono font-bold uppercase tracking-widest text-cyan-400 mb-2">
+            Đòn tấn công từ khán giả
+          </span>
+          <span className="text-6xl font-black font-mono text-white tracking-tight">
+            {stats.totalAttacks}
+          </span>
+          <span className="text-xs text-gray-400 mt-2">Tổng số lượt gửi từ điện thoại</span>
+        </div>
+
+        {/* M: Convinced Attacks */}
+        <div className="bg-[#0c1018] border border-amber-900/40 rounded-2xl p-6 flex flex-col items-center justify-center text-center shadow-lg relative overflow-hidden group">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 to-orange-500" />
+          <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-400 mb-2">
+            Agent bị thuyết phục
+          </span>
+          <span className="text-6xl font-black font-mono text-amber-300 tracking-tight">
+            {stats.convincedAttacks}
+          </span>
+          <span className="text-xs text-amber-400/80 mt-2 font-medium">
+            LLM đồng ý xuất lệnh sai luật ✅
+          </span>
+        </div>
+
+        {/* Loss: $0.00 */}
+        <div className="bg-[#0c1018] border border-emerald-900/40 rounded-2xl p-6 flex flex-col items-center justify-center text-center shadow-lg relative overflow-hidden group">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-400" />
+          <span className="text-xs font-mono font-bold uppercase tracking-widest text-emerald-400 mb-2">
+            Tiền thực tế bị mất
+          </span>
+          <span className="text-6xl font-black font-mono text-emerald-400 tracking-tight drop-shadow-[0_0_20px_rgba(52,211,153,0.3)]">
+            ${stats.totalLossUsdc}
+          </span>
+          <span className="text-xs text-emerald-400/80 mt-2 font-medium">
+            Avalanche Guard chặn 100%
+          </span>
+        </div>
+      </div>
+
+      {/* Center Layout: QR Code + Live Feed */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1">
+        {/* Left: QR Code & Audience Participation */}
+        <div className="lg:col-span-1 bg-[#0b0f17] border border-gray-800 rounded-2xl p-6 flex flex-col items-center justify-between text-center">
+          <div className="w-full">
+            <span className="text-xs font-mono font-bold text-red-400 uppercase tracking-widest block mb-1">
+              THỬ THÁCH KHÁN GIẢ
+            </span>
+            <h2 className="text-base font-bold text-white mb-4">Quét QR trên điện thoại</h2>
+
+            {/* QR Visual */}
+            <div className="bg-white p-4 rounded-xl inline-block shadow-2xl mb-4 border-2 border-gray-300">
+              {/* Clean Vector SVG QR Code representation */}
+              <svg className="w-44 h-44" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {/* 3 Corner Markers */}
+                <rect x="5" y="5" width="26" height="26" rx="4" fill="black" />
+                <rect x="9" y="9" width="18" height="18" fill="white" />
+                <rect x="13" y="13" width="10" height="10" fill="black" />
+
+                <rect x="69" y="5" width="26" height="26" rx="4" fill="black" />
+                <rect x="73" y="9" width="18" height="18" fill="white" />
+                <rect x="77" y="13" width="10" height="10" fill="black" />
+
+                <rect x="5" y="69" width="26" height="26" rx="4" fill="black" />
+                <rect x="9" y="73" width="18" height="18" fill="white" />
+                <rect x="13" y="77" width="10" height="10" fill="black" />
+
+                {/* Pattern Data Dots */}
+                <rect x="36" y="8" width="6" height="6" fill="black" />
+                <rect x="46" y="8" width="6" height="6" fill="black" />
+                <rect x="56" y="8" width="6" height="6" fill="black" />
+                <rect x="36" y="18" width="6" height="6" fill="black" />
+                <rect x="50" y="20" width="8" height="6" fill="black" />
+                <rect x="8" y="36" width="6" height="6" fill="black" />
+                <rect x="18" y="36" width="6" height="6" fill="black" />
+                <rect x="28" y="36" width="6" height="6" fill="black" />
+                <rect x="8" y="46" width="6" height="6" fill="black" />
+                <rect x="18" y="54" width="6" height="6" fill="black" />
+
+                {/* Center Cluster */}
+                <rect x="38" y="38" width="24" height="24" rx="2" fill="#e11d48" />
+                <circle cx="50" cy="50" r="7" fill="white" />
+                <path d="M47 47 L53 53 M53 47 L47 53" stroke="#e11d48" strokeWidth="2" />
+
+                {/* Bottom right data */}
+                <rect x="68" y="38" width="6" height="6" fill="black" />
+                <rect x="78" y="46" width="6" height="6" fill="black" />
+                <rect x="88" y="54" width="6" height="6" fill="black" />
+                <rect x="38" y="72" width="6" height="6" fill="black" />
+                <rect x="48" y="82" width="6" height="6" fill="black" />
+                <rect x="58" y="72" width="6" height="6" fill="black" />
+                <rect x="68" y="82" width="6" height="6" fill="black" />
+                <rect x="80" y="72" width="12" height="6" fill="black" />
+                <rect x="76" y="82" width="16" height="8" fill="black" />
+              </svg>
+            </div>
+
+            <p className="text-xs font-mono text-cyan-300 break-all select-all bg-[#111722] p-2 rounded border border-gray-800">
+              {arenaUrl}
+            </p>
+          </div>
+
+          <div className="text-[11px] text-gray-400 bg-red-950/20 p-2.5 rounded-lg border border-red-900/30 w-full mt-4">
+            <span className="font-bold text-red-300 block mb-1">Quy tắc Arena:</span>
+            Mọi đòn tấn công được truyền trực tiếp vào Agent qua sandbox. Hợp đồng thông minh trên Avalanche sẽ tự động chặn mọi vi phạm.
+          </div>
+        </div>
+
+        {/* Right: Live Feed of Attacks */}
+        <div className="lg:col-span-3 bg-[#0b0f17] border border-gray-800 rounded-2xl p-6 flex flex-col justify-between">
+          <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-3">
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-mono font-bold uppercase tracking-wider text-gray-400">
+                Nhật ký đòn tấn công trực tiếp (Live Attack Feed)
+              </span>
+              <span className="text-[10px] font-mono bg-cyan-950/40 text-cyan-300 border border-cyan-800 px-2 py-0.5 rounded-full">
+                Thời gian thực
+              </span>
+            </div>
+            <span className="text-xs text-gray-500 font-mono">
+              Hiển thị {data.recentAttacks?.length || 0} đòn gần nhất
+            </span>
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-3 max-h-[460px] pr-2">
+            {data.recentAttacks && data.recentAttacks.length > 0 ? (
+              data.recentAttacks.map((atk: any) => (
+                <div
+                  key={atk.id}
+                  className="bg-[#101522] border border-gray-800 rounded-xl p-4 space-y-2 hover:border-gray-700 transition"
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-mono text-gray-400">{atk.timestamp?.slice(11, 19)}</span>
+                      <span className="font-mono text-cyan-400 font-bold bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-900">
+                        Client #{atk.clientTag}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      {atk.agentConvinced && (
+                        <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-mono text-[10px] font-bold">
+                          🧠 LLM THUYẾT PHỤC ✅
+                        </span>
+                      )}
+                      <span
+                        className={`font-mono font-bold text-[10px] px-2.5 py-0.5 rounded ${
+                          atk.verdict?.outcome === 'BLOCK'
+                            ? 'bg-red-500/20 text-red-400 border border-red-500/40'
+                            : atk.verdict?.outcome === 'QUEUE'
+                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                            : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                        }`}
+                      >
+                        {atk.verdict?.outcome === 'BLOCK'
+                          ? `🛑 CHẶN BỞI ${atk.verdict?.rule || 'RULE'}`
+                          : atk.verdict?.outcome === 'QUEUE'
+                          ? `⏳ VÀO HÀNG ĐỢI (${atk.verdict?.rule})`
+                          : '✅ HỢP LỆ'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Attack Prompt */}
+                  <div className="text-sm font-medium text-gray-100">
+                    <span className="text-gray-500 mr-2 font-mono text-xs">Đòn tấn công:</span>
+                    <span className="text-rose-300">"{atk.sanitizedPrompt}"</span>
+                  </div>
+
+                  {/* Decoded Morse info if present */}
+                  {atk.decodedMorse && (
+                    <div className="text-xs bg-amber-950/30 border border-amber-800/40 p-2 rounded text-amber-200 font-mono">
+                      📻 <span className="font-bold">Mã Morse giải mã:</span> {atk.decodedMorse}
+                    </div>
+                  )}
+
+                  {/* Defense Verdict Details */}
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-800/60">
+                    <span className="text-gray-400 text-[11px] truncate max-w-[80%]">
+                      {atk.verdict?.reason || atk.agentThought}
+                    </span>
+                    <span className="text-emerald-400 font-mono font-bold text-[11px]">
+                      Tổn thất: $0.00
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="h-64 flex flex-col items-center justify-center text-gray-500 space-y-2">
+                <svg className="w-10 h-10 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <p className="text-xs font-mono">Đang chờ đòn tấn công đầu tiên từ khán giả...</p>
+                <p className="text-[11px] text-gray-600">Quét mã QR bên cạnh để bắt đầu thử nghiệm.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Bar: Key Slogan */}
+      <div className="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between text-xs text-gray-500 font-mono">
+        <div>
+          <span className="text-white font-bold">"LLM có thể bị lừa. Ngân sách trên Avalanche thì không."</span>
+        </div>
+        <div>
+          <span>AVALANCHE FUJI • UNIHAX STAGE CONSOLE</span>
+        </div>
+      </div>
+    </div>
+  );
+}
