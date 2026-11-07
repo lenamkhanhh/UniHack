@@ -14,6 +14,7 @@ export interface AuditEntryFields {
     | 'REJECTED'
     | 'EXPIRED'
     | 'BLOCKED'
+    | 'ATTACK_BLOCKED'
     | 'TOOL_RESERVED'
     | 'TOOL_SIGNED'
     | 'TOOL_PAID'
