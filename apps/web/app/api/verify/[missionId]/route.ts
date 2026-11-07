@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { INITIAL_PREV_HASH } from '@/lib/audit';
 import { keccak256, stringToBytes } from 'viem';
+import { verifyToken } from '@/lib/auth';
 
 // Clear sandbox addresses (WOW-F6) — not Anvil, not real wallets
 const SANDBOX_OWNER = '0x00000000000000000000000000000000000A11CE';
@@ -119,6 +120,30 @@ export async function GET(req: NextRequest, context: any) {
     });
 
     if (!mission) {
+      return NextResponse.json(
+        { error: 'Không tìm thấy mission', success: false },
+        { status: 404 }
+      );
+    }
+
+    // Scoped visibility (WOW-F9): unpublished missions require a valid mission token
+    const authHeader = req.headers.get('authorization') || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    let claims: any = null;
+    if (token) {
+      try {
+        claims = await verifyToken(token, { expectedStage: 'S1' }).catch(() =>
+          verifyToken(token, { expectedStage: 'S2' })
+        );
+      } catch {
+        // invalid token
+      }
+    }
+
+    const isSandbox = mission.slug.startsWith('arena-') || mission.slug === 'bankr-replay-sandbox';
+    const isAuthorized = claims?.missionSlug === mission.slug;
+
+    if (!mission.publicPublished && !isSandbox && !isAuthorized) {
       return NextResponse.json(
         { error: 'Không tìm thấy mission', success: false },
         { status: 404 }

@@ -63,12 +63,62 @@ export async function GET(req: NextRequest) {
     const isFeed = req.nextUrl.searchParams.get('feed') === '1';
 
     if (isFeed || urlMissionSlug) {
-      const whereClause: any = {};
-      if (urlMissionSlug && urlMissionSlug !== 'all') {
-        whereClause.missionSlug = urlMissionSlug;
+      // Find published missions or sandbox missions allowed for unauthenticated access (WOW-F9)
+      const publishedMissions = await prisma.mission.findMany({
+        where: {
+          OR: [
+            { publicPublished: true },
+            { slug: { startsWith: 'arena-' } },
+            { slug: 'bankr-replay-sandbox' },
+          ],
+        },
+        select: { slug: true },
+      });
+      const allowedSlugs = new Set(publishedMissions.map((m) => m.slug));
+      allowedSlugs.add('bankr-replay-sandbox');
+
+      if (claims?.missionSlug) {
+        allowedSlugs.add(claims.missionSlug);
       }
+
+      if (urlMissionSlug && urlMissionSlug !== 'all') {
+        const isSandbox = urlMissionSlug.startsWith('arena-') || urlMissionSlug === 'bankr-replay-sandbox';
+        // If unauthenticated and mission is neither published nor sandbox
+        if (!allowedSlugs.has(urlMissionSlug) && !isSandbox) {
+          return NextResponse.json({
+            scope: isFeed ? 'feed' : 'mission_param',
+            entries: [],
+          });
+        }
+
+        const rawEntries = await prisma.auditEntry.findMany({
+          where: { missionSlug: urlMissionSlug },
+          orderBy: { id: 'desc' },
+          take: 20,
+        });
+
+        return NextResponse.json({
+          scope: isFeed ? 'feed' : 'mission_param',
+          entries: rawEntries.map((e) => ({
+            id: e.id?.toString() ?? '0',
+            sourceKey: e.sourceKey,
+            prevHash: e.missionPrevHash || e.prevHash,
+            entryHash: e.missionEntryHash || e.entryHash,
+            canonicalJson: e.missionCanonicalJson || e.canonicalJson,
+            createdAt: e.createdAt instanceof Date ? e.createdAt.toISOString() : e.createdAt,
+          })),
+        });
+      }
+
+      // If feed=1 with all/unspecified slug: only return entries belonging to allowedSlugs or sandbox
       const rawEntries = await prisma.auditEntry.findMany({
-        where: whereClause,
+        where: {
+          OR: [
+            { missionSlug: { in: Array.from(allowedSlugs) } },
+            { missionSlug: { startsWith: 'arena-' } },
+            { missionSlug: 'bankr-replay-sandbox' },
+          ],
+        },
         orderBy: { id: 'desc' },
         take: 20,
       });
