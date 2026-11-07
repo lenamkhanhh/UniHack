@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.16",
+    "@openzeppelin/merkle-tree": "^1.0.8",
     "@prisma/client": "5.22.0",
     "@types/qrcode": "^1.5.6",
     "jose": "^5.9.6",

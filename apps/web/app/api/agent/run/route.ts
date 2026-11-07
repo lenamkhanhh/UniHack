@@ -9,6 +9,7 @@ import {
   verifyQuoteAgainstCatalog,
   ToolPurchaseProposal,
   ValidationContext,
+  TaintRegistry,
 } from '@/lib/validator';
 import {
   createQuote,
@@ -121,6 +122,11 @@ export async function POST(req: NextRequest) {
       process.env.SELLER_ADDRESS || '0x70997970c51812dc3a010c7d01b50e0d17dc79c8';
     const appOrigin = process.env.APP_ORIGIN || 'http://localhost:3000';
 
+    const taintRegistry = new TaintRegistry();
+    if (goal) {
+      taintRegistry.record(goal, 'WEB');
+    }
+
     // 3. Multi-turn autonomous planning loop (Max 6 turns)
     while (!isDone && turn < 6) {
       turn++;
@@ -219,6 +225,8 @@ export async function POST(req: NextRequest) {
             configVersion: currentMission.configVersion,
           },
           treasuryAllowlist,
+          ownerSignedPayees: treasuryAllowlist,
+          taintRegistry,
         };
 
         // Strict code-level policy validation (Finding AG-01)
@@ -238,7 +246,7 @@ export async function POST(req: NextRequest) {
                 operation_id: blockedId,
                 policy_hash: currentMission.policyHash,
                 policy_version: currentMission.configVersion.toString(),
-                reason: `[BLOCKED:${verdict.rule}] ${verdict.reason || proposal.reason}`,
+                reason: `[BLOCKED:${verdict.rule}][to_provenance:${verdict.toProvenance || 'NONE'},amount_provenance:${verdict.amountProvenance || 'NONE'}] ${verdict.reason || proposal.reason}`,
                 result_hash: '',
                 rule: verdict.rule || 'RULE_BLOCK',
                 source_key: `blocked:${currentMission.slug}:${turn}:${blockedId}`,
@@ -295,7 +303,7 @@ export async function POST(req: NextRequest) {
                   operation_id: operationId,
                   policy_hash: currentMission.policyHash,
                   policy_version: currentMission.configVersion.toString(),
-                  reason: `[QUEUED:${verdict.rule}] ${verdict.reason || proposal.reason}`,
+                  reason: `[QUEUED:${verdict.rule}][to_provenance:${verdict.toProvenance || 'NONE'},amount_provenance:${verdict.amountProvenance || 'NONE'}] ${verdict.reason || proposal.reason}`,
                   result_hash: requestHash,
                   rule: verdict.rule || 'RULE_QUEUE',
                   source_key: `queued:${currentMission.slug}:${turn}:${operationId}`,
@@ -353,7 +361,7 @@ export async function POST(req: NextRequest) {
                 operation_id: operationId,
                 policy_hash: currentMission.policyHash,
                 policy_version: currentMission.configVersion.toString(),
-                reason: proposal.reason,
+                reason: `[PROPOSED:TREASURY][to_provenance:${verdict.toProvenance || 'NONE'},amount_provenance:${verdict.amountProvenance || 'NONE'}] ${proposal.reason}`,
                 result_hash: requestHash,
                 rule: 'TREASURY_PROPOSED',
                 source_key: `treasury:${currentMission.slug}:${turn}:${operationId}`,
@@ -470,6 +478,7 @@ export async function POST(req: NextRequest) {
         const isSettled = execution.operation?.state === 'SETTLED';
 
         if (isSettled && execution.result) {
+          taintRegistry.record(JSON.stringify(execution.result), 'TOOL_OUTPUT');
           history.push({
             step: turn,
             thought: plan.thought,

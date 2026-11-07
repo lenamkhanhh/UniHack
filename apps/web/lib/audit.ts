@@ -25,7 +25,8 @@ export interface AuditEntryFields {
     | 'CUTOVER'
     | 'SESSION_WALLET_FUNDED'
     | 'PROOF_ANCHORED'
-    | 'ERC8004_FEEDBACK';
+    | 'ERC8004_FEEDBACK'
+    | 'PAYEE_ROOT_SET';
   mission_id: string;
   operation_id: string;
   policy_hash: string;

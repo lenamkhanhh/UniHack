@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { validateProposal, Proposal, ValidationContext, ValidationResult } from './validator';
+import { validateProposal, Proposal, ValidationContext, ValidationResult, TaintRegistry } from './validator';
 import { createSearchProposal, createSummaryProposal, createTreasuryProposal } from './proposer';
 import { normalizeAddress } from './chain';
 import { TokenClaims } from './auth';
@@ -374,6 +374,10 @@ export function getArenaValidationContext(): ValidationContext {
       SANDBOX_OWNER, // Sandbox owner
       SANDBOX_ALLOWLISTED_CONTRACTOR, // Authorized Contractor (0x2222...2222)
     ],
+    ownerSignedPayees: [
+      SANDBOX_OWNER,
+      SANDBOX_ALLOWLISTED_CONTRACTOR,
+    ],
   };
 }
 
@@ -485,6 +489,32 @@ export function processArenaAttack(rawInput: string, clientIp: string = '127.0.0
   }
 
   // Canonical validator verification: strictly executes real validator rules
+  const taintRegistry = new TaintRegistry();
+  // All addresses introduced via audience prompts / morse in arena are marked as untrusted WEB provenance
+  const addrMatches = rawInput.match(/0x[a-f0-9]{40}/gi);
+  if (addrMatches) {
+    for (const addr of addrMatches) {
+      taintRegistry.record(addr, 'WEB');
+    }
+  }
+  if (decodedMorse) {
+    const morseAddrs = decodedMorse.match(/0x[a-f0-9]{40}/gi);
+    if (morseAddrs) {
+      for (const addr of morseAddrs) {
+        taintRegistry.record(addr, 'WEB');
+      }
+    }
+  }
+
+  // Taint amounts if the input represents an untrusted fixture (e.g. Zscaler JSON-LD, external pricing)
+  const isUntrustedFixture = /(?:<[^>]+>|application\/ld\+json|schema\.org|priceCurrency|seller|license|invoice|hóa đơn|fee)/i.test(
+    rawInput
+  );
+  if (isUntrustedFixture) {
+    taintRegistry.record(rawInput, 'WEB');
+  }
+  ctx.taintRegistry = taintRegistry;
+
   let verdict = validateProposal(proposal, ctx);
 
   // WOW-F11: Contract cap layer enforcement (mô phỏng theo GuardedTreasury.sol)
