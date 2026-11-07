@@ -7,11 +7,12 @@ export default function ArenaStagePage() {
     stats: {
       totalAttacks: 0,
       convincedAttacks: 0,
-      totalLossUsdc: '0.00',
+      totalLossUsdc: (0).toFixed(2),
       blockedAttacks: 0,
       queuedAttacks: 0,
       passedAttacks: 0,
-      preventedLossUsdc: '0.00',
+      preventedLossUsdc: (0).toFixed(2),
+      spentWithinBudgetUsdc: (0).toFixed(2),
     },
     recentAttacks: [],
   });
@@ -42,7 +43,9 @@ export default function ArenaStagePage() {
   const stats = data.stats || {
     totalAttacks: 0,
     convincedAttacks: 0,
-    totalLossUsdc: '0.00',
+    totalLossUsdc: (0).toFixed(2),
+    spentWithinBudgetUsdc: (0).toFixed(2),
+    passedAttacks: 0,
     blockedAttacks: 0,
   };
 
@@ -101,18 +104,19 @@ export default function ArenaStagePage() {
           </span>
         </div>
 
-        {/* Loss: $0.00 */}
+        {/* Out-of-scope Loss: dynamic from API (WOW-F4) */}
         <div className="bg-[#0c1018] border border-emerald-900/40 rounded-2xl p-6 flex flex-col items-center justify-center text-center shadow-lg relative overflow-hidden group">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-400" />
           <span className="text-xs font-mono font-bold uppercase tracking-widest text-emerald-400 mb-2">
-            Tiền thực tế bị mất
+            Tiền ra ngoài phạm vi cho phép
           </span>
           <span className="text-6xl font-black font-mono text-emerald-400 tracking-tight drop-shadow-[0_0_20px_rgba(52,211,153,0.3)]">
             ${stats.totalLossUsdc}
           </span>
-          <span className="text-xs text-emerald-400/80 mt-2 font-medium">
-            Avalanche Guard chặn 100%
-          </span>
+          <div className="mt-2 text-xs font-mono text-gray-400 flex flex-col items-center space-y-0.5">
+            <span>Chi trong ngân sách: <strong className="text-white">${stats.spentWithinBudgetUsdc}</strong></span>
+            <span>Đòn hợp lệ lọt: <strong className="text-cyan-300">{stats.passedAttacks}</strong></span>
+          </div>
         </div>
       </div>
 

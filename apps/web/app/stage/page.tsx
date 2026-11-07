@@ -8,6 +8,8 @@ interface ArenaStats {
   totalAttacks: number;
   convincedAttacks: number;
   totalLossUsdc: string;
+  spentWithinBudgetUsdc?: string;
+  passedAttacks?: number;
   recentAttacks: Array<{
     id: string;
     text: string;
@@ -30,7 +32,9 @@ export default function StageConsolePage() {
   const [arenaStats, setArenaStats] = useState<ArenaStats>({
     totalAttacks: 12,
     convincedAttacks: 12,
-    totalLossUsdc: '0.00',
+    totalLossUsdc: (0).toFixed(2),
+    spentWithinBudgetUsdc: (0).toFixed(2),
+    passedAttacks: 0,
     recentAttacks: [
       {
         id: 'atk-init-1',
@@ -38,7 +42,7 @@ export default function StageConsolePage() {
         category: 'Freysa Fake Admin',
         timestamp: Date.now() - 40000,
         agentConvinced: true,
-        lossUsdc: '0.00',
+        lossUsdc: (0).toFixed(2),
         blockedRule: 'RECIPIENT_NOT_ALLOWLISTED',
       },
       {
@@ -47,7 +51,7 @@ export default function StageConsolePage() {
         category: 'Bankr Morse Code',
         timestamp: Date.now() - 25000,
         agentConvinced: true,
-        lossUsdc: '0.00',
+        lossUsdc: (0).toFixed(2),
         blockedRule: 'RECIPIENT_NOT_ALLOWLISTED',
       },
     ],
@@ -138,7 +142,7 @@ export default function StageConsolePage() {
             rule: 'RECIPIENT_NOT_ALLOWLISTED',
             reason: 'Recipient 0xA77AC462002305CDEaDBe9dD132D9D2f01d4a046 is not on recipient allowlist',
           },
-          fundsTransferredUsdc: '0.00',
+          fundsTransferredUsdc: (0).toFixed(2),
           auditEntry: {
             kind: 'ATTACK_BLOCKED',
             entry_hash: '0xmock_bankr_attack_blocked_hash',
@@ -412,11 +416,15 @@ export default function StageConsolePage() {
 
               <div className="bg-[#081510] border-2 border-emerald-500/80 rounded-2xl p-6 text-center shadow-[0_0_35px_rgba(16,185,129,0.2)]">
                 <span className="text-xs font-mono text-emerald-400 uppercase font-bold block mb-1">
-                  Số Tiền Bị Thất Thoát
+                  Tiền Ra Ngoài Phạm Vi Cho Phép
                 </span>
                 <span className="text-5xl md:text-6xl font-black font-mono text-emerald-300">
                   ${arenaStats.totalLossUsdc}
                 </span>
+                <div className="mt-2 text-xs font-mono text-gray-400 flex flex-col items-center space-y-0.5">
+                  <span>Chi trong ngân sách: <strong className="text-white">${arenaStats.spentWithinBudgetUsdc || (0).toFixed(2)}</strong></span>
+                  <span>Đòn hợp lệ lọt: <strong className="text-cyan-300">{arenaStats.passedAttacks || 0}</strong></span>
+                </div>
               </div>
             </div>
 
@@ -562,8 +570,13 @@ export default function StageConsolePage() {
               </div>
               <div className="w-px h-8 bg-gray-800" />
               <div>
-                <span className="text-gray-500 text-xs block">TIỀN BỊ MẤT</span>
-                <span className="text-2xl font-black text-emerald-400">$0.00</span>
+                <span className="text-gray-500 text-xs block">TIỀN RA NGOÀI PHẠM VI</span>
+                <span className="text-2xl font-black text-emerald-400">${arenaStats.totalLossUsdc}</span>
+              </div>
+              <div className="w-px h-8 bg-gray-800" />
+              <div>
+                <span className="text-gray-500 text-xs block">CHI TRONG NGÂN SÁCH</span>
+                <span className="text-2xl font-black text-white">${arenaStats.spentWithinBudgetUsdc || (0).toFixed(2)}</span>
               </div>
             </div>
 
