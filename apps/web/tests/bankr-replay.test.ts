@@ -54,4 +54,34 @@ describe('WOW-0: Replay Vụ Bankr ($174,000 Drain Incident)', () => {
     const afterOpsCount = await prisma.toolOperation.count();
     expect(afterOpsCount).toBe(beforeOpsCount);
   });
+
+  it('WOW-F5: Honest labeling for MOCK replay (empty tx_hash, off-chain validator defense), and real mission verification never contains bankr:* or ATTACK_BLOCKED', async () => {
+    // 1. Run Bankr replay and check contractDefense label
+    const result = await executeBankrReplay();
+    expect(result.guardedSystem.contractDefense).toContain('(off-chain)');
+    expect(result.guardedSystem.contractDefense).toContain('Lớp contract cap: sẽ chứng minh khi chạy Fuji live');
+
+    // 2. Query audit entry directly to verify tx_hash is empty
+    if (result.guardedSystem.auditEntryHash) {
+      const entry = await prisma.auditEntry.findUnique({
+        where: { entryHash: result.guardedSystem.auditEntryHash },
+      });
+      expect(entry).toBeDefined();
+      const parsed = JSON.parse(entry!.canonicalJson);
+      expect(parsed.tx_hash).toBe('');
+      expect(parsed.source_key).toMatch(/^bankr:attack:/);
+      expect(parsed.mission_id).toBe('0x000000000000000000000000000000000000000000000000000000000000ba9a');
+    }
+
+    // 3. Query real mission audit entries and ensure they do NOT contain any bankr entries
+    const realEntries = await prisma.auditEntry.findMany({
+      where: {
+        missionSlug: { not: 'bankr-replay-sandbox' },
+      },
+    });
+    for (const e of realEntries) {
+      expect(e.sourceKey).not.toMatch(/^bankr:/);
+      expect(e.kind).not.toBe('ATTACK_BLOCKED');
+    }
+  });
 });

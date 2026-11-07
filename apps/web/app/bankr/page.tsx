@@ -165,9 +165,11 @@ export default function BankrReplayPage() {
                   <span className="text-gray-400">Trạng thái Agent (LLM):</span>
                   <span className="text-amber-400 font-bold">🧠 ĐÃ BỊ THUYẾT PHỤC ✅</span>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col space-y-1">
                   <span className="text-gray-400">Validator Guard:</span>
-                  <span className="text-red-400 font-bold">🛑 BLOCK ({result.validatorVerdict?.rule})</span>
+                  <span className="text-red-400 font-bold text-xs bg-red-950/40 p-2 rounded border border-red-900/50">
+                    {result.guardedSystem?.contractDefense || `🛡️ Validator BLOCK ${result.validatorVerdict?.rule || 'RECIPIENT_NOT_ALLOWLISTED'} (off-chain) · Lớp contract cap: sẽ chứng minh khi chạy Fuji live`}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-400">Lý do bảo vệ:</span>
@@ -190,7 +192,7 @@ export default function BankrReplayPage() {
           </div>
 
           <div className="text-[10px] text-gray-500 border-t border-gray-900 pt-3 mt-6 font-mono text-center">
-            DỮ LIỆU ĐƯỢC BẢO ĐẢM BỞI SMART CONTRACT TRÊN AVALANCHE FUJI
+            BẢO VỆ OFF-CHAIN BỞI VALIDATOR • LỚP ON-CHAIN CAP SẼ CHỨNG MINH TRÊN FUJI LIVE
           </div>
         </div>
       </div>
