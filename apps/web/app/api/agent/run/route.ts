@@ -20,6 +20,7 @@ import {
 import { appendAuditEntry } from '@/lib/audit';
 import { validateLiveFujiConfig } from '@/lib/config';
 import {
+  computePayeeMerkleTree,
   getMissionPayeeProof,
   buildProposeWithProofCalldata,
   saveMissionPayees,
@@ -371,10 +372,20 @@ export async function POST(req: NextRequest) {
                 if (Array.isArray(parsed) && parsed.length > 0) dbPayees = parsed;
               } catch {}
             }
-            proof = getMissionPayeeProof(currentMission.slug, proposal.to);
-            if (!proof && dbPayees) {
-              saveMissionPayees(currentMission.slug, dbPayees);
-              proof = getMissionPayeeProof(currentMission.slug, proposal.to);
+
+            // PV-F10c: Always compute proof directly from DB payeesJson and assert computed root matches mission.payeeRoot
+            if (dbPayees && dbPayees.length > 0) {
+              const treeResult = computePayeeMerkleTree(dbPayees);
+              if (treeResult.root.toLowerCase() === (currentMission.payeeRoot || '').toLowerCase()) {
+                proof = treeResult.getProof(proposal.to);
+                // Resync RAM cache with verified DB state
+                saveMissionPayees(currentMission.slug, dbPayees);
+              } else {
+                console.error('[PV-F10c] Invariant violation: DB payeesJson root mismatch', {
+                  computedRoot: treeResult.root,
+                  missionPayeeRoot: currentMission.payeeRoot,
+                });
+              }
             }
 
             if (!proof) {

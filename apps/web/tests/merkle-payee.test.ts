@@ -7,6 +7,7 @@ import {
   getMissionPayeeProof,
   buildSetMissionPayeeRootCalldata,
   buildProposeWithProofCalldata,
+  proposeWithProofAbi,
   clearMissionPayeesForTesting,
 } from '../lib/merkle';
 import {
@@ -19,6 +20,7 @@ import { prisma } from '../lib/db';
 import { encodeEventTopics, encodeAbiParameters, parseAbiParameters } from 'viem';
 import { POST as createMissionPOST } from '../app/api/missions/route';
 import { POST as activatePOST } from '../app/api/missions/[slug]/activate/route';
+import { POST as agentRunPOST } from '../app/api/agent/run/route';
 import {
   computePayloadHash,
   generateEip191Message,
@@ -28,6 +30,7 @@ import {
 import { validateProposal } from '../lib/validator';
 import { hashUtf8, normalizeAddress } from '../lib/chain';
 import { ownerAccount, agentAccount } from './setup';
+import { decodeFunctionData } from 'viem';
 
 describe('PV-3: Owner-signed Payee Merkle Root & proposeWithProof Settlement', () => {
   const payeeA = '0x2222222222222222222222222222222222222222';
@@ -39,9 +42,10 @@ describe('PV-3: Owner-signed Payee Merkle Root & proposeWithProof Settlement', (
   const EXPECTED_PROOF_A = '0xbd164a4590db938a0b098da1b25cf37b155f857b38c37c016ad5b8f8fce80192';
   const EXPECTED_PROOF_B = '0x708e7cb9a75ffb24191120fba1c3001faa9078147150c6f2747569edbadee751';
 
-  beforeEach(() => {
+  beforeEach(async () => {
     clearMissionPayeesForTesting();
     setReceiptFetcherForTesting(null);
+    await prisma.systemState.update({ where: { id: 1 }, data: { stage: 'S1', systemPaused: false } });
   });
 
   it('1. TypeScript StandardMerkleTree matches the exact Forge cross-verification vector', () => {
@@ -441,5 +445,134 @@ describe('PV-3: Owner-signed Payee Merkle Root & proposeWithProof Settlement', (
 
     // Clean up
     await prisma.mission.delete({ where: { slug } });
+  });
+
+  it('9. PV-F10c: Stale RAM cache with old payee set does not leak into agent/run; proofs are derived from DB and match mission payeeRoot', async () => {
+    process.env.ALLOW_AGENT_TEST_OVERRIDE = '1';
+    process.env.PAYMENT_MODE = 'MOCK';
+    process.env.OWNER_ADDRESS = normalizeAddress(ownerAccount.address);
+
+    const slug = `pv-f10c-${Date.now()}`;
+    const payeeOld = '0x1111111111111111111111111111111111111111';
+    const payeeNew = '0x2222222222222222222222222222222222222222';
+    const ownerAddr = normalizeAddress(ownerAccount.address);
+
+    process.env.TREASURY_ALLOWLIST = `${ownerAddr},${payeeNew},${payeeOld}`;
+
+    // DB has the NEW payee set
+    const newPayees = [ownerAddr, payeeNew];
+    const treeNew = computePayeeMerkleTree(newPayees);
+    const expectedRootNew = treeNew.root;
+
+    // RAM cache intentionally seeded with the STALE OLD set
+    const oldPayees = [ownerAddr, payeeOld];
+    const treeOld = computePayeeMerkleTree(oldPayees);
+    saveMissionPayees(slug, oldPayees);
+    expect(getMissionPayees(slug)).toEqual(oldPayees.map(normalizeAddress));
+
+    try {
+      await prisma.systemState.update({ where: { id: 1 }, data: { stage: 'S2' } });
+
+      // Create active mission with new payee root and new payeesJson in DB
+      const policyHash = hashUtf8(`policy:1:10000000:5000000:${expectedRootNew}`);
+      const mission = await prisma.mission.create({
+        data: {
+          slug,
+          missionId: hashUtf8(slug),
+          ownerAddress: ownerAddr,
+          agentAddress: normalizeAddress(agentAccount.address),
+          treasuryCap: 10000000,
+          toolCap: 5000000,
+          expiresAt: new Date(Date.now() + 86400000),
+          status: 'ACTIVE',
+          payeesJson: JSON.stringify(newPayees),
+          payeeRoot: expectedRootNew,
+          configVersion: 1,
+          policyHash,
+        },
+      });
+
+      const spendToken = await issueSpendToken({
+        deploymentId: 'unihack-test-deployment',
+        stage: 'S2',
+        guardAddress: 'none',
+        authVersion: 1,
+        missionSlug: slug,
+        missionId: mission.missionId,
+        ownerAddress: ownerAddr,
+        agentAddress: normalizeAddress(agentAccount.address),
+        missionConfigVersion: 1,
+        policyHash,
+        missionExpiresAt: mission.expiresAt,
+        appOrigin: 'http://localhost:3000',
+      });
+
+      // 1. Propose payout to payeeNew (present in DB, but NOT in stale RAM cache)
+      const reqNew = new NextRequest('http://localhost:3000/api/agent/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${spendToken}`,
+        },
+        body: JSON.stringify({
+          goal: 'Pay newly authorized contractor from DB',
+          overrideProposal: {
+            kind: 'treasury_payout',
+            mission_id: slug,
+            to: payeeNew,
+            amount_atomic: '1000000',
+            reason: 'Authorized contractor payout from DB set',
+          },
+        }),
+      });
+
+      const resNew = await agentRunPOST(reqNew);
+      expect(resNew.status).toBe(200);
+      const dataNew = await resNew.json();
+
+      expect(dataNew.steps[0].action).toBe('TREASURY_PROPOSED');
+      expect(dataNew.steps[0].calldata).toBeDefined();
+
+      // Decode calldata and verify proof matches DB tree, not old cache
+      const decoded = decodeFunctionData({
+        abi: [proposeWithProofAbi],
+        data: dataNew.steps[0].calldata,
+      });
+      const calldataProof = decoded.args[5] as `0x${string}`[];
+      const expectedProofNew = treeNew.getProof(payeeNew);
+      expect(calldataProof).toEqual(expectedProofNew);
+
+      // 2. Propose payout to payeeOld (only present in stale RAM cache, NOT in DB)
+      const reqOld = new NextRequest('http://localhost:3000/api/agent/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${spendToken}`,
+        },
+        body: JSON.stringify({
+          goal: 'Pay contractor only in stale cache',
+          overrideProposal: {
+            kind: 'treasury_payout',
+            mission_id: slug,
+            to: payeeOld,
+            amount_atomic: '1000000',
+            reason: 'Attempt payment to stale payee',
+          },
+        }),
+      });
+
+      const resOld = await agentRunPOST(reqOld);
+      expect(resOld.status).toBe(200);
+      const dataOld = await resOld.json();
+      expect(dataOld.steps[0].action).toBe('TOOL_BLOCKED');
+      expect(dataOld.steps[0].verdict.rule).toBe('PAYEE_NOT_IN_MISSION_SET');
+    } finally {
+      // Clean up
+      await prisma.systemState.update({ where: { id: 1 }, data: { stage: 'S1' } });
+      await prisma.treasuryRequest.deleteMany({ where: { missionSlug: slug } });
+      await prisma.auditEntry.deleteMany({ where: { missionSlug: slug } });
+      await prisma.mission.deleteMany({ where: { slug } });
+      delete process.env.TREASURY_ALLOWLIST;
+    }
   });
 });
