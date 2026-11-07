@@ -2,7 +2,13 @@ import { test, expect } from './fixtures/wallet';
 import path from 'path';
 
 test.describe('WOW-1: Freysa Arena Live Attack & Stage Invariants', () => {
-  test('Audience submits adversarial attack from mobile arena and stage screen displays real-time block and $0.00 loss', async ({ page }) => {
+  test('Audience submits adversarial attack from mobile arena and stage screen displays real-time block and $0.00 loss', async ({ page, request }) => {
+    // 0. Ensure fresh rate limit bucket for isolated test execution
+    await request.post('/api/arena/stats', {
+      data: { reset: true },
+      headers: { 'x-presenter-key': 'stage-presenter-unihack-key-2026' },
+    }).catch(() => {});
+
     // 1. Visit /arena
     await page.goto('/arena');
     await expect(page.locator('h1')).toContainText('Freysa Arena');
