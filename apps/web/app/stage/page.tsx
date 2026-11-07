@@ -3,12 +3,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import MoneyFlowDiagram from '@/components/MoneyFlowDiagram';
+import { resetArenaAction } from './actions';
 
 interface ArenaStats {
   totalAttacks: number;
   convincedAttacks: number;
   totalLossUsdc: string;
   spentWithinBudgetUsdc?: string;
+  remainingTreasuryUsdc?: string;
+  treasuryCapUsdc?: string;
   passedAttacks?: number;
   recentAttacks: Array<{
     id: string;
@@ -62,6 +65,23 @@ export default function StageConsolePage() {
   const [bankrStep, setBankrStep] = useState<'IDLE' | 'STEP1_NORMAL' | 'STEP2_ATTACK' | 'STEP3_COMPROMISED' | 'STEP4_VERDICT'>('IDLE');
   const [bankrDrainBalance, setBankrDrainBalance] = useState(174000);
   const [bankrResult, setBankrResult] = useState<any>(null);
+  const [resettingArena, setResettingArena] = useState(false);
+
+  const handleResetArena = async () => {
+    setResettingArena(true);
+    try {
+      await resetArenaAction();
+      const res = await fetch('/api/arena/stats');
+      const json = await res.json();
+      if (json.stats) {
+        setArenaStats(json.stats);
+      }
+    } catch (err) {
+      console.error('Failed to reset arena:', err);
+    } finally {
+      setResettingArena(false);
+    }
+  };
 
   // Poll arena stats if in LIVE mode
   useEffect(() => {
@@ -425,6 +445,47 @@ export default function StageConsolePage() {
                   <span>Chi trong ngân sách: <strong className="text-white">${arenaStats.spentWithinBudgetUsdc || (0).toFixed(2)}</strong></span>
                   <span>Đòn hợp lệ lọt: <strong className="text-cyan-300">{arenaStats.passedAttacks || 0}</strong></span>
                 </div>
+              </div>
+            </div>
+
+            {/* Sandbox Budget Remaining Bar & Presenter Reset Control (WOW-F11) */}
+            <div className="bg-[#0b0e14] border border-gray-800 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between font-mono text-xs space-y-3 md:space-y-0">
+              <div className="flex items-center space-x-3">
+                <span className="text-gray-400 font-bold">Ngân sách sandbox còn lại:</span>
+                <span className="text-emerald-400 font-black text-sm">
+                  ${arenaStats.remainingTreasuryUsdc || '10.00'} / ${arenaStats.treasuryCapUsdc || '10.00'}
+                </span>
+                <span className="text-gray-500 text-[11px]">
+                  (Đã chi trong hạn mức: ${arenaStats.spentWithinBudgetUsdc || '0.00'})
+                </span>
+              </div>
+
+              <div className="flex items-center space-x-4 w-full md:w-auto justify-end">
+                <div className="w-48 bg-gray-900 rounded-full h-2.5 overflow-hidden border border-gray-800">
+                  <div
+                    className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.max(
+                          0,
+                          (Number(arenaStats.remainingTreasuryUsdc ?? '10.00') /
+                            Number(arenaStats.treasuryCapUsdc ?? '10.00')) *
+                            100
+                        )
+                      )}%`,
+                    }}
+                  />
+                </div>
+                <button
+                  data-testid="reset-arena-sandbox-btn"
+                  onClick={handleResetArena}
+                  disabled={resettingArena}
+                  className="px-3 py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/60 rounded-xl font-bold transition text-[11px] disabled:opacity-50"
+                  title="Presenter Only: Reset Arena Budget to $10.00"
+                >
+                  {resettingArena ? 'Đang reset...' : '↻ Reset Sandbox ($10.00)'}
+                </button>
               </div>
             </div>
 

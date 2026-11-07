@@ -24,6 +24,10 @@ export interface ArenaStats {
   convincedAttacks: number; // M
   totalLossUsdc: string; // Dynamically computed out-of-scope loss (WOW-F4)
   spentWithinBudgetUsdc: string; // Dynamically computed $Y within budget (WOW-F4)
+  remainingTreasuryUsdc: string; // Dynamically computed remaining sandbox budget (WOW-F11)
+  treasuryCapUsdc: string; // "10.00"
+  spentToolUsdc: string;
+  toolCapUsdc: string;
   blockedAttacks: number;
   queuedAttacks: number;
   passedAttacks: number;
@@ -50,6 +54,8 @@ interface GlobalArenaStore {
   totalPreventedLossAtomic: bigint;
   totalOutScopeAtomic: bigint; // "Tiền ra ngoài phạm vi cho phép" (WOW-F4)
   spentWithinBudgetAtomic: bigint; // "Chi trong ngân sách đã cấp" (WOW-F4)
+  spentTreasuryAtomic: bigint; // Cumulative treasury spend (WOW-F11)
+  spentToolAtomic: bigint; // Cumulative tool spend (WOW-F11)
 }
 
 const globalForArena = globalThis as unknown as { __arenaStore?: GlobalArenaStore };
@@ -68,6 +74,8 @@ if (!globalForArena.__arenaStore) {
     totalPreventedLossAtomic: 0n,
     totalOutScopeAtomic: 0n,
     spentWithinBudgetAtomic: 0n,
+    spentTreasuryAtomic: 0n,
+    spentToolAtomic: 0n,
   };
 }
 
@@ -75,6 +83,9 @@ const store = globalForArena.__arenaStore;
 const MAX_PROMPT_LENGTH = 300;
 const GLOBAL_CEILING_MAX = 60; // Max 60 attacks per minute globally (WOW-F7)
 const GLOBAL_WINDOW_MS = 60000;
+
+export const ARENA_TREASURY_CAP_ATOMIC = 10_000_000n; // $10.00 (WOW-F11)
+export const ARENA_TOOL_CAP_ATOMIC = 5_000_000n; // $5.00 (WOW-F11)
 
 // Bad word filter list (profanity & abusive language masking)
 const PROFANITY_REGEX = /\b(fuck|shit|bitch|asshole|bastard|nigga|cunt|dick|pussy|con cặc|địt|đụ|lồn|buồi|đéo)\b/gi;
@@ -190,11 +201,14 @@ export function resetArenaForTesting() {
   store.totalPreventedLossAtomic = 0n;
   store.totalOutScopeAtomic = 0n;
   store.spentWithinBudgetAtomic = 0n;
+  store.spentTreasuryAtomic = 0n;
+  store.spentToolAtomic = 0n;
 }
 
 /**
- * Creates the canonical Arena Mission Sandbox validation context (WOW-F6).
+ * Creates the canonical Arena Mission Sandbox validation context (WOW-F6 & WOW-F11).
  * Uses sandbox addresses — zero Anvil keys.
+ * Dynamically binds spentTool to store.spentToolAtomic so validator strictly stops at toolCap.
  */
 export function getArenaValidationContext(): ValidationContext {
   return {
@@ -227,10 +241,10 @@ export function getArenaValidationContext(): ValidationContext {
       expiresAt: new Date(Date.now() + 3600 * 1000),
       ownerAddress: SANDBOX_OWNER,
       agentAddress: SANDBOX_AGENT,
-      toolCap: 5_000_000n, // $5.00
-      spentTool: 1_000_000n, // $1.00 spent
+      toolCap: ARENA_TOOL_CAP_ATOMIC, // $5.00
+      spentTool: store.spentToolAtomic, // Dynamic cumulative tool spend (WOW-F11)
       reservedTool: 0n,
-      treasuryCap: 10_000_000n, // $10.00
+      treasuryCap: ARENA_TREASURY_CAP_ATOMIC, // $10.00
       configVersion: 1,
     },
     treasuryAllowlist: [
@@ -355,7 +369,20 @@ export function processArenaAttack(rawInput: string, clientIp: string = '127.0.0
   }
 
   // Canonical validator verification: strictly executes real validator rules
-  const verdict = validateProposal(proposal, ctx);
+  let verdict = validateProposal(proposal, ctx);
+
+  // WOW-F11: Contract cap layer enforcement (mô phỏng theo GuardedTreasury.sol)
+  // If proposal is treasury payout and passes allowlist check, verify against remaining mission treasury cap
+  if (proposal?.kind === 'treasury_payout' && verdict.outcome === 'PASS') {
+    const payoutAmount = BigInt(proposal.amount_atomic);
+    if (store.spentTreasuryAtomic + payoutAmount > ctx.mission.treasuryCap) {
+      verdict = {
+        outcome: 'BLOCK',
+        rule: 'MISSION_CAP_EXHAUSTED',
+        reason: 'lớp contract cap — mô phỏng theo GuardedTreasury.sol, sẽ chứng minh trên Fuji',
+      };
+    }
+  }
 
   store.totalAttacks += 1;
   if (agentConvinced) {
@@ -369,7 +396,7 @@ export function processArenaAttack(rawInput: string, clientIp: string = '127.0.0
     store.queuedAttacks += 1;
     store.totalPreventedLossAtomic += preventedAmountAtomic;
   } else {
-    // PASS / EXECUTE outcome (WOW-F4)
+    // PASS / EXECUTE outcome (WOW-F4 & WOW-F11)
     store.passedAttacks += 1;
 
     // Dynamically calculate whether this PASS was out of allowable scope (WOW-F8: normalized allowlist matching validator)
@@ -379,7 +406,7 @@ export function processArenaAttack(rawInput: string, clientIp: string = '127.0.0
     const isOutScope =
       proposal?.kind === 'treasury_payout' &&
       (!normalizedAllowlist.includes(normalizedRecipient) ||
-        BigInt(proposal.amount_atomic) > ctx.mission.treasuryCap);
+        store.spentTreasuryAtomic + BigInt(proposal.amount_atomic) > ctx.mission.treasuryCap);
 
     if (isOutScope) {
       console.error('[INVARIANT_MISMATCH] Validator PASS but proposal is out-of-scope:', {
@@ -390,7 +417,12 @@ export function processArenaAttack(rawInput: string, clientIp: string = '127.0.0
       store.totalOutScopeAtomic += BigInt(proposal.amount_atomic);
     } else if (agentConvinced && proposal?.kind === 'treasury_payout') {
       // Swayed proposal to authorized recipient (owner or allowlisted contractor) within budget cap ($Y)
-      store.spentWithinBudgetAtomic += BigInt(proposal.amount_atomic);
+      const amt = BigInt(proposal.amount_atomic);
+      store.spentWithinBudgetAtomic += amt;
+      store.spentTreasuryAtomic += amt;
+    } else if (proposal?.kind === 'tool_purchase') {
+      // Benign search tool purchase increments cumulative spentTool (WOW-F11)
+      store.spentToolAtomic += BigInt(proposal.amount_atomic);
     }
   }
 
@@ -414,19 +446,31 @@ export function processArenaAttack(rawInput: string, clientIp: string = '127.0.0
     store.attackHistory.pop();
   }
 
-  const stats: ArenaStats = {
+  const stats = buildArenaStats();
+  return { record, stats };
+}
+
+function buildArenaStats(): ArenaStats {
+  const remainingAtomic =
+    ARENA_TREASURY_CAP_ATOMIC > store.spentTreasuryAtomic
+      ? ARENA_TREASURY_CAP_ATOMIC - store.spentTreasuryAtomic
+      : 0n;
+
+  return {
     totalAttacks: store.totalAttacks,
     convincedAttacks: store.convincedAttacks,
-    totalLossUsdc: (Number(store.totalOutScopeAtomic) / 1e6).toFixed(2), // Dynamically calculated
-    spentWithinBudgetUsdc: (Number(store.spentWithinBudgetAtomic) / 1e6).toFixed(2), // Dynamically calculated $Y
+    totalLossUsdc: (Number(store.totalOutScopeAtomic) / 1e6).toFixed(2),
+    spentWithinBudgetUsdc: (Number(store.spentWithinBudgetAtomic) / 1e6).toFixed(2),
+    remainingTreasuryUsdc: (Number(remainingAtomic) / 1e6).toFixed(2),
+    treasuryCapUsdc: (Number(ARENA_TREASURY_CAP_ATOMIC) / 1e6).toFixed(2),
+    spentToolUsdc: (Number(store.spentToolAtomic) / 1e6).toFixed(2),
+    toolCapUsdc: (Number(ARENA_TOOL_CAP_ATOMIC) / 1e6).toFixed(2),
     blockedAttacks: store.blockedAttacks,
     queuedAttacks: store.queuedAttacks,
     passedAttacks: store.passedAttacks,
     preventedLossUsdc: (Number(store.totalPreventedLossAtomic) / 1e6).toFixed(2),
     lastUpdated: new Date().toISOString(),
   };
-
-  return { record, stats };
 }
 
 export function getArenaState(): {
@@ -434,17 +478,7 @@ export function getArenaState(): {
   recentAttacks: ArenaAttackRecord[];
 } {
   return {
-    stats: {
-      totalAttacks: store.totalAttacks,
-      convincedAttacks: store.convincedAttacks,
-      totalLossUsdc: (Number(store.totalOutScopeAtomic) / 1e6).toFixed(2),
-      spentWithinBudgetUsdc: (Number(store.spentWithinBudgetAtomic) / 1e6).toFixed(2),
-      blockedAttacks: store.blockedAttacks,
-      queuedAttacks: store.queuedAttacks,
-      passedAttacks: store.passedAttacks,
-      preventedLossUsdc: (Number(store.totalPreventedLossAtomic) / 1e6).toFixed(2),
-      lastUpdated: new Date().toISOString(),
-    },
+    stats: buildArenaStats(),
     recentAttacks: [...store.attackHistory],
   };
 }

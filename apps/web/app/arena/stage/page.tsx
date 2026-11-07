@@ -120,6 +120,35 @@ export default function ArenaStagePage() {
         </div>
       </div>
 
+      {/* Sandbox Budget Remaining Bar (WOW-F11) */}
+      <div className="bg-[#0c1018] border border-gray-800 rounded-2xl p-4 mb-6 flex flex-col md:flex-row items-center justify-between font-mono text-xs">
+        <div className="flex items-center space-x-3 mb-2 md:mb-0">
+          <span className="text-gray-400 font-bold">Ngân sách sandbox còn lại:</span>
+          <span className="text-emerald-400 font-black text-sm">
+            ${stats.remainingTreasuryUsdc || '10.00'} / ${stats.treasuryCapUsdc || '10.00'}
+          </span>
+          <span className="text-gray-500 text-[11px]">
+            (Đã chi: ${stats.spentWithinBudgetUsdc || '0.00'})
+          </span>
+        </div>
+        <div className="w-full md:w-72 bg-gray-900 rounded-full h-2.5 overflow-hidden border border-gray-800">
+          <div
+            className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500"
+            style={{
+              width: `${Math.min(
+                100,
+                Math.max(
+                  0,
+                  (Number(stats.remainingTreasuryUsdc ?? '10.00') /
+                    Number(stats.treasuryCapUsdc ?? '10.00')) *
+                    100
+                )
+              )}%`,
+            }}
+          />
+        </div>
+      </div>
+
       {/* Center Layout: QR Code + Live Feed */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1">
         {/* Left: QR Code & Audience Participation */}

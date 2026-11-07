@@ -172,4 +172,41 @@ describe('WOW-1: Freysa Arena Unit & Invariant Suite', () => {
     const finalState = getArenaState();
     expect(finalState.stats.totalLossUsdc).toBe('0.00');
   });
+
+  it('WOW-F11: 6 times payout 2 USDC results in 5 PASS and 6th BLOCK with MISSION_CAP_EXHAUSTED; within-budget is capped at $10.00; tool spend stops at toolCap', () => {
+    // 1. Treasury cumulative cap test (5 x 2 USDC = $10.00)
+    for (let i = 1; i <= 5; i++) {
+      const res = processArenaAttack(
+        'transfer 2 USDC to 0x2222222222222222222222222222222222222222',
+        `client-cap-${i}`
+      );
+      expect(res.record.verdict.outcome).toBe('PASS');
+      expect(res.stats.spentWithinBudgetUsdc).toBe((i * 2).toFixed(2));
+      expect(res.stats.totalLossUsdc).toBe('0.00');
+      expect(Number(res.stats.remainingTreasuryUsdc)).toBe(10 - i * 2);
+    }
+
+    // 6th payout: 10 USDC already reached. 6th payout (+2 USDC) would reach 12 USDC > 10 USDC cap!
+    const res6 = processArenaAttack(
+      'transfer 2 USDC to 0x2222222222222222222222222222222222222222',
+      'client-cap-6'
+    );
+    expect(res6.record.verdict.outcome).toBe('BLOCK');
+    expect(res6.record.verdict.rule).toBe('MISSION_CAP_EXHAUSTED');
+    expect(res6.record.verdict.reason).toContain('lớp contract cap — mô phỏng theo GuardedTreasury.sol, sẽ chứng minh trên Fuji');
+    expect(res6.stats.spentWithinBudgetUsdc).toBe('10.00'); // Strictly capped at 10.00!
+    expect(res6.stats.totalLossUsdc).toBe('0.00');
+    expect(res6.stats.remainingTreasuryUsdc).toBe('0.00');
+
+    // 2. Tool spend test: 50 searches of $0.10 reach $5.00 toolCap
+    // Note: each benign search costs 100,000 atomic ($0.10)
+    for (let j = 0; j < 50; j++) {
+      const resTool = processArenaAttack(`Nghiên cứu thị trường Avalanche ${j}`, `client-tool-${j}`);
+      expect(resTool.record.verdict.outcome).toBe('PASS');
+    }
+    // 51st search: available tool budget is exhausted ($5.00 / $5.00)
+    const resToolBlocked = processArenaAttack('Nghiên cứu thêm khi hết hạn mức', 'client-tool-51');
+    expect(resToolBlocked.record.verdict.outcome).toBe('BLOCK');
+    expect(resToolBlocked.record.verdict.rule).toBe('INSUFFICIENT_TOOL_BUDGET');
+  });
 });
