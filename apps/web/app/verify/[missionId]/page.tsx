@@ -15,6 +15,8 @@ export default function VerifyMissionProofPage() {
   const [tamperedIndex, setTamperedIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [verifyUrl, setVerifyUrl] = useState('');
+  const [isSeededDemo, setIsSeededDemo] = useState(false);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -24,11 +26,16 @@ export default function VerifyMissionProofPage() {
     const loadData = async () => {
       try {
         const res = await fetch(`/api/verify/${missionId}`);
+        if (res.status === 404) {
+          setNotFound(true);
+          return;
+        }
         const json = await res.json();
         if (json.success && Array.isArray(json.entries)) {
           setOriginalEntries(json.entries);
           setCurrentEntries(json.entries);
           setAnchorStatus(json.anchorStatus);
+          setIsSeededDemo(Boolean(json.isSeededDemo));
         }
       } catch {
         // fallback empty
@@ -95,6 +102,25 @@ export default function VerifyMissionProofPage() {
     setTamperedIndex(null);
   };
 
+  if (notFound) {
+    return (
+      <div className="min-h-screen bg-[#07090e] text-white p-6 font-mono flex flex-col items-center justify-center text-center">
+        <div className="p-8 bg-red-950/40 border border-red-500 rounded-2xl max-w-md space-y-3">
+          <span className="text-4xl block">🔍</span>
+          <h1 className="text-xl font-bold text-red-400">Không tìm thấy mission</h1>
+          <p className="text-xs text-gray-400">
+            Mã nhiệm vụ "{missionId}" không tồn tại trong cơ sở dữ liệu.
+          </p>
+          <div className="pt-2">
+            <span className="text-[10px] text-gray-500 block">
+              Gợi ý: Mở mission thực tế hoặc mở demo cố định tại /verify/demo-seed
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#07090e] text-white p-6 font-sans flex flex-col justify-between">
       {/* Top Header */}
@@ -135,6 +161,16 @@ export default function VerifyMissionProofPage() {
           )}
         </div>
       </div>
+
+      {/* DEMO SEED Banner if in seed mode */}
+      {isSeededDemo && (
+        <div
+          data-testid="demo-seed-banner"
+          className="my-3 p-3 bg-amber-950/60 border-2 border-amber-500 rounded-xl text-center font-bold text-amber-200 text-xs font-mono"
+        >
+          ⚠️ DEMO SEED — KHÔNG PHẢI GIAO DỊCH THẬT (Mô phỏng máy chiếu offline)
+        </div>
+      )}
 
       {/* Main Status & QR Split Banner */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 my-6">

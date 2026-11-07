@@ -504,7 +504,7 @@ export default function StageConsolePage() {
               </div>
 
               <Link
-                href="/verify/default-mission"
+                href="/verify/demo-seed"
                 target="_blank"
                 className="bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/50 text-cyan-300 font-mono text-xs font-bold py-2 px-4 rounded-xl transition"
               >

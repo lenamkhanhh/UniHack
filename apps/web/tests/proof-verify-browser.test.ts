@@ -123,4 +123,37 @@ describe('WOW-2: Client-Side Hash Chain Verifier & Tamper Detection', () => {
     // Inner / outer amount check or hash mismatch
     expect(res.errors.some((err) => err.includes('index 1'))).toBe(true);
   });
+
+  it('WOW-F2: Random non-existent missionId returns 404, while demo-seed returns isSeededDemo: true with empty tx_hash', async () => {
+    const { GET } = await import('../app/api/verify/[missionId]/route');
+
+    // 1. Non-existent random missionId -> 404
+    const reqRandom = new Request('http://localhost/api/verify/non-existent-random-id');
+    const resRandom = await GET(reqRandom as any, { params: Promise.resolve({ missionId: 'non-existent-random-id' }) });
+    expect(resRandom.status).toBe(404);
+    const jsonRandom = await resRandom.json();
+    expect(jsonRandom.error).toContain('Không tìm thấy mission');
+
+    // 2. Fixed demo-seed -> 200, isSeededDemo: true, empty tx_hash, clean sandbox addresses
+    const reqSeed = new Request('http://localhost/api/verify/demo-seed');
+    const resSeed = await GET(reqSeed as any, { params: Promise.resolve({ missionId: 'demo-seed' }) });
+    expect(resSeed.status).toBe(200);
+    const jsonSeed = await resSeed.json();
+    expect(jsonSeed.success).toBe(true);
+    expect(jsonSeed.isSeededDemo).toBe(true);
+    expect(jsonSeed.entries.length).toBe(3);
+
+    // Verify all seed entries have empty tx_hash and valid hashes
+    for (const e of jsonSeed.entries) {
+      const parsed = JSON.parse(e.canonicalJson);
+      expect(parsed.tx_hash).toBe('');
+      // No Anvil addresses
+      expect(parsed.actor.toLowerCase()).not.toContain('976ea740');
+      expect(parsed.to.toLowerCase()).not.toContain('70997970');
+    }
+
+    // Client verifier passes on demo-seed chain
+    const verifyRes = verifyProof(jsonSeed.entries);
+    expect(verifyRes.valid).toBe(true);
+  });
 });

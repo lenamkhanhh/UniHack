@@ -3,9 +3,14 @@ import path from 'path';
 
 test.describe('WOW-2: Client-Side Hash Chain Verifier & Tamper Simulation', () => {
   test('Browser verifies hash-chain integrity, simulates 1-byte tamper, and cascades detection', async ({ page }) => {
-    // 1. Visit /verify/mission-demo-alpha
-    await page.goto('/verify/mission-demo-alpha');
+    // 1. Visit /verify/demo-seed (WOW-F2)
+    await page.goto('/verify/demo-seed');
     await expect(page.locator('h1')).toContainText('ĐỪNG TIN CHÚNG TÔI — TỰ KIỂM CHỨNG');
+
+    // Verify DEMO SEED banner is visible on demo-seed route
+    const seedBanner = page.locator('[data-testid="demo-seed-banner"]');
+    await expect(seedBanner).toBeVisible({ timeout: 10000 });
+    await expect(seedBanner).toContainText('DEMO SEED — KHÔNG PHẢI GIAO DỊCH THẬT');
 
     // 2. Verify initial pristine state (green)
     await expect(page.locator('text=CHUỖI TOÀN VẸN 100%')).toBeVisible({ timeout: 15000 });
