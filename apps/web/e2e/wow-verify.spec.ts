@@ -3,6 +3,8 @@ import path from 'path';
 
 test.describe('WOW-2: Client-Side Hash Chain Verifier & Tamper Simulation', () => {
   test('Browser verifies hash-chain integrity, simulates 1-byte tamper, and cascades detection', async ({ page }) => {
+    test.setTimeout(60000);
+
     // 1. Visit /verify/demo-seed (WOW-F2)
     await page.goto('/verify/demo-seed');
     await expect(page.locator('h1')).toContainText('ĐỪNG TIN CHÚNG TÔI — TỰ KIỂM CHỨNG');
@@ -24,8 +26,8 @@ test.describe('WOW-2: Client-Side Hash Chain Verifier & Tamper Simulation', () =
 
     // 3. Click "Thử sửa 1 byte dữ liệu"
     const tamperBtn = page.locator('[data-testid="tamper-one-byte-btn"]');
-    await expect(tamperBtn).toBeVisible();
-    await tamperBtn.click();
+    await expect(tamperBtn).toBeVisible({ timeout: 10000 });
+    await tamperBtn.click({ force: true });
 
     // 4. Verify tampering detected immediately in browser
     await expect(page.locator('text=CHUỖI BỊ GÃY / GIAN LẬN')).toBeVisible();

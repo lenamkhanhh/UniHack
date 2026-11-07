@@ -19,7 +19,7 @@ test.describe('WOW-0: Replay Vụ Bankr $174k Incident', () => {
 
     // 4. Verify right panel shows 100% funds preserved with $0.00 loss
     await expect(page.locator('text=BẢO TOÀN 100% TIỀN TỆ TRÊN AVALANCHE')).toBeVisible();
-    await expect(page.locator('text=BLOCK (RECIPIENT_NOT_ALLOWLISTED)')).toBeVisible();
+    await expect(page.locator('text=BLOCK RECIPIENT_NOT_ALLOWLISTED')).toBeVisible();
 
     // 5. Verify decoded Morse inspector appears
     await expect(page.locator('text=Chuỗi mã Morse ẩn trong tài liệu nguồn:')).toBeVisible();
