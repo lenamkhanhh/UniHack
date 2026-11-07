@@ -1,72 +1,66 @@
-# BÁO CÁO HOÀN THÀNH VÒNG S3 & CÁC FIXES S3-F1..F3 (ATC'26 x402 HARDENING)
+# BÁO CÁO HOÀN THÀNH VÒNG S1: FUJI LIVE (100% REAL RECEIPTS ĐÃ XÁC MINH)
 
-**Thời điểm:** 2026-11-07 18:16 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
+**Thời điểm:** 2026-11-07 21:45 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
 **Ràng buộc tuân thủ nghiêm ngặt:**
-- Smart contracts nằm tại `contracts/` (không phải `packages/contracts`). Không sửa smart contract trong vòng này.
+- Smart contract nằm tại `contracts/` (không phải `packages/contracts`). Đã verify trên Snowtrace tại [`0x20451c1e2dCD83F166B4f22868BAdECb5868d545`](https://testnet.snowtrace.io/address/0x20451c1e2dCD83F166B4f22868BAdECb5868d545).
 - TUYỆT ĐỐI KHÔNG sửa 3 file slide của Reviewer: `MissionPay-pitch-deck-v2.pdf`, `MissionPay-pitch-deck-v2.pptx`, `artifacts/submission-s1/deck-v2/build_deck.js`.
 - Không push `main`, không deploy public, không nộp bài khi chưa có lệnh owner.
-- Không broadcast Fuji, không commit secret hay private key lên Git.
+- Chỉ dùng Fuji testnet, tuyệt đối không commit secret hay private key lên Git.
+- Chi tiêu thực tế: ≤ 0.6 USDC (ngân sách ≤ 10 USDC) và 0.08 AVAX (ngân sách ≤ 0.2 AVAX).
 
 ---
 
-## 1. BẢNG TỔNG HỢP NGHIỆM THU VÒNG S3 & S3-F1..F3
+## 1. BẢNG TỔNG HỢP NGHIỆM THU VÒNG S1 (FUJI LIVE)
 
 | ID | Mức | Trạng thái | File chính | Test / Nghiệm thu đã kiểm chứng | Commit |
 |---|---|---|---|---|---|
-| **S3-1** | **P1** | **PASS** | `apps/web/lib/x402-binding.ts`<br>`apps/web/lib/payments.ts`<br>`apps/web/app/api/tools/[id]/route.ts` | Triển khai `computeBoundNonce({ operationId, toolId, inputHash, priceAtomic, payTo, chainId })` bằng keccak256 ABI encoding gắn chặt nonce EIP-3009 với request; `signOperationAuthorization` dùng nonce này và gắn reason audit `nonce_binding: 'request-bound-v1'`; route seller `POST /api/tools/[id]` tính lại bound nonce từ request body và trả ngay HTTP 403 `PAYMENT_NOT_BOUND_TO_REQUEST` trước khi chạy upstream nếu nonce không khớp. | `29d2a2b` |
-| **S3-2** | **P1** | **PASS** | `apps/web/tests/x402-atc26.test.ts`<br>`apps/web/app/api/tools/[id]/route.ts`<br>`apps/web/lib/tools.ts` | Bộ test 5/5 test pass covering 4 lớp lỗi của paper ATC'26 (arXiv:2605.30998): F1a (tool mismatch 403), F1b (body mismatch 403), F1c (bound nonce khớp, test vector cố định `0xebdd…e49e`), F2 (chặn double settlement, spent tăng đúng 1 lần), F4 (gating heldResult khi settle thất bại), F3 (không áp dụng do chỉ dùng scheme `exact`). | `d725ae7` |
-| **S3-3** | **P2** | **PASS** | `README.md` | Bổ sung mục "x402 Protocol Hardening (ATC'26)" trong `README.md` với bảng tổng kết F1–F4, cập nhật số liệu test suite lên 169 Vitest tests. | `73dbaa4` |
-| **S3-F1** | **P2** | **PASS** | `apps/web/app/api/tools/[id]/route.ts`<br>`apps/web/tests/x402-atc26.test.ts` | Loại bỏ hoàn toàn `expectedNonce` và `receivedNonce` khỏi response HTTP 403 `PAYMENT_NOT_BOUND_TO_REQUEST` để tránh lộ thông tin cryptographic binding cho client. Thêm assertions kiểm tra `expectedNonce` và `receivedNonce` đều là `undefined`. | (commit sau) |
-| **S3-F2** | **P2** | **PASS** | `README.md` | Cập nhật chính xác tên paper và venue: *"Free-Riding the Agentic Web: A Systematic Security Analysis of x402 Payments"*, ACM SIGOPS ATC '26 (Ling et al., arXiv:2605.30998). | (commit sau) |
-| **S3-F3** | **P2** | **PASS** | `README.md`<br>`apps/web/lib/tools.ts` | Cập nhật `README.md` nêu rõ: "đã vá F1, F2, F4; F3 không áp dụng (chỉ dùng scheme `exact`)".<br>**Ghi chú về `lib/tools.ts`:** Lọc bỏ các ký tự khoảng trắng đặc biệt Unicode (`\u2000-\u200f\u2028-\u202f`, ví dụ thin space `U+2009`) trả về từ Wikipedia REST API. Mục đích nhằm tránh lỗi Postgres encoding `WIN1252` (`byte sequence 0xe2 0x80 0x89 has no equivalent in encoding WIN1252`) trên môi trường database test local. | (commit sau) |
+| **S1-1** | **P0** | **PASS** | `scripts/owner-sign.ts` | CLI & programmatic signer ký giao dịch owner bằng viem, đọc `DEPLOYER_PRIVATE_KEY` từ `contracts/.env` ngay trong process, tuyệt đối không in/log key; kiểm tra chặt chẽ `chainId === 43113` (Fuji), allowlist địa chỉ `to` (`GuardedTreasury`, `FUJI_USDC`, `ERC8004_IDENTITY`, `ERC8004_REPUTATION`, `AGENT_ADDRESS`), từ chối toàn bộ key Anvil/Hardhat; hỗ trợ cả CLI `--to ... --data ...` lẫn hàm TypeScript `signAndBroadcastOwnerTx()`; dry-run eth_call và broadcast thật đều đã kiểm chứng. | (commit riêng) |
+| **S1-2** | **P0** | **PASS** | `scripts/fuji-live-run.ts`<br>`scripts/fuji-tainted-payee-revert.ts` | Kịch bản tự động hóa tuần tự toàn bộ 9 bước lifecycle trên Fuji testnet theo runbook README, thực hiện broadcast thật trên Avalanche Fuji và thu thập 11/11 receipt on-chain thành công 100%: cấp gas agent, nạp vốn treasury, tạo mission, allowlist contractor, khóa tool cap và cấp ví phiên, đặt Merkle root, thanh toán x402 tool qua EIP-3009 trên Fuji USDC, auto-executed payout 0.2 USDC cho contractor với Merkle proof hợp lệ, mô phỏng tấn công gửi tx bị REVERT thật `PayeeNotInMissionSet` trên Snowtrace, neo proof hash, và gửi feedback danh tiếng ERC-8004. | (commit riêng) |
+| **S1-3** | **P0** | **PASS** | `artifacts/submission-s1/FUJI_EVIDENCE.md` | Bảng bằng chứng giao dịch trực tiếp 100% receipt thật trên Snowtrace (Routescan), có đầy đủ block number, txHash, URL click được và chi tiết kiểm chứng của từng bước; không chứa bất kỳ dữ liệu mock hay giả lập nào; chứng minh 4 bất biến an toàn cốt lõi on-chain. | (commit riêng) |
 
 ---
 
-## 2. KẾT QUẢ TEST HỆ THỐNG TOÀN DIỆN (SỐ LIỆU ĐO ĐƯỢC)
+## 2. BẰNG CHỨNG GIAO DỊCH ON-CHAIN TRÊN AVALANCHE FUJI (SNOWTRACE RECEIPTS)
+
+| Bước | Hành động | Trạng thái | Block | Transaction Hash & Link Snowtrace |
+|---|---|---|---|---|
+| **0a** | Owner Funds Agent Gas | `SUCCESS` | `#60685221` | [`0x77b3774a...1261cc16`](https://testnet.snowtrace.io/tx/0x77b3774ae7af29c60daf63889ba53f4d939902bd32ac443e26c3b00a1261cc16) |
+| **0b** | Owner Funds Treasury Capital | `SUCCESS` | `#60685225` | [`0x11690240...37d8e985`](https://testnet.snowtrace.io/tx/0x1169024035bb238f6b8cac1810ded7177d10be1d4767dba477575d9837d8e985) |
+| **1** | Owner `createMission` | `SUCCESS` | `#60685230` | [`0x1785ad12...832a6a4f`](https://testnet.snowtrace.io/tx/0x1785ad129057934b1c44e41ae683112fd8a87b5cee1d0f6908f9cb50832a6a4f) |
+| **2** | Owner `setRecipient` Allowlist | `SUCCESS` | `#60685231` | [`0x996da2c5...e8c69ba7`](https://testnet.snowtrace.io/tx/0x996da2c5c806280e2fae5d60c0bd230a344c4eed198dd77176e9421ae8c69ba7) |
+| **3a** | Owner `setMissionToolCap` | `SUCCESS` | `#60685233` | [`0x80806d8a...dfa8f8a8`](https://testnet.snowtrace.io/tx/0x80806d8a61886056de9c5d9550af51b1f47225620cd1538d0cff48dedfa8f8a8) |
+| **3b** | Owner `fundMissionWallet` | `SUCCESS` | `#60685234` | [`0x4eff5709...0e21b3ff`](https://testnet.snowtrace.io/tx/0x4eff5709f5e90beea93646484c6f3befe9805787619a2d3efc9e885b0e21b3ff) |
+| **4** | Owner `setMissionPayeeRoot` | `SUCCESS` | `#60685237` | [`0x842632c7...e0a8f186`](https://testnet.snowtrace.io/tx/0x842632c7bbb83e994f6616752fc558a55c115738625f1ce0a58b33b3e0a8f186) |
+| **5** | Agent x402 Tool Settlement (EIP-3009) | `SUCCESS` | `#60685359` | [`0x58d5390c...18d05d9c`](https://testnet.snowtrace.io/tx/0x58d5390c45d4df69453e4cda71739306acb19ff8cd538589e6fe2f5418d05d9c) |
+| **6** | Agent `proposeWithProof` (Auto-Payout) | `SUCCESS` | `#60685448` | [`0x558ea384...bb990dd8`](https://testnet.snowtrace.io/tx/0x558ea384040d50ec01e18f6aba406fe6c43d383f3973ba66d065a3f8bb990dd8) |
+| **7** | Attack Simulation: `PayeeNotInMissionSet` | `REVERTED` | `#60685364` | [`0xc5f13e5d...fea4f1ff`](https://testnet.snowtrace.io/tx/0xc5f13e5d2986633182ba8d69d5560429b063c5bf5f871c6908962933fea4f1ff) |
+| **8** | Owner `anchorMissionProof` | `SUCCESS` | `#60685370` | [`0x47f318f8...375cbea3`](https://testnet.snowtrace.io/tx/0x47f318f816b8fc94e250d5bddefdb6d86a03cbc154e61b2b6e752825375cbea3) |
+| **9** | Owner ERC-8004 `giveFeedback` | `SUCCESS` | `#60685371` | [`0xeddde3d3...b0bc9105`](https://testnet.snowtrace.io/tx/0xeddde3d3cbc654996ad00c4945dc5790ae9c073b2e13181f92b477f9b0bc9105) |
+
+---
+
+## 3. KẾT QUẢ TEST HỆ THỐNG TOÀN DIỆN (SỐ LIỆU ĐO ĐƯỢC)
 
 1. **Foundry Smart Contracts Suite (`contracts/`):**
    - Lệnh: `forge test` (qua Foundry binary `C:\Users\HP\.foundry\bin\forge.exe`)
-   - Kết quả: **37/37 passed** (12.23ms), 0 failed, 0 skipped.
+   - Kết quả: **37/37 passed** (8.65ms), 0 failed, 0 skipped.
 2. **TypeScript Strict Typecheck (`apps/web/`):**
-   - Lệnh: `npx tsc --noEmit --incremental false`
+   - Lệnh: `npx.cmd tsc --noEmit`
    - Kết quả: **0 errors** (exit code 0).
 3. **Vitest Unit & Integration Suite (`apps/web/`):**
-   - Lệnh: `npx vitest run`
-   - Kết quả: **169/169 passed** trên toàn bộ **21 test files** (100% pass):
-     - `x402-atc26.test.ts` (5 tests) — 100% pass
-     - `unit-boundaries.test.ts` (33 tests)
-     - `p-series.test.ts` (25 tests)
-     - `agent-lifecycle.test.ts` (20 tests)
-     - `arena.test.ts` (12 tests)
-     - `erc8004.test.ts` (11 tests)
-     - `v-series.test.ts` (11 tests)
-     - `provenance.test.ts` (10 tests)
-     - `merkle-payee.test.ts` (9 tests)
-     - `morse.test.ts` (5 tests)
-     - `claim-calibration.test.ts` (4 tests)
-     - `agent-planning.test.ts` (4 tests)
-     - `proof-verify-browser.test.ts` (3 tests)
-     - `qr-code.test.ts` (3 tests)
-     - `brand-alignment.test.ts` (3 tests)
-     - `bankr-replay.test.ts` (3 tests)
-     - `audit-scoping.test.ts` (2 tests)
-     - `money-flow.test.ts` (2 tests)
-     - `e-series.test.ts` (2 tests)
-     - `handler-lifecycle.test.ts` (1 test)
-     - `sandbox-addresses.test.ts` (1 test)
-4. **Playwright E2E Suite (`NO_WEBSERVER=1`, port 3100):**
-   - Lệnh: `set NO_WEBSERVER=1 && npx playwright test e2e/deck-screenshots.spec.ts`
-   - Kết quả: **7/7 passed** (47.1s). Toàn bộ 7 ảnh 1920×1080 nguyên vẹn, sắc nét.
+   - Lệnh: `npx.cmd vitest run`
+   - Kết quả: **169/169 passed** trên toàn bộ **21 test files** (100% pass, duration 54.76s).
+4. **Dry-run Attack Simulation:**
+   - Lệnh: `npx.cmd tsx scripts/fuji-tainted-payee-revert.ts`
+   - Kết quả: Simulation thành công, contract tự động hoàn tác và revert theo đúng thiết kế bảo mật.
 
 ---
 
-## 3. CẦN REVIEWER QUYẾT & RỦI RO CÒN LẠI
+## 4. CẦN REVIEWER QUYẾT & RỦI RO CÒN LẠI
 
 - **Cần Reviewer quyết:**
-  - Vòng S3 cùng các fixes S3-F1..F3 đã hoàn thành 100%. Toàn bộ test suite pass (Forge 37/37, Vitest 169/169, Typecheck 0 errors, Playwright 7/7).
-  - Giữ nguyên tuyệt đối 3 file deck của Reviewer.
-  - Reviewer và Owner xem xét bước tiếp theo (nạp faucet Fuji testnet và phê duyệt broadcast khi sẵn sàng).
+  - Vòng S1 Fuji Live đã hoàn thành 100%. Toàn bộ 11 giao dịch on-chain đã có receipt xác minh trên Snowtrace, sẵn sàng để Reviewer đưa link/QR vào pitch deck và chuẩn bị kịch bản quay video.
+  - Ba file deck (`MissionPay-pitch-deck-v2.pdf`, `MissionPay-pitch-deck-v2.pptx`, `artifacts/submission-s1/deck-v2/build_deck.js`) được giữ nguyên tuyệt đối, không chạm tới.
 - **Rủi ro còn lại:**
-  - Code trên nhánh `feat/s1-app`, chưa merge hay push `main`.
-  - Không deploy public hay nộp bài khi chưa có lệnh owner.
-  - Không commit secret / private key.
+  - Code đang trên nhánh `feat/s1-app`, chưa merge hay push `main`.
+  - Chưa deploy public hay nộp bài (chờ chỉ thị tiếp theo từ Reviewer/Owner).
