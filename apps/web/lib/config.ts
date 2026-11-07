@@ -151,6 +151,16 @@ export function validateLiveFujiConfigSync(): void {
 }
 
 /**
+ * PV-F3: Unified helper resolving GUARDED_TREASURY_ADDRESS across all routes
+ */
+export function getGuardedTreasuryAddress(): `0x${string}` {
+  const addr = process.env.GUARDED_TREASURY_ADDRESS?.trim() ||
+    process.env.NEXT_PUBLIC_GUARDED_TREASURY_ADDRESS?.trim() ||
+    '0x5aAdFB43eF8dAF45DD80F4676345b7676f1D70e3';
+  return addr as `0x${string}`;
+}
+
+/**
  * KEY-02 & CFG-01 Security Guard: Validates that when operating in LIVE_FUJI mode,
  * public Anvil/Hardhat test accounts and private keys are strictly rejected, and
  * GUARDED_TREASURY_ADDRESS is a valid deployed contract with bytecode on Avalanche Fuji.

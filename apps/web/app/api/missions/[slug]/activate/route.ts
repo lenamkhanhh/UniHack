@@ -6,7 +6,7 @@ import { getSessionWalletForMission } from '@/lib/session-wallets';
 import { appendAuditEntry } from '@/lib/audit';
 import { encodeFunctionData, parseAbiItem } from 'viem';
 import { verifyFundingReceiptOnFuji, verifyPayeeRootReceiptOnFuji } from '@/lib/fuji-receipts';
-import { validateLiveFujiConfig } from '@/lib/config';
+import { validateLiveFujiConfig, getGuardedTreasuryAddress } from '@/lib/config';
 import {
   saveMissionPayees,
   getMissionPayees,
@@ -65,9 +65,8 @@ export async function POST(
         appOrigin,
       });
 
-      const rawTreasury = process.env.GUARDED_TREASURY_ADDRESS?.trim();
-      const guardedTreasuryAddress = (rawTreasury ||
-        '0x5aAdFB43eF8dAF45DD80F4676345b7676f1D70e3') as `0x${string}`;
+      // PV-F3: Unified guarded treasury address
+      const guardedTreasuryAddress = getGuardedTreasuryAddress();
 
       // WIRE-01 & CFG-01: In Stage S2, wire session wallet funding into activation lifecycle
       if (res.state.stage === 'S2') {
@@ -165,14 +164,30 @@ export async function POST(
         }
       }
 
-      // PV-3: Handle owner-signed payee set and Merkle root transaction
+      // PV-3 & PV-F3: Handle owner-signed payee set and Merkle root transaction with DB persistence
+      let dbPayees: string[] | null = null;
+      if (mission.payeesJson) {
+        try {
+          const parsed = JSON.parse(mission.payeesJson);
+          if (Array.isArray(parsed) && parsed.length > 0) dbPayees = parsed;
+        } catch {}
+      }
+
       const payeesList =
         Array.isArray(payload.payees) && payload.payees.length > 0
           ? payload.payees
-          : getMissionPayees(mission.slug);
+          : (dbPayees || getMissionPayees(mission.slug));
 
       if (payeesList && payeesList.length > 0) {
         const treeResult = saveMissionPayees(mission.slug, payeesList);
+        await tx.mission.update({
+          where: { slug: mission.slug },
+          data: {
+            payeesJson: JSON.stringify(treeResult.payees),
+            payeeRoot: treeResult.root,
+          },
+        });
+
         const unsignedPayeeTx = {
           to: guardedTreasuryAddress,
           data: buildSetMissionPayeeRootCalldata(mission.missionId, treeResult.root),

@@ -33,6 +33,8 @@ model Mission {
   status         String   // ACTIVE/CLOSED; expiry checked from expiresAt on every spend
   completedAt    DateTime?
   deliverableHash String?
+  payeesJson      String?
+  payeeRoot       String?
   configVersion  Int      @default(1)
   policyHash     String
   auditHeadHash  String   @default("0x0000000000000000000000000000000000000000000000000000000000000000")

@@ -6,6 +6,7 @@ import { verifyAndConsumeChallenge, ChallengeError } from '@/lib/challenges';
 import { toMissionDto } from '@/lib/dto';
 import { verifyToken } from '@/lib/auth';
 import { saveMissionPayees, buildSetMissionPayeeRootCalldata } from '@/lib/merkle';
+import { getGuardedTreasuryAddress } from '@/lib/config';
 
 export async function GET(req: NextRequest) {
   try {
@@ -66,6 +67,30 @@ export async function POST(req: NextRequest) {
     const missionId = hashUtf8(slug);
     const policyHash = hashUtf8(`policy:1:${treasuryCap}:${toolCap}`);
 
+    let payeeInfo: any = null;
+    let payeesJson: string | null = null;
+    let payeeRoot: string | null = null;
+
+    if (Array.isArray(payload.payees) && payload.payees.length > 0) {
+      const treeResult = saveMissionPayees(slug, payload.payees);
+      payeesJson = JSON.stringify(treeResult.payees);
+      payeeRoot = treeResult.root;
+      const guardedTreasuryAddress = getGuardedTreasuryAddress();
+      const unsignedTx = {
+        to: guardedTreasuryAddress,
+        data: buildSetMissionPayeeRootCalldata(missionId, treeResult.root),
+        value: '0',
+        chainId: 43113,
+      };
+
+      payeeInfo = {
+        root: treeResult.root,
+        payees: treeResult.payees,
+        status: 'PAYEE_ROOT_MOCK_NOT_SENT',
+        unsignedTx,
+      };
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       await verifyAndConsumeChallenge(tx, {
         nonce,
@@ -88,6 +113,8 @@ export async function POST(req: NextRequest) {
           reservedTool: '0',
           expiresAt,
           status: 'ACTIVE',
+          payeesJson,
+          payeeRoot,
           configVersion: 1,
           policyHash,
         },
@@ -95,27 +122,6 @@ export async function POST(req: NextRequest) {
 
       return mission;
     });
-
-    let payeeInfo: any = null;
-    if (Array.isArray(payload.payees) && payload.payees.length > 0) {
-      const treeResult = saveMissionPayees(slug, payload.payees);
-      const guardedTreasuryAddress =
-        process.env.NEXT_PUBLIC_GUARDED_TREASURY_ADDRESS ||
-        '0x5aAdFB43eF8dAF45DD80F4676345b7676f1D70e3';
-      const unsignedTx = {
-        to: guardedTreasuryAddress,
-        data: buildSetMissionPayeeRootCalldata(missionId, treeResult.root),
-        value: '0',
-        chainId: 43113,
-      };
-
-      payeeInfo = {
-        root: treeResult.root,
-        payees: treeResult.payees,
-        status: 'PAYEE_ROOT_MOCK_NOT_SENT',
-        unsignedTx,
-      };
-    }
 
     return NextResponse.json({ mission: result, payeeInfo }, { status: 201 });
   } catch (err: any) {

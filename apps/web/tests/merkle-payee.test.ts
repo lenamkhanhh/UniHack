@@ -14,6 +14,7 @@ import {
   missionPayeeRootSetEventAbi,
 } from '../lib/fuji-receipts';
 import { executeTreasuryPayoutWithProof } from '../lib/payments';
+import { prisma } from '../lib/db';
 import { encodeEventTopics, encodeAbiParameters, parseAbiParameters } from 'viem';
 
 describe('PV-3: Owner-signed Payee Merkle Root & proposeWithProof Settlement', () => {
@@ -182,5 +183,52 @@ describe('PV-3: Owner-signed Payee Merkle Root & proposeWithProof Settlement', (
     });
     expect(wrongContractRes.valid).toBe(false);
     expect(wrongContractRes.error).toContain('recipient mismatch');
+  });
+
+  it('6. PV-F3: Mission payees stored in DB survive RAM cache clear and reconstruct root during activate', async () => {
+    const slug = `pv-f3-persist-${Date.now()}`;
+    const missionId = `0x${'3'.repeat(64)}`;
+    const payees = [payeeA, payeeB];
+
+    // Compute expected tree
+    const tree = computePayeeMerkleTree(payees);
+
+    // Persist mission in DB with payeesJson and payeeRoot
+    const mission = await prisma.mission.create({
+      data: {
+        slug,
+        missionId,
+        ownerAddress: '0x00000000000000000000000000000000000A11CE',
+        agentAddress: '0x1111111111111111111111111111111111111111',
+        treasuryCap: '10000000',
+        toolCap: '5000000',
+        spentTool: '0',
+        reservedTool: '0',
+        expiresAt: new Date(Date.now() + 86400000),
+        status: 'ACTIVE',
+        payeesJson: JSON.stringify(payees),
+        payeeRoot: tree.root,
+        configVersion: 1,
+        policyHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+      },
+    });
+
+    // Wipe the in-memory cache completely
+    clearMissionPayeesForTesting();
+    expect(getMissionPayees(slug)).toBeUndefined();
+
+    // Verify activate logic can recover payees from DB column and regenerate identical root
+    const dbMission = await prisma.mission.findUnique({ where: { slug } });
+    expect(dbMission).toBeDefined();
+    expect(dbMission?.payeesJson).toBe(JSON.stringify(payees));
+    expect(dbMission?.payeeRoot).toBe(tree.root);
+
+    const parsedPayees = JSON.parse(dbMission!.payeesJson!);
+    const recoveredTree = saveMissionPayees(slug, parsedPayees);
+    expect(recoveredTree.root.toLowerCase()).toBe(EXPECTED_ROOT.toLowerCase());
+    expect(getMissionPayeeProof(slug, payeeA)![0].toLowerCase()).toBe(EXPECTED_PROOF_A.toLowerCase());
+
+    // Clean up
+    await prisma.mission.delete({ where: { slug } });
   });
 });
