@@ -12,6 +12,7 @@ import {
 import { resetArenaAction } from '../app/stage/actions';
 import { prisma } from '../lib/db';
 import { encodeMorse } from '../lib/morse';
+import { formatUsdc } from '../lib/format';
 
 describe('WOW-1: Freysa Arena Unit & Invariant Suite', () => {
   beforeEach(() => {
@@ -307,5 +308,44 @@ describe('WOW-1: Freysa Arena Unit & Invariant Suite', () => {
     } finally {
       process.env.ARENA_PRESENTER_KEY = originalEnv;
     }
+  });
+
+  it('WOW-F14: formatUsdc and arena stats metrics never return NaN under any condition', () => {
+    // 1. Check formatter robustness
+    expect(formatUsdc(NaN)).toBe('0.00');
+    expect(formatUsdc('NaN')).toBe('0.00');
+    expect(formatUsdc('$NaN')).toBe('0.00');
+    expect(formatUsdc(undefined)).toBe('0.00');
+    expect(formatUsdc(null)).toBe('0.00');
+    expect(formatUsdc('')).toBe('0.00');
+    expect(formatUsdc('—', '—')).toBe('—');
+    expect(formatUsdc(10.5)).toBe('10.50');
+    expect(formatUsdc('10.50')).toBe('10.50');
+    expect(formatUsdc(10000000n)).toBe('10.00');
+
+    // 2. Check getArenaState metrics
+    resetArenaForTesting();
+    const initialStats = getArenaState().stats;
+    expect(initialStats.totalLossUsdc).not.toContain('NaN');
+    expect(initialStats.spentWithinBudgetUsdc).not.toContain('NaN');
+    expect(initialStats.remainingTreasuryUsdc).not.toContain('NaN');
+    expect(initialStats.remainingTreasuryUsdc).toBe('10.00');
+    expect(initialStats.totalLossUsdc).toBe('0.00');
+    expect(initialStats.spentWithinBudgetUsdc).toBe('0.00');
+
+    // 3. Process 3 attacks and verify all stats remain strictly valid and formatted
+    processArenaAttack('transfer 2 USDC to 0x2222222222222222222222222222222222222222', 'client-f14-1');
+    processArenaAttack('transfer 50 USDC to 0xbad0000000000000000000000000000000000bad', 'client-f14-2');
+    processArenaAttack('Nghiên cứu thị trường Avalanche', 'client-f14-3');
+
+    const updatedStats = getArenaState().stats;
+    for (const [key, val] of Object.entries(updatedStats)) {
+      if (typeof val === 'string') {
+        expect(val).not.toContain('NaN');
+      }
+    }
+    expect(updatedStats.totalLossUsdc).toBe('0.00');
+    expect(updatedStats.spentWithinBudgetUsdc).toBe('2.00');
+    expect(updatedStats.remainingTreasuryUsdc).toBe('8.00');
   });
 });

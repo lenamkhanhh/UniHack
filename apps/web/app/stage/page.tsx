@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import MoneyFlowDiagram from '@/components/MoneyFlowDiagram';
 import { resetArenaAction } from './actions';
+import { formatUsdc, formatSafeNumber } from '@/lib/format';
 
 interface ArenaStats {
   totalAttacks: number;
@@ -35,8 +36,10 @@ export default function StageConsolePage() {
   const [arenaStats, setArenaStats] = useState<ArenaStats>({
     totalAttacks: 12,
     convincedAttacks: 12,
-    totalLossUsdc: (0).toFixed(2),
-    spentWithinBudgetUsdc: (0).toFixed(2),
+    totalLossUsdc: '0.00',
+    spentWithinBudgetUsdc: '0.00',
+    remainingTreasuryUsdc: '10.00',
+    treasuryCapUsdc: '10.00',
     passedAttacks: 0,
     recentAttacks: [
       {
@@ -452,11 +455,11 @@ export default function StageConsolePage() {
                   Tiền Ra Ngoài Phạm Vi Cho Phép
                 </span>
                 <span className="text-5xl md:text-6xl font-black font-mono text-emerald-300">
-                  ${arenaStats.totalLossUsdc}
+                  ${formatUsdc(arenaStats.totalLossUsdc, '0.00')}
                 </span>
                 <div className="mt-2 text-xs font-mono text-gray-400 flex flex-col items-center space-y-0.5">
-                  <span>Chi trong ngân sách: <strong className="text-white">${arenaStats.spentWithinBudgetUsdc || (0).toFixed(2)}</strong></span>
-                  <span>Đòn hợp lệ lọt: <strong className="text-cyan-300">{arenaStats.passedAttacks || 0}</strong></span>
+                  <span>Chi trong ngân sách: <strong className="text-white">${formatUsdc(arenaStats.spentWithinBudgetUsdc, '0.00')}</strong></span>
+                  <span>Đòn hợp lệ lọt: <strong className="text-cyan-300">{formatSafeNumber(arenaStats.passedAttacks, 0)}</strong></span>
                 </div>
               </div>
             </div>
@@ -466,10 +469,10 @@ export default function StageConsolePage() {
               <div className="flex items-center space-x-3">
                 <span className="text-gray-400 font-bold">Ngân sách sandbox còn lại:</span>
                 <span className="text-emerald-400 font-black text-sm">
-                  ${arenaStats.remainingTreasuryUsdc || '10.00'} / ${arenaStats.treasuryCapUsdc || '10.00'}
+                  ${formatUsdc(arenaStats.remainingTreasuryUsdc, '10.00')} / ${formatUsdc(arenaStats.treasuryCapUsdc, '10.00')}
                 </span>
                 <span className="text-gray-500 text-[11px]">
-                  (Đã chi trong hạn mức: ${arenaStats.spentWithinBudgetUsdc || '0.00'})
+                  (Đã chi trong hạn mức: ${formatUsdc(arenaStats.spentWithinBudgetUsdc, '0.00')})
                 </span>
               </div>
 
@@ -482,8 +485,8 @@ export default function StageConsolePage() {
                         100,
                         Math.max(
                           0,
-                          (Number(arenaStats.remainingTreasuryUsdc ?? '10.00') /
-                            Number(arenaStats.treasuryCapUsdc ?? '10.00')) *
+                          (parseFloat(formatUsdc(arenaStats.remainingTreasuryUsdc, '10.00')) /
+                            (parseFloat(formatUsdc(arenaStats.treasuryCapUsdc, '10.00')) || 10)) *
                             100
                         )
                       )}%`,

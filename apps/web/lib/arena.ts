@@ -4,6 +4,7 @@ import { createSearchProposal, createSummaryProposal, createTreasuryProposal } f
 import { normalizeAddress } from './chain';
 import { TokenClaims } from './auth';
 import { decodeMorse, isMorseCode, parseTransferFromDecoded } from './morse';
+import { formatUsdc } from './format';
 
 export interface ArenaAttackRecord {
   id: string;
@@ -78,6 +79,14 @@ if (!globalForArena.__arenaStore) {
     spentTreasuryAtomic: 0n,
     spentToolAtomic: 0n,
   };
+} else {
+  // Ensure all counters exist in long-lived or hot-reloaded environments (WOW-F14)
+  const s = globalForArena.__arenaStore;
+  if (s.totalPreventedLossAtomic === undefined || typeof s.totalPreventedLossAtomic !== 'bigint') s.totalPreventedLossAtomic = 0n;
+  if (s.totalOutScopeAtomic === undefined || typeof s.totalOutScopeAtomic !== 'bigint') s.totalOutScopeAtomic = 0n;
+  if (s.spentWithinBudgetAtomic === undefined || typeof s.spentWithinBudgetAtomic !== 'bigint') s.spentWithinBudgetAtomic = 0n;
+  if (s.spentTreasuryAtomic === undefined || typeof s.spentTreasuryAtomic !== 'bigint') s.spentTreasuryAtomic = 0n;
+  if (s.spentToolAtomic === undefined || typeof s.spentToolAtomic !== 'bigint') s.spentToolAtomic = 0n;
 }
 
 const store = globalForArena.__arenaStore;
@@ -558,24 +567,25 @@ export function processArenaAttack(rawInput: string, clientIp: string = '127.0.0
 }
 
 function buildArenaStats(): ArenaStats {
+  const spentTreasury = typeof store.spentTreasuryAtomic === 'bigint' ? store.spentTreasuryAtomic : 0n;
   const remainingAtomic =
-    ARENA_TREASURY_CAP_ATOMIC > store.spentTreasuryAtomic
-      ? ARENA_TREASURY_CAP_ATOMIC - store.spentTreasuryAtomic
+    ARENA_TREASURY_CAP_ATOMIC > spentTreasury
+      ? ARENA_TREASURY_CAP_ATOMIC - spentTreasury
       : 0n;
 
   return {
-    totalAttacks: store.totalAttacks,
-    convincedAttacks: store.convincedAttacks,
-    totalLossUsdc: (Number(store.totalOutScopeAtomic) / 1e6).toFixed(2),
-    spentWithinBudgetUsdc: (Number(store.spentWithinBudgetAtomic) / 1e6).toFixed(2),
-    remainingTreasuryUsdc: (Number(remainingAtomic) / 1e6).toFixed(2),
-    treasuryCapUsdc: (Number(ARENA_TREASURY_CAP_ATOMIC) / 1e6).toFixed(2),
-    spentToolUsdc: (Number(store.spentToolAtomic) / 1e6).toFixed(2),
-    toolCapUsdc: (Number(ARENA_TOOL_CAP_ATOMIC) / 1e6).toFixed(2),
-    blockedAttacks: store.blockedAttacks,
-    queuedAttacks: store.queuedAttacks,
-    passedAttacks: store.passedAttacks,
-    preventedLossUsdc: (Number(store.totalPreventedLossAtomic) / 1e6).toFixed(2),
+    totalAttacks: store.totalAttacks || 0,
+    convincedAttacks: store.convincedAttacks || 0,
+    totalLossUsdc: formatUsdc(store.totalOutScopeAtomic ?? 0n, '0.00'),
+    spentWithinBudgetUsdc: formatUsdc(store.spentWithinBudgetAtomic ?? 0n, '0.00'),
+    remainingTreasuryUsdc: formatUsdc(remainingAtomic, '10.00'),
+    treasuryCapUsdc: formatUsdc(ARENA_TREASURY_CAP_ATOMIC, '10.00'),
+    spentToolUsdc: formatUsdc(store.spentToolAtomic ?? 0n, '0.00'),
+    toolCapUsdc: formatUsdc(ARENA_TOOL_CAP_ATOMIC, '5.00'),
+    blockedAttacks: store.blockedAttacks || 0,
+    queuedAttacks: store.queuedAttacks || 0,
+    passedAttacks: store.passedAttacks || 0,
+    preventedLossUsdc: formatUsdc(store.totalPreventedLossAtomic ?? 0n, '0.00'),
     lastUpdated: new Date().toISOString(),
   };
 }

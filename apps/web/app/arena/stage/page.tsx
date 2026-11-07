@@ -1,19 +1,31 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { ArenaStats, ArenaAttackRecord } from '@/lib/arena';
+import { formatUsdc, formatSafeNumber } from '@/lib/format';
+
+const DEFAULT_ARENA_STATS: ArenaStats = {
+  totalAttacks: 0,
+  convincedAttacks: 0,
+  totalLossUsdc: '0.00',
+  spentWithinBudgetUsdc: '0.00',
+  remainingTreasuryUsdc: '10.00',
+  treasuryCapUsdc: '10.00',
+  spentToolUsdc: '0.00',
+  toolCapUsdc: '5.00',
+  blockedAttacks: 0,
+  queuedAttacks: 0,
+  passedAttacks: 0,
+  preventedLossUsdc: '0.00',
+  lastUpdated: '',
+};
 
 export default function ArenaStagePage() {
-  const [data, setData] = useState<any>({
-    stats: {
-      totalAttacks: 0,
-      convincedAttacks: 0,
-      totalLossUsdc: (0).toFixed(2),
-      blockedAttacks: 0,
-      queuedAttacks: 0,
-      passedAttacks: 0,
-      preventedLossUsdc: (0).toFixed(2),
-      spentWithinBudgetUsdc: (0).toFixed(2),
-    },
+  const [data, setData] = useState<{
+    stats: ArenaStats;
+    recentAttacks: ArenaAttackRecord[];
+  }>({
+    stats: DEFAULT_ARENA_STATS,
     recentAttacks: [],
   });
   const [arenaUrl, setArenaUrl] = useState('http://localhost:3100/arena');
@@ -28,7 +40,15 @@ export default function ArenaStagePage() {
         const res = await fetch('/api/arena/stats');
         if (res.ok) {
           const json = await res.json();
-          setData(json);
+          if (json.stats) {
+            setData({
+              stats: {
+                ...DEFAULT_ARENA_STATS,
+                ...json.stats,
+              },
+              recentAttacks: json.recentAttacks || json.stats.recentAttacks || [],
+            });
+          }
         }
       } catch {
         // silent poll error
@@ -40,14 +60,14 @@ export default function ArenaStagePage() {
     return () => clearInterval(interval);
   }, []);
 
-  const stats = data.stats || {
-    totalAttacks: 0,
-    convincedAttacks: 0,
-    totalLossUsdc: (0).toFixed(2),
-    spentWithinBudgetUsdc: (0).toFixed(2),
-    passedAttacks: 0,
-    blockedAttacks: 0,
-  };
+  const stats = data.stats || DEFAULT_ARENA_STATS;
+  const remainingUsdc = formatUsdc(stats.remainingTreasuryUsdc, '10.00');
+  const capUsdc = formatUsdc(stats.treasuryCapUsdc, '10.00');
+  const spentBudgetUsdc = formatUsdc(stats.spentWithinBudgetUsdc, '0.00');
+  const lossUsdc = formatUsdc(stats.totalLossUsdc, '0.00');
+  const remainingNum = parseFloat(remainingUsdc);
+  const capNum = parseFloat(capUsdc) || 10;
+  const budgetPercent = Math.min(100, Math.max(0, (remainingNum / capNum) * 100));
 
   return (
     <div className="min-h-screen bg-[#06080d] text-white p-6 font-sans flex flex-col justify-between">
@@ -111,11 +131,11 @@ export default function ArenaStagePage() {
             Tiền ra ngoài phạm vi cho phép
           </span>
           <span className="text-6xl font-black font-mono text-emerald-400 tracking-tight drop-shadow-[0_0_20px_rgba(52,211,153,0.3)]">
-            ${stats.totalLossUsdc}
+            ${lossUsdc}
           </span>
           <div className="mt-2 text-xs font-mono text-gray-400 flex flex-col items-center space-y-0.5">
-            <span>Chi trong ngân sách: <strong className="text-white">${stats.spentWithinBudgetUsdc}</strong></span>
-            <span>Đòn hợp lệ lọt: <strong className="text-cyan-300">{stats.passedAttacks}</strong></span>
+            <span>Chi trong ngân sách: <strong className="text-white">${spentBudgetUsdc}</strong></span>
+            <span>Đòn hợp lệ lọt: <strong className="text-cyan-300">{formatSafeNumber(stats.passedAttacks, 0)}</strong></span>
           </div>
         </div>
       </div>
@@ -125,25 +145,17 @@ export default function ArenaStagePage() {
         <div className="flex items-center space-x-3 mb-2 md:mb-0">
           <span className="text-gray-400 font-bold">Ngân sách sandbox còn lại:</span>
           <span className="text-emerald-400 font-black text-sm">
-            ${stats.remainingTreasuryUsdc || '10.00'} / ${stats.treasuryCapUsdc || '10.00'}
+            ${remainingUsdc} / ${capUsdc}
           </span>
           <span className="text-gray-500 text-[11px]">
-            (Đã chi: ${stats.spentWithinBudgetUsdc || '0.00'})
+            (Đã chi: ${spentBudgetUsdc})
           </span>
         </div>
         <div className="w-full md:w-72 bg-gray-900 rounded-full h-2.5 overflow-hidden border border-gray-800">
           <div
             className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500"
             style={{
-              width: `${Math.min(
-                100,
-                Math.max(
-                  0,
-                  (Number(stats.remainingTreasuryUsdc ?? '10.00') /
-                    Number(stats.treasuryCapUsdc ?? '10.00')) *
-                    100
-                )
-              )}%`,
+              width: `${budgetPercent}%`,
             }}
           />
         </div>
