@@ -3,8 +3,9 @@ import path from 'path';
 
 test.describe('WOW-5: Unified Stage Presentation Console', () => {
   test('Console switches scenes 1-5 via keyboard shortcuts and UI buttons, executes seed mode, and captures wow-stage-console screenshot', async ({ page }) => {
-    // 1. Navigate to /stage
+    // 1. Navigate to /stage and wait for client hydration
     await page.goto('/stage', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('[data-hydrated="true"]')).toBeVisible({ timeout: 10000 });
 
     // Scene 1: Hook ($174,000 · 5/2026)
     const scene1 = page.locator('[data-testid="scene-1-container"]');

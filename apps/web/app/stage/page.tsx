@@ -20,8 +20,13 @@ interface ArenaStats {
 }
 
 export default function StageConsolePage() {
+  const [mounted, setMounted] = useState(false);
   const [currentScene, setCurrentScene] = useState<number>(1);
   const [demoMode, setDemoMode] = useState<'LIVE' | 'DEMO SEED'>('LIVE');
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const [arenaStats, setArenaStats] = useState<ArenaStats>({
     totalAttacks: 12,
     convincedAttacks: 12,
@@ -146,7 +151,11 @@ export default function StageConsolePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#05070b] text-white flex flex-col justify-between font-sans selection:bg-cyan-500/30">
+    <div
+      data-testid="stage-console-root"
+      data-hydrated={mounted ? 'true' : 'false'}
+      className="min-h-screen bg-[#05070b] text-white flex flex-col justify-between font-sans selection:bg-cyan-500/30"
+    >
       {/* Top Bar for Stage Control */}
       <header className="border-b border-gray-800 bg-[#070a10]/90 backdrop-blur px-6 py-3 flex items-center justify-between z-30">
         <div className="flex items-center space-x-3">
