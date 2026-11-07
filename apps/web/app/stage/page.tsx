@@ -74,7 +74,10 @@ export default function StageConsolePage() {
       const res = await fetch('/api/arena/stats');
       const json = await res.json();
       if (json.stats) {
-        setArenaStats(json.stats);
+        setArenaStats({
+          ...json.stats,
+          recentAttacks: json.recentAttacks || json.stats.recentAttacks || [],
+        });
       }
     } catch (err) {
       console.error('Failed to reset arena:', err);
@@ -90,8 +93,11 @@ export default function StageConsolePage() {
       try {
         const res = await fetch('/api/arena/stats');
         const json = await res.json();
-        if (json.success) {
-          setArenaStats(json.stats);
+        if (json.stats) {
+          setArenaStats({
+            ...json.stats,
+            recentAttacks: json.recentAttacks || json.stats.recentAttacks || [],
+          });
         }
       } catch {
         // keep current
@@ -532,7 +538,7 @@ export default function StageConsolePage() {
                 </div>
 
                 <div className="space-y-2 max-h-60 overflow-y-auto font-mono text-xs">
-                  {arenaStats.recentAttacks.map((atk) => (
+                  {(arenaStats.recentAttacks || []).map((atk) => (
                     <div
                       key={atk.id}
                       className="p-3 bg-[#101420] border border-gray-800 rounded-xl flex items-center justify-between"
