@@ -1,27 +1,109 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { DEMO_SEED_MONEY_FLOW_ENTRIES, SeedLedgerEntry } from '@/lib/demo-seeds';
 
 interface MoneyFlowProps {
   mode?: 'LIVE' | 'DEMO SEED' | 'MOCK';
+  missionSlug?: string;
   autoSimulate?: boolean;
 }
 
-export default function MoneyFlowDiagram({ mode = 'DEMO SEED', autoSimulate = false }: MoneyFlowProps) {
+interface ParsedEntry {
+  id: string;
+  from: string;
+  to: string;
+  amount: string;
+  status: 'SETTLED' | 'BLOCKED';
+  rule?: string;
+  txHash: string;
+}
+
+export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, autoSimulate = false }: MoneyFlowProps) {
   const [animationState, setAnimationState] = useState<'IDLE' | 'FLOWING_VALID' | 'FLOWING_BLOCKED' | 'BOUNCED'>('IDLE');
   const [blockedRule, setBlockedRule] = useState<string>('RECIPIENT_NOT_ALLOWLISTED');
-  const [ledgerEntries, setLedgerEntries] = useState<Array<{ id: string; from: string; to: string; amount: string; status: string; rule?: string }>>([
-    { id: 'tx-1', from: 'Treasury', to: 'Session #1', amount: '5.00 USDC', status: 'SETTLED' },
-    { id: 'tx-2', from: 'Session #1', to: 'Search Tool', amount: '0.10 USDC', status: 'SETTLED' },
-  ]);
+  const [realEntries, setRealEntries] = useState<ParsedEntry[]>([]);
+  const [paymentMode, setPaymentMode] = useState<string>('MOCK');
+  const [loading, setLoading] = useState(false);
+
+  // Fetch real audit entries and system policy when not in DEMO SEED
+  useEffect(() => {
+    if (mode === 'DEMO SEED') {
+      return;
+    }
+
+    let isMounted = true;
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [policyRes, auditRes] = await Promise.all([
+          fetch('/api/policy').then((r) => r.json()),
+          fetch(missionSlug ? `/api/audit?missionSlug=${missionSlug}` : '/api/audit?feed=1').then((r) => r.json()),
+        ]);
+
+        if (isMounted) {
+          setPaymentMode(policyRes?.paymentMode || 'MOCK');
+          if (Array.isArray(auditRes?.entries)) {
+            const parsed: ParsedEntry[] = auditRes.entries.map((e: any, idx: number) => {
+              let parsedJson: any = {};
+              try {
+                parsedJson = JSON.parse(e.canonicalJson || '{}');
+              } catch {
+                parsedJson = {};
+              }
+
+              const isBlocked = parsedJson.kind === 'ATTACK_BLOCKED' || parsedJson.status === 'BLOCK' || parsedJson.rule?.includes('NOT_ALLOWLISTED');
+              const amountAtomic = parsedJson.amount || parsedJson.amount_atomic || '0';
+              const amountUsdc = (Number(amountAtomic) / 1_000_000).toFixed(2);
+
+              return {
+                id: e.id || `entry-${idx}`,
+                from: parsedJson.actor || 'Session #1',
+                to: parsedJson.to || (isBlocked ? '0xA77AC... (Attacker)' : 'Merchant Tool'),
+                amount: `${amountUsdc} USDC`,
+                status: isBlocked ? 'BLOCKED' : 'SETTLED',
+                rule: parsedJson.rule,
+                txHash: parsedJson.tx_hash || e.txHash || '',
+              };
+            });
+            setRealEntries(parsed);
+          } else {
+            setRealEntries([]);
+          }
+        }
+      } catch {
+        if (isMounted) setRealEntries([]);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [mode, missionSlug]);
+
+  // Determine active entries strictly according to mode
+  const activeEntries: ParsedEntry[] = useMemo(() => {
+    if (mode === 'DEMO SEED') {
+      return DEMO_SEED_MONEY_FLOW_ENTRIES;
+    }
+    return realEntries;
+  }, [mode, realEntries]);
+
+  // Label strictly follows honesty rule (F1)
+  const isLiveHonest = useMemo(() => {
+    if (mode === 'DEMO SEED') return false;
+    const hasVerifiedFujiTx = activeEntries.some((e) => e.txHash && e.txHash.startsWith('0x') && e.txHash.length === 66);
+    return paymentMode === 'LIVE_FUJI' && hasVerifiedFujiTx;
+  }, [mode, paymentMode, activeEntries]);
 
   const triggerValidFlow = () => {
     setAnimationState('FLOWING_VALID');
     setTimeout(() => {
-      setLedgerEntries(prev => [
-        { id: `tx-${Date.now().toString().slice(-4)}`, from: 'Session #1', to: 'Summary Tool', amount: '0.05 USDC', status: 'SETTLED' },
-        ...prev.slice(0, 4)
-      ]);
       setAnimationState('IDLE');
     }, 1500);
   };
@@ -32,10 +114,6 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', autoSimulate = fa
     setTimeout(() => {
       setAnimationState('BOUNCED');
       setTimeout(() => {
-        setLedgerEntries(prev => [
-          { id: `blk-${Date.now().toString().slice(-4)}`, from: 'Session #1', to: '0xA77AC... (Attacker)', amount: '50.00 USDC', status: 'BLOCKED', rule: 'RECIPIENT_NOT_ALLOWLISTED' },
-          ...prev.slice(0, 4)
-        ]);
         setAnimationState('IDLE');
       }, 2000);
     }, 800);
@@ -53,7 +131,7 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', autoSimulate = fa
   return (
     <div className="w-full bg-[#0a0d14] border border-gray-800 rounded-2xl p-6 font-mono text-white flex flex-col justify-between">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-800 pb-3 mb-6 gap-2">
         <div className="flex items-center space-x-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
           <h3 className="text-sm font-black tracking-wide text-white uppercase">
@@ -61,11 +139,28 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', autoSimulate = fa
           </h3>
         </div>
         <div className="flex items-center space-x-2">
-          <span className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-bold">
-            {mode === 'LIVE' ? 'LIVE ON AVALANCHE' : 'DEMO SEED / MOCK'}
-          </span>
+          {mode === 'DEMO SEED' ? (
+            <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/50 px-2.5 py-0.5 rounded font-bold">
+              DEMO SEED (OFFLINE)
+            </span>
+          ) : isLiveHonest ? (
+            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 px-2.5 py-0.5 rounded font-bold">
+              LIVE ON AVALANCHE FUJI
+            </span>
+          ) : (
+            <span className="text-[10px] bg-gray-800 text-gray-300 border border-gray-700 px-2.5 py-0.5 rounded font-bold">
+              MOCK — chưa gửi lên chain
+            </span>
+          )}
         </div>
       </div>
+
+      {/* DEMO SEED Banner if in seed mode */}
+      {mode === 'DEMO SEED' && (
+        <div className="mb-4 p-2.5 bg-amber-950/40 border border-amber-500/40 rounded-xl text-[11px] text-amber-200 text-center font-bold">
+          ⚠️ DEMO SEED — DỮ LIỆU MÔ PHỎNG DETERMINISTIC, KHÔNG PHẢI GIAO DỊCH THẬT
+        </div>
+      )}
 
       {/* Visual Canvas of Architecture & Particles */}
       <div className="relative py-8 px-4 bg-[#07090e] border border-gray-800/80 rounded-xl overflow-hidden min-h-[220px] flex items-center justify-between">
@@ -148,7 +243,7 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', autoSimulate = fa
               <span className="text-xs">🤖</span>
               <span className="text-[11px] font-bold text-emerald-300">Tool Merchant</span>
             </div>
-            <span className="text-[8px] text-gray-500 block truncate">0x7001... (Allowlisted)</span>
+            <span className="text-[8px] text-gray-500 block truncate">Allowlisted Tool</span>
           </div>
 
           {/* Attacker */}
@@ -162,7 +257,7 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', autoSimulate = fa
         </div>
       </div>
 
-      {/* Interactive Controls & Status Feedback */}
+      {/* Interactive Controls & Particle Triggers */}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center space-x-2">
           <button
@@ -170,60 +265,70 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', autoSimulate = fa
             disabled={animationState !== 'IDLE'}
             className="bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/50 text-emerald-300 px-3 py-1.5 rounded-lg text-xs font-bold transition disabled:opacity-50"
           >
-            ▶️ Mua Tool Hợp Lệ ($0.05)
+            ▶️ Mô Phỏng Luồng Hợp Lệ ($0.05)
           </button>
           <button
             onClick={triggerBlockedFlow}
             disabled={animationState !== 'IDLE'}
             className="bg-red-600/20 hover:bg-red-600/30 border border-red-500/50 text-red-300 px-3 py-1.5 rounded-lg text-xs font-bold transition disabled:opacity-50"
           >
-            ⚡ Thử Rút Tiền Kẻ Trộm ($50.00)
+            ⚡ Mô Phỏng Đòn Tấn Công Bị Chặn
           </button>
         </div>
 
         <div className="text-[11px] text-gray-400">
-          Trạng thái:{' '}
+          Hiệu ứng:{' '}
           <span className="text-white font-bold">
             {animationState === 'IDLE' && 'Sẵn sàng'}
-            {animationState === 'FLOWING_VALID' && 'Đang chuyển khoản...'}
+            {animationState === 'FLOWING_VALID' && 'Hạt tiền đang chuyển đến Merchant...'}
             {animationState === 'FLOWING_BLOCKED' && 'Attacker đang cố gắng rút...'}
             {animationState === 'BOUNCED' && `BẬT NGƯỢC! Khiên chặn: ${blockedRule}`}
           </span>
         </div>
       </div>
 
-      {/* Mini Ledger Preview */}
+      {/* Ledger Entries List (Derived dynamically from activeEntries, empty if no entries) */}
       <div className="mt-4 pt-3 border-t border-gray-800">
-        <span className="text-[10px] text-gray-400 uppercase tracking-wider block mb-2 font-bold">
-          Sổ cái Ledger thực tế (Audit Entries):
-        </span>
-        <div className="space-y-1.5">
-          {ledgerEntries.map((e) => (
-            <div
-              key={e.id}
-              className={`flex items-center justify-between text-[11px] px-2.5 py-1 rounded border ${
-                e.status === 'BLOCKED'
-                  ? 'bg-red-950/40 border-red-500/60 text-red-200'
-                  : 'bg-[#101420] border-gray-800 text-gray-300'
-              }`}
-            >
-              <div className="flex items-center space-x-2">
-                <span className="text-gray-500">{e.id}</span>
-                <span>{e.from} → {e.to}</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <span className="font-bold">{e.amount}</span>
-                <span
-                  className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
-                    e.status === 'BLOCKED' ? 'bg-red-500 text-white' : 'bg-emerald-500/20 text-emerald-300'
-                  }`}
-                >
-                  {e.status}
-                </span>
-              </div>
-            </div>
-          ))}
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">
+            Sổ Cái Ledger ({activeEntries.length} bản ghi):
+          </span>
+          {loading && <span className="text-[10px] text-cyan-400">Đang tải ledger...</span>}
         </div>
+
+        {activeEntries.length === 0 ? (
+          <div className="p-4 bg-[#07090e] border border-gray-800/80 rounded-xl text-center text-xs text-gray-500 font-mono">
+            Sổ cái ledger hiện chưa có giao dịch nào.
+          </div>
+        ) : (
+          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            {activeEntries.map((e) => (
+              <div
+                key={e.id}
+                className={`flex items-center justify-between text-[11px] px-2.5 py-1 rounded border ${
+                  e.status === 'BLOCKED'
+                    ? 'bg-red-950/40 border-red-500/60 text-red-200'
+                    : 'bg-[#101420] border-gray-800 text-gray-300'
+                }`}
+              >
+                <div className="flex items-center space-x-2 truncate pr-2">
+                  <span className="text-gray-500 text-[10px]">{e.id}</span>
+                  <span className="truncate">{e.from} → {e.to}</span>
+                </div>
+                <div className="flex items-center space-x-2 whitespace-nowrap">
+                  <span className="font-bold">{e.amount}</span>
+                  <span
+                    className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                      e.status === 'BLOCKED' ? 'bg-red-500 text-white' : 'bg-emerald-500/20 text-emerald-300'
+                    }`}
+                  >
+                    {e.status} {e.rule ? `(${e.rule})` : ''}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

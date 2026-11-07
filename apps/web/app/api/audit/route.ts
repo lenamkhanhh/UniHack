@@ -59,6 +59,33 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const urlMissionSlug = req.nextUrl.searchParams.get('missionSlug');
+    const isFeed = req.nextUrl.searchParams.get('feed') === '1';
+
+    if (isFeed || urlMissionSlug) {
+      const whereClause: any = {};
+      if (urlMissionSlug && urlMissionSlug !== 'all') {
+        whereClause.missionSlug = urlMissionSlug;
+      }
+      const rawEntries = await prisma.auditEntry.findMany({
+        where: whereClause,
+        orderBy: { id: 'desc' },
+        take: 20,
+      });
+
+      return NextResponse.json({
+        scope: isFeed ? 'feed' : 'mission_param',
+        entries: rawEntries.map((e) => ({
+          id: e.id?.toString() ?? '0',
+          sourceKey: e.sourceKey,
+          prevHash: e.missionPrevHash || e.prevHash,
+          entryHash: e.missionEntryHash || e.entryHash,
+          canonicalJson: e.missionCanonicalJson || e.canonicalJson,
+          createdAt: e.createdAt instanceof Date ? e.createdAt.toISOString() : e.createdAt,
+        })),
+      });
+    }
+
     // Public caller: return scoped bundles for explicitly published missions (Finding T06, V4-05)
     // Entire snapshot wrapped in single RepeatableRead transaction
     const bundles = await prisma.$transaction(
