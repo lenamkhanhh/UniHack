@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { planAgentStep, AgentHistoryStep } from '../lib/agent';
 import { validateProposalSchema, ToolPurchaseProposal } from '../lib/validator';
 import { toolCatalog } from '../lib/tools';
@@ -147,5 +147,116 @@ describe('AGENT-01: Autonomous AI Agent Planning Loop', () => {
 
     expect(plan.promptVersion).toBe('v1.0');
     expect(plan.deliverable).toBeDefined();
+  });
+
+  it('S2-0: planner uses gemini-3.8-flash default and sends key via x-goog-api-key header without URL query param', async () => {
+    const originalApiKey = process.env.GEMINI_API_KEY;
+    const originalModel = process.env.LLM_MODEL;
+    const originalFetch = global.fetch;
+
+    let interceptedUrl = '';
+    let interceptedHeaders: Record<string, string> = {};
+
+    process.env.GEMINI_API_KEY = 'test-secret-gemini-key-12345';
+    delete process.env.LLM_MODEL;
+
+    global.fetch = vi.fn().mockImplementation(async (url: string | URL | Request, init?: RequestInit) => {
+      interceptedUrl = String(url);
+      interceptedHeaders = (init?.headers as Record<string, string>) || {};
+      return {
+        ok: true,
+        json: async () => ({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      thought: 'Unit test mock thought',
+                      action: 'DONE',
+                      deliverable: 'Unit test deliverable',
+                      sources: ['https://example.com'],
+                    }),
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      } as Response;
+    });
+
+    try {
+      const plan = await planAgentStep({
+        goal: 'Test S2-0 API key header security',
+        missionSlug: 'test-agent-mission-s2-0',
+        history: [],
+      });
+
+      expect(interceptedUrl).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent');
+      expect(interceptedUrl).not.toContain('key=');
+      expect(interceptedHeaders['x-goog-api-key']).toBe('test-secret-gemini-key-12345');
+      expect(plan.plannerModel).toBe('gemini-3.8-flash');
+      expect(plan.plannerMode).toBe('LIVE_LLM');
+    } finally {
+      process.env.GEMINI_API_KEY = originalApiKey;
+      process.env.LLM_MODEL = originalModel;
+      global.fetch = originalFetch;
+    }
+  });
+
+  it('S2-0: respects LLM_MODEL override (e.g. gemini-3.5-flash-lite) and keeps URL key-free', async () => {
+    const originalApiKey = process.env.GEMINI_API_KEY;
+    const originalModel = process.env.LLM_MODEL;
+    const originalFetch = global.fetch;
+
+    let interceptedUrl = '';
+    let interceptedHeaders: Record<string, string> = {};
+
+    process.env.GEMINI_API_KEY = 'test-secret-gemini-key-12345';
+    process.env.LLM_MODEL = 'gemini-3.5-flash-lite';
+
+    global.fetch = vi.fn().mockImplementation(async (url: string | URL | Request, init?: RequestInit) => {
+      interceptedUrl = String(url);
+      interceptedHeaders = (init?.headers as Record<string, string>) || {};
+      return {
+        ok: true,
+        json: async () => ({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      thought: 'Unit test mock thought',
+                      action: 'DONE',
+                      deliverable: 'Unit test deliverable',
+                      sources: ['https://example.com'],
+                    }),
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      } as Response;
+    });
+
+    try {
+      const plan = await planAgentStep({
+        goal: 'Test S2-0 LLM_MODEL override',
+        missionSlug: 'test-agent-mission-s2-0-override',
+        history: [],
+      });
+
+      expect(interceptedUrl).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent');
+      expect(interceptedUrl).not.toContain('key=');
+      expect(interceptedHeaders['x-goog-api-key']).toBe('test-secret-gemini-key-12345');
+      expect(plan.plannerModel).toBe('gemini-3.5-flash-lite');
+    } finally {
+      process.env.GEMINI_API_KEY = originalApiKey;
+      process.env.LLM_MODEL = originalModel;
+      global.fetch = originalFetch;
+    }
   });
 });

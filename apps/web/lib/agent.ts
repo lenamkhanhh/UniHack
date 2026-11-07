@@ -223,7 +223,7 @@ async function callLLMPlanner(
   history: AgentHistoryStep[]
 ): Promise<AgentPlanOutput | null> {
   const geminiKey = process.env.GEMINI_API_KEY || (process.env.LLM_API_KEY?.startsWith('AIza') ? process.env.LLM_API_KEY : '');
-  const model = process.env.LLM_MODEL || 'gemini-2.0-flash';
+  const model = process.env.LLM_MODEL || 'gemini-3.8-flash';
 
   if (!geminiKey) {
     return null;
@@ -262,10 +262,13 @@ Result: ${JSON.stringify(h.result || {})}`).join('\n\n');
 
     const promptText = `${systemPrompt}\n\n${history.length > 0 ? `Prior History:\n${historyPrompt}\n\n` : ''}Now decide the next step:`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': geminiKey,
+      },
       body: JSON.stringify({
         contents: [{ parts: [{ text: promptText }] }],
         generationConfig: {
