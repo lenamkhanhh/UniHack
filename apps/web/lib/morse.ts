@@ -135,12 +135,15 @@ export function parseTransferFromDecoded(text: string): { recipient: string; amo
     return null;
   }
 
+  // Normalize 0X -> 0x for valid EVM address format (WOW-F10)
+  const recipient = addrMatch[0].replace(/^0x/i, '0x');
+
   // Look for amount (e.g. 50 USDC or 50.00)
   const amountMatch = upper.match(/(\d+(?:\.\d+)?)\s*(?:USDC|USD|TOKEN)?/);
   const amountUsdc = amountMatch ? amountMatch[1] : '50.00';
 
   return {
-    recipient: addrMatch[0],
+    recipient,
     amountUsdc,
   };
 }
