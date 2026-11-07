@@ -84,6 +84,25 @@ export default function DashboardPage() {
                   <div>Owner: {m.ownerAddress}</div>
                   <div>Agent: {m.agentAddress}</div>
                   <div>Expires: {new Date(m.expiresAt).toLocaleString()}</div>
+                  {m.payeeRoot && (
+                    <div className="pt-1">
+                      {m.payeeRootConfirmedOnchain ? (
+                        <span
+                          data-testid="payee-root-onchain-badge"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-700/80"
+                        >
+                          ✓ Payee root on-chain: {m.payeeRoot.slice(0, 10)}...{m.payeeRoot.slice(-6)}
+                        </span>
+                      ) : (
+                        <span
+                          data-testid="payee-root-unconfirmed-badge"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-950/80 text-amber-300 border border-amber-700/80"
+                        >
+                          ⚠ Payee root chưa lên chain
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Two Separate Budgets (00 §2, 05 §5) */}

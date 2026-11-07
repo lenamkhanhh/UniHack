@@ -31,12 +31,20 @@ export default function StageConsolePage() {
   const [currentScene, setCurrentScene] = useState<number>(1);
   const [demoMode, setDemoMode] = useState<'LIVE' | 'DEMO SEED'>('LIVE');
   const [arenaUrl, setArenaUrl] = useState<string>('http://localhost:3100/arena');
+  const [payeeRootConfirmed, setPayeeRootConfirmed] = useState<boolean>(false);
 
   useEffect(() => {
     setMounted(true);
     if (typeof window !== 'undefined') {
       setArenaUrl(`${window.location.origin}/arena`);
     }
+    fetch('/api/missions')
+      .then((res) => res.json())
+      .then((data) => {
+        const hasConfirmed = (data.missions || []).some((m: any) => m.payeeRootConfirmedOnchain);
+        setPayeeRootConfirmed(hasConfirmed);
+      })
+      .catch(() => {});
   }, []);
   const [arenaStats, setArenaStats] = useState<ArenaStats>({
     totalAttacks: 12,
@@ -238,8 +246,24 @@ export default function StageConsolePage() {
           ))}
         </div>
 
-        {/* Mode Switcher */}
+        {/* Mode Switcher & Payee Root Badge (PV-F7) */}
         <div className="flex items-center space-x-2 font-mono text-xs">
+          {payeeRootConfirmed ? (
+            <span
+              data-testid="stage-payee-root-badge"
+              className="px-2.5 py-1 rounded-lg border bg-emerald-950/40 text-emerald-300 border-emerald-600/50 font-bold flex items-center gap-1.5"
+            >
+              <span>✓</span> Payee root on-chain
+            </span>
+          ) : (
+            <span
+              data-testid="stage-payee-root-badge"
+              className="px-2.5 py-1 rounded-lg border bg-amber-950/50 text-amber-300 border-amber-600/60 font-bold flex items-center gap-1.5"
+            >
+              <span>⚠</span> Payee root chưa lên chain
+            </span>
+          )}
+
           <button
             onClick={() => setDemoMode(demoMode === 'LIVE' ? 'DEMO SEED' : 'LIVE')}
             data-testid="toggle-seed-mode-btn"

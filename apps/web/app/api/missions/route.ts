@@ -27,12 +27,26 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const onchainRoots = await prisma.auditEntry.findMany({
+      where: {
+        sourceKey: { startsWith: 'payee_root:' },
+      },
+      select: { missionSlug: true },
+    });
+    const confirmedSlugs = new Set(
+      onchainRoots.map((e) => e.missionSlug).filter(Boolean) as string[]
+    );
+
     if (claims?.missionSlug) {
       const missions = await prisma.mission.findMany({
         where: { slug: claims.missionSlug },
         orderBy: { createdAt: 'desc' },
       });
-      return NextResponse.json({ missions: missions.map(toMissionDto) });
+      return NextResponse.json({
+        missions: missions.map((m) =>
+          toMissionDto(m, { hasOnchainPayeeRoot: confirmedSlugs.has(m.slug) })
+        ),
+      });
     }
 
     // Public listing only includes publicPublished missions (Finding R08)
@@ -40,7 +54,11 @@ export async function GET(req: NextRequest) {
       where: { publicPublished: true },
       orderBy: { createdAt: 'desc' },
     });
-    return NextResponse.json({ missions: missions.map(toMissionDto) });
+    return NextResponse.json({
+      missions: missions.map((m) =>
+        toMissionDto(m, { hasOnchainPayeeRoot: confirmedSlugs.has(m.slug) })
+      ),
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

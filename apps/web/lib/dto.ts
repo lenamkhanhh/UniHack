@@ -53,7 +53,10 @@ export function toAuditEntryDto(entry: any) {
   };
 }
 
-export function toMissionDto(mission: any) {
+export function toMissionDto(
+  mission: any,
+  options?: { hasOnchainPayeeRoot?: boolean }
+) {
   if (!mission) return null;
 
   return {
@@ -69,6 +72,9 @@ export function toMissionDto(mission: any) {
     status: mission.status,
     completedAt: mission.completedAt instanceof Date ? mission.completedAt.toISOString() : (mission.completedAt ?? null),
     deliverableHash: mission.deliverableHash ?? null,
+    payeesJson: mission.payeesJson ?? null,
+    payeeRoot: mission.payeeRoot ?? null,
+    payeeRootConfirmedOnchain: Boolean(options?.hasOnchainPayeeRoot),
     configVersion: mission.configVersion ?? 1,
     policyHash: mission.policyHash,
     publicPublished: Boolean(mission.publicPublished),
