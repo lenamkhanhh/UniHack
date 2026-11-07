@@ -61,6 +61,13 @@ export default function VerifyMissionProofPage() {
     return verifyProof(currentEntries);
   }, [currentEntries]);
 
+  // S1-F9: On-chain head comparison
+  const clientHead = verification.headHash || '';
+  const onchainHead = anchorStatus?.onchainHead || '';
+  const isAnchored = Boolean(anchorStatus?.anchored && onchainHead);
+  const isHeadMatch = isAnchored && verification.valid && clientHead && onchainHead && clientHead.toLowerCase() === onchainHead.toLowerCase();
+  const isHeadMismatch = isAnchored && (!verification.valid || (clientHead && onchainHead && clientHead.toLowerCase() !== onchainHead.toLowerCase()));
+
   // Simulate modifying 1 byte in the first available entry (in memory only, zero DB mutation!)
   const handleTamperOneByte = () => {
     if (currentEntries.length === 0) return;
@@ -211,14 +218,85 @@ export default function VerifyMissionProofPage() {
             </div>
           </div>
 
-          {/* Anchor Status */}
-          <div className="mt-4 pt-3 border-t border-gray-800/80 flex flex-col md:flex-row md:items-center justify-between text-xs font-mono gap-2">
-            <div className="flex items-center space-x-2">
-              <span className="text-gray-400">Trạng thái neo On-Chain:</span>
-              <span className="bg-amber-500/10 text-amber-300 px-2.5 py-0.5 rounded border border-amber-500/30 font-bold">
-                {anchorStatus?.label || 'Chưa neo on-chain (MOCK)'}
-              </span>
+          {/* Anchor Status (S1-F9) */}
+          <div className="mt-4 pt-3 border-t border-gray-800/80 flex flex-col space-y-2 text-xs font-mono">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-gray-400">Trạng thái neo On-Chain:</span>
+                <span
+                  data-testid="anchor-status-badge"
+                  className={`px-2.5 py-0.5 rounded border font-bold ${
+                    isHeadMatch
+                      ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/40'
+                      : isHeadMismatch
+                      ? 'bg-red-500/20 text-red-300 border-red-500/50'
+                      : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                  }`}
+                >
+                  {isHeadMatch
+                    ? 'Đã neo on-chain (Fuji)'
+                    : isHeadMismatch
+                    ? 'Không khớp với on-chain'
+                    : anchorStatus?.label || 'Chưa neo on-chain'}
+                </span>
+
+                {isHeadMatch && (
+                  <span
+                    data-testid="anchor-match-badge"
+                    className="bg-emerald-950 text-emerald-400 border border-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold"
+                  >
+                    khớp
+                  </span>
+                )}
+                {isHeadMismatch && (
+                  <span
+                    data-testid="anchor-mismatch-badge"
+                    className="bg-red-950 text-red-400 border border-red-700 px-2 py-0.5 rounded text-[10px] font-bold"
+                  >
+                    không khớp
+                  </span>
+                )}
+              </div>
+
+              {anchorStatus?.snowtraceUrl && (
+                <a
+                  href={anchorStatus.snowtraceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="anchor-tx-link"
+                  className="text-cyan-400 hover:text-cyan-300 underline inline-flex items-center space-x-1 text-[11px]"
+                >
+                  <span>Xem giao dịch neo trên Snowtrace ↗</span>
+                </a>
+              )}
             </div>
+
+            {/* Display on-chain head & client head when anchored */}
+            {isAnchored && (
+              <div className="bg-[#0b0e14] border border-gray-800 p-3 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] mt-2">
+                <div>
+                  <span className="text-gray-500 block text-[10px]">Head neo on-chain (GuardedTreasury):</span>
+                  <span
+                    data-testid="onchain-head"
+                    className="font-mono text-cyan-300 break-all select-all font-bold"
+                  >
+                    {onchainHead}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500 block text-[10px]">Head tính toán bởi trình duyệt (Client):</span>
+                  <span
+                    data-testid="client-head"
+                    className={`font-mono break-all select-all font-bold ${
+                      isHeadMatch ? 'text-emerald-300' : 'text-red-400'
+                    }`}
+                  >
+                    {clientHead}
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div className="text-[11px] text-gray-500">
               {anchorStatus?.note || 'Không giả lập tx; chỉ xác nhận khi có receipt hợp lệ.'}
             </div>

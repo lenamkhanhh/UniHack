@@ -1,6 +1,6 @@
 # BẰNG CHỨNG GIAO DỊCH TRÊN AVALANCHE FUJI TESTNET (FUJI_EVIDENCE.md)
 
-**Ngày cập nhật:** 2026-11-07T16:07:12.008Z | **Mạng:** Avalanche Fuji (Chain ID `43113`)  
+**Ngày cập nhật:** 2026-11-07T16:42:02.955Z | **Mạng:** Avalanche Fuji (Chain ID `43113`)  
 **GuardedTreasury (Verified trên Snowtrace):** [`0x20451c1e2dCD83F166B4f22868BAdECb5868d545`](https://testnet.snowtrace.io/address/0x20451c1e2dCD83F166B4f22868BAdECb5868d545)  
 **Fuji Native USDC:** [`0x5425890298aed601595a70AB815c96711a31Bc65`](https://testnet.snowtrace.io/address/0x5425890298aed601595a70AB815c96711a31Bc65)  
 **ERC-8004 ReputationRegistry:** [`0x8004B663056A597Dffe9eCcC1965A193B7388713`](https://testnet.snowtrace.io/address/0x8004B663056A597Dffe9eCcC1965A193B7388713)  
@@ -40,9 +40,9 @@ Toàn bộ lifecycle được điều phối qua App API, ký challenge EIP-191 
 | **B2** | Owner fundMissionWallet tới Session Wallet | Gọi trực tiếp contract | `SUCCESS` | `#60687230` | [`0xd1eb4765...2bf91557`](https://testnet.snowtrace.io/tx/0xd1eb476548bbca809a415f2e867d546998377e3e61a58afb3db83d2f2bf91557) | Chuyển 0.5 USDC từ Treasury vào ĐÚNG ví phiên `0x46a84a9f...` |
 | **B3** | Owner setMissionPayeeRoot | Gọi trực tiếp contract | `SUCCESS` | `#60687235` | [`0x2a4c8f4a...b63f90a4`](https://testnet.snowtrace.io/tx/0x2a4c8f4a9461a8253eb52bbc35a28e59db6d90f75741ebeef3a17818b63f90a4) | Đặt Merkle root trên GuardedTreasury cho tập người nhận đã ký |
 | **B4** | Owner kích hoạt Mission & Xác thực Fuji | Qua App API | `SUCCESS` | — | `POST /api/missions/[slug]/activate` | Ký challenge EIP-191; App gọi verifyFundingReceiptOnFuji và verifyPayeeRootReceiptOnFuji; ghi nhận audit entry hợp lệ |
-| **B5** | Agent x402 Tool Settlement (EIP-3009) | Qua App API | `SUCCESS` | `#60688545` | [`0x07824f3b...7577d422`](https://testnet.snowtrace.io/tx/0x07824f3ba7c88bbe80837c7d15897de7fafda1dad4e442def0e681177577d422) | Ví phiên `0x46a84a9f...` ký EIP-3009; Facilitator PayAI settle gasless tới seller |
-| **B6** | Agent proposeWithProof Payout | Qua App Validator & Contract | `SUCCESS` | `#60688549` | [`0x9c22bc5f...67dfb95c`](https://testnet.snowtrace.io/tx/0x9c22bc5f86f25f1e0a288e5535e3f5ed93676b57a6bb69531e40867a67dfb95c) | Validator phê duyệt provenance OWNER_MISSION; agent gọi proposeWithProof với Merkle proof; chuyển 0.2 USDC cho contractor |
-| **B7** | Owner anchorMissionProof (REAL HEAD) | Gọi trực tiếp contract | `SUCCESS` | `#60688555` | [`0xb5e4725a...bbb5d27e`](https://testnet.snowtrace.io/tx/0xb5e4725ade2450deee762f67fe6e07d610574263d08537177634a6e4bbb5d27e) | Neo đỉnh chuỗi kiểm toán THẬT (0x0169ce58...) từ DB lên GuardedTreasury |
+| **B5** | Agent x402 Tool Settlement (EIP-3009) | Qua App API | `SUCCESS` | `#60689764` | [`0x8c898c90...20dc8208`](https://testnet.snowtrace.io/tx/0x8c898c904fef42c9a2e5d45b18549bd48dce285ef81d497f588ae41320dc8208) | Ví phiên `0x46a84a9f...` ký EIP-3009; Facilitator PayAI settle gasless tới seller |
+| **B6** | Agent proposeWithProof Payout | Qua App Validator & Contract | `SUCCESS` | `#60689765` | [`0x769484bb...46cd6c9a`](https://testnet.snowtrace.io/tx/0x769484bb45b13a42917972dabb206697ec4f21acd117394017a62e0046cd6c9a) | Validator phê duyệt provenance OWNER_MISSION; agent gọi proposeWithProof với Merkle proof; chuyển 0.2 USDC cho contractor |
+| **B7** | Owner anchorMissionProof (REAL HEAD) | Gọi trực tiếp contract | `SUCCESS` | `#60689767` | [`0x43bd21b8...6ceb0547`](https://testnet.snowtrace.io/tx/0x43bd21b81248a9f1a4dc2ff037a3df8119ae098690cd4e353bdbb4ce6ceb0547) | Neo đỉnh chuỗi kiểm toán THẬT (0x7d46d875...) từ DB lên GuardedTreasury |
 | **B8** | Đối chiếu /verify trên Trình duyệt | Trình duyệt Client | `SUCCESS` | — | Ảnh: `fuji-verify-anchor.png` | Tính lại hash chain phía client, xác nhận khớp 100% với giá trị neo trên contract |
 
 ---
@@ -66,5 +66,5 @@ Toàn bộ lifecycle được điều phối qua App API, ký challenge EIP-191 
    - Khi Agent bị chiếm quyền và gửi giao dịch chuyển tiền tới ví kẻ tấn công, smart contract `GuardedTreasury` **revert ngay lập tức với lỗi `PayeeNotInMissionSet`**, không một xu nào bị rút.
 
 5. **Neo đỉnh chuỗi kiểm toán thật (Bước B7 & B8):**
-   - Đỉnh băm chuỗi kiểm toán `0x0169ce58d36f98948a5f8f8d503634d2e0d7441f903cbfeb10629d10f9bf9bd6` được đọc trực tiếp từ DB (`mission.auditHeadHash`) và neo bất biến lên smart contract `GuardedTreasury`.
+   - Đỉnh băm chuỗi kiểm toán `0x7d46d87541ed812ada52afe7f1d3144d6a2b90b359a66162e54c8e41d675be2f` được đọc trực tiếp từ DB (`mission.auditHeadHash`) và neo bất biến lên smart contract `GuardedTreasury`.
    - Trang `/verify/fuji-live-mission-s1b` kiểm tra tính lại hash chain hoàn toàn khớp với on-chain.

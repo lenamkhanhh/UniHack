@@ -5,6 +5,9 @@ export default defineConfig({
   root: path.resolve(__dirname),
   test: {
     environment: 'node',
+    env: {
+      PAYMENT_MODE: 'MOCK',
+    },
     testTimeout: 30000,
     hookTimeout: 30000,
     fileParallelism: false,

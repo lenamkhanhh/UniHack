@@ -81,35 +81,41 @@ describe('PV-3: Owner-signed Payee Merkle Root & proposeWithProof Settlement', (
   });
 
   it('3. End-to-end payout in MOCK mode generates proposeWithProof calldata and verified proof', async () => {
-    const missionSlug = 'payout-mission-1';
-    const missionId = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
-    saveMissionPayees(missionSlug, [payeeA, payeeB]);
+    const prevMode = process.env.PAYMENT_MODE;
+    process.env.PAYMENT_MODE = 'MOCK';
+    try {
+      const missionSlug = 'payout-mission-1';
+      const missionId = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
+      saveMissionPayees(missionSlug, [payeeA, payeeB]);
 
-    const result = await executeTreasuryPayoutWithProof({
-      missionSlug,
-      missionId,
-      operationId: '0x0000000000000000000000000000000000000000000000000000000000000001',
-      to: payeeA,
-      amountAtomic: '1000000', // 1 USDC
-      reason: 'Contractor disbursement',
-    });
-
-    expect(result.mode).toBe('MOCK');
-    expect(result.status).toBe('EXECUTED');
-    expect(result.proof).toEqual([EXPECTED_PROOF_A]);
-    expect(result.calldata.startsWith('0x')).toBe(true);
-
-    // Attempting payout to outsider strictly throws
-    await expect(
-      executeTreasuryPayoutWithProof({
+      const result = await executeTreasuryPayoutWithProof({
         missionSlug,
         missionId,
-        operationId: '0x0000000000000000000000000000000000000000000000000000000000000002',
-        to: outsider,
-        amountAtomic: '1000000',
-        reason: 'Unauthorized payment',
-      })
-    ).rejects.toThrow(/not in the owner-signed payee set/);
+        operationId: '0x0000000000000000000000000000000000000000000000000000000000000001',
+        to: payeeA,
+        amountAtomic: '1000000', // 1 USDC
+        reason: 'Contractor disbursement',
+      });
+
+      expect(result.mode).toBe('MOCK');
+      expect(result.status).toBe('EXECUTED');
+      expect(result.proof).toEqual([EXPECTED_PROOF_A]);
+      expect(result.calldata.startsWith('0x')).toBe(true);
+
+      // Attempting payout to outsider strictly throws
+      await expect(
+        executeTreasuryPayoutWithProof({
+          missionSlug,
+          missionId,
+          operationId: '0x0000000000000000000000000000000000000000000000000000000000000002',
+          to: outsider,
+          amountAtomic: '1000000',
+          reason: 'Unauthorized payment',
+        })
+      ).rejects.toThrow(/not in the owner-signed payee set/);
+    } finally {
+      process.env.PAYMENT_MODE = prevMode;
+    }
   });
 
   it('4. buildSetMissionPayeeRootCalldata and buildProposeWithProofCalldata encode valid ABI data', () => {

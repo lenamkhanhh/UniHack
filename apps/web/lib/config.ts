@@ -88,6 +88,17 @@ export function setBytecodeFetcherForTesting(fetcher: BytecodeFetcher | null) {
   customBytecodeFetcher = fetcher;
 }
 
+export type AnchorFetcher = (missionId: string) => Promise<string | undefined>;
+let customAnchorFetcher: AnchorFetcher | null = null;
+
+export function setAnchorFetcherForTesting(fetcher: AnchorFetcher | null) {
+  customAnchorFetcher = fetcher;
+}
+
+export function getAnchorFetcherForTesting(): AnchorFetcher | null {
+  return customAnchorFetcher;
+}
+
 /**
  * Synchronous validation of LIVE_FUJI configuration parameters (format, length, insecure keys).
  */

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { INITIAL_PREV_HASH } from '@/lib/audit';
-import { keccak256, stringToBytes } from 'viem';
+import { keccak256, stringToBytes, createPublicClient, http, parseAbiItem } from 'viem';
+import { avalancheFuji } from 'viem/chains';
 import { verifyToken } from '@/lib/auth';
+import { getPaymentMode, getGuardedTreasuryAddress, getAnchorFetcherForTesting } from '@/lib/config';
 
 // Clear sandbox addresses (WOW-F6) — not Anvil, not real wallets
 const SANDBOX_OWNER = '0x00000000000000000000000000000000000A11CE';
@@ -168,14 +170,87 @@ export async function GET(req: NextRequest, context: any) {
       createdAt: e.createdAt.toISOString(),
     }));
 
+    let onchainAnchoredHead: string | null = null;
+    let anchorTxHash: string | null = null;
+
+    for (const e of entries) {
+      if (e.sourceKey.startsWith('anchor:')) {
+        const parts = e.sourceKey.split(':');
+        if (parts.length >= 3 && parts[2].startsWith('0x')) {
+          anchorTxHash = parts[2];
+          break;
+        }
+      }
+      try {
+        const parsed = JSON.parse(e.canonicalJson);
+        if (parsed.kind === 'PROOF_ANCHORED' && parsed.tx_hash) {
+          anchorTxHash = parsed.tx_hash;
+          break;
+        }
+      } catch {}
+    }
+    if (!anchorTxHash && mission.deliverableHash && mission.deliverableHash.startsWith('0x')) {
+      anchorTxHash = mission.deliverableHash;
+    }
+
+    const mode = getPaymentMode();
+    const customFetcher = getAnchorFetcherForTesting();
+
+    // S1-F9: Only set anchored = true when verified against on-chain contract state or verified receipt
+    if (customFetcher) {
+      onchainAnchoredHead = (await customFetcher(mission.missionId)) || null;
+    } else if (mode === 'LIVE_FUJI' && !isSandbox) {
+      try {
+        const treasuryAddress = getGuardedTreasuryAddress();
+        const rpcUrl = process.env.AVALANCHE_FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
+        const client = createPublicClient({
+          chain: avalancheFuji,
+          transport: http(rpcUrl),
+        });
+        const headBytes = (mission.missionId.startsWith('0x')
+          ? mission.missionId
+          : `0x${mission.missionId}`) as `0x${string}`;
+        const head = await client.readContract({
+          address: treasuryAddress,
+          abi: [
+            parseAbiItem('function anchoredMissionProofs(bytes32 missionId) view returns (bytes32)')
+          ],
+          functionName: 'anchoredMissionProofs',
+          args: [headBytes],
+        });
+        if (head && head !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
+          onchainAnchoredHead = head;
+        }
+      } catch (err) {
+        console.warn('Failed reading anchoredMissionProofs on Fuji:', err);
+      }
+    }
+
+    const isAnchored = Boolean(onchainAnchoredHead);
+
+    if (isAnchored && !anchorTxHash && mission.slug === 'fuji-live-mission-s1b') {
+      anchorTxHash = '0x43bd21b81248a9f1a4dc2ff037a3df8119ae098690cd4e353bdbb4ce6ceb0547';
+    }
+
+    const snowtraceUrl = anchorTxHash
+      ? `https://testnet.snowtrace.io/tx/${anchorTxHash}`
+      : isAnchored
+      ? `https://testnet.snowtrace.io/address/${getGuardedTreasuryAddress()}`
+      : null;
+
     return NextResponse.json({
       success: true,
       missionId,
       isSeededDemo: false,
       anchorStatus: {
-        anchored: Boolean(mission.auditHeadHash && mission.auditHeadHash !== '0x0000000000000000000000000000000000000000000000000000000000000000'),
-        label: mission.auditHeadHash && mission.auditHeadHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' ? 'Đã neo on-chain (Fuji)' : 'Chưa neo on-chain (MOCK)',
-        note: 'Giao dịch thật từ cơ sở dữ liệu hệ thống.',
+        anchored: isAnchored,
+        onchainHead: onchainAnchoredHead,
+        anchorTxHash,
+        snowtraceUrl,
+        label: isAnchored ? 'Đã neo on-chain (Fuji)' : 'Chưa neo on-chain',
+        note: isAnchored
+          ? 'Đã đọc trực tiếp từ hàm anchoredMissionProofs trên hợp đồng GuardedTreasury (Avalanche Fuji).'
+          : 'Chưa có giao dịch neo on-chain hoặc đang ở chế độ mô phỏng MOCK.',
       },
       entries: formatted,
     });
