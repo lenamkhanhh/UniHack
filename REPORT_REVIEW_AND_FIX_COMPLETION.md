@@ -25,7 +25,7 @@
 
 | Bước | Hạng mục | Trạng thái | Minh chứng thực tế |
 |---|---|---|---|
-| **Bước 0** | **Commit code & dọn dẹp** | **PASS** | Commit sạch sẽ mọi thay đổi trên nhánh `feat/s1-app`, không commit secrets, `.gitignore` bảo vệ key, root sạch không còn file nháp cũ. |
+| **Bước 0** | **Commit code & dọn dẹp** | **PASS** | Commit `12feb25` sạch sẽ mọi thay đổi trên nhánh `feat/s1-app`, không commit secrets, `.gitignore` bảo vệ key, root sạch không còn file nháp cũ. |
 | **Bước 1** | **P0 Agent thật (§4.1)** | **PASS** | `apps/web/lib/agent.ts` tích hợp Gemini LLM planner JSON (`gemini-2.0-flash`, JSON mode) và deterministic fallback có nhãn. Tool search gọi Wikipedia REST API trực tiếp (`tool:search`), tool summary gọi LLM thật (`tool:summary`). UI và audit entries ghi nhận rõ ràng `reason`, `priceAtomic` và `provenance`. |
 | **Bước 2** | **P0 Fuji live (§4.2)** | **PASS** | Foundry 37/37 tests pass (`contracts/`). Contract `GuardedTreasury` đã deploy và verify trên Snowtrace tại [`0x20451c1e...`](https://testnet.snowtrace.io/address/0x20451c1e2dCD83F166B4f22868BAdECb5868d545). Thanh toán x402 thực hiện gasless qua PayAI facilitator trên Fuji (`tx: 0x55c5a51e...`). Mọi transaction đều có link Snowtrace. |
 | **Bước 3** | **P1 Ví phiên on-chain (§4.3)** | **PASS** | Hàm `fundMissionWallet` trên contract nạp 0.5 USDC trực tiếp vào ví phiên HKDF thật `0x46a84a9f...` (`tx: 0xd1eb4765...`, block `#60687230`). Lỗ hổng rò rỉ key agent bị giới hạn cứng on-chain bởi số dư ví phiên. |
