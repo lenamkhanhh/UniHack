@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { NextRequest } from 'next/server';
 import {
   computePayeeMerkleTree,
   saveMissionPayees,
@@ -16,6 +17,17 @@ import {
 import { executeTreasuryPayoutWithProof } from '../lib/payments';
 import { prisma } from '../lib/db';
 import { encodeEventTopics, encodeAbiParameters, parseAbiParameters } from 'viem';
+import { POST as createMissionPOST } from '../app/api/missions/route';
+import { POST as activatePOST } from '../app/api/missions/[slug]/activate/route';
+import {
+  computePayloadHash,
+  generateEip191Message,
+  issueSpendToken,
+  verifyToken,
+} from '../lib/auth';
+import { validateProposal } from '../lib/validator';
+import { hashUtf8, normalizeAddress } from '../lib/chain';
+import { ownerAccount, agentAccount } from './setup';
 
 describe('PV-3: Owner-signed Payee Merkle Root & proposeWithProof Settlement', () => {
   const payeeA = '0x2222222222222222222222222222222222222222';
@@ -227,6 +239,204 @@ describe('PV-3: Owner-signed Payee Merkle Root & proposeWithProof Settlement', (
     const recoveredTree = saveMissionPayees(slug, parsedPayees);
     expect(recoveredTree.root.toLowerCase()).toBe(EXPECTED_ROOT.toLowerCase());
     expect(getMissionPayeeProof(slug, payeeA)![0].toLowerCase()).toBe(EXPECTED_PROOF_A.toLowerCase());
+
+    // Clean up
+    await prisma.mission.delete({ where: { slug } });
+  });
+
+  it('7. PV-F9: Invalid signature on CREATE_MISSION with dirty payees rejects without poisoning RAM cache or DB', async () => {
+    const slug = `pv-f9-dirty-${Date.now()}`;
+    const dirtyPayee = '0xbad0000000000000000000000000000000000bad';
+
+    const nonce = `pv-f9-nonce-${Date.now()}`;
+    const payload = {
+      slug,
+      agentAddress: normalizeAddress(agentAccount.address),
+      treasuryCap: '10000000',
+      toolCap: '5000000',
+      durationSeconds: 86400,
+      payees: [dirtyPayee],
+      targetMissionSlug: slug,
+    };
+    const payloadHash = computePayloadHash(payload);
+
+    const challenge = await prisma.authChallenge.create({
+      data: {
+        nonce,
+        action: 'CREATE_MISSION',
+        expectedSigner: normalizeAddress(ownerAccount.address),
+        payloadHash,
+        authVersion: 1,
+        deploymentId: 'unihack-test-deployment',
+        expiresAt: new Date(Date.now() + 300000),
+      },
+    });
+
+    // Sign with agent account (unauthorized) instead of owner
+    const systemState = await prisma.systemState.findUnique({ where: { id: 1 } });
+    const message = generateEip191Message({
+      action: 'CREATE_MISSION',
+      deploymentId: systemState?.deploymentId || 'unihack-test-deployment',
+      appOrigin: 'http://localhost:3000',
+      stage: 'S1',
+      guardAddress: 'none',
+      authVersion: 1,
+      nonce,
+      payloadHash,
+      issuedAt: Math.floor(challenge.createdAt.getTime() / 1000),
+    });
+    const badSignature = await agentAccount.signMessage({ message });
+
+    const req = new NextRequest('http://localhost:3000/api/missions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nonce,
+        signature: badSignature,
+        payload,
+      }),
+    });
+
+    const res = await createMissionPOST(req);
+    expect(res.status).toBeGreaterThanOrEqual(400);
+
+    // RAM cache MUST NOT be poisoned with the dirty payee
+    expect(getMissionPayees(slug)).toBeUndefined();
+
+    // DB MUST NOT have the mission
+    const dbMission = await prisma.mission.findUnique({ where: { slug } });
+    expect(dbMission).toBeNull();
+  });
+
+  it('8. PV-F9: Updating payees at ACTIVATE increments configVersion and revokes previously issued spend token', async () => {
+    const slug = `pv-f9-update-${Date.now()}`;
+    const missionId = hashUtf8(slug);
+    const initialTree = computePayeeMerkleTree([payeeA]);
+
+    await prisma.mission.create({
+      data: {
+        slug,
+        missionId,
+        ownerAddress: normalizeAddress(ownerAccount.address),
+        agentAddress: normalizeAddress(agentAccount.address),
+        treasuryCap: '10000000',
+        toolCap: '5000000',
+        spentTool: '0',
+        reservedTool: '0',
+        expiresAt: new Date(Date.now() + 86400000),
+        status: 'ACTIVE',
+        payeesJson: JSON.stringify([payeeA]),
+        payeeRoot: initialTree.root,
+        configVersion: 1,
+        policyHash: hashUtf8(`policy:1:10000000:5000000:${initialTree.root}`),
+      },
+    });
+
+    const oldSpendToken = await issueSpendToken({
+      deploymentId: 'unihack-test-deployment',
+      stage: 'S1',
+      authVersion: 1,
+      missionSlug: slug,
+      missionId,
+      ownerAddress: normalizeAddress(ownerAccount.address),
+      agentAddress: normalizeAddress(agentAccount.address),
+      missionConfigVersion: 1,
+      policyHash: hashUtf8(`policy:1:10000000:5000000:${initialTree.root}`),
+      missionExpiresAt: new Date(Date.now() + 86400000),
+    });
+
+    // ACTIVATE with updated payee set [payeeA, payeeB]
+    const nonce = `pv-f9-act-nonce-${Date.now()}`;
+    const activatePayload = {
+      missionId,
+      ownerAddress: normalizeAddress(ownerAccount.address),
+      agentAddress: normalizeAddress(agentAccount.address),
+      treasuryCap: '10000000',
+      toolCap: '5000000',
+      configVersion: 1,
+      policyHash: hashUtf8(`policy:1:10000000:5000000:${initialTree.root}`),
+      targetMissionSlug: slug,
+      payees: [payeeA, payeeB],
+    };
+    const payloadHash = computePayloadHash(activatePayload);
+
+    const challenge = await prisma.authChallenge.create({
+      data: {
+        nonce,
+        action: 'ACTIVATE',
+        expectedSigner: normalizeAddress(ownerAccount.address),
+        payloadHash,
+        authVersion: 1,
+        deploymentId: 'unihack-test-deployment',
+        expiresAt: new Date(Date.now() + 300000),
+      },
+    });
+
+    const systemState = await prisma.systemState.findUnique({ where: { id: 1 } });
+    const message = generateEip191Message({
+      action: 'ACTIVATE',
+      deploymentId: systemState?.deploymentId || 'unihack-test-deployment',
+      appOrigin: 'http://localhost:3000',
+      stage: 'S1',
+      guardAddress: 'none',
+      authVersion: 1,
+      nonce,
+      payloadHash,
+      issuedAt: Math.floor(challenge.createdAt.getTime() / 1000),
+    });
+    const signature = await ownerAccount.signMessage({ message });
+
+    const req = new NextRequest(`http://localhost:3000/api/missions/${slug}/activate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nonce,
+        signature,
+        payload: activatePayload,
+      }),
+    });
+
+    const res = await activatePOST(req, { params: Promise.resolve({ slug }) });
+    expect(res.status).toBe(200);
+
+    // Verify DB mission configVersion is now 2
+    const updatedMission = await prisma.mission.findUnique({ where: { slug } });
+    expect(updatedMission?.configVersion).toBe(2);
+
+    // Old token with configVersion: 1 must be rejected by validator
+    const oldClaims = await verifyToken(oldSpendToken);
+    const validationResult = validateProposal(
+      {
+        kind: 'tool_purchase',
+        mission_id: updatedMission!.slug,
+        tool_id: 'tool:search',
+        amount_atomic: '100000',
+        reason: 'Authorized search operation',
+      },
+      {
+        tokenClaims: oldClaims,
+        systemPaused: false,
+        maintenance: false,
+        stage: 'S1',
+        mission: {
+          slug: updatedMission!.slug,
+          missionId: updatedMission!.missionId,
+          status: updatedMission!.status,
+          expiresAt: updatedMission!.expiresAt,
+          ownerAddress: updatedMission!.ownerAddress,
+          agentAddress: updatedMission!.agentAddress,
+          toolCap: BigInt(updatedMission!.toolCap.toString()),
+          spentTool: BigInt(updatedMission!.spentTool.toString()),
+          reservedTool: BigInt(updatedMission!.reservedTool.toString()),
+          treasuryCap: BigInt(updatedMission!.treasuryCap.toString()),
+          configVersion: updatedMission!.configVersion,
+        },
+        treasuryAllowlist: [normalizeAddress(ownerAccount.address)],
+      }
+    );
+
+    expect(validationResult.outcome).toBe('BLOCK');
+    expect(validationResult.rule).toBe('CONFIG_VERSION_REVOKED');
 
     // Clean up
     await prisma.mission.delete({ where: { slug } });

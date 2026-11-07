@@ -93,8 +93,22 @@ export function getMissionPayeeTree(missionSlug: string): PayeeMerkleTreeResult 
   return missionPayeeStore.get(missionSlug)?.treeResult;
 }
 
-export function getMissionPayeeProof(missionSlug: string, address: string): `0x${string}`[] | null {
-  const record = missionPayeeStore.get(missionSlug);
+export function getMissionPayeeProof(
+  missionSlug: string,
+  address: string,
+  fallbackPayees?: string[]
+): `0x${string}`[] | null {
+  let record = missionPayeeStore.get(missionSlug);
+  if (!record && fallbackPayees && fallbackPayees.length > 0) {
+    const treeResult = computePayeeMerkleTree(fallbackPayees);
+    record = {
+      missionSlug,
+      payees: treeResult.payees,
+      treeResult,
+      updatedAt: new Date(),
+    };
+    missionPayeeStore.set(missionSlug, record);
+  }
   if (!record) return null;
   return record.treeResult.getProof(address);
 }

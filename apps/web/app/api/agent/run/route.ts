@@ -20,7 +20,6 @@ import {
 import { appendAuditEntry } from '@/lib/audit';
 import { validateLiveFujiConfig } from '@/lib/config';
 import {
-  getMissionPayees,
   getMissionPayeeProof,
   buildProposeWithProofCalldata,
   saveMissionPayees,
@@ -233,7 +232,7 @@ export async function POST(req: NextRequest) {
           },
           treasuryAllowlist,
           ownerSignedPayees: (() => {
-            // PV-F2: Use owner-signed payee set for this specific mission, falling back to treasuryAllowlist only if unset
+            // PV-F9: DB is the single source of truth for owner-signed payees. Never fallback to memory cache.
             let dbPayees: string[] | null = null;
             if ((currentMission as any).payeesJson) {
               try {
@@ -243,8 +242,7 @@ export async function POST(req: NextRequest) {
                 }
               } catch {}
             }
-            const missionPayees = dbPayees || getMissionPayees(currentMission.slug);
-            return (missionPayees && missionPayees.length > 0) ? missionPayees : treasuryAllowlist;
+            return (dbPayees && dbPayees.length > 0) ? dbPayees : treasuryAllowlist;
           })(),
           taintRegistry,
         };

@@ -5,7 +5,12 @@ import { getConfiguredOwner } from '@/lib/config';
 import { verifyAndConsumeChallenge, ChallengeError } from '@/lib/challenges';
 import { toMissionDto } from '@/lib/dto';
 import { verifyToken } from '@/lib/auth';
-import { saveMissionPayees, buildSetMissionPayeeRootCalldata } from '@/lib/merkle';
+import {
+  saveMissionPayees,
+  computePayeeMerkleTree,
+  buildSetMissionPayeeRootCalldata,
+  PayeeMerkleTreeResult,
+} from '@/lib/merkle';
 import { getGuardedTreasuryAddress } from '@/lib/config';
 
 export async function GET(req: NextRequest) {
@@ -65,14 +70,15 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + durationSeconds * 1000);
     const missionId = hashUtf8(slug);
-    const policyHash = hashUtf8(`policy:1:${treasuryCap}:${toolCap}`);
 
     let payeeInfo: any = null;
     let payeesJson: string | null = null;
     let payeeRoot: string | null = null;
+    let treeResult: PayeeMerkleTreeResult | null = null;
 
+    // PV-F9: Use pure computePayeeMerkleTree first. Never poison in-memory cache before verification!
     if (Array.isArray(payload.payees) && payload.payees.length > 0) {
-      const treeResult = saveMissionPayees(slug, payload.payees);
+      treeResult = computePayeeMerkleTree(payload.payees);
       payeesJson = JSON.stringify(treeResult.payees);
       payeeRoot = treeResult.root;
       const guardedTreasuryAddress = getGuardedTreasuryAddress();
@@ -90,6 +96,9 @@ export async function POST(req: NextRequest) {
         unsignedTx,
       };
     }
+
+    // PV-F9: Bind payeeRoot into policyHash
+    const policyHash = hashUtf8(`policy:1:${treasuryCap}:${toolCap}:${payeeRoot || ''}`);
 
     const result = await prisma.$transaction(async (tx) => {
       await verifyAndConsumeChallenge(tx, {
@@ -122,6 +131,11 @@ export async function POST(req: NextRequest) {
 
       return mission;
     });
+
+    // PV-F9: Only save to in-memory store AFTER transaction commits successfully
+    if (treeResult && treeResult.payees.length > 0) {
+      saveMissionPayees(slug, treeResult.payees);
+    }
 
     return NextResponse.json({ mission: result, payeeInfo }, { status: 201 });
   } catch (err: any) {

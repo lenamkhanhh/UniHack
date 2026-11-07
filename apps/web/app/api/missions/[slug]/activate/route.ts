@@ -7,10 +7,12 @@ import { appendAuditEntry } from '@/lib/audit';
 import { encodeFunctionData, parseAbiItem } from 'viem';
 import { verifyFundingReceiptOnFuji, verifyPayeeRootReceiptOnFuji } from '@/lib/fuji-receipts';
 import { validateLiveFujiConfig, getGuardedTreasuryAddress } from '@/lib/config';
+import { hashUtf8 } from '@/lib/chain';
 import {
   saveMissionPayees,
-  getMissionPayees,
+  computePayeeMerkleTree,
   buildSetMissionPayeeRootCalldata,
+  PayeeMerkleTreeResult,
 } from '@/lib/merkle';
 
 const fundMissionWalletAbi = parseAbiItem(
@@ -52,6 +54,9 @@ export async function POST(
 
     let sessionWalletInfo: any = null;
     let payeeInfo: any = null;
+    let newConfigVersion = mission.configVersion;
+    let newPolicyHash = mission.policyHash;
+    let savedTreeResult: PayeeMerkleTreeResult | null = null;
 
     const { state } = await prisma.$transaction(async (tx) => {
       const res = await verifyAndConsumeChallenge(tx, {
@@ -164,7 +169,7 @@ export async function POST(
         }
       }
 
-      // PV-3 & PV-F3: Handle owner-signed payee set and Merkle root transaction with DB persistence
+      // PV-3, PV-F3 & PV-F9: Single source of truth is DB payeesJson. Never fallback to memory cache.
       let dbPayees: string[] | null = null;
       if (mission.payeesJson) {
         try {
@@ -173,18 +178,29 @@ export async function POST(
         } catch {}
       }
 
-      const payeesList =
-        Array.isArray(payload.payees) && payload.payees.length > 0
-          ? payload.payees
-          : (dbPayees || getMissionPayees(mission.slug));
+      const hasNewPayees = Array.isArray(payload.payees) && payload.payees.length > 0;
+      const payeesList = hasNewPayees ? payload.payees : dbPayees;
 
       if (payeesList && payeesList.length > 0) {
-        const treeResult = saveMissionPayees(mission.slug, payeesList);
+        const treeResult = computePayeeMerkleTree(payeesList);
+        savedTreeResult = treeResult;
+
+        // PV-F9: If payee set changed, bump configVersion and re-compute policyHash to revoke old tokens
+        const payeesChanged = hasNewPayees && mission.payeeRoot !== treeResult.root;
+        if (payeesChanged) {
+          newConfigVersion = mission.configVersion + 1;
+          newPolicyHash = hashUtf8(
+            `policy:${newConfigVersion}:${mission.treasuryCap}:${mission.toolCap}:${treeResult.root}`
+          );
+        }
+
         await tx.mission.update({
           where: { slug: mission.slug },
           data: {
             payeesJson: JSON.stringify(treeResult.payees),
             payeeRoot: treeResult.root,
+            configVersion: newConfigVersion,
+            policyHash: newPolicyHash,
           },
         });
 
@@ -220,8 +236,8 @@ export async function POST(
               kind: 'PAYEE_ROOT_SET',
               mission_id: mission.slug,
               operation_id: '',
-              policy_hash: mission.policyHash,
-              policy_version: verification.policyVersion?.toString() || '2',
+              policy_hash: newPolicyHash,
+              policy_version: verification.policyVersion?.toString() || newConfigVersion.toString(),
               reason: `Set mission payee Merkle root to ${treeResult.root}`,
               result_hash: treeResult.root,
               rule: 'STAGE_S2_PAYEE_ROOT_SET',
@@ -263,7 +279,12 @@ export async function POST(
       return res;
     });
 
-    // Issue spend token
+    // PV-F9: Only update cache after transaction commits
+    if (savedTreeResult) {
+      saveMissionPayees(mission.slug, savedTreeResult.payees);
+    }
+
+    // Issue spend token with updated configVersion and policyHash
     const spendToken = await issueSpendToken({
       deploymentId: state.deploymentId,
       stage: state.stage as 'S1' | 'S2',
@@ -273,8 +294,8 @@ export async function POST(
       missionId: mission.missionId,
       ownerAddress: mission.ownerAddress,
       agentAddress: mission.agentAddress,
-      missionConfigVersion: mission.configVersion,
-      policyHash: mission.policyHash,
+      missionConfigVersion: newConfigVersion,
+      policyHash: newPolicyHash,
       missionExpiresAt: mission.expiresAt,
       appOrigin,
     });
