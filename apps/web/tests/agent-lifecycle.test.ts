@@ -17,13 +17,15 @@ import { verifyQuoteAgainstCatalog } from '../lib/validator';
 import { reserveOperation } from '../lib/payments';
 import { toolCatalog } from '../lib/tools';
 import { verifyProof, INITIAL_PREV_HASH } from '../lib/proof-verifier';
-import { keccak256, stringToBytes } from 'viem';
+import { keccak256, stringToBytes, decodeFunctionData } from 'viem';
+import { proposeWithProofAbi, computePayeeMerkleTree } from '../lib/merkle';
 
 describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Rails', () => {
   beforeEach(async () => {
     await clearDatabase();
     process.env.ALLOW_AGENT_TEST_OVERRIDE = '1';
     process.env.PAYMENT_MODE = 'MOCK';
+    process.env.OWNER_ADDRESS = normalizeAddress(ownerAccount.address);
   });
 
   it('Regression 1: Missing or invalid spend token returns HTTP 401', async () => {
@@ -371,6 +373,88 @@ describe('AG-01..05 & P1-C/P2 Agent Run Security Boundaries & Real Settlement Ra
     const auditEntries = await prisma.auditEntry.findMany({ where: { missionSlug: mission.slug } });
     const proposedEntry = auditEntries.find((e) => JSON.parse(e.canonicalJson).kind === 'PROPOSED');
     expect(proposedEntry).toBeDefined();
+  });
+
+  it('Regression 8b (PV-F4): In Stage S2 with active payeeRoot, payout to payee in owner-signed set generates decodable proposeWithProof calldata; payout to outsider is blocked with PAYEE_NOT_IN_MISSION_SET', async () => {
+    const { mission, spendToken } = await createTestMission({ stage: 'S2' });
+    await prisma.systemState.update({ where: { id: 1 }, data: { stage: 'S2' } });
+
+    const trustedPayee = mission.ownerAddress;
+    const outsider = '0x9999999999999999999999999999999999999999';
+
+    // Configure mission with an active payeeRoot containing trustedPayee
+    const tree = computePayeeMerkleTree([trustedPayee]);
+    await prisma.mission.update({
+      where: { slug: mission.slug },
+      data: {
+        payeesJson: JSON.stringify([trustedPayee]),
+        payeeRoot: tree.root,
+      },
+    });
+
+    // 1. Authorized payout to trustedPayee: generates proof and decodable proposeWithProof calldata
+    const reqAuthorized = new NextRequest('http://localhost:3000/api/agent/run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${spendToken}`,
+      },
+      body: JSON.stringify({
+        goal: 'Pay authorized contractor',
+        overrideProposal: {
+          kind: 'treasury_payout',
+          mission_id: mission.slug,
+          to: trustedPayee,
+          amount_atomic: '1000000', // 1.00 USDC
+          reason: 'Authorized disbursement to owner-signed contractor',
+        },
+      }),
+    });
+
+    const resAuth = await POST(reqAuthorized);
+    expect(resAuth.status).toBe(200);
+    const dataAuth = await resAuth.json();
+
+    expect(dataAuth.steps[0].action).toBe('TREASURY_PROPOSED');
+    expect(dataAuth.steps[0].verdict.outcome).toBe('PASS');
+    expect(dataAuth.steps[0].proof).toBeDefined();
+    expect(dataAuth.steps[0].calldata).toBeDefined();
+
+    // Verify calldata decodes to proposeWithProof with matching arguments
+    const decoded = decodeFunctionData({
+      abi: [proposeWithProofAbi],
+      data: dataAuth.steps[0].calldata,
+    });
+    expect(decoded.functionName).toBe('proposeWithProof');
+    expect(normalizeAddress(decoded.args[1])).toBe(normalizeAddress(trustedPayee));
+    expect(decoded.args[2]).toBe(1_000_000n);
+
+    // 2. Unauthorized payout to outsider: blocked with PAYEE_NOT_IN_MISSION_SET
+    const reqOutsider = new NextRequest('http://localhost:3000/api/agent/run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${spendToken}`,
+      },
+      body: JSON.stringify({
+        goal: 'Pay unauthorized outsider',
+        overrideProposal: {
+          kind: 'treasury_payout',
+          mission_id: mission.slug,
+          to: outsider,
+          amount_atomic: '1000000',
+          reason: 'Unauthorized payment attempt',
+        },
+      }),
+    });
+
+    const resOutsider = await POST(reqOutsider);
+    expect(resOutsider.status).toBe(200);
+    const dataOutsider = await resOutsider.json();
+
+    expect(dataOutsider.steps[0].action).toBe('TOOL_BLOCKED');
+    expect(dataOutsider.steps[0].verdict.outcome).toBe('BLOCK');
+    expect(dataOutsider.steps[0].verdict.rule).toBe('PAYEE_NOT_IN_MISSION_SET');
   });
 
   it('Regression 9 (AG-05): Treasury payout in Stage S2 with QUEUE (> 5 USDC) creates QUEUED request and terminates', async () => {

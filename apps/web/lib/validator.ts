@@ -121,6 +121,7 @@ export interface ValidationContext {
     reservedTool: bigint;
     treasuryCap: bigint;
     configVersion: number;
+    payeeRoot?: string;
   };
   treasuryAllowlist?: string[];
   ownerSignedPayees?: string[];
@@ -405,6 +406,24 @@ export function validateProposal(proposal: Proposal, ctx: ValidationContext): Va
         toProvenance,
         amountProvenance,
       };
+    }
+
+    // PV-F4: If mission has an active payeeRoot, any recipient outside ownerSignedPayees is hard-blocked
+    const hasPayeeRoot = Boolean(
+      ctx.mission.payeeRoot &&
+      ctx.mission.payeeRoot !== '0x0000000000000000000000000000000000000000000000000000000000000000'
+    );
+    if (hasPayeeRoot) {
+      const ownerPayees = (ctx.ownerSignedPayees || []).map(normalizeAddress);
+      if (!ownerPayees.includes(to)) {
+        return {
+          outcome: 'BLOCK',
+          rule: 'PAYEE_NOT_IN_MISSION_SET',
+          reason: `Recipient ${to} is not in the owner-signed payee set for this mission (payee root active)`,
+          toProvenance,
+          amountProvenance,
+        };
+      }
     }
 
     // PV-2: Provenance checks strictly placed BEFORE allowlist check

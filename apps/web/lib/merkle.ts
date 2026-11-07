@@ -127,7 +127,8 @@ export function buildProposeWithProofCalldata(params: {
   reason: string;
   proof: `0x${string}`[];
 }): `0x${string}` {
-  const cleanOpId = (params.operationId.startsWith('0x') ? params.operationId : `0x${params.operationId}`).padEnd(66, '0') as `0x${string}`;
+  const rawOpId = params.operationId.replace(/-/g, '');
+  const cleanOpId = (rawOpId.startsWith('0x') ? rawOpId : `0x${rawOpId}`).padEnd(66, '0') as `0x${string}`;
   const cleanMissionId = (params.missionId.startsWith('0x') ? params.missionId : `0x${params.missionId}`).padEnd(66, '0') as `0x${string}`;
   return encodeFunctionData({
     abi: [proposeWithProofAbi],

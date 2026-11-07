@@ -19,7 +19,12 @@ import {
 } from '@/lib/payments';
 import { appendAuditEntry } from '@/lib/audit';
 import { validateLiveFujiConfig } from '@/lib/config';
-import { getMissionPayees } from '@/lib/merkle';
+import {
+  getMissionPayees,
+  getMissionPayeeProof,
+  buildProposeWithProofCalldata,
+  saveMissionPayees,
+} from '@/lib/merkle';
 
 export async function POST(req: NextRequest) {
   try {
@@ -224,6 +229,7 @@ export async function POST(req: NextRequest) {
             reservedTool: BigInt(currentMission.reservedTool.toString()),
             treasuryCap: BigInt(currentMission.treasuryCap.toString()),
             configVersion: currentMission.configVersion,
+            payeeRoot: currentMission.payeeRoot || undefined,
           },
           treasuryAllowlist,
           ownerSignedPayees: (() => {
@@ -345,13 +351,98 @@ export async function POST(req: NextRequest) {
           break;
         }
 
-        // AG-05: Separate branches for treasury_payout vs tool_purchase
+        // AG-05 & PV-F4: Separate branches for treasury_payout vs tool_purchase
         if (proposal.kind === 'treasury_payout') {
           // In S2, small payouts within per-tx cap pass validator.
           // The agent loop NEVER automatically executes payout; it creates a TreasuryRequest and terminates.
           const operationId = randomUUID();
+
+          // PV-F4: If mission has payeeRoot set, require and attach Merkle proof & proposeWithProof calldata
+          let proof: `0x${string}`[] | null = null;
+          let proposeCalldata: `0x${string}` | null = null;
+          const hasRoot = Boolean(
+            currentMission.payeeRoot &&
+            currentMission.payeeRoot !== '0x0000000000000000000000000000000000000000000000000000000000000000'
+          );
+
+          if (hasRoot) {
+            let dbPayees: string[] | null = null;
+            if ((currentMission as any).payeesJson) {
+              try {
+                const parsed = JSON.parse((currentMission as any).payeesJson);
+                if (Array.isArray(parsed) && parsed.length > 0) dbPayees = parsed;
+              } catch {}
+            }
+            proof = getMissionPayeeProof(currentMission.slug, proposal.to);
+            if (!proof && dbPayees) {
+              saveMissionPayees(currentMission.slug, dbPayees);
+              proof = getMissionPayeeProof(currentMission.slug, proposal.to);
+            }
+
+            if (!proof) {
+              const blockedVerdict = {
+                outcome: 'BLOCK' as const,
+                rule: 'PAYEE_NOT_IN_MISSION_SET',
+                reason: `Recipient ${proposal.to} is not in the owner-signed payee set for this mission (payee root active)`,
+                toProvenance: verdict.toProvenance,
+                amountProvenance: verdict.amountProvenance,
+              };
+
+              await withLockOrder(
+                async (tx) => {
+                  await appendAuditEntry(tx, {
+                    actor: claims.sub,
+                    amount: proposal.amount_atomic,
+                    chain_id: claims.chainId.toString(),
+                    kind: 'ATTACK_BLOCKED',
+                    mission_id: currentMission.slug,
+                    operation_id: operationId,
+                    policy_hash: currentMission.policyHash,
+                    policy_version: currentMission.configVersion.toString(),
+                    reason: `[PAYEE_NOT_IN_MISSION_SET] ${proposal.reason}`,
+                    result_hash: '0x0000000000000000000000000000000000000000000000000000000000000000',
+                    rule: 'PAYEE_NOT_IN_MISSION_SET',
+                    source_key: `treasury_blocked:${currentMission.slug}:${turn}:${operationId}`,
+                    to: proposal.to,
+                    tx_hash: '',
+                  });
+                },
+                { missionSlug: currentMission.slug, lockAuditHead: true }
+              );
+
+              stepLogs.push({
+                turn,
+                thought: plan.thought,
+                action: 'POLICY_BLOCKED',
+                operationId,
+                to: proposal.to,
+                amountAtomic: proposal.amount_atomic,
+                reason: proposal.reason,
+                verdict: blockedVerdict,
+                plannerMode: plan.plannerMode,
+                plannerModel: plan.plannerModel,
+                promptVersion: plan.promptVersion,
+              });
+              break;
+            }
+
+            proposeCalldata = buildProposeWithProofCalldata({
+              operationId,
+              to: proposal.to,
+              amountAtomic: BigInt(proposal.amount_atomic),
+              missionId: currentMission.missionId,
+              reason: proposal.reason,
+              proof,
+            });
+          }
+
+          const requestPayload = {
+            ...proposal,
+            proof,
+            calldata: proposeCalldata,
+          };
           const requestHash =
-            '0x' + createHash('sha256').update(JSON.stringify(proposal)).digest('hex');
+            '0x' + createHash('sha256').update(JSON.stringify(requestPayload)).digest('hex');
 
           await prisma.treasuryRequest.create({
             data: {
@@ -395,6 +486,8 @@ export async function POST(req: NextRequest) {
             amountAtomic: proposal.amount_atomic,
             reason: proposal.reason,
             verdict,
+            proof,
+            calldata: proposeCalldata,
             plannerMode: plan.plannerMode,
             plannerModel: plan.plannerModel,
             promptVersion: plan.promptVersion,
