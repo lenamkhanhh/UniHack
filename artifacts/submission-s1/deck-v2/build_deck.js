@@ -349,7 +349,7 @@ async function main() {
     [fa.FaBolt, "x402 on Fuji", "Gasless USDC tool payments (EIP-3009). A facilitator settles and pays the gas, so the mission's session wallet needs no AVAX."],
     [fa.FaCubes, "GuardedTreasury", "Per-mission caps, session wallets funded and swept by the owner, BLOCK / QUEUE / EXECUTE on-chain."],
     [fa.FaIdBadge, "ERC-8004 trust", "Agent #294 on the official Identity registry, owner feedback on Reputation, and our Validation registry: an independent validator re-checks a mission from the chain and posts 100/100."],
-    [fa.FaFingerprint, "Passkey approval", "The owner can approve a mission with Face ID or a fingerprint. Avalanche's P-256 precompile verifies it on-chain (281k gas)."],
+    [fa.FaFingerprint, "Passkey approval", "The owner can approve a mission with Face ID or a fingerprint. Avalanche's P-256 precompile verifies it on-chain, with RP ID, origin and user-verification checks (400k gas)."],
     [fa.FaAnchor, "Proof anchoring", "The audit head hash is written to the chain (MissionProofAnchored) so receipts can't be rewritten later."],
   ];
   const tw = 2.26, tg = 0.207;
@@ -363,7 +363,7 @@ async function main() {
   card(s, MX, 5.88, W - 2 * MX, 0.85, "status card");
   T(s, [
     { text: "Live on Fuji: ", options: { bold: true, color: GREEN } },
-    { text: "GuardedTreasury 0x2045…d545 (verified) · x402 settle 0x8c89…8208 · payee root set 0x2a4c…90a4 · payout with proof 0x7694…6c9a · unapproved payout reverted 0xc5f1…f1ff · anchor 0x43bd…0547 · ERC-8004 feedback 0xeddd…9105 · validation 100/100 0xb641…d059 · passkey approval 0x9885…cf45. Median finality measured: 4.2 s. Every link: FUJI_EVIDENCE.md.", options: { color: TXT } },
+    { text: "GuardedTreasury 0x2045…d545 (verified) · x402 settle 0x8c89…8208 · payee root set 0x2a4c…90a4 · payout with proof 0x7694…6c9a · unapproved payout reverted 0xc5f1…f1ff · anchor 0x43bd…0547 · ERC-8004 feedback 0xeddd…9105 · validation 100/100 0xb641…d059 · passkey approval 0x494b…a929. Median finality measured: 4.2 s. Every link: FUJI_EVIDENCE.md.", options: { color: TXT } },
   ], { x: MX + 0.3, y: 5.92, w: W - 2 * MX - 0.6, h: 0.77, fontSize: 11, valign: "middle", objectName: "status text" });
   s.addNotes("Avalanche là 25 điểm. Mọi hash trên slide là tx thật trên Fuji, reviewer đã kiểm bằng cast (ngày 07/11). Nếu được hỏi: mở FUJI_EVIDENCE.md hoặc Snowtrace. Câu chốt: tx 0xc5f1 là lúc chính contract từ chối trả tiền cho người nhận không có trong danh sách owner ký. ValidationRegistry là bản port từ ava-labs/8004-boilerplate (Fuji chưa có registry chính thức), validator là ví riêng, chỉ đọc chain. Passkey: bản trên Fuji là demo instance riêng, khóa demo là khóa phần mềm; passkey thật của owner đăng ký khi quay video. Finality 4.2 s là đo từ lúc gửi tới lúc có receipt qua RPC công khai, gồm cả thời gian polling.");
 
