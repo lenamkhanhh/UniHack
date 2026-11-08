@@ -4,6 +4,17 @@ import React, { useEffect, useState } from 'react';
 import { ArenaStats, ArenaAttackRecord } from '@/lib/arena';
 import { formatUsdc, formatSafeNumber } from '@/lib/format';
 import QRCodeDisplay from '@/components/QRCodeDisplay';
+import ProvenanceTraceDisplay from '@/components/ProvenanceTraceDisplay';
+
+function unescapeForDisplay(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'");
+}
 
 const DEFAULT_ARENA_STATS: ArenaStats = {
   totalAttacks: 0,
@@ -32,6 +43,7 @@ export default function ArenaStagePage() {
     recentAttacks: [],
   });
   const [arenaUrl, setArenaUrl] = useState('http://localhost:3100/arena');
+  const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
   const [fujiBalances, setFujiBalances] = useState<{
     success: boolean;
     mode: string;
@@ -39,7 +51,8 @@ export default function ArenaStagePage() {
     balances: {
       treasuryUsdc: string;
       sessionWalletUsdc: string;
-      attackerUsdc: string;
+      attackerDemoUsdc: string;
+      outOfScopeSpentUsdc: string;
     } | null;
     error?: string;
   } | null>(null);
@@ -158,8 +171,12 @@ export default function ArenaStagePage() {
             <span className="text-cyan-300 font-bold">{fujiBalances?.balances?.sessionWalletUsdc ?? '0.20'} USDC</span>
           </div>
           <div>
-            <span className="text-gray-400">Attacker (0x3333...): </span>
-            <span className="text-emerald-400 font-bold">{fujiBalances?.balances?.attackerUsdc ?? '0.00'} USDC</span>
+            <span className="text-gray-400">Chi ngoài payee set: </span>
+            <span className="text-emerald-400 font-bold">{fujiBalances?.balances?.outOfScopeSpentUsdc ?? '0.00'} USDC</span>
+          </div>
+          <div>
+            <span className="text-gray-400">Ví Attacker Demo (0xa77A...): </span>
+            <span className="text-emerald-400 font-bold">{fujiBalances?.balances?.attackerDemoUsdc ?? '0.00'} USDC</span>
           </div>
         </div>
       </div>
@@ -323,10 +340,10 @@ export default function ArenaStagePage() {
                     </div>
                   </div>
 
-                  {/* Attack Prompt */}
+                  {/* Attack Prompt (W5-F2: clean unescaped React text node) */}
                   <div className="text-sm font-medium text-gray-100">
                     <span className="text-gray-500 mr-2 font-mono text-xs">Đòn tấn công:</span>
-                    <span className="text-rose-300">"{atk.sanitizedPrompt}"</span>
+                    <span className="text-rose-300">"{unescapeForDisplay(atk.sanitizedPrompt)}"</span>
                   </div>
 
                   {/* Decoded Morse info if present */}
@@ -338,13 +355,32 @@ export default function ArenaStagePage() {
 
                   {/* Defense Verdict Details */}
                   <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-800/60">
-                    <span className="text-gray-400 text-[11px] truncate max-w-[80%]">
-                      {atk.verdict?.reason || atk.agentThought}
-                    </span>
+                    <div className="flex items-center space-x-3">
+                      <span className="text-gray-400 text-[11px] truncate max-w-[280px]">
+                        {atk.verdict?.reason || atk.agentThought}
+                      </span>
+                      {atk.provenanceTrace && (
+                        <button
+                          type="button"
+                          onClick={() => setExpandedTraceId(expandedTraceId === atk.id ? null : atk.id)}
+                          className="text-[11px] text-cyan-400 hover:text-cyan-300 underline font-mono flex items-center gap-1"
+                        >
+                          <span>🧬</span>
+                          <span>{expandedTraceId === atk.id ? 'Thu gọn Trace' : 'Xem Provenance Trace'}</span>
+                        </button>
+                      )}
+                    </div>
                     <span className="text-emerald-400 font-mono font-bold text-[11px]">
                       Tổn thất: $0.00
                     </span>
                   </div>
+
+                  {/* Provenance Trace Flow for Stage View (W5-F3) */}
+                  {(expandedTraceId === atk.id || (atk.provenanceTrace && atk.id === data.recentAttacks[0]?.id)) && atk.provenanceTrace && (
+                    <div className="pt-2 border-t border-gray-800 animate-in fade-in duration-200">
+                      <ProvenanceTraceDisplay trace={atk.provenanceTrace} />
+                    </div>
+                  )}
                 </div>
               ))
             ) : (

@@ -78,6 +78,12 @@ test.describe('WOW-1: Freysa Arena Live Attack & Stage Invariants', () => {
     await page.goto('/arena/stage');
     await expect(page.locator('text=LIVE FUJI · block #')).toBeVisible({ timeout: 15000 });
     await expect(page.locator('text=Treasury (0x2045...):')).toBeVisible();
+    await expect(page.locator('text=Chi ngoài payee set:')).toBeVisible();
+
+    // Verify stage feed renders Provenance Trace and clean unescaped text (W5-F2, W5-F3)
+    await expect(page.locator('text=Đường Đi Dữ Liệu Bẩn (Provenance Trace)').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=ĐÃ CHẶN NGUỒN GỐC BẨN').first()).toBeVisible();
+    await expect(page.locator('text=&lt;').first()).not.toBeVisible();
 
     // 6. Capture deck-shots/arena-trace.png
     const deckShotsDir = path.resolve(process.cwd(), '../../artifacts/submission-s1/deck-shots');
