@@ -44,6 +44,18 @@ test.describe('WOW-W4: Passkey Mission Authority (RIP-7212 Precompile 0x100)', (
     });
     await expect(page.locator('text=RIP-7212 Native')).toBeVisible();
 
+    // 6. Capture screenshot for pitch deck
+    const fs = await import('fs');
+    const path = await import('path');
+    const deckShotsDir = path.resolve(process.cwd(), '../../artifacts/submission-s1/deck-shots');
+    if (!fs.existsSync(deckShotsDir)) {
+      fs.mkdirSync(deckShotsDir, { recursive: true });
+    }
+    await page.screenshot({
+      path: path.join(deckShotsDir, 'wow-w4-passkey.png'),
+      fullPage: true,
+    });
+
     // Clean up CDP
     await cdp.send('WebAuthn.disable');
   });
