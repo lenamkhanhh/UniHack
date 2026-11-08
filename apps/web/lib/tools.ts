@@ -10,7 +10,7 @@ import {
   SUMMARY_PER_CALL_CAP,
   USDC_ADDRESS,
   CHAIN_ID,
-  X402_VERSION,
+  getActiveX402Version,
   X402_SCHEME,
 } from './constants';
 import { hashUtf8, normalizeAddress } from './chain';
@@ -269,7 +269,7 @@ export function getCanonicalPaymentTerms(params: {
   policyVersion: number;
 }) {
   return {
-    protocolVersion: X402_VERSION,
+    protocolVersion: getActiveX402Version(),
     scheme: X402_SCHEME,
     chainId: CHAIN_ID,
     asset: normalizeAddress(USDC_ADDRESS),

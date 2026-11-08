@@ -18,9 +18,14 @@ import {
 import { setChainReader, reconcileOperation } from '@/lib/reconcile';
 import { POST as toolRoutePOST } from '@/app/api/tools/[id]/route';
 import { computeBoundNonce, NONCE_BINDING_VERSION } from '@/lib/x402-binding';
-import { SEARCH_PRICE, SUMMARY_PRICE } from '@/lib/constants';
+import {
+  SEARCH_PRICE,
+  SUMMARY_PRICE,
+  CAIP2_AVALANCHE_FUJI,
+  LEGACY_AVALANCHE_FUJI,
+} from '@/lib/constants';
 
-describe("x402 ATC'26 Vulnerability Hardening Suite (arXiv:2605.30998)", () => {
+describe.each([1, 2])("x402 ATC'26 Vulnerability Hardening Suite (v%i)", (version) => {
   beforeEach(async () => {
     setChainReader(null);
     await clearDatabase();
@@ -56,24 +61,51 @@ describe("x402 ATC'26 Vulnerability Hardening Suite (arXiv:2605.30998)", () => {
       agentPrivateKey: TEST_AGENT_KEY,
     });
 
-    const paymentPayload = {
-      x402Version: 1,
-      scheme: 'exact',
-      network: 'avalanche-fuji',
-      payload: {
-        authorization: {
-          from: signedOp.authFrom,
-          to: signedOp.authTo,
-          value: signedOp.authValue,
-          validAfter: signedOp.validAfter?.toString(),
-          validBefore: signedOp.validBefore?.toString(),
-          nonce: signedOp.authNonce,
-        },
-        signature: signedOp.authSignature,
-      },
-    };
+    const isV2 = version === 2;
+    const paymentHeaderName = isV2 ? 'payment-signature' : 'x-payment';
 
-    const xPaymentHeader = Buffer.from(JSON.stringify(paymentPayload)).toString('base64');
+    const paymentPayload = isV2
+      ? {
+          x402Version: 2,
+          resource: `http://localhost:3000/api/tools/${toolId}`,
+          accepted: {
+            scheme: 'exact',
+            network: CAIP2_AVALANCHE_FUJI,
+            amount: signedOp.authValue,
+            asset: signedOp.authTo,
+            payTo: signedOp.authTo,
+            maxTimeoutSeconds: 60,
+          },
+          payload: {
+            authorization: {
+              from: signedOp.authFrom,
+              to: signedOp.authTo,
+              value: signedOp.authValue,
+              validAfter: signedOp.validAfter?.toString(),
+              validBefore: signedOp.validBefore?.toString(),
+              nonce: signedOp.authNonce,
+            },
+            signature: signedOp.authSignature,
+          },
+        }
+      : {
+          x402Version: 1,
+          scheme: 'exact',
+          network: LEGACY_AVALANCHE_FUJI,
+          payload: {
+            authorization: {
+              from: signedOp.authFrom,
+              to: signedOp.authTo,
+              value: signedOp.authValue,
+              validAfter: signedOp.validAfter?.toString(),
+              validBefore: signedOp.validBefore?.toString(),
+              nonce: signedOp.authNonce,
+            },
+            signature: signedOp.authSignature,
+          },
+        };
+
+    const paymentHeaderValue = Buffer.from(JSON.stringify(paymentPayload)).toString('base64');
 
     return {
       operationId,
@@ -82,14 +114,16 @@ describe("x402 ATC'26 Vulnerability Hardening Suite (arXiv:2605.30998)", () => {
       signedOp,
       claims,
       paymentPayload,
-      xPaymentHeader,
+      paymentHeaderName,
+      paymentHeaderValue,
+      xPaymentHeader: paymentHeaderValue,
     };
   }
 
   // --------------------------------------------------------------------------
   // F1c: Bound Nonce Verification & Deterministic Test Vector
   // --------------------------------------------------------------------------
-  it("F1c: Bound nonce matches computeBoundNonce formula and passes deterministic test vector", async () => {
+  it(`F1c (v${version}): Bound nonce matches computeBoundNonce formula and passes deterministic test vector`, async () => {
     // 1. Assert deterministic test vector for external judges to verify independently
     const testVector = {
       operationId: 'op_atc26_fixed_vector_001',
@@ -107,7 +141,7 @@ describe("x402 ATC'26 Vulnerability Hardening Suite (arXiv:2605.30998)", () => {
 
     // 2. Full end-to-end route test: normal request with bound nonce succeeds
     const { mission, spendToken } = await createTestMission();
-    const { operationId, xPaymentHeader, input } = await createSignedOperation({
+    const { operationId, paymentHeaderName, paymentHeaderValue, input } = await createSignedOperation({
       toolId: 'tool:search',
       input: { query: 'Avalanche C-Chain' },
       spendToken,
@@ -118,7 +152,7 @@ describe("x402 ATC'26 Vulnerability Hardening Suite (arXiv:2605.30998)", () => {
       headers: {
         authorization: `Bearer ${spendToken}`,
         'x-operation-id': operationId,
-        'x-payment': xPaymentHeader,
+        [paymentHeaderName]: paymentHeaderValue,
         'content-type': 'application/json',
       },
       body: JSON.stringify({ arguments: input }),
@@ -156,11 +190,11 @@ describe("x402 ATC'26 Vulnerability Hardening Suite (arXiv:2605.30998)", () => {
   // --------------------------------------------------------------------------
   // F1a: Cross-Resource Free-Riding (Tool Mismatch)
   // --------------------------------------------------------------------------
-  it("F1a: Cross-resource free-riding attack (tool mismatch) is blocked with HTTP 403 PAYMENT_NOT_BOUND_TO_REQUEST without running upstream", async () => {
+  it(`F1a (v${version}): Cross-resource free-riding attack (tool mismatch) is blocked with HTTP 403 PAYMENT_NOT_BOUND_TO_REQUEST without running upstream`, async () => {
     const { spendToken } = await createTestMission();
 
     // Sign for tool:search (0.10 USDC)
-    const { operationId, xPaymentHeader } = await createSignedOperation({
+    const { operationId, paymentHeaderName, paymentHeaderValue } = await createSignedOperation({
       toolId: 'tool:search',
       input: { query: 'Search query' },
       spendToken,
@@ -172,7 +206,7 @@ describe("x402 ATC'26 Vulnerability Hardening Suite (arXiv:2605.30998)", () => {
       headers: {
         authorization: `Bearer ${spendToken}`,
         'x-operation-id': operationId,
-        'x-payment': xPaymentHeader,
+        [paymentHeaderName]: paymentHeaderValue,
         'content-type': 'application/json',
       },
       body: JSON.stringify({ arguments: { text: 'Free-rider attempting to get summary for search price' } }),
@@ -196,26 +230,26 @@ describe("x402 ATC'26 Vulnerability Hardening Suite (arXiv:2605.30998)", () => {
   // --------------------------------------------------------------------------
   // F1b: Parameter Tampering (Modified Request Body / inputHash Mismatch)
   // --------------------------------------------------------------------------
-  it("F1b: Parameter tampering attack (modified request body / inputHash mismatch) is blocked with HTTP 403 PAYMENT_NOT_BOUND_TO_REQUEST", async () => {
+  it(`F1b (v${version}): Parameter tampering attack (modified request body / inputHash mismatch) is blocked with HTTP 403 PAYMENT_NOT_BOUND_TO_REQUEST`, async () => {
     const { spendToken } = await createTestMission();
 
-    // Sign for query: "Safe original query"
-    const { operationId, xPaymentHeader } = await createSignedOperation({
+    // Sign for legitimate query
+    const { operationId, paymentHeaderName, paymentHeaderValue } = await createSignedOperation({
       toolId: 'tool:search',
-      input: { query: 'Safe original query' },
+      input: { query: 'Original query before tampering' },
       spendToken,
     });
 
-    // Adversary tampers with the query payload while reusing the signed X-PAYMENT header
+    // Attacker tampers body before forwarding to seller
     const tamperedReq = new NextRequest('http://localhost:3000/api/tools/tool:search', {
       method: 'POST',
       headers: {
         authorization: `Bearer ${spendToken}`,
         'x-operation-id': operationId,
-        'x-payment': xPaymentHeader,
+        [paymentHeaderName]: paymentHeaderValue,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ arguments: { query: 'Malicious injected query not authorized' } }),
+      body: JSON.stringify({ arguments: { query: 'Tampered malicious query payload' } }),
     });
 
     const res = await toolRoutePOST(tamperedReq, { params: Promise.resolve({ id: 'tool:search' }) });
@@ -233,12 +267,23 @@ describe("x402 ATC'26 Vulnerability Hardening Suite (arXiv:2605.30998)", () => {
   });
 
   // --------------------------------------------------------------------------
+  // Architectural Note on Vulnerability F3 (Facilitator Censorship / Settlement Timeout)
+  // --------------------------------------------------------------------------
+  // ATC'26 §4.3 defines F3 as facilitator censorship or denial of service where
+  // a facilitator drops an authorization or fails to broadcast before validBefore.
+  // In MissionPay:
+  // 1) All authorizations use short validBefore TTLs (default 60s) preventing indefinite lock.
+  // 2) Unsettled reservations transition safely to UNKNOWN / AVAILABLE via timeout reconciliation without loss.
+  // 3) Automatic fallback to self-hosted facilitator (apps/web/lib/facilitator-fallback.ts) with direct RPC.
+  // This is an infrastructure availability property covered by P-series integration tests (P10, P15).
+
+  // --------------------------------------------------------------------------
   // F2: Double Settlement Prevention (Concurrent Replay)
   // --------------------------------------------------------------------------
-  it("F2: Concurrent replay of identical X-PAYMENT results in exactly 1 settlement and no duplicate spend", async () => {
+  it(`F2 (v${version}): Concurrent replay of identical payment header results in exactly 1 settlement and no duplicate spend`, async () => {
     const { mission, spendToken } = await createTestMission();
 
-    const { operationId, xPaymentHeader, input } = await createSignedOperation({
+    const { operationId, paymentHeaderName, paymentHeaderValue, input } = await createSignedOperation({
       toolId: 'tool:search',
       input: { query: 'Avalanche C-Chain' },
       spendToken,
@@ -250,13 +295,13 @@ describe("x402 ATC'26 Vulnerability Hardening Suite (arXiv:2605.30998)", () => {
         headers: {
           authorization: `Bearer ${spendToken}`,
           'x-operation-id': operationId,
-          'x-payment': xPaymentHeader,
+          [paymentHeaderName]: paymentHeaderValue,
           'content-type': 'application/json',
         },
         body: JSON.stringify({ arguments: input }),
       });
 
-    // Send 2 concurrent requests with identical X-PAYMENT header
+    // Send 2 concurrent requests with identical payment header
     const [res1, res2] = await Promise.all([
       toolRoutePOST(createReq(), { params: Promise.resolve({ id: 'tool:search' }) }),
       toolRoutePOST(createReq(), { params: Promise.resolve({ id: 'tool:search' }) }),
@@ -287,10 +332,10 @@ describe("x402 ATC'26 Vulnerability Hardening Suite (arXiv:2605.30998)", () => {
   // --------------------------------------------------------------------------
   // F4: Premature Result Disclosure Gating
   // --------------------------------------------------------------------------
-  it("F4: Premature result disclosure defense: failed settlement strictly gates upstream output and returns null result with FAILED state", async () => {
+  it(`F4 (v${version}): Premature result disclosure defense: failed settlement strictly gates upstream output and returns null result with FAILED state`, async () => {
     const { spendToken } = await createTestMission();
 
-    const { operationId, signedOp, xPaymentHeader, input } = await createSignedOperation({
+    const { operationId, signedOp, paymentHeaderName, paymentHeaderValue, input } = await createSignedOperation({
       toolId: 'tool:search',
       input: { query: 'Confidential upstream query' },
       spendToken,
@@ -331,7 +376,7 @@ describe("x402 ATC'26 Vulnerability Hardening Suite (arXiv:2605.30998)", () => {
       headers: {
         authorization: `Bearer ${spendToken}`,
         'x-operation-id': operationId,
-        'x-payment': xPaymentHeader,
+        [paymentHeaderName]: paymentHeaderValue,
         'content-type': 'application/json',
       },
       body: JSON.stringify({ arguments: input }),

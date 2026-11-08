@@ -306,4 +306,84 @@ describe('x402 v2 Migration & Dual-Version Protocol Suite (PLAN_MAX §M6)', () =
     const data = await res.json();
     expect(data.error).toBe('PAYMENT_NOT_BOUND_TO_REQUEST');
   });
+
+  // 6. M6-F1: Dynamic env flag X402_VERSION=1 yields v1 header and body format
+  it('M6-F1: Dynamic env flag X402_VERSION=1 yields v1 header and body format', async () => {
+    const origEnv = process.env.X402_VERSION;
+    try {
+      process.env.X402_VERSION = '1';
+      const { spendToken } = await createTestMission();
+      const operationId = randomUUID();
+
+      const req = new NextRequest('http://localhost:3000/api/tools/tool:search', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${spendToken}`,
+          'x-operation-id': operationId,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ arguments: { query: 'Test v1 query' } }),
+      });
+
+      const res = await toolRoutePOST(req, { params: Promise.resolve({ id: 'tool:search' }) });
+      expect(res.status).toBe(402);
+
+      // Verify v1 header is present
+      const v1Header = res.headers.get(X402_V1_HEADER);
+      expect(v1Header).toBeDefined();
+      expect(v1Header).not.toBeNull();
+
+      const body = await res.json();
+      expect(body.x402Version).toBe(1);
+      expect(body.error).toBe('X-PAYMENT header is required');
+      expect(body.accepts[0].network).toBe(LEGACY_AVALANCHE_FUJI);
+      expect(body.accepts[0].maxAmountRequired).toBe('100000');
+    } finally {
+      if (origEnv !== undefined) {
+        process.env.X402_VERSION = origEnv;
+      } else {
+        delete process.env.X402_VERSION;
+      }
+    }
+  });
+
+  // 7. M6-F1: Dynamic env flag X402_VERSION=2 yields v2 header and body format
+  it('M6-F1: Dynamic env flag X402_VERSION=2 yields v2 header and body format', async () => {
+    const origEnv = process.env.X402_VERSION;
+    try {
+      process.env.X402_VERSION = '2';
+      const { spendToken } = await createTestMission();
+      const operationId = randomUUID();
+
+      const req = new NextRequest('http://localhost:3000/api/tools/tool:search', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${spendToken}`,
+          'x-operation-id': operationId,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ arguments: { query: 'Test v2 query' } }),
+      });
+
+      const res = await toolRoutePOST(req, { params: Promise.resolve({ id: 'tool:search' }) });
+      expect(res.status).toBe(402);
+
+      // Verify v2 header is present
+      const v2Header = res.headers.get(X402_V2_REQUIRED_HEADER);
+      expect(v2Header).toBeDefined();
+      expect(v2Header).not.toBeNull();
+
+      const body = await res.json();
+      expect(body.x402Version).toBe(2);
+      expect(body.error).toBe('PAYMENT-SIGNATURE header is required');
+      expect(body.accepts[0].network).toBe(CAIP2_AVALANCHE_FUJI);
+      expect(body.accepts[0].amount).toBe('100000');
+    } finally {
+      if (origEnv !== undefined) {
+        process.env.X402_VERSION = origEnv;
+      } else {
+        delete process.env.X402_VERSION;
+      }
+    }
+  });
 });

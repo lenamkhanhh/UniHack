@@ -8,20 +8,15 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-Claude review M6 (87b87c8, 09/11). Đã kiểm tx `0x7e3b…be19` trên Fuji: status 1, 0,10 USDC (log `AuthorizationUsed` + `Transfer` của USDC Fuji), gửi từ facilitator `0xc669…` (không phải ví owner). apps/web 219/219 pass. Còn 3 mục:
-
-- M6-F1 [bug] `lib/constants.ts` vừa có hàm đọc env `X402_VERSION`, vừa có `export const X402_VERSION = 2;` gán cứng, và `payments.ts` import hằng số gán cứng này. Kết quả là cờ `X402_VERSION=1` không có tác dụng lúc chạy. Sửa:
-  - Mọi chỗ đọc qua hàm (hoặc hằng tính từ env).
-  - Thêm test: đặt env = 1 thì response 402 có header/body kiểu v1, đặt env = 2 thì kiểu v2.
-- M6-F2 [spec] Test ATC'26 phải pass ở **cả v1 lẫn v2**. Hiện `x402-v2.test.ts` chỉ có F1a, F1b ở v2; F1c, F2 (replay đồng thời → đúng 1 settlement) và F4 (settle lỗi thì không lộ kết quả) chỉ chạy ở v1. Tham số hóa `x402-atc26.test.ts` bằng `describe.each([1, 2])` để mọi test F1a/F1b/F1c/F2/F4 chạy ở cả hai version.
-  - Nếu F3 trước đây đã được ghi là "ngoài phạm vi" thì giữ nguyên ghi chú; nếu chưa có thì ghi rõ lý do.
-- M6-F3 FUJI_EVIDENCE Part E ghi rõ facilitator dùng cho tx này: tự host (`facilitator-fallback.ts`) hay public. Nếu tự host, ghi đã thử facilitator public nào, lỗi gì và vào ngày nào.
-  - Sửa chữ "khí gas bằng 0": agent không trả gas, facilitator trả.
-  - Ghi gasUsed 92,372.
-- Xong thì commit `fix(m6)`, rồi làm **M7** (validator tự động khi đóng mission) theo PLAN_MAX.
+- **Việc tiếp: M7 (Validator tự động khi đóng mission)** theo PLAN_MAX_2026-11-08.md (0.5 ngày). Khi owner đóng mission (`closeMission`) hoặc anchor proof: job gọi `validator-run` cho mission đó (validator key riêng như hiện tại), gửi `validationResponse`. `/verify` hiện kết quả. Test: mission đóng → có request + response; tamper → score 0 (trên anvil fork).
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
+
+- M6-F1..F3 [x402 v2 Refinements, Dual-Version ATC'26 Parameterization & Facilitator Evidence]:
+  - **M6-F1 (Dynamic X402_VERSION Flag & Callers Cleaned):** Đã loại bỏ hằng số gán cứng `export const X402_VERSION = 2;`. Toàn bộ caller (`constants.ts`, `payments.ts`, `tools.ts`, `route.ts`) chuyển sang gọi trực tiếp `getActiveX402Version()` (hoặc alias `getX402Version`). Khi `X402_VERSION=1`, route 402 trả về header `X-PAYMENT` và body kiểu v1 (`maxAmountRequired`, network `avalanche-fuji`); khi `X402_VERSION=2`, trả về header `PAYMENT-REQUIRED` và body kiểu v2 (`amount`, network `eip155:43113`). Đã bổ sung 2 unit test kiểm chứng trong `x402-v2.test.ts`.
+  - **M6-F2 (ATC'26 Dual-Version Parameterization):** Đã tham số hóa toàn bộ test suite `x402-atc26.test.ts` qua `describe.each([1, 2])`. Mọi test F1a (cross-resource), F1b (parameter tampering), F1c (deterministic bound nonce vector), F2 (concurrent double-settlement prevention), và F4 (premature result disclosure gating) đều chạy và vượt qua 10/10 tests trên cả 2 phiên bản v1 và v2. Đã bổ sung ghi chú kiến trúc cho F3 (Facilitator Censorship / Settlement Timeout) phân định rõ cơ chế bảo vệ bằng short TTL validBefore, timeout reconciliation UNKNOWN → AVAILABLE, và fallback tự host.
+  - **M6-F3 (FUJI_EVIDENCE Clarified):** Cập nhật Phần E trong `artifacts/submission-s1/FUJI_EVIDENCE.md` ghi rõ tx `0x7e3b...be19` sử dụng PayAI Public Facilitator (`https://facilitator.payai.network`) qua relayer `0xc6699d2aada6c36dfea5c248dd70f9cb0235cb63`; ghi chú đầy đủ kết quả probe Ultravioleta (502 Bad Gateway) và giải pháp fallback tự host `facilitator-fallback.ts` với relayer `0xE90c...`; sửa chữ "khí gas bằng 0" thành "cơ chế gasless cho Agent (Agent không trả gas, Facilitator Relayer trả)"; ghi nhận chính xác `gasUsed: 92,372`.
 
 - M6 [x402 v2 Migration & Dual-Version Live Protocol]:
   - Đã tích hợp `@x402/core` và `@x402/evm` (v2.30.0).

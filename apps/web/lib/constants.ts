@@ -48,12 +48,12 @@ export const SUMMARY_INPUT_MAX_CHARS = 2000;
 export const SUMMARY_OUTPUT_MAX_CHARS = 500;
 
 // x402 Protocol (v1 & v2 migration support per PLAN_MAX §M6)
-export const DEFAULT_X402_VERSION = 2;
-export const getActiveX402Version = (): number => {
+export const DEFAULT_X402_VERSION: 1 | 2 = 2;
+export const getActiveX402Version = (): 1 | 2 => {
   const envVal = process.env.X402_VERSION;
-  return envVal ? parseInt(envVal, 10) : DEFAULT_X402_VERSION;
+  return envVal === '1' ? 1 : 2;
 };
-export const X402_VERSION = 2;
+export const getX402Version = getActiveX402Version;
 export const X402_SCHEME = 'exact';
 
 // Network Identifiers (CAIP-2 for v2, legacy name for v1)

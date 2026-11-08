@@ -1181,3 +1181,26 @@ ightarrow$ Attack Blocked (ASR = 0, thất thoát 0 USDC).
 - `contracts` (Foundry): **4 suites passed, 61/61 tests passed (0 failures)**
 - TypeScript Typecheck (`tsc --noEmit`): **0 errors**
 - Production Build (`next build`): **33/33 static & dynamic routes compiled cleanly**
+
+### Cập nhật Fixes M6-F1..M6-F3 (x402 v2 Refinements)
+- **M6-F1 (Dynamic X402_VERSION Flag & Callers Cleaned):**
+  - Đã loại bỏ hằng số gán cứng `export const X402_VERSION = 2;` khỏi `apps/web/lib/constants.ts`.
+  - Toàn bộ các caller (`payments.ts`, `tools.ts`, `route.ts`) chuyển sang gọi trực tiếp hàm dynamic `getActiveX402Version()` (hoặc alias `getX402Version`).
+  - Route `/api/tools/[id]` khi unpaid 402 kiểm tra `getActiveX402Version()`: nếu version = 1, trả về header `X-PAYMENT` và body format v1 (`maxAmountRequired`, network `avalanche-fuji`); nếu version = 2, trả về header `PAYMENT-REQUIRED` và body format v2 (`amount`, network `eip155:43113`).
+  - Bổ sung 2 unit test trong `apps/web/tests/x402-v2.test.ts` kiểm chứng độc lập hai trường hợp `X402_VERSION=1` và `X402_VERSION=2`.
+- **M6-F2 (ATC'26 Dual-Version Parameterization):**
+  - Tham số hóa toàn bộ test suite `apps/web/tests/x402-atc26.test.ts` qua `describe.each([1, 2])`.
+  - Toàn bộ 5 kịch bản bảo mật ATC'26:
+    - F1c (deterministic bound nonce vector & end-to-end route settlement)
+    - F1a (cross-resource free-riding attack blocked with 403)
+    - F1b (parameter tampering attack blocked with 403)
+    - F2 (concurrent double-settlement prevention: exactly 1 settlement & audit entry)
+    - F4 (premature result disclosure defense: failed settlement strictly gates output)
+    đều chạy và vượt qua **10/10 tests** (5 tests × 2 versions).
+  - Bổ sung ghi chú kiến trúc cho F3 (Facilitator Censorship / Settlement Timeout) nêu rõ các cơ chế phòng thủ: validBefore TTL bounding, timeout reconciliation UNKNOWN → AVAILABLE, và fallback tự host `facilitator-fallback.ts`.
+- **M6-F3 (FUJI_EVIDENCE Clarified):**
+  - Cập nhật Phần E trong `artifacts/submission-s1/FUJI_EVIDENCE.md` nêu rõ:
+    - Facilitator sử dụng cho giao dịch `0x7e3b...be19` là PayAI Public Facilitator (`https://facilitator.payai.network`), relayer `0xc6699d2aada6c36dfea5c248dd70f9cb0235cb63`.
+    - Kết quả khảo sát các facilitator trên Fuji ngày 08/11/2026: Ultravioleta trả lỗi HTTP 502 Bad Gateway; PayAI hoạt động; giải pháp fallback tự host `facilitator-fallback.ts` với ví relayer `0xE90c...` sẵn sàng kích hoạt nếu facilitator public timeout.
+    - Sửa thuật ngữ "khí gas bằng 0" thành "cơ chế gasless cho Agent (Agent / ví phiên không phải trả gas; toàn bộ phí gas do Facilitator Relayer thanh toán)".
+    - Ghi nhận chính xác `Gas Used: 92,372`.

@@ -151,12 +151,24 @@ Bằng chứng thực thi giao dịch thanh toán tài nguyên AI theo chuẩn g
 | Thông số | Giá trị kiểm chứng thực tế |
 |---|---|
 | **Giao thức** | **x402 v2** (`x402Version: 2`, Scheme: `exact`, CAIP-2: `eip155:43113`) |
-| **Hành động** | Mua công cụ tìm kiếm `tool:search` qua cơ chế thanh toán vi mô khí gas bằng 0 cho Agent |
+| **Hành động** | Mua công cụ tìm kiếm `tool:search` qua cơ chế gasless cho Agent (Agent / ví phiên không phải trả gas; toàn bộ phí gas do Facilitator Relayer thanh toán) |
 | **Giao dịch Settle Hash** | [`0x7e3b18eea005f6b1cfa6b9ec4008998629be595f0e1046988d81f55d95fbbe19`](https://testnet.snowtrace.io/tx/0x7e3b18eea005f6b1cfa6b9ec4008998629be595f0e1046988d81f55d95fbbe19) |
 | **Block Number** | `#60751475` |
-| **Người gửi Giao dịch (Relayer)** | `0xc6699d2aada6c36dfea5c248dd70f9cb0235cb63` (Facilitator chuyên dụng, độc lập với ví Owner và Treasury) |
+| **Gas Used** | `92,372` (do Facilitator Relayer thanh toán on-chain) |
+| **Facilitator sử dụng** | **PayAI Public Facilitator** (`https://facilitator.payai.network`) |
+| **Người gửi Giao dịch (Relayer)** | `0xc6699d2aada6c36dfea5c248dd70f9cb0235cb63` (PayAI Facilitator Relayer chuyên dụng trên Avalanche Fuji, hoàn toàn độc lập với ví Owner và Treasury) |
 | **Người trả tiền (Payer)** | Ví phiên an toàn `0x46a84a9f6b9be739c9aa02319497abe7b9f23843` |
 | **Người nhận tiền (Seller)** | Nhà cung cấp công cụ `0xd4ce6B645ACd77BefA0E2693D26B50482426dEcB` |
 | **Số tiền thanh toán** | **0.10 USDC** (`100000` atomic units) |
 | **Trạng thái on-chain** | **`SUCCESS`** (Log `Transfer` và `AuthorizationUsed` xác nhận trên Avalanche Fuji) |
 | **Trạng thái DB & Header** | Trạng thái `SETTLED`, trả về tiêu đề chuẩn `PAYMENT-RESPONSE` |
+
+### Khảo sát & Lựa chọn Facilitator trên Avalanche Fuji (08/11/2026):
+1. **Ultravioleta Facilitator (`https://facilitator.ultravioletadao.xyz`)**:
+   - Đã probe endpoint `/supported` vào ngày 08/11/2026.
+   - Kết quả: Trả về mã lỗi HTTP `502 Bad Gateway` / timeout tạm thời tại thời điểm thử nghiệm.
+2. **PayAI Public Facilitator (`https://facilitator.payai.network`)**:
+   - Đã probe và gửi payload v2 vào ngày 08/11/2026.
+   - Kết quả: Hoạt động bình thường; relayer `0xc6699d2aada6c36dfea5c248dd70f9cb0235cb63` broadcast thành công giao dịch `0x7e3b18eea005f6b1cfa6b9ec4008998629be595f0e1046988d81f55d95fbbe19` (block `#60751475`, gasUsed: `92,372`).
+3. **Self-Hosted Fallback Facilitator (`apps/web/lib/facilitator-fallback.ts`)**:
+   - Dự án đã chuẩn bị sẵn module facilitator tự host sử dụng ví relayer riêng `FACILITATOR_PRIVATE_KEY` (`0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA` đã nạp 0.02 AVAX) gọi trực tiếp hàm `transferWithAuthorization` của USDC Fuji (`0x5425890298aed601595a70AB815c96711a31Bc65`), sẵn sàng fallback tự động nếu cả hai facilitator công khai gặp sự cố kết nối.

@@ -20,7 +20,6 @@ import {
   CAIP2_AVALANCHE_FUJI,
   LEGACY_AVALANCHE_FUJI,
   getActiveX402Version,
-  X402_VERSION,
   X402_SCHEME,
 } from '@/lib/constants';
 import { normalizeAddress } from '@/lib/chain';
@@ -125,16 +124,24 @@ export async function POST(
         appOrigin,
       });
 
-      const v2RequiredHeader = Buffer.from(
+      const activeVersion = getActiveX402Version();
+      const requiredPayloadBase64 = Buffer.from(
         JSON.stringify(quote.unpaidResponse)
       ).toString('base64');
 
+      const headers: Record<string, string> = {
+        'X-Operation-Id': operationId,
+      };
+
+      if (activeVersion === 1) {
+        headers[X402_V1_HEADER] = requiredPayloadBase64;
+      } else {
+        headers[X402_V2_REQUIRED_HEADER] = requiredPayloadBase64;
+      }
+
       return NextResponse.json(quote.unpaidResponse, {
         status: 402,
-        headers: {
-          'X-Operation-Id': operationId,
-          [X402_V2_REQUIRED_HEADER]: v2RequiredHeader,
-        },
+        headers,
       });
     }
 
