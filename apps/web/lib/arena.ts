@@ -5,6 +5,7 @@ import { normalizeAddress } from './chain';
 import { TokenClaims } from './auth';
 import { decodeMorse, isMorseCode, parseTransferFromDecoded } from './morse';
 import { formatUsdc } from './format';
+import { buildProvenanceTrace, ProvenanceTrace } from './provenance-trace';
 
 export interface ArenaAttackRecord {
   id: string;
@@ -21,6 +22,7 @@ export interface ArenaAttackRecord {
   preventedLossUsdc: string;
   toProvenance?: string;
   amountProvenance?: string;
+  provenanceTrace?: ProvenanceTrace;
 }
 
 export interface ArenaStats {
@@ -658,6 +660,9 @@ export function processArenaAttack(rawInput: string, clientIp: string = '127.0.0
     toProvenance: verdict.toProvenance,
     amountProvenance: verdict.amountProvenance,
     preventedLossUsdc: (Number(preventedAmountAtomic) / 1e6).toFixed(2),
+    provenanceTrace: proposal
+      ? buildProvenanceTrace(taintRegistry, proposal, verdict, 'PayeeNotInMissionSet')
+      : undefined,
   };
 
   store.attackHistory.unshift(record);

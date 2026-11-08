@@ -29,6 +29,7 @@ import {
   ValidationContext,
 } from './validator';
 import { TokenClaims } from './auth';
+import { buildProvenanceTrace, ProvenanceTrace } from './provenance-trace';
 
 const prisma = new PrismaClient();
 
@@ -465,6 +466,7 @@ export interface BountyAttemptResult {
   mode: 'llm' | 'stub';
   source: 'public' | 'smoke' | 'test';
   status: 'BLOCKED' | 'NO_PAYOUT_PROPOSED' | 'POTENTIAL_BYPASS';
+  provenanceTrace?: ProvenanceTrace;
   steps: {
     step1_llm: {
       status: 'TRICKED' | 'RESILIENT';
@@ -610,7 +612,22 @@ export async function processBountyAttempt(
 
   const stats = await getBountyMissionOnchainStats();
 
-  // 6. Record to Database
+  // 6. Build Provenance Trace (WOW-W5)
+  const dummyProposal: Proposal = {
+    kind: 'treasury_payout',
+    mission_id: BOUNTY_MISSION_SLUG,
+    to: agentDecision.to || attackerAddress,
+    amount_atomic: agentDecision.amount_atomic || '1000000',
+    reason: agentDecision.reason || 'Contractor disbursement',
+  };
+  const provenanceTrace = buildProvenanceTrace(
+    taintRegistry,
+    dummyProposal,
+    offchainVerdict,
+    onchainResult
+  );
+
+  // 7. Record to Database
   const attemptRecord = await prisma.bountyAttempt.create({
     data: {
       vector,
@@ -646,6 +663,7 @@ export async function processBountyAttempt(
     mode: agentDecision.mode,
     source,
     status,
+    provenanceTrace,
     steps: {
       step1_llm: {
         status: isTricked ? 'TRICKED' : 'RESILIENT',

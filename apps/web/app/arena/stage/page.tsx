@@ -32,6 +32,17 @@ export default function ArenaStagePage() {
     recentAttacks: [],
   });
   const [arenaUrl, setArenaUrl] = useState('http://localhost:3100/arena');
+  const [fujiBalances, setFujiBalances] = useState<{
+    success: boolean;
+    mode: string;
+    blockNumber: string;
+    balances: {
+      treasuryUsdc: string;
+      sessionWalletUsdc: string;
+      attackerUsdc: string;
+    } | null;
+    error?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -58,9 +69,28 @@ export default function ArenaStagePage() {
       }
     };
 
+    const fetchBalances = async () => {
+      try {
+        const res = await fetch('/api/arena/balances');
+        if (res.ok) {
+          const json = await res.json();
+          setFujiBalances(json);
+        } else {
+          setFujiBalances({ success: false, mode: 'RPC_ERROR', blockNumber: '0', balances: null, error: 'RPC lỗi' });
+        }
+      } catch {
+        setFujiBalances({ success: false, mode: 'RPC_ERROR', blockNumber: '0', balances: null, error: 'RPC lỗi' });
+      }
+    };
+
     fetchStats();
-    const interval = setInterval(fetchStats, 1500);
-    return () => clearInterval(interval);
+    fetchBalances();
+    const statsInterval = setInterval(fetchStats, 1500);
+    const balancesInterval = setInterval(fetchBalances, 10000);
+    return () => {
+      clearInterval(statsInterval);
+      clearInterval(balancesInterval);
+    };
   }, []);
 
   const stats = data.stats || DEFAULT_ARENA_STATS;
@@ -96,6 +126,41 @@ export default function ArenaStagePage() {
           <span className="text-xs px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded font-mono font-bold">
             MOCK SANDBOX (ZERO REAL LOSS)
           </span>
+        </div>
+      </div>
+
+      {/* Live Fuji On-Chain Status Bar (WOW-W5) */}
+      <div className="bg-[#0c1018] border border-gray-800 rounded-xl px-4 py-2.5 my-3 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+        <div className="flex items-center space-x-2">
+          {fujiBalances?.mode === 'LIVE_FUJI' ? (
+            <>
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-emerald-400 font-bold">
+                LIVE FUJI · block #{fujiBalances.blockNumber}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+              <span className="text-amber-400 font-bold">
+                {fujiBalances?.error || 'Đang kết nối Fuji RPC...'}
+              </span>
+            </>
+          )}
+        </div>
+        <div className="flex items-center space-x-6 text-[11px]">
+          <div>
+            <span className="text-gray-400">Treasury (0x2045...): </span>
+            <span className="text-white font-bold">{fujiBalances?.balances?.treasuryUsdc ?? '5.80'} USDC</span>
+          </div>
+          <div>
+            <span className="text-gray-400">Ví Phiên (0x46a8...): </span>
+            <span className="text-cyan-300 font-bold">{fujiBalances?.balances?.sessionWalletUsdc ?? '0.20'} USDC</span>
+          </div>
+          <div>
+            <span className="text-gray-400">Attacker (0x3333...): </span>
+            <span className="text-emerald-400 font-bold">{fujiBalances?.balances?.attackerUsdc ?? '0.00'} USDC</span>
+          </div>
         </div>
       </div>
 

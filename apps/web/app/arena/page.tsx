@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import ProvenanceTraceDisplay from '@/components/ProvenanceTraceDisplay';
 
 const PRESETS = [
   {
@@ -201,6 +202,13 @@ export default function ArenaMobilePage() {
                 $0.00 (Chặn bởi validator off-chain)
               </span>
             </div>
+
+            {/* Dirty Data Provenance Trace (WOW-W5) */}
+            {result.record.provenanceTrace && (
+              <div className="pt-2 border-t border-gray-800">
+                <ProvenanceTraceDisplay trace={result.record.provenanceTrace} />
+              </div>
+            )}
           </div>
         )}
 

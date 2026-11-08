@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import ProvenanceTraceDisplay from '@/components/ProvenanceTraceDisplay';
+import { ProvenanceTrace } from '@/lib/provenance-trace';
 
 interface BountyStats {
   treasuryBalanceUsdc: string;
@@ -64,6 +66,7 @@ interface AttemptResponse {
   bountyRemainingUsdc?: string;
   mode?: string;
   source?: string;
+  provenanceTrace?: ProvenanceTrace;
   steps: StepResult;
 }
 
@@ -311,6 +314,16 @@ export default function BountyPage() {
               {loading ? 'Đang Chạy Pipeline C2 (Gemini + On-Chain Fuji)...' : '🚀 Gửi Đòn Tấn Công (Simulate Pipeline)'}
             </button>
           </form>
+
+          {/* W3-F6 Notice: Agent Mechanism & Prompt Disclosure */}
+          <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 text-xs text-slate-400 space-y-1.5 font-sans">
+            <div className="font-semibold text-slate-300 flex items-center gap-1.5">
+              <span>ℹ️</span> <span>Cách Hoạt Động & Cơ Chế Agent:</span>
+            </div>
+            <p className="leading-relaxed">
+              Agent dùng prompt của một agent kế toán thông thường có danh bạ vendor công ty (bao gồm vendor <code className="text-amber-400">0x1111...</code>, <code className="text-amber-400">0x2222...</code>, và vendor thứ cấp <code className="text-amber-400">0x3333...</code>). Với prompt hạn chế chặt hơn, Gemini 3.5 Flash Lite từ chối 5/5 payload mẫu; guard của MissionPay vẫn chặn bất kể prompt.
+            </p>
+          </div>
         </div>
 
         {/* 3-Step Result Card */}
@@ -384,6 +397,13 @@ export default function BountyPage() {
                 </a>
               </div>
             </div>
+
+            {/* Provenance Trace Flow (WOW-W5) */}
+            {lastResult.provenanceTrace && (
+              <div className="pt-2 border-t border-slate-800">
+                <ProvenanceTraceDisplay trace={lastResult.provenanceTrace} />
+              </div>
+            )}
           </div>
         )}
 

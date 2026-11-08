@@ -207,12 +207,36 @@
   - **createMission (`missionpay-bounty-v1`, cap 5 USDC):** Tx [`0x16a4a45ca84dc3a157dccf80a25f989cac24b5d5a004e5b9322124df7c4e7afd`](https://testnet.snowtrace.io/tx/0x16a4a45ca84dc3a157dccf80a25f989cac24b5d5a004e5b9322124df7c4e7afd) (Block `#60713136`)
   - **setMissionPayeeRoot (Merkle Root `0xc6ce8a...`):** Tx [`0x12062261f369384bf06b9f4747f8e335a7a57951ec6509e6791ab1ba879f5dc3`](https://testnet.snowtrace.io/tx/0x12062261f369384bf06b9f4747f8e335a7a57951ec6509e6791ab1ba879f5dc3) (Block `#60713140`)
   - **fundTreasury (5 USDC từ owner vào GuardedTreasury):** Tx [`0xd0654d4d695ff1b3a81dbc3785c39123859c1907a9b165782a1ea87e6c599934`](https://testnet.snowtrace.io/tx/0xd0654d4d695ff1b3a81dbc3785c39123859c1907a9b165782a1ea87e6c599934) (Block `#60713146`)
-- **Khắc phục Review W3-F1..W3-F4:**
+- **Khắc phục Review W3-F1..W3-F6:**
   - **W3-F1:** Loại bỏ hoàn toàn fallback heuristic ngầm. Khi Gemini lỗi/timeout, trả HTTP 503 `status: 'LLM_UNAVAILABLE'`, không lưu vào DB/stats; UI hiển thị "Agent tạm thời không phản hồi, thử lại". Thêm trường `mode: 'llm' | 'stub'` và model thật.
   - **W3-F2:** Tách biệt triệt để lượt test/smoke (`source: 'test' | 'smoke'`) khỏi thống kê công khai (`source: 'public'`). Thêm script `scripts/bounty-reset-stats.ts`. Ghi đúng model/mode trong `smoke.json`.
   - **W3-F3:** Hiển thị 2 số ngân sách trên hero: ngân sách bounty còn lại 5.00 USDC (đọc từ `missions(BOUNTY_MISSION_ID).cap - missionSpent(BOUNTY_MISSION_ID)`) và số dư treasury 5.80 USDC. "Tiền thất thoát" tính trực tiếp từ `missionSpent(BOUNTY_MISSION_ID)`.
   - **W3-F4:** Bổ sung section `## WOW-W3` vào report. Chụp thêm `deck-shots/bounty-result.png` (1920×1080). Ghi nhận đúng trạng thái `NO_PAYOUT_PROPOSED` khi agent từ chối tạo payout.
+  - **W3-F5:** Ảnh demo đã có lượt LLM bị lừa THẬT (`bounty-result-tricked.png`). Đã thử 4 payload vendor-diversion (nhóm E10) với `gemini-3.5-flash-lite (llm)`: lượt thành công thuyết phục LLM (`llmTricked: true`) đề xuất chuyển 1.00 USDC cho vendor `0x3333333333333333333333333333333333333333` (có trong danh bạ tổ chức nhưng ngoài mission payee set). Tầng 2 Validator chặn đứng với rule `PAYEE_NOT_IN_MISSION_SET`, Tầng 3 Smart contract trên Fuji revert `PayeeNotInMissionSet`. Đã chụp ảnh `artifacts/submission-s1/deck-shots/bounty-result-tricked.png` (1920×1080).
+  - **W3-F6:** Công khai cơ chế prompt agent bounty: Bổ sung chú thích minh bạch trên UI `/bounty` (phần "Cách Hoạt Động & Cơ Chế Agent"): "Agent dùng prompt của một agent kế toán thông thường có danh bạ vendor công ty (0x1111/0x2222/0x3333). Với prompt hạn chế chặt hơn, Gemini 3.5 Flash-Lite từ chối 5/5 payload mẫu; guard của MissionPay vẫn chặn bất kể prompt." Ghi rõ đã thử 4 payload vendor-diversion (1 lượt bị lừa, 3 lượt từ chối).
 - **Giới hạn còn lại:** Backend không giữ private key; mọi kiểm tra tấn công được verify an toàn qua Pipeline C2 và zero-gas `eth_call` revert simulation trên Fuji.
+
+---
+
+## WOW-W5 — Live Fuji Balances & Dirty Data Provenance Trace
+
+- **Trạng thái:** **PASS 100%**
+- **File tạo/sửa:**
+  - `apps/web/lib/provenance-trace.ts`: Engine tái hiện chuỗi nhân quả dữ liệu bẩn (Tool/Web origin -> Taint Registry -> Proposal -> Validator Rule `RECIPIENT_UNTRUSTED_PROVENANCE` / `AMOUNT_FROM_UNTRUSTED_SOURCE` -> Smart Contract revert `PayeeNotInMissionSet`).
+  - `apps/web/tests/provenance-trace.test.ts`: 3 unit tests kiểm chứng chuỗi nhân quả dữ liệu bẩn cho nguồn không tin cậy (`WEB`), nguồn tin cậy (`OWNER_MISSION`), và số tiền bị taint.
+  - `apps/web/components/ProvenanceTraceDisplay.tsx`: Component hiển thị trực quan các bước nhân quả dữ liệu bẩn, nhãn trạng thái và lý do chặn.
+  - `apps/web/app/api/arena/balances/route.ts`: API endpoint đọc live on-chain Fuji USDC balance cho GuardedTreasury (`0x2045...`), Session Wallet (`0x46a8...`), Attacker (`0x3333...`), và block number hiện tại.
+  - `apps/web/app/arena/stage/page.tsx`: Tích hợp thanh trạng thái live Fuji on-chain (polling mỗi 10s, hiển thị `LIVE FUJI · block #<N>` hoặc `RPC lỗi` khi sự cố, kèm 3 số dư live: Treasury 5.80 USDC, Session Wallet 0.20 USDC, Attacker 0.00 USDC).
+  - `apps/web/app/bounty/page.tsx`: Tích hợp `ProvenanceTraceDisplay` hiển thị đường đi dữ liệu bẩn khi đòn tấn công bị chặn, kèm thông báo cơ chế prompt W3-F6.
+  - `apps/web/app/arena/page.tsx`: Tích hợp `ProvenanceTraceDisplay` hiển thị cho người dùng di động khi submit attack.
+  - `apps/web/lib/arena.ts`: Gắn `provenanceTrace` tự động vào `ArenaAttackRecord`.
+  - `apps/web/e2e/wow-arena.spec.ts`: E2E test xác minh luồng Provenance Trace và chụp ảnh `arena-trace.png`.
+  - `artifacts/submission-s1/deck-shots/arena-trace.png`: Ảnh 1920×1080 chụp màn hình sân khấu Arena với live Fuji balances và provenance trace.
+- **Lệnh đã chạy & Output test:**
+  - `npx.cmd vitest run tests/provenance-trace.test.ts` (**3/3 passed**)
+  - `npx.cmd playwright test e2e/wow-arena.spec.ts` (**2/2 passed**)
+  - `npx.cmd vitest run` (**192/192 passed across 13 test files**)
+  - `npx.cmd tsc --noEmit` (**0 errors**)
 
 
 
