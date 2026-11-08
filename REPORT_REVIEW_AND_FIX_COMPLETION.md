@@ -1145,3 +1145,39 @@ ightarrow$ Attack Blocked (ASR = 0, thất thoát 0 USDC).
   - Thực thi `git rm -r --cached packages/guard/dist packages/mcp/dist`.
   - Cập nhật tài liệu `packages/guard/README.md` và `packages/mcp/README.md` hướng dẫn build từ source bằng `npm run build`.
 
+
+---
+
+## MAX-M6: x402 v2 MIGRATION, DUAL-VERSION SUPPORT & LIVE FUJI SETTLEMENT
+
+**Thời điểm:** 2026-11-09 (Asia/Saigon) | **Nhánh:** `feat/s1-app`
+
+### 1. Bảng Nghiệm Thu Milestone MAX-M6
+
+| ID | Yêu cầu kỹ thuật | Trạng thái | Chi tiết thực hiện & Kiểm chứng |
+|---|---|---|---|
+| **M6-01** | Cài đặt thư viện x402 v2 chính thức | **ĐẠT** | Cài đặt `@x402/core` (2.30.0) và `@x402/evm` (2.30.0) trong `apps/web`. |
+| **M6-02** | Chuẩn hóa Headers x402 v2 song song v1 | **ĐẠT** | Triển khai `PAYMENT-REQUIRED`, `PAYMENT-SIGNATURE`, `PAYMENT-RESPONSE` đồng thời tiếp tục hỗ trợ `X-PAYMENT` và `X-PAYMENT-RESPONSE`. |
+| **M6-03** | Chuẩn hóa CAIP-2 Network Identifier | **ĐẠT** | Định danh `eip155:43113` (CAIP-2) cho Avalanche Fuji song song với legacy `avalanche-fuji`. |
+| **M6-04** | Dual-Version Switch & Exact Scheme | **ĐẠT** | Mặc định v2 qua `DEFAULT_X402_VERSION = 2`, có thể chuyển qua biến môi trường `X402_VERSION=1`. Format scheme `exact` với trường `amount` (thay vì `maxAmountRequired`). |
+| **M6-05** | Fallback Facilitator & Relayer EIP-3009 | **ĐẠT** | `apps/web/lib/facilitator-fallback.ts` sử dụng `FACILITATOR_PRIVATE_KEY` / `RELAYER_PRIVATE_KEY` (`0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA` nạp 0.02 AVAX), thực hiện `transferWithAuthorization` cho phép relayer độc lập phát sóng tx gasless cho payer & payee. Guarded không dùng ví owner (`0x4BC9...`) hay treasury (`0x2045...`). |
+| **M6-06** | ATC'26 Security Binding Retained | **ĐẠT** | Ràng buộc mật mã `computeBoundNonce` theo paper ATC'26 (F1) và toàn bộ 4 lớp phòng thủ (F1a, F1b, F1c, F2, F4) được kiểm chứng pass trên cả v1 và v2. |
+| **M6-07** | Unit & Integration Test Suite | **ĐẠT** | `apps/web/tests/x402-v2.test.ts` (5/5 pass) và `apps/web/tests/x402-atc26.test.ts` (5/5 pass). Toàn bộ `apps/web`: 28 test files, 219/219 pass. |
+| **M6-08** | Giao dịch x402 v2 thật trên Avalanche Fuji | **ĐẠT** | Thực thi settlement thành công trên Avalanche Fuji Testnet (`0x7e3b18eea005f6b1cfa6b9ec4008998629be595f0e1046988d81f55d95fbbe19`), chuyển 0.10 USDC từ ví phiên sang seller, ghi nhận đầy đủ vào `artifacts/submission-s1/FUJI_EVIDENCE.md` Phần E. |
+
+### 2. Bằng chứng giao dịch Avalanche Fuji Testnet (Part E)
+- **Transaction Hash:** [`0x7e3b18eea005f6b1cfa6b9ec4008998629be595f0e1046988d81f55d95fbbe19`](https://testnet.snowtrace.io/tx/0x7e3b18eea005f6b1cfa6b9ec4008998629be595f0e1046988d81f55d95fbbe19)
+- **Block:** `#60751475`
+- **Relayer:** `0xc6699d2aada6c36dfea5c248dd70f9cb0235cb63` (PayAI Facilitator Relayer)
+- **Payer (Session Wallet):** `0x46a84a9f6b9be739c9aa02319497abe7b9f23843`
+- **Payee (Seller):** `0xd4ce6B645ACd77BefA0E2693D26B50482426dEcB`
+- **Số tiền:** 0.10 USDC (100,000 atomic units)
+- **Trạng thái on-chain:** `SUCCESS`
+
+### 3. Tổng hợp kết quả kiểm thử toàn diện
+- `apps/web` (Vitest): **28/28 files passed, 219/219 tests passed**
+- `packages/guard` (Vitest): **2/2 files passed, 12/12 tests passed** (gồm 180-case differential parity)
+- `packages/mcp` (Vitest): **1/1 file passed, 6/6 tests passed**
+- `contracts` (Foundry): **4 suites passed, 61/61 tests passed (0 failures)**
+- TypeScript Typecheck (`tsc --noEmit`): **0 errors**
+- Production Build (`next build`): **33/33 static & dynamic routes compiled cleanly**

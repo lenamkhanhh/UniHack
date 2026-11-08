@@ -9,7 +9,20 @@ import {
 } from '@/lib/payments';
 import { toolCatalog } from '@/lib/tools';
 import { toOperationDto } from '@/lib/dto';
-import { X402_HEADER, X402_RESPONSE_HEADER, X402_VERSION, X402_SCHEME } from '@/lib/constants';
+import {
+  X402_HEADER,
+  X402_RESPONSE_HEADER,
+  X402_V2_REQUIRED_HEADER,
+  X402_V2_SIGNATURE_HEADER,
+  X402_V2_RESPONSE_HEADER,
+  X402_V1_HEADER,
+  X402_V1_RESPONSE_HEADER,
+  CAIP2_AVALANCHE_FUJI,
+  LEGACY_AVALANCHE_FUJI,
+  getActiveX402Version,
+  X402_VERSION,
+  X402_SCHEME,
+} from '@/lib/constants';
 import { normalizeAddress } from '@/lib/chain';
 import { computeBoundNonce } from '@/lib/x402-binding';
 
@@ -53,12 +66,18 @@ export async function POST(
       );
     }
 
-    const xPaymentHeader = req.headers.get(X402_HEADER.toLowerCase()) || req.headers.get(X402_HEADER);
+    const v2PaymentHeader =
+      req.headers.get(X402_V2_SIGNATURE_HEADER.toLowerCase()) ||
+      req.headers.get(X402_V2_SIGNATURE_HEADER);
+    const v1PaymentHeader =
+      req.headers.get(X402_V1_HEADER.toLowerCase()) ||
+      req.headers.get(X402_V1_HEADER);
+    const paymentHeader = v2PaymentHeader || v1PaymentHeader;
     const appOrigin = process.env.APP_ORIGIN || 'http://localhost:3000';
     const sellerAddress = process.env.SELLER_ADDRESS || '0x0000000000000000000000000000000000000002';
 
     // 1. Unpaid request or server-orchestrated request
-    if (!xPaymentHeader) {
+    if (!paymentHeader) {
       if (req.headers.get('x-orchestrate') === 'true' || body.orchestrate === true) {
         await createQuote({
           operationId,
@@ -106,38 +125,81 @@ export async function POST(
         appOrigin,
       });
 
+      const v2RequiredHeader = Buffer.from(
+        JSON.stringify(quote.unpaidResponse)
+      ).toString('base64');
+
       return NextResponse.json(quote.unpaidResponse, {
         status: 402,
         headers: {
           'X-Operation-Id': operationId,
+          [X402_V2_REQUIRED_HEADER]: v2RequiredHeader,
         },
       });
     }
 
-    // 2. Paid request: Decode and strictly verify x402 payment payload (Finding F2)
+    // 2. Paid request: Decode and strictly verify x402 payment payload (v1 and v2 dual-support)
     let paymentPayload: any;
     try {
-      const rawJson = Buffer.from(xPaymentHeader, 'base64').toString('utf8');
+      const rawJson = Buffer.from(paymentHeader, 'base64').toString('utf8');
       paymentPayload = JSON.parse(rawJson);
     } catch {
-      return NextResponse.json({ error: 'Malformed X-PAYMENT header (must be valid base64 JSON)' }, { status: 400 });
+      try {
+        paymentPayload = JSON.parse(paymentHeader);
+      } catch {
+        return NextResponse.json(
+          { error: 'Malformed payment header (must be valid base64 JSON)' },
+          { status: 400 }
+        );
+      }
     }
 
-    if (
-      paymentPayload.x402Version !== X402_VERSION ||
-      paymentPayload.scheme !== X402_SCHEME ||
-      paymentPayload.network !== 'avalanche-fuji' ||
-      !paymentPayload.payload ||
-      !paymentPayload.payload.authorization ||
-      !paymentPayload.payload.signature
-    ) {
+    const payloadVersion = Number(paymentPayload.x402Version || paymentPayload.version || 1);
+    if (payloadVersion !== 1 && payloadVersion !== 2) {
       return NextResponse.json(
-        { error: 'Invalid X-PAYMENT protocol envelope or unsupported scheme/version/network' },
+        { error: 'Invalid x402 protocol envelope: unsupported version' },
         { status: 400 }
       );
     }
 
-    const auth = paymentPayload.payload.authorization;
+    const payloadScheme = paymentPayload.scheme || paymentPayload.accepted?.scheme;
+    if (payloadScheme && payloadScheme !== X402_SCHEME) {
+      return NextResponse.json(
+        { error: 'Invalid x402 protocol envelope: unsupported scheme' },
+        { status: 400 }
+      );
+    }
+
+    const payloadNetwork = paymentPayload.network || paymentPayload.accepted?.network;
+    const isSupportedNetwork =
+      payloadNetwork === CAIP2_AVALANCHE_FUJI ||
+      payloadNetwork === LEGACY_AVALANCHE_FUJI ||
+      payloadNetwork === '43113';
+
+    if (!isSupportedNetwork) {
+      return NextResponse.json(
+        { error: 'Invalid x402 protocol envelope: unsupported network' },
+        { status: 400 }
+      );
+    }
+
+    const innerPayload = paymentPayload.payload;
+    if (!innerPayload) {
+      return NextResponse.json(
+        { error: 'Invalid x402 protocol envelope: missing payload' },
+        { status: 400 }
+      );
+    }
+
+    const auth = innerPayload.authorization || innerPayload;
+    const sig = innerPayload.signature || paymentPayload.signature;
+
+    if (!auth || !auth.from || !auth.to || !auth.value || !auth.nonce || !sig) {
+      return NextResponse.json(
+        { error: 'Invalid x402 protocol envelope: missing authorization or signature' },
+        { status: 400 }
+      );
+    }
 
     // Scoped lookup before execution
     const op = await prisma.toolOperation.findUnique({
@@ -210,10 +272,10 @@ export async function POST(
       normalizeAddress(auth.from) !== normalizeAddress(op.authFrom || '') ||
       normalizeAddress(auth.to) !== normalizeAddress(op.authTo || '') ||
       auth.value?.toString() !== op.authValue?.toString() ||
-      paymentPayload.payload.signature !== op.authSignature
+      sig !== op.authSignature
     ) {
       return NextResponse.json(
-        { error: 'X-PAYMENT authorization does not match operation terms' },
+        { error: 'Payment authorization does not match operation terms' },
         { status: 403 }
       );
     }
@@ -228,9 +290,18 @@ export async function POST(
 
     const isSettled = execution.operation?.state === 'SETTLED';
 
-    const paymentResponseHeader = Buffer.from(
+    const v2PaymentResponseHeader = Buffer.from(
       JSON.stringify({
-        x402Version: X402_VERSION,
+        x402Version: 2,
+        txHash: execution.operation?.txHash || (isSettled ? 'mock:settled' : null),
+        status: execution.operation?.state,
+        network: CAIP2_AVALANCHE_FUJI,
+      })
+    ).toString('base64');
+
+    const v1PaymentResponseHeader = Buffer.from(
+      JSON.stringify({
+        x402Version: 1,
         txHash: execution.operation?.txHash || (isSettled ? 'mock:settled' : null),
         status: execution.operation?.state,
       })
@@ -252,7 +323,8 @@ export async function POST(
       {
         status: responseStatus,
         headers: {
-          [X402_RESPONSE_HEADER]: paymentResponseHeader,
+          [X402_V2_RESPONSE_HEADER]: v2PaymentResponseHeader,
+          [X402_V1_RESPONSE_HEADER]: v1PaymentResponseHeader,
           'X-Operation-Id': operationId,
         },
       }

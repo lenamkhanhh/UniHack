@@ -14,8 +14,12 @@ import {
   AUTHORIZATION_TTL_SECONDS,
   X402_VERSION,
   X402_SCHEME,
+  CAIP2_AVALANCHE_FUJI,
+  LEGACY_AVALANCHE_FUJI,
+  getActiveX402Version,
   FACILITATOR_DEFAULT_URL,
 } from './constants';
+import { settleWithSelfHostedFacilitator } from './facilitator-fallback';
 import {
   normalizeAddress,
   usdcEip712Domain,
@@ -130,25 +134,57 @@ export async function createQuote(params: QuoteParams) {
   };
 }
 
-export function build402Response(operation: any, appOrigin: string) {
+export function build402Response(
+  operation: any,
+  appOrigin: string,
+  requestedVersion?: number
+) {
   const terms = JSON.parse(operation.paymentTerms);
+  const version = requestedVersion ?? getActiveX402Version();
+  const priceAtomic = terms.priceAtomic;
+  const resource = terms.resource || `${appOrigin}/api/tools/${operation.toolId}`;
+
+  const v2Requirement = {
+    scheme: X402_SCHEME,
+    network: CAIP2_AVALANCHE_FUJI,
+    amount: priceAtomic,
+    maxAmountRequired: priceAtomic, // Backward-compatible field for v1 clients
+    networkAliases: [LEGACY_AVALANCHE_FUJI, CAIP2_AVALANCHE_FUJI],
+    asset: terms.asset || USDC_ADDRESS,
+    payTo: terms.payTo,
+    resource,
+    description: `Purchase for ${operation.toolId}`,
+    mimeType: 'application/json',
+    maxTimeoutSeconds: 60,
+    extra: { name: 'USD Coin', version: '2' },
+  };
+
+  const v1Requirement = {
+    scheme: X402_SCHEME,
+    network: LEGACY_AVALANCHE_FUJI,
+    maxAmountRequired: priceAtomic,
+    asset: terms.asset || USDC_ADDRESS,
+    payTo: terms.payTo,
+    resource,
+    description: `Purchase for ${operation.toolId}`,
+    mimeType: 'application/json',
+    maxTimeoutSeconds: 60,
+    extra: { name: 'USD Coin', version: '2' },
+  };
+
+  if (version === 1) {
+    return {
+      x402Version: 1,
+      error: 'X-PAYMENT header is required',
+      accepts: [v1Requirement],
+      operationId: operation.operationId,
+    };
+  }
+
   return {
-    x402Version: X402_VERSION,
-    error: 'X-PAYMENT header is required',
-    accepts: [
-      {
-        scheme: X402_SCHEME,
-        network: 'avalanche-fuji',
-        maxAmountRequired: terms.priceAtomic,
-        asset: terms.asset,
-        payTo: terms.payTo,
-        resource: terms.resource,
-        description: `Purchase for ${operation.toolId}`,
-        mimeType: 'application/json',
-        maxTimeoutSeconds: 60,
-        extra: { name: 'USD Coin', version: '2' },
-      },
-    ],
+    x402Version: 2,
+    error: 'PAYMENT-SIGNATURE header is required',
+    accepts: [v2Requirement],
     operationId: operation.operationId,
   };
 }
@@ -811,75 +847,138 @@ export async function executeUpstreamAndSettle(params: {
     };
   } else {
     // LIVE_FUJI mode:
-    // Facilitator submission via HTTP POST to facilitatorUrl using standard x402 v1 schema (Finding R03, T08)
+    // Facilitator submission via HTTP POST to facilitatorUrl using standard x402 v2 schema (fallback to v1 and self-hosted)
+    const version = getActiveX402Version();
     const primaryUrl = process.env.FACILITATOR_URL || FACILITATOR_DEFAULT_URL;
     const candidateUrls = [primaryUrl];
     if (!primaryUrl.includes('payai.network')) {
       candidateUrls.push('https://facilitator.payai.network');
     }
 
-    const paymentPayload = {
-      x402Version: 1,
+    const terms = JSON.parse(op.paymentTerms || '{}');
+    const resourceUrl = terms.resource || `${process.env.APP_ORIGIN || 'http://localhost:3000'}/api/tools/${op.toolId}`;
+    const priceAtomic = op.authValue?.toString() || terms.priceAtomic || op.reservedAmount?.toString();
+
+    // Standard x402 v2 payload (docs.x402.org & Ultravioleta/PayAI)
+    const v2Resource = {
+      url: resourceUrl,
+      description: `Purchase for ${op.toolId}`,
+      mimeType: 'application/json',
+    };
+    const v2Accepted = {
       scheme: X402_SCHEME,
-      network: 'avalanche-fuji',
-      payload: {
-        authorization: {
-          from: op.authFrom,
-          to: op.authTo,
-          value: op.authValue?.toString(),
-          validAfter: op.validAfter?.toString(),
-          validBefore: op.validBefore?.toString(),
-          nonce: op.authNonce,
+      network: CAIP2_AVALANCHE_FUJI,
+      asset: op.asset || terms.asset || USDC_ADDRESS,
+      amount: priceAtomic,
+      payTo: op.authTo || terms.payTo,
+      maxTimeoutSeconds: terms.timeoutSeconds || 60,
+    };
+    const v2RequestBody = {
+      x402Version: 2,
+      paymentPayload: {
+        x402Version: 2,
+        resource: v2Resource,
+        accepted: v2Accepted,
+        payload: {
+          authorization: {
+            from: op.authFrom,
+            to: op.authTo,
+            value: op.authValue?.toString(),
+            validAfter: op.validAfter?.toString(),
+            validBefore: op.validBefore?.toString(),
+            nonce: op.authNonce,
+          },
+          signature: op.authSignature,
         },
-        signature: op.authSignature,
+      },
+      resource: v2Resource,
+      accepted: v2Accepted,
+    };
+
+    // Legacy x402 v1 payload
+    const v1RequestBody = {
+      x402Version: 1,
+      paymentPayload: {
+        x402Version: 1,
+        scheme: X402_SCHEME,
+        network: LEGACY_AVALANCHE_FUJI,
+        payload: {
+          authorization: {
+            from: op.authFrom,
+            to: op.authTo,
+            value: op.authValue?.toString(),
+            validAfter: op.validAfter?.toString(),
+            validBefore: op.validBefore?.toString(),
+            nonce: op.authNonce,
+          },
+          signature: op.authSignature,
+        },
+      },
+      paymentRequirements: {
+        scheme: X402_SCHEME,
+        network: LEGACY_AVALANCHE_FUJI,
+        maxAmountRequired: priceAtomic,
+        payTo: op.authTo || terms.payTo,
+        asset: op.asset || terms.asset || USDC_ADDRESS,
+        resource: resourceUrl,
+        description: `Purchase for ${op.toolId}`,
+        mimeType: 'application/json',
+        maxTimeoutSeconds: terms.timeoutSeconds || 60,
+        extra: { name: 'USD Coin', version: '2' },
       },
     };
 
-    const terms = JSON.parse(op.paymentTerms || '{}');
-    const paymentRequirements = {
-      scheme: X402_SCHEME,
-      network: 'avalanche-fuji',
-      maxAmountRequired: op.authValue?.toString() || terms.priceAtomic || op.reservedAmount?.toString(),
-      payTo: op.authTo || terms.payTo,
-      asset: op.asset || terms.asset || USDC_ADDRESS,
-      resource: terms.resource || `${process.env.APP_ORIGIN || 'http://localhost:3000'}/api/tools/${op.toolId}`,
-      description: `Purchase for ${op.toolId}`,
-      mimeType: 'application/json',
-      maxTimeoutSeconds: terms.timeoutSeconds || 60,
-      extra: { name: 'USD Coin', version: '2' },
-    };
-
-    const requestBody = {
-      x402Version: 1,
-      paymentPayload,
-      paymentRequirements,
-    };
+    const preferredBody = version === 1 ? v1RequestBody : v2RequestBody;
+    const fallbackBody = version === 1 ? v2RequestBody : v1RequestBody;
+    const bodyCandidates = [preferredBody, fallbackBody];
 
     let facilitatorTxHash: string | null = null;
-    for (const fUrl of candidateUrls) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+    for (const bodyCandidate of bodyCandidates) {
+      if (facilitatorTxHash) break;
+      for (const fUrl of candidateUrls) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
 
-        const resp = await fetch(`${fUrl}/settle`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody),
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
+          const resp = await fetch(`${fUrl}/settle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bodyCandidate),
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
 
-        if (resp.ok) {
-          const data = await resp.json();
-          // Support standard x402 v1 "transaction" field as well as "txHash" extension (Finding R03)
-          const candidateTx = data?.transaction || data?.txHash;
-          if (data && data.success && candidateTx) {
-            facilitatorTxHash = candidateTx;
-            break;
+          if (resp.ok) {
+            const data = await resp.json();
+            const candidateTx = data?.transaction || data?.txHash || data?.transactionHash;
+            if (data && (data.success || data.isValid) && candidateTx) {
+              facilitatorTxHash = candidateTx;
+              break;
+            }
           }
+        } catch {
+          // Facilitator error or timeout - try next candidate
         }
-      } catch {
-        // Facilitator error or timeout - try next candidate
+      }
+    }
+
+    // Fallback: If public facilitators failed or were unreachable, attempt self-hosted settlement (PLAN_MAX §M6)
+    if (!facilitatorTxHash && op.authFrom && op.authTo && op.authValue && op.authNonce && op.authSignature) {
+      try {
+        const selfHash = await settleWithSelfHostedFacilitator({
+          from: op.authFrom,
+          to: op.authTo,
+          value: op.authValue.toString(),
+          validAfter: op.validAfter?.toString() || '0',
+          validBefore: op.validBefore?.toString() || '0',
+          nonce: op.authNonce,
+          signature: op.authSignature,
+        });
+        if (selfHash) {
+          facilitatorTxHash = selfHash;
+        }
+      } catch (err: any) {
+        console.warn('[FACILITATOR] Self-hosted fallback error:', err?.message || err);
       }
     }
 

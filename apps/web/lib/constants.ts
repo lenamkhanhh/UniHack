@@ -47,10 +47,30 @@ export const SEARCH_QUERY_MAX_CHARS = 500;
 export const SUMMARY_INPUT_MAX_CHARS = 2000;
 export const SUMMARY_OUTPUT_MAX_CHARS = 500;
 
-// x402 Protocol
-export const X402_VERSION = 1;
+// x402 Protocol (v1 & v2 migration support per PLAN_MAX §M6)
+export const DEFAULT_X402_VERSION = 2;
+export const getActiveX402Version = (): number => {
+  const envVal = process.env.X402_VERSION;
+  return envVal ? parseInt(envVal, 10) : DEFAULT_X402_VERSION;
+};
+export const X402_VERSION = 2;
 export const X402_SCHEME = 'exact';
-export const X402_HEADER = 'X-PAYMENT';
-export const X402_RESPONSE_HEADER = 'X-PAYMENT-RESPONSE';
+
+// Network Identifiers (CAIP-2 for v2, legacy name for v1)
+export const CAIP2_AVALANCHE_FUJI = 'eip155:43113';
+export const LEGACY_AVALANCHE_FUJI = 'avalanche-fuji';
+
+// Standard x402 v2 Header Names (docs.x402.org/guides/migration-v1-to-v2)
+export const X402_V2_REQUIRED_HEADER = 'PAYMENT-REQUIRED';
+export const X402_V2_SIGNATURE_HEADER = 'PAYMENT-SIGNATURE';
+export const X402_V2_RESPONSE_HEADER = 'PAYMENT-RESPONSE';
+
+// Legacy x402 v1 Header Names
+export const X402_V1_HEADER = 'X-PAYMENT';
+export const X402_V1_RESPONSE_HEADER = 'X-PAYMENT-RESPONSE';
+
+// Generic backwards-compatible aliases
+export const X402_HEADER = X402_V1_HEADER;
+export const X402_RESPONSE_HEADER = X402_V1_RESPONSE_HEADER;
 
 export const FACILITATOR_DEFAULT_URL = 'https://facilitator.ultravioletadao.xyz';

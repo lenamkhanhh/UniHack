@@ -8,12 +8,25 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-Claude duyệt M5 (7d049cd, 09/11): đã tự chạy apps/web 214/214, tsc sạch, guard 12/12, dist đã gỡ khỏi git. Đạt.
-
-- **Việc tiếp: M6 (x402 v2)** theo PLAN_MAX_2026-11-08.md. Ngân sách Fuji ≤0.15 AVAX và ≤3 USDC; facilitator dùng ví riêng `FACILITATOR_PRIVATE_KEY`, không dùng ví owner, nạp ≤0.02 AVAX. Giữ v1 song song (`X402_VERSION`) và test ATC'26 F1–F4 phải pass ở cả v1 và v2. Tx thật ghi vào FUJI_EVIDENCE Part E.
+- **Việc tiếp: M7 (Validator tự động khi đóng mission)** theo PLAN_MAX_2026-11-08.md (0.5 ngày). Khi owner đóng mission (`closeMission`) hoặc anchor proof: job gọi `validator-run` cho mission đó (validator key riêng như hiện tại), gửi `validationResponse`. `/verify` hiện kết quả. Test: mission đóng → có request + response; tamper → score 0 (trên anvil fork).
 - M4-F6b (vẫn mở) Live 48 cặp (16 user × injection 0..2) và 16 benign, C0 và C2 strict, khi quota reset (~15:00 giờ VN). Không bao giờ giả lập.
 
 ## DONE
+
+- M6 [x402 v2 Migration & Dual-Version Live Protocol]:
+  - Đã tích hợp `@x402/core` và `@x402/evm` (v2.30.0).
+  - Chuẩn hóa header v2: `PAYMENT-REQUIRED`, `PAYMENT-SIGNATURE`, `PAYMENT-RESPONSE` song song với legacy v1 (`X-PAYMENT`, `X-PAYMENT-RESPONSE`).
+  - Định dạng mạng CAIP-2: `eip155:43113` song song với `avalanche-fuji`.
+  - Cờ chuyển đổi phiên bản `X402_VERSION=1|2`, mặc định v2.
+  - Bảo vệ bảo mật ATC'26: duy trì mã hóa ràng buộc nonce `computeBoundNonce` và toàn bộ 4 lớp phòng vệ (F1–F4) hoạt động hoàn hảo trên cả v1 và v2.
+  - Tích hợp fallback facilitator: ví relayer chuyên dụng `0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA` (nạp 0.02 AVAX), sử dụng USDC EIP-3009 `transferWithAuthorization` cho phép relayer độc lập phát sóng gasless settlement.
+  - Test suite mới `apps/web/tests/x402-v2.test.ts`: 5/5 passed.
+  - Test suite ATC'26 `apps/web/tests/x402-atc26.test.ts`: 5/5 passed.
+  - Toàn bộ `apps/web` test suite: 28 test files, 219/219 passed.
+  - Giao dịch thanh toán x402 v2 thật trên Avalanche Fuji:
+    - Tx Hash: [`0x7e3b18eea005f6b1cfa6b9ec4008998629be595f0e1046988d81f55d95fbbe19`](https://testnet.snowtrace.io/tx/0x7e3b18eea005f6b1cfa6b9ec4008998629be595f0e1046988d81f55d95fbbe19)
+    - Block `#60751475`, Relayer `0xc6699d2aada6c36dfea5c248dd70f9cb0235cb63`, Payer `0x46a84a9f6b9be739c9aa02319497abe7b9f23843`, Seller `0xd4ce6B645ACd77BefA0E2693D26B50482426dEcB`, Transfer 0.10 USDC.
+    - Đã ghi vào `artifacts/submission-s1/FUJI_EVIDENCE.md` Phần E.
 
 - M5-F1..F3 [SDK & MCP Single Source, Differential Parity & Clean Git]:
   - **M5-F1 (Single Source of Truth):** Đã hợp nhất logic validator vào `@missionpay/guard`. `apps/web/lib/validator.ts` và `apps/web/lib/merkle.ts` re-export các type, `TaintRegistry`, `isPolicyChangeAttempt`, `validateTreasuryProposal`, `computePayeeMerkleTree`, `getMerkleProof` trực tiếp từ `@missionpay/guard`. Step 5 của `validateProposal` ủy quyền trực tiếp cho `validateTreasuryProposal`. 214/214 tests của apps/web pass; `next build` của apps/web tạo 33/33 static pages thành công (0 errors).

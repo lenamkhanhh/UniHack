@@ -143,3 +143,20 @@ Hệ thống xác thực WebAuthn P-256 sinh trắc học (Passkey) trực tiế
   - `createMission`: [`0x16a4a45ca84dc3a157dccf80a25f989cac24b5d5a004e5b9322124df7c4e7afd`](https://testnet.snowtrace.io/tx/0x16a4a45ca84dc3a157dccf80a25f989cac24b5d5a004e5b9322124df7c4e7afd)
   - `setMissionPayeeRoot`: [`0x12062261f369384bf06b9f4747f8e335a7a57951ec6509e6791ab1ba879f5dc3`](https://testnet.snowtrace.io/tx/0x12062261f369384bf06b9f4747f8e335a7a57951ec6509e6791ab1ba879f5dc3)
   - `fundTreasury` (5 USDC): [`0xd0654d4d695ff1b3a81dbc3785c39123859c1907a9b165782a1ea87e6c599934`](https://testnet.snowtrace.io/tx/0xd0654d4d695ff1b3a81dbc3785c39123859c1907a9b165782a1ea87e6c599934)
+
+## PHẦN E: BẰNG CHỨNG x402 v2 TRÊN AVALANCHE FUJI (CAIP-2 eip155:43113)
+
+Bằng chứng thực thi giao dịch thanh toán tài nguyên AI theo chuẩn giao thức **x402 v2** (định dạng định danh mạng CAIP-2 `eip155:43113`, tiêu đề `PAYMENT-REQUIRED` / `PAYMENT-SIGNATURE` / `PAYMENT-RESPONSE`, trường giá `amount`, và ràng buộc mật mã nonce `computeBoundNonce` theo ATC'26 F1):
+
+| Thông số | Giá trị kiểm chứng thực tế |
+|---|---|
+| **Giao thức** | **x402 v2** (`x402Version: 2`, Scheme: `exact`, CAIP-2: `eip155:43113`) |
+| **Hành động** | Mua công cụ tìm kiếm `tool:search` qua cơ chế thanh toán vi mô khí gas bằng 0 cho Agent |
+| **Giao dịch Settle Hash** | [`0x7e3b18eea005f6b1cfa6b9ec4008998629be595f0e1046988d81f55d95fbbe19`](https://testnet.snowtrace.io/tx/0x7e3b18eea005f6b1cfa6b9ec4008998629be595f0e1046988d81f55d95fbbe19) |
+| **Block Number** | `#60751475` |
+| **Người gửi Giao dịch (Relayer)** | `0xc6699d2aada6c36dfea5c248dd70f9cb0235cb63` (Facilitator chuyên dụng, độc lập với ví Owner và Treasury) |
+| **Người trả tiền (Payer)** | Ví phiên an toàn `0x46a84a9f6b9be739c9aa02319497abe7b9f23843` |
+| **Người nhận tiền (Seller)** | Nhà cung cấp công cụ `0xd4ce6B645ACd77BefA0E2693D26B50482426dEcB` |
+| **Số tiền thanh toán** | **0.10 USDC** (`100000` atomic units) |
+| **Trạng thái on-chain** | **`SUCCESS`** (Log `Transfer` và `AuthorizationUsed` xác nhận trên Avalanche Fuji) |
+| **Trạng thái DB & Header** | Trạng thái `SETTLED`, trả về tiêu đề chuẩn `PAYMENT-RESPONSE` |

@@ -16,7 +16,7 @@ import {
   executeUpstreamAndSettle,
 } from '@/lib/payments';
 import { reconcileOperation, setChainReader } from '@/lib/reconcile';
-import { SEARCH_PRICE, SUMMARY_PRICE, TALKMETER_PRICE_PER_MINUTE } from '@/lib/constants';
+import { SEARCH_PRICE, SUMMARY_PRICE, TALKMETER_PRICE_PER_MINUTE, getActiveX402Version } from '@/lib/constants';
 
 describe('Payment P-series Integration Tests (06 §2)', () => {
   beforeEach(async () => {
@@ -39,10 +39,11 @@ describe('Payment P-series Integration Tests (06 §2)', () => {
       appOrigin: 'http://localhost:3000',
     });
 
-    expect(quote.unpaidResponse.x402Version).toBe(1);
-    expect(quote.unpaidResponse.error).toBe('X-PAYMENT header is required');
+    expect(quote.unpaidResponse.x402Version).toBe(getActiveX402Version());
+    expect(quote.unpaidResponse.error).toMatch(/header is required/);
     expect(quote.unpaidResponse.accepts[0].scheme).toBe('exact');
-    expect(quote.unpaidResponse.accepts[0].maxAmountRequired).toBe('500000');
+    const acceptItem = quote.unpaidResponse.accepts[0] as any;
+    expect(acceptItem.amount || acceptItem.maxAmountRequired).toBe('500000');
     expect(quote.unpaidResponse.operationId).toBe(opId);
 
     // Verify DB: created but not reserved, no held result
