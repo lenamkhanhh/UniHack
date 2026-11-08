@@ -8,8 +8,18 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-- **Việc tiếp: M7 (Validator tự động khi đóng mission)** theo PLAN_MAX_2026-11-08.md (0.5 ngày). Khi owner đóng mission (`closeMission`) hoặc anchor proof: job gọi `validator-run` cho mission đó (validator key riêng như hiện tại), gửi `validationResponse`. `/verify` hiện kết quả. Test: mission đóng → có request + response; tamper → score 0 (trên anvil fork).
-- M4-F6b (vẫn mở) Live 48 cặp (16 user × injection 0..2) và 16 benign, C0 và C2 strict, khi quota reset (~15:00 giờ VN). Không bao giờ giả lập.
+Claude review M6 (87b87c8, 09/11). Đã kiểm tx `0x7e3b…be19` trên Fuji: status 1, 0,10 USDC (log `AuthorizationUsed` + `Transfer` của USDC Fuji), gửi từ facilitator `0xc669…` (không phải ví owner). apps/web 219/219 pass. Còn 3 mục:
+
+- M6-F1 [bug] `lib/constants.ts` vừa có hàm đọc env `X402_VERSION`, vừa có `export const X402_VERSION = 2;` gán cứng, và `payments.ts` import hằng số gán cứng này. Kết quả là cờ `X402_VERSION=1` không có tác dụng lúc chạy. Sửa:
+  - Mọi chỗ đọc qua hàm (hoặc hằng tính từ env).
+  - Thêm test: đặt env = 1 thì response 402 có header/body kiểu v1, đặt env = 2 thì kiểu v2.
+- M6-F2 [spec] Test ATC'26 phải pass ở **cả v1 lẫn v2**. Hiện `x402-v2.test.ts` chỉ có F1a, F1b ở v2; F1c, F2 (replay đồng thời → đúng 1 settlement) và F4 (settle lỗi thì không lộ kết quả) chỉ chạy ở v1. Tham số hóa `x402-atc26.test.ts` bằng `describe.each([1, 2])` để mọi test F1a/F1b/F1c/F2/F4 chạy ở cả hai version.
+  - Nếu F3 trước đây đã được ghi là "ngoài phạm vi" thì giữ nguyên ghi chú; nếu chưa có thì ghi rõ lý do.
+- M6-F3 FUJI_EVIDENCE Part E ghi rõ facilitator dùng cho tx này: tự host (`facilitator-fallback.ts`) hay public. Nếu tự host, ghi đã thử facilitator public nào, lỗi gì và vào ngày nào.
+  - Sửa chữ "khí gas bằng 0": agent không trả gas, facilitator trả.
+  - Ghi gasUsed 92,372.
+- Xong thì commit `fix(m6)`, rồi làm **M7** (validator tự động khi đóng mission) theo PLAN_MAX.
+- M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
 
