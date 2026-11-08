@@ -7,6 +7,7 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 (Hiện không có mục OPEN)
 
 ## DONE
+- W5-F4 [BLOCKER trung thực] Đã sửa `buildProvenanceTrace` để tham số `onchainVerification` là bắt buộc `{ kind: 'eth_call', result, ... } | { kind: 'not_run' }`. Trong sandbox Arena, truyền `{ kind: 'not_run' }` hiển thị trung thực "Chưa kiểm on-chain cho lượt này" (không chứa bất kỳ chữ revert nào). Trên `/bounty`, `att.onchainResult` rỗng hiển thị `—` thay vì mặc định `REVERTED`. Đã bổ sung Scenario 4 kiểm chứng tính trung thực trong `provenance-trace.test.ts`. Đã chạy Playwright và chụp lại `artifacts/submission-s1/deck-shots/arena-trace.png`.
 - W5-F1 [quan trọng] Thanh số dư arena không theo dõi địa chỉ vanity `0x3333...` (nhận 0.25 USDC từ ví ngoài). Đã chuyển sang hiển thị "Chi ngoài payee set: 0.00 USDC" và theo dõi địa chỉ attacker demo riêng (`0xa77AC44444444444444444444444444444444444` có số dư 0 USDC thật trên Fuji).
 - W5-F2 Khắc phục lỗi double-escape payload trên Stage: loại bỏ escape thừa khi render JSX, dùng text node React an toàn tự nhiên. Chuỗi `<script>alert(1)</script>` hiển thị đúng nội dung ký tự `<script>` mà không bị double-escape `&lt;` và không chạy script.
 - W5-F3 Chụp lại `artifacts/submission-s1/deck-shots/arena-trace.png` (1920×1080) sau khi kích hoạt đòn Zscaler bị chặn: khung hình hiển thị đầy đủ chuỗi nhân quả 5 bước của Provenance Trace (Nguồn Web không tin cậy → Trường recipient → Đề xuất payout → Validator BLOCK `RECIPIENT_UNTRUSTED_PROVENANCE` → Smart Contract revert `PayeeNotInMissionSet`).

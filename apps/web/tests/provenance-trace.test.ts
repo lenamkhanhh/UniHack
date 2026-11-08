@@ -3,7 +3,7 @@ import { buildProvenanceTrace } from '../lib/provenance-trace';
 import { TaintRegistry, Proposal, ValidationResult } from '../lib/validator';
 
 describe('WOW-W5: Dirty Data Provenance Trace Engine', () => {
-  it('Scenario 1: Untrusted Web/Tool Source -> RECIPIENT_UNTRUSTED_PROVENANCE -> PayeeNotInMissionSet', () => {
+  it('Scenario 1: Untrusted Web/Tool Source -> RECIPIENT_UNTRUSTED_PROVENANCE -> PayeeNotInMissionSet via eth_call', () => {
     const taintRegistry = new TaintRegistry();
     const attackerAddr = '0x6666666666666666666666666666666666666666';
     taintRegistry.record(
@@ -27,7 +27,12 @@ describe('WOW-W5: Dirty Data Provenance Trace Engine', () => {
       amountProvenance: 'TOOL_OUTPUT',
     };
 
-    const trace = buildProvenanceTrace(taintRegistry, proposal, verdict, 'PayeeNotInMissionSet');
+    const trace = buildProvenanceTrace(taintRegistry, proposal, verdict, {
+      kind: 'eth_call',
+      result: 'PayeeNotInMissionSet',
+      contract: '0x20451c1e2dCD83F166B4f22868BAdECb5868d545',
+      chainId: 43113,
+    });
 
     expect(trace.isBlocked).toBe(true);
     expect(trace.verdictRule).toBe('RECIPIENT_UNTRUSTED_PROVENANCE');
@@ -39,6 +44,7 @@ describe('WOW-W5: Dirty Data Provenance Trace Engine', () => {
     expect(trace.steps[2].status).toBe('TAINTED');
     expect(trace.steps[3].status).toBe('BLOCKED');
     expect(trace.steps[4].status).toBe('REVERTED');
+    expect(trace.steps[4].detail).toContain('PayeeNotInMissionSet');
   });
 
   it('Scenario 2: Trusted Source -> OWNER_MISSION -> Passes within budget', () => {
@@ -59,7 +65,10 @@ describe('WOW-W5: Dirty Data Provenance Trace Engine', () => {
       amountProvenance: 'OWNER_MISSION',
     };
 
-    const trace = buildProvenanceTrace(taintRegistry, proposal, verdict, 'Executed');
+    const trace = buildProvenanceTrace(taintRegistry, proposal, verdict, {
+      kind: 'eth_call',
+      result: 'Executed',
+    });
 
     expect(trace.isBlocked).toBe(false);
     expect(trace.verdictRule).toBeUndefined();
@@ -96,14 +105,54 @@ describe('WOW-W5: Dirty Data Provenance Trace Engine', () => {
       amountProvenance: 'TOOL_OUTPUT',
     };
 
-    const trace = buildProvenanceTrace(taintRegistry, proposal, verdict, 'ContractRevert');
+    const trace = buildProvenanceTrace(taintRegistry, proposal, verdict, {
+      kind: 'eth_call',
+      result: 'ContractRevert',
+    });
 
     expect(trace.isBlocked).toBe(true);
     expect(trace.verdictRule).toBe('AMOUNT_FROM_UNTRUSTED_SOURCE');
+    expect(trace.onchainResult).toBe('ContractRevert');
     expect(trace.steps).toHaveLength(5);
     expect(trace.steps[0].status).toBe('TAINTED');
     expect(trace.steps[0].source).toContain('TOOL_OUTPUT');
     expect(trace.steps[1].label).toContain('Amount');
     expect(trace.steps[3].status).toBe('BLOCKED');
+  });
+
+  it('Scenario 4: not_run mode (W5-F4) -> Step 5 unverified on-chain without any revert string', () => {
+    const taintRegistry = new TaintRegistry();
+    const fakeRecipient = '0xbad0000000000000000000000000000000000bad';
+    taintRegistry.record(`Fake recipient: ${fakeRecipient}`, 'WEB');
+
+    const proposal: Proposal = {
+      kind: 'treasury_payout',
+      mission_id: 'arena-sandbox-mission',
+      to: fakeRecipient,
+      amount_atomic: '3000000',
+      reason: 'Sandbox attack',
+    };
+
+    const verdict: ValidationResult = {
+      outcome: 'BLOCK',
+      rule: 'RECIPIENT_UNTRUSTED_PROVENANCE',
+      reason: 'Recipient is tainted',
+      toProvenance: 'WEB',
+    };
+
+    const trace = buildProvenanceTrace(taintRegistry, proposal, verdict, {
+      kind: 'not_run',
+    });
+
+    expect(trace.isBlocked).toBe(true);
+    expect(trace.onchainResult).toBeUndefined();
+    expect(trace.onchainVerification.kind).toBe('not_run');
+    expect(trace.steps).toHaveLength(5);
+    expect(trace.steps[4].status).toBe('NOT_RUN');
+    expect(trace.steps[4].detail).toBe('Chưa kiểm on-chain cho lượt này.');
+
+    // Acceptance requirement: trace with not_run must NOT contain the string "revert"
+    const serialized = JSON.stringify(trace).toLowerCase();
+    expect(serialized.includes('revert')).toBe(false);
   });
 });

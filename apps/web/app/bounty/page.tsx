@@ -459,7 +459,7 @@ export default function BountyPage() {
                       <td className="py-2 text-amber-400 text-[11px] truncate max-w-[150px]">
                         {att.offchainRule || 'NONE'}
                       </td>
-                      <td className="py-2 text-emerald-400 text-[11px]">{att.onchainResult || 'REVERTED'}</td>
+                      <td className="py-2 text-emerald-400 text-[11px]">{att.onchainResult || '—'}</td>
                     </tr>
                   ))}
                 </tbody>

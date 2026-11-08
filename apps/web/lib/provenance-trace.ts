@@ -6,23 +6,35 @@
  * 2. Extracted Field (recipient address / amount atomic)
  * 3. Agent Payout Proposal
  * 4. Off-Chain Validator Rule (RECIPIENT_UNTRUSTED_PROVENANCE / AMOUNT_FROM_UNTRUSTED_SOURCE)
- * 5. On-Chain Smart Contract Layer (eth_call revert: PayeeNotInMissionSet)
+ * 5. On-Chain Smart Contract Layer (eth_call simulation or not_run)
  */
 
 import { TaintRegistry, Proposal, ValidationResult, Provenance } from './validator';
 import { normalizeAddress } from './chain';
+
+export type OnchainVerification =
+  | {
+      kind: 'eth_call';
+      result: string;
+      contract?: string;
+      chainId?: number;
+    }
+  | {
+      kind: 'not_run';
+    };
 
 export interface ProvenanceTraceStep {
   step: number;
   label: string;
   source: string;
   detail: string;
-  status: 'SAFE' | 'TAINTED' | 'BLOCKED' | 'REVERTED';
+  status: 'SAFE' | 'TAINTED' | 'BLOCKED' | 'REVERTED' | 'NOT_RUN';
 }
 
 export interface ProvenanceTrace {
   isBlocked: boolean;
   verdictRule?: string;
+  onchainVerification: OnchainVerification;
   onchainResult?: string;
   summary: string;
   steps: ProvenanceTraceStep[];
@@ -32,7 +44,7 @@ export function buildProvenanceTrace(
   taintRegistry: TaintRegistry | undefined,
   proposal: Proposal,
   verdict: ValidationResult,
-  onchainResult: string = 'PayeeNotInMissionSet'
+  onchainVerification: OnchainVerification
 ): ProvenanceTrace {
   const isBlocked = verdict.outcome === 'BLOCK' || verdict.outcome === 'QUEUE';
   const steps: ProvenanceTraceStep[] = [];
@@ -142,33 +154,58 @@ export function buildProvenanceTrace(
     });
   }
 
-  // Step 5: Smart Contract Layer (eth_call)
-  if (isBlocked) {
+  // Step 5: Smart Contract Layer (eth_call or not_run)
+  if (onchainVerification.kind === 'not_run') {
     steps.push({
       step: 5,
       label: 'Hợp Đồng Thông Minh Trên Avalanche Fuji',
-      source: 'GuardedTreasury.sol (RIP-7212 / Merkle Root)',
-      detail: `Mô phỏng server bị chiếm: Gọi thẳng proposeWithProof lên Fuji -> Revert on-chain: ${onchainResult}.`,
-      status: 'REVERTED',
+      source: 'GuardedTreasury.sol (Fuji 43113)',
+      detail: 'Chưa kiểm on-chain cho lượt này.',
+      status: 'NOT_RUN',
     });
   } else {
-    steps.push({
-      step: 5,
-      label: 'Hợp Đồng Thông Minh Trên Avalanche Fuji',
-      source: 'GuardedTreasury.sol',
-      detail: 'Kiểm tra Merkle root thành công, giao dịch sẵn sàng thực thi an toàn.',
-      status: 'SAFE',
-    });
+    if (isBlocked) {
+      const isRevert =
+        onchainVerification.result.toLowerCase().includes('revert') ||
+        onchainVerification.result === 'PayeeNotInMissionSet' ||
+        onchainVerification.result === 'PayeeProofRequired' ||
+        onchainVerification.result === 'RecipientNotAllowlisted' ||
+        onchainVerification.result === 'MissionCapExceeded';
+
+      steps.push({
+        step: 5,
+        label: 'Hợp Đồng Thông Minh Trên Avalanche Fuji',
+        source: `GuardedTreasury.sol (${onchainVerification.contract ? onchainVerification.contract.slice(0, 10) + '...' : 'Fuji 43113'})`,
+        detail: `Mô phỏng server bị chiếm: Gọi thẳng proposeWithProof lên Fuji -> Kết quả mô phỏng: ${onchainVerification.result}.`,
+        status: isRevert ? 'REVERTED' : 'SAFE',
+      });
+    } else {
+      steps.push({
+        step: 5,
+        label: 'Hợp Đồng Thông Minh Trên Avalanche Fuji',
+        source: 'GuardedTreasury.sol',
+        detail: 'Kiểm tra Merkle root thành công, giao dịch sẵn sàng thực thi an toàn.',
+        status: 'SAFE',
+      });
+    }
   }
 
-  const summary = isBlocked
-    ? `Dữ liệu bẩn từ [${toProvenance || 'UNTRUSTED'}] bị chặn bởi [${verdict.rule}] và được bảo đảm revert on-chain bởi [${onchainResult}].`
-    : `Dữ liệu hợp lệ từ [OWNER_MISSION] được phê duyệt an toàn.`;
+  let summary = '';
+  if (isBlocked) {
+    if (onchainVerification.kind === 'not_run') {
+      summary = `Dữ liệu bẩn từ [${toProvenance || 'UNTRUSTED'}] bị chặn bởi [${verdict.rule}]. Lớp on-chain: Chưa kiểm tra trực tiếp cho lượt này.`;
+    } else {
+      summary = `Dữ liệu bẩn từ [${toProvenance || 'UNTRUSTED'}] bị chặn bởi [${verdict.rule}] và được bảo đảm revert on-chain bởi [${onchainVerification.result}].`;
+    }
+  } else {
+    summary = `Dữ liệu hợp lệ từ [OWNER_MISSION] được phê duyệt an toàn.`;
+  }
 
   return {
     isBlocked,
     verdictRule: verdict.rule,
-    onchainResult,
+    onchainVerification,
+    onchainResult: onchainVerification.kind === 'eth_call' ? onchainVerification.result : undefined,
     summary,
     steps,
   };

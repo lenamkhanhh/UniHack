@@ -625,6 +625,13 @@ export async function processBountyAttempt(
     dummyProposal,
     offchainVerdict,
     onchainResult
+      ? {
+          kind: 'eth_call',
+          result: onchainResult,
+          contract: GUARDED_TREASURY_ADDRESS,
+          chainId: 43113,
+        }
+      : { kind: 'not_run' }
   );
 
   // 7. Record to Database

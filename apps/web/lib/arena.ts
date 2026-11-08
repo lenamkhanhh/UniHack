@@ -661,7 +661,7 @@ export function processArenaAttack(rawInput: string, clientIp: string = '127.0.0
     amountProvenance: verdict.amountProvenance,
     preventedLossUsdc: (Number(preventedAmountAtomic) / 1e6).toFixed(2),
     provenanceTrace: proposal
-      ? buildProvenanceTrace(taintRegistry, proposal, verdict, 'PayeeNotInMissionSet')
+      ? buildProvenanceTrace(taintRegistry, proposal, verdict, { kind: 'not_run' })
       : undefined,
   };
 
