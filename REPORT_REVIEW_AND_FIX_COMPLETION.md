@@ -180,5 +180,40 @@
   - **approveMission Tx:** [`0x9885664fcfc45539af1183fa3768f6e2dbfb52c76544b7b6f1ee14833790cf45`](https://testnet.snowtrace.io/tx/0x9885664fcfc45539af1183fa3768f6e2dbfb52c76544b7b6f1ee14833790cf45) (Block `#60712056`, gas used: **281,498**, precompile 0x100 gas ~3,450)
 - **Giới hạn còn lại:** Passkey demo chạy trên instance GuardedTreasury riêng biệt để cách ly hoàn toàn rủi ro khỏi treasury chính.
 
+---
+
+## WOW-W3 — "Hack the Treasury" (Bounty Công Khai Cho Giám Khảo)
+
+- **Trạng thái:** **PASS 100% (Đã hoàn tất toàn bộ W3-F1..F4)**
+- **File tạo/sửa:**
+  - `apps/web/lib/bounty.ts`: Xử lý rate limit (5/min/IP, 300/day global), query on-chain live (`missions`, `missionSpent`, `USDC.balanceOf`), Pipeline C2 validator với `payeeRoot` Merkle, Fuji `eth_call` revert simulation (`simulateFujiProposeWithProof`), strict error `LlmUnavailableError` (không fallback heuristic ngầm khi chạy prod), format 2 chữ số thập phân chuẩn ($0.00).
+  - `apps/web/app/api/bounty/attempt/route.ts`: Endpoint POST (xử lý đòn tấn công, trả 503 khi LLM unavailable không ghi DB/stats, phân tách `source: 'public' | 'smoke' | 'test'`), GET (chỉ tính `mode: 'llm'` và `source: 'public'`, đọc live số dư treasury + ngân sách bounty còn lại từ smart contract Fuji).
+  - `apps/web/app/bounty/page.tsx`: Giao diện tương tác trực tiếp với hero "Cài một địa chỉ ví của bạn vào hóa đơn, trang vendor...", 2 thẻ ngân sách (ngân sách bounty còn lại 5.00 USDC đọc từ contract, số dư treasury 5.80 USDC), thẻ kết quả 3 tầng hiển thị model & mode, feed lịch sử DB.
+  - `apps/web/prisma/schema.prisma`: Bổ sung trường `mode` (`llm` / `stub`) và `source` (`public` / `smoke` / `test`) cho model `BountyAttempt`.
+  - `scripts/bounty-reset-stats.ts`: Script dọn dẹp các bản ghi test/stub để giữ sạch bảng thống kê công khai của giám khảo.
+  - `scripts/bounty-smoke.ts`: Script chạy thử nghiệm 5 case ADI thật với `gemini-3.5-flash-lite (llm)` + Fuji `eth_call`.
+  - `evidence/bounty/smoke.json`: Bằng chứng kết quả thực tế (5/5 case pass, model `gemini-3.5-flash-lite`, mode `llm`, status `NO_PAYOUT_PROPOSED`).
+  - `apps/web/tests/bounty.test.ts`: 10/10 vitest tests pass (input validation, rate limiting, `<script>` escaping, C2 blocking, 503 LLM_UNAVAILABLE handling, on-chain revert simulation, stats GET).
+  - `apps/web/e2e/bounty.spec.ts`: Playwright E2E browser test (chụp ảnh 1920×1080 `bounty-blocked.png` và `bounty-result.png`).
+  - `artifacts/submission-s1/bounty-qr.png`: Mã QR thật dẫn trực tiếp tới trang `/bounty`.
+- **Lệnh đã chạy & Output test:**
+  - `npx.cmd vitest run tests/bounty.test.ts` (**10/10 passed**)
+  - `npx.cmd playwright test e2e/bounty.spec.ts` (**1/1 passed**)
+  - `npx.cmd tsx scripts/bounty-smoke.ts` (**5/5 cases ran with real Gemini 3.5 Flash Lite**)
+  - `npx.cmd tsx scripts/bounty-reset-stats.ts` (**Pruned 24 test/stub attempts, preserved public records**)
+  - `npx.cmd tsc --noEmit` (**0 errors**)
+- **Tx Hash Snowtrace (Setup On-Chain Bounty trên Fuji):**
+  - **Set Payee Allowlist (0x2222...2222):** Tx [`0xa70f888a919ee68b3e4f36b84ef9b80c2ff591c62619dd90e16881167b97d20c`](https://testnet.snowtrace.io/tx/0xa70f888a919ee68b3e4f36b84ef9b80c2ff591c62619dd90e16881167b97d20c) (Block `#60713131`)
+  - **createMission (`missionpay-bounty-v1`, cap 5 USDC):** Tx [`0x16a4a45ca84dc3a157dccf80a25f989cac24b5d5a004e5b9322124df7c4e7afd`](https://testnet.snowtrace.io/tx/0x16a4a45ca84dc3a157dccf80a25f989cac24b5d5a004e5b9322124df7c4e7afd) (Block `#60713136`)
+  - **setMissionPayeeRoot (Merkle Root `0xc6ce8a...`):** Tx [`0x12062261f369384bf06b9f4747f8e335a7a57951ec6509e6791ab1ba879f5dc3`](https://testnet.snowtrace.io/tx/0x12062261f369384bf06b9f4747f8e335a7a57951ec6509e6791ab1ba879f5dc3) (Block `#60713140`)
+  - **fundTreasury (5 USDC từ owner vào GuardedTreasury):** Tx [`0xd0654d4d695ff1b3a81dbc3785c39123859c1907a9b165782a1ea87e6c599934`](https://testnet.snowtrace.io/tx/0xd0654d4d695ff1b3a81dbc3785c39123859c1907a9b165782a1ea87e6c599934) (Block `#60713146`)
+- **Khắc phục Review W3-F1..W3-F4:**
+  - **W3-F1:** Loại bỏ hoàn toàn fallback heuristic ngầm. Khi Gemini lỗi/timeout, trả HTTP 503 `status: 'LLM_UNAVAILABLE'`, không lưu vào DB/stats; UI hiển thị "Agent tạm thời không phản hồi, thử lại". Thêm trường `mode: 'llm' | 'stub'` và model thật.
+  - **W3-F2:** Tách biệt triệt để lượt test/smoke (`source: 'test' | 'smoke'`) khỏi thống kê công khai (`source: 'public'`). Thêm script `scripts/bounty-reset-stats.ts`. Ghi đúng model/mode trong `smoke.json`.
+  - **W3-F3:** Hiển thị 2 số ngân sách trên hero: ngân sách bounty còn lại 5.00 USDC (đọc từ `missions(BOUNTY_MISSION_ID).cap - missionSpent(BOUNTY_MISSION_ID)`) và số dư treasury 5.80 USDC. "Tiền thất thoát" tính trực tiếp từ `missionSpent(BOUNTY_MISSION_ID)`.
+  - **W3-F4:** Bổ sung section `## WOW-W3` vào report. Chụp thêm `deck-shots/bounty-result.png` (1920×1080). Ghi nhận đúng trạng thái `NO_PAYOUT_PROPOSED` khi agent từ chối tạo payout.
+- **Giới hạn còn lại:** Backend không giữ private key; mọi kiểm tra tấn công được verify an toàn qua Pipeline C2 và zero-gas `eth_call` revert simulation trên Fuji.
+
+
 
 

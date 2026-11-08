@@ -12,7 +12,8 @@ test.describe('WOW-W3: "Hack the Treasury" Public Bounty Challenge (/bounty)', (
 
     // 3. Verify hero text and live treasury badge
     await expect(page.locator('h1')).toContainText('Lừa agent trả tiền cho bạn');
-    await expect(page.locator('text=Treasury Live Fuji')).toBeVisible();
+    await expect(page.locator('text=Ngân sách bounty mission:')).toBeVisible();
+    await expect(page.locator('text=Số dư treasury:')).toBeVisible();
 
     // 4. Select attack vector (Invoice PDF Text)
     const invoiceBtn = page.getByRole('button', { name: 'Hóa Đơn PDF (Text)' });
@@ -33,7 +34,8 @@ test.describe('WOW-W3: "Hack the Treasury" Public Bounty Challenge (/bounty)', (
     await submitBtn.click();
 
     // 8. Verify 3-step guard evaluation result card
-    await expect(page.locator('text=Kết Quả Đánh Giá Đa Tầng (3-Layer Guard)')).toBeVisible({ timeout: 25000 });
+    const resultCard = page.locator('text=Kết Quả Đánh Giá Đa Tầng (3-Layer Guard)');
+    await expect(resultCard).toBeVisible({ timeout: 25000 });
     await expect(page.locator('text=TREASURY BẢO TOÀN ($0.00 MẤT)')).toBeVisible();
     await expect(page.locator('text=Tầng 1: LLM Agent')).toBeVisible();
     await expect(page.locator('text=Tầng 2: Validator Off-Chain')).toBeVisible();
@@ -42,15 +44,25 @@ test.describe('WOW-W3: "Hack the Treasury" Public Bounty Challenge (/bounty)', (
     // 9. Verify treasury balance remains intact
     await expect(page.getByText('$0.00', { exact: true })).toBeVisible();
 
-    // 10. Capture 1920x1080 screenshot for pitch deck
+    // 10. Capture 1920x1080 screenshots for pitch deck
     const deckShotsDir = path.resolve(process.cwd(), '../../artifacts/submission-s1/deck-shots');
     if (!fs.existsSync(deckShotsDir)) {
       fs.mkdirSync(deckShotsDir, { recursive: true });
     }
-    const shotPath = path.join(deckShotsDir, 'bounty-blocked.png');
-    await page.screenshot({ path: shotPath, fullPage: false });
-    console.log(`[E2E Bounty] Captured deck shot: ${shotPath}`);
 
-    expect(fs.existsSync(shotPath)).toBe(true);
+    // Capture overview form + result card
+    const blockedShotPath = path.join(deckShotsDir, 'bounty-blocked.png');
+    await page.screenshot({ path: blockedShotPath, fullPage: false });
+    console.log(`[E2E Bounty] Captured deck shot: ${blockedShotPath}`);
+
+    // Scroll to focus on the 3-step result card and capture bounty-result.png
+    await resultCard.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(500);
+    const resultShotPath = path.join(deckShotsDir, 'bounty-result.png');
+    await page.screenshot({ path: resultShotPath, fullPage: false });
+    console.log(`[E2E Bounty] Captured deck shot: ${resultShotPath}`);
+
+    expect(fs.existsSync(blockedShotPath)).toBe(true);
+    expect(fs.existsSync(resultShotPath)).toBe(true);
   });
 });

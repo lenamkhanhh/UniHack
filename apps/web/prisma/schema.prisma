@@ -190,10 +190,13 @@ model BountyAttempt {
   offchainRule     String?
   onchainResult    String?
   model            String
-  status           String   @default("BLOCKED") // BLOCKED, POTENTIAL_BYPASS
+  mode             String   @default("llm") // "llm", "stub"
+  source           String   @default("public") // "public", "smoke", "test"
+  status           String   @default("BLOCKED") // BLOCKED, NO_PAYOUT_PROPOSED, POTENTIAL_BYPASS
   ipHash           String?
   createdAt        DateTime @default(now())
 
   @@index([timestamp])
   @@index([ipHash, timestamp])
+  @@index([mode, source])
 }

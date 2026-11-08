@@ -11,6 +11,17 @@
 
 import fs from 'fs';
 import path from 'path';
+
+// Explicitly load .env for real Gemini API key
+try {
+  process.loadEnvFile(path.resolve(__dirname, '../apps/web/.env'));
+} catch (e) {
+  console.warn('Could not loadEnvFile:', (e as any)?.message);
+}
+
+// Ensure stub mode is OFF for real smoke testing
+delete process.env.STUB_BOUNTY_LLM;
+
 import { processBountyAttempt, resetRateLimits } from '../apps/web/lib/bounty';
 
 async function main() {
@@ -51,28 +62,46 @@ async function main() {
     // Reset rate limits between smoke iterations to ensure clean runs
     resetRateLimits();
 
-    const attemptResult = await processBountyAttempt(
-      payload,
-      attackerAddress,
-      vector,
-      `198.51.100.${20 + i}`
-    );
+    try {
+      const attemptResult = await processBountyAttempt(
+        payload,
+        attackerAddress,
+        vector,
+        `198.51.100.${20 + i}`,
+        { source: 'smoke' }
+      );
 
-    console.log(`  LLM Tricked:     ${attemptResult.llmTricked ? 'YES (Tricked)' : 'NO (Resilient)'}`);
-    console.log(`  Off-chain Rule:  ${attemptResult.offchainVerdict.rule || 'PASS'}`);
-    console.log(`  Fuji eth_call:   ${attemptResult.onchainResult}`);
-    console.log(`  Treasury Balance:${attemptResult.treasuryBalanceUsdc} USDC`);
+      console.log(`  Model:           ${attemptResult.agentDecision.model} (${attemptResult.mode})`);
+      console.log(`  LLM Tricked:     ${attemptResult.llmTricked ? 'YES (Tricked)' : 'NO (Resilient)'}`);
+      console.log(`  Off-chain Rule:  ${attemptResult.offchainVerdict.rule || 'PASS'}`);
+      console.log(`  Fuji eth_call:   ${attemptResult.onchainResult}`);
+      console.log(`  Treasury Balance:${attemptResult.treasuryBalanceUsdc} USDC`);
+      console.log(`  Status:          ${attemptResult.status}`);
 
-    results.push({
-      caseId: c.id,
-      vector,
-      attackerAddress,
-      llmTricked: attemptResult.llmTricked,
-      offchainRule: attemptResult.offchainVerdict.rule,
-      onchainResult: attemptResult.onchainResult,
-      treasuryBalance: attemptResult.treasuryBalanceUsdc,
-      status: attemptResult.status,
-    });
+      results.push({
+        caseId: c.id,
+        vector,
+        attackerAddress,
+        llmTricked: attemptResult.llmTricked,
+        offchainRule: attemptResult.offchainVerdict.rule,
+        onchainResult: attemptResult.onchainResult,
+        treasuryBalance: attemptResult.treasuryBalanceUsdc,
+        model: attemptResult.agentDecision.model,
+        mode: attemptResult.mode,
+        status: attemptResult.status,
+      });
+    } catch (err: any) {
+      console.error(`  Case ${c.id} failed with error:`, err?.message);
+      results.push({
+        caseId: c.id,
+        vector,
+        attackerAddress,
+        error: err?.message || 'Execution error',
+        status: 'ERROR',
+        mode: 'llm',
+        model: process.env.BOUNTY_LLM_MODEL || 'gemini-3.5-flash-lite',
+      });
+    }
   }
 
   // Save to evidence/bounty/smoke.json

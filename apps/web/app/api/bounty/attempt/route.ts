@@ -3,7 +3,8 @@ import { isAddress } from 'viem';
 import { PrismaClient } from '@prisma/client';
 import {
   processBountyAttempt,
-  getLiveTreasuryBalance,
+  getBountyMissionOnchainStats,
+  LlmUnavailableError,
   BountyVector,
 } from '@/lib/bounty';
 
@@ -27,6 +28,13 @@ export async function POST(req: NextRequest) {
     }
 
     const { payload, attackerAddress, vector } = body;
+    const headerSource = req.headers.get('x-bounty-source');
+    const source: 'public' | 'smoke' | 'test' =
+      headerSource === 'test' || headerSource === 'smoke'
+        ? headerSource
+        : body.source === 'test' || body.source === 'smoke'
+        ? body.source
+        : 'public';
 
     // Validate payload
     if (!payload || typeof payload !== 'string' || payload.trim().length === 0) {
@@ -67,7 +75,8 @@ export async function POST(req: NextRequest) {
       payload,
       attackerAddress,
       vector as BountyVector,
-      clientIp
+      clientIp,
+      { source }
     );
 
     return NextResponse.json({
@@ -75,6 +84,22 @@ export async function POST(req: NextRequest) {
       result,
     });
   } catch (error: any) {
+    if (
+      error instanceof LlmUnavailableError ||
+      error?.code === 'LLM_UNAVAILABLE' ||
+      error?.message?.includes('LLM_UNAVAILABLE') ||
+      error?.message?.includes('Gemini LLM unavailable')
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          status: 'LLM_UNAVAILABLE',
+          error: 'Agent tạm thời không phản hồi, thử lại',
+        },
+        { status: 503 }
+      );
+    }
+
     const msg = error?.message || 'Lỗi xử lý bounty attempt';
     if (msg.includes('Quá giới hạn')) {
       return NextResponse.json({ success: false, error: msg }, { status: 429 });
@@ -86,11 +111,14 @@ export async function POST(req: NextRequest) {
 
 export async function GET() {
   try {
-    const [treasuryBalanceUsdc, totalAttempts, trickedCount, recentAttempts] = await Promise.all([
-      getLiveTreasuryBalance(),
-      prisma.bountyAttempt.count(),
-      prisma.bountyAttempt.count({ where: { llmTricked: true } }),
+    const onchainStats = await getBountyMissionOnchainStats();
+    const publicFilter = { mode: 'llm', source: 'public' };
+
+    const [totalAttempts, trickedCount, recentAttempts] = await Promise.all([
+      prisma.bountyAttempt.count({ where: publicFilter }),
+      prisma.bountyAttempt.count({ where: { ...publicFilter, llmTricked: true } }),
       prisma.bountyAttempt.findMany({
+        where: publicFilter,
         take: 10,
         orderBy: { timestamp: 'desc' },
         select: {
@@ -103,6 +131,8 @@ export async function GET() {
           offchainRule: true,
           onchainResult: true,
           model: true,
+          mode: true,
+          source: true,
           status: true,
         },
       }),
@@ -113,11 +143,14 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       stats: {
-        treasuryBalanceUsdc,
+        treasuryBalanceUsdc: onchainStats.treasuryBalanceUsdc,
+        bountyCapUsdc: onchainStats.bountyCapUsdc,
+        bountySpentUsdc: onchainStats.bountySpentUsdc,
+        bountyRemainingUsdc: onchainStats.bountyRemainingUsdc,
         totalAttempts,
         trickedCount,
         trickedRate: `${trickedRate}%`,
-        blockedCount: totalAttempts, // All unauthorized attempts are blocked
+        blockedCount: totalAttempts, // All unauthorized attempts are preserved
         leakCount: 0,
         recentAttempts,
       },

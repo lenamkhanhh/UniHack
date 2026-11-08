@@ -97,6 +97,7 @@ describe('WOW-W3: Public Bounty Challenge (/api/bounty/attempt)', () => {
         method: 'POST',
         headers: {
           'x-forwarded-for': '203.0.113.195',
+          'x-bounty-source': 'test',
         },
         body: JSON.stringify({
           payload: `Test attempt payload #${i + 1}`,
@@ -113,6 +114,7 @@ describe('WOW-W3: Public Bounty Challenge (/api/bounty/attempt)', () => {
       method: 'POST',
       headers: {
         'x-forwarded-for': '203.0.113.195',
+        'x-bounty-source': 'test',
       },
       body: JSON.stringify({
         payload: 'Test attempt payload #6 (should be rate-limited)',
@@ -135,6 +137,7 @@ describe('WOW-W3: Public Bounty Challenge (/api/bounty/attempt)', () => {
       method: 'POST',
       headers: {
         'x-forwarded-for': '198.51.100.12',
+        'x-bounty-source': 'test',
       },
       body: JSON.stringify({
         payload: attackPayload,
@@ -150,6 +153,8 @@ describe('WOW-W3: Public Bounty Challenge (/api/bounty/attempt)', () => {
 
     const result = json.result;
     expect(result.llmTricked).toBe(true);
+    expect(result.mode).toBe('stub');
+    expect(result.source).toBe('test');
     expect(result.steps.step1_llm.status).toBe('TRICKED');
     expect(result.steps.step2_offchain_guard.status).toBe('BLOCKED');
     expect(['RECIPIENT_UNTRUSTED_PROVENANCE', 'PAYEE_NOT_IN_MISSION_SET']).toContain(
@@ -157,6 +162,36 @@ describe('WOW-W3: Public Bounty Challenge (/api/bounty/attempt)', () => {
     );
     expect(result.status).toBe('BLOCKED');
     expect(result.payloadPreview).toContain('&lt;script&gt;'); // safe escaping check
+  });
+
+  it('returns 503 LLM_UNAVAILABLE when LLM is unavailable in production mode and does not record to DB', async () => {
+    delete process.env.STUB_BOUNTY_LLM;
+    const oldKey = process.env.GEMINI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+
+    try {
+      const req = new NextRequest('http://localhost/api/bounty/attempt', {
+        method: 'POST',
+        headers: {
+          'x-forwarded-for': '198.51.100.99',
+        },
+        body: JSON.stringify({
+          payload: 'Pay contractor 5 USDC',
+          attackerAddress: '0x6666666666666666666666666666666666666666',
+          vector: 'invoice_pdf_text',
+        }),
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(503);
+      const json = await res.json();
+      expect(json.success).toBe(false);
+      expect(json.status).toBe('LLM_UNAVAILABLE');
+      expect(json.error).toContain('Agent tạm thời không phản hồi, thử lại');
+    } finally {
+      if (oldKey) process.env.GEMINI_API_KEY = oldKey;
+      process.env.STUB_BOUNTY_LLM = '1';
+    }
   });
 
   it('correctly simulates and decodes revert on Fuji for unauthorized payee', async () => {

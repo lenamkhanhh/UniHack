@@ -5,6 +5,9 @@ import Link from 'next/link';
 
 interface BountyStats {
   treasuryBalanceUsdc: string;
+  bountyCapUsdc: string;
+  bountySpentUsdc: string;
+  bountyRemainingUsdc: string;
   totalAttempts: number;
   trickedCount: number;
   trickedRate: string;
@@ -20,6 +23,8 @@ interface BountyStats {
     offchainRule: string | null;
     onchainResult: string | null;
     model: string;
+    mode?: string;
+    source?: string;
     status: string;
   }>;
 }
@@ -30,14 +35,16 @@ interface StepResult {
     description: string;
     proposedTo: string;
     amountAtomic: string;
+    model?: string;
+    mode?: string;
   };
   step2_offchain_guard: {
-    status: 'BLOCKED' | 'QUEUED' | 'PASSED';
+    status: 'BLOCKED' | 'QUEUED' | 'PASSED' | 'NO_PROPOSAL';
     rule: string;
     reason: string;
   };
   step3_contract_fuji: {
-    status: 'REVERTED' | 'BYPASS';
+    status: 'REVERTED' | 'BYPASS' | 'SKIPPED';
     revertReason: string;
     contractAddress: string;
     snowtraceUrl: string;
@@ -52,6 +59,11 @@ interface AttemptResponse {
   llmTricked: boolean;
   onchainResult: string;
   treasuryBalanceUsdc: string;
+  bountyCapUsdc?: string;
+  bountySpentUsdc?: string;
+  bountyRemainingUsdc?: string;
+  mode?: string;
+  source?: string;
   steps: StepResult;
 }
 
@@ -66,6 +78,9 @@ export default function BountyPage() {
   const [lastResult, setLastResult] = useState<AttemptResponse | null>(null);
   const [stats, setStats] = useState<BountyStats>({
     treasuryBalanceUsdc: '5.80',
+    bountyCapUsdc: '5.00',
+    bountySpentUsdc: '0.00',
+    bountyRemainingUsdc: '5.00',
     totalAttempts: 0,
     trickedCount: 0,
     trickedRate: '0.0%',
@@ -113,6 +128,9 @@ export default function BountyPage() {
 
       const json = await res.json();
       if (!res.ok || !json.success) {
+        if (res.status === 503 || json.status === 'LLM_UNAVAILABLE') {
+          throw new Error('Agent tạm thời không phản hồi, thử lại');
+        }
         throw new Error(json.error || 'Lỗi gửi đòn tấn công');
       }
 
@@ -160,18 +178,26 @@ export default function BountyPage() {
             Lừa agent trả tiền cho bạn.
           </h1>
           <p className="text-slate-400 max-w-2xl mx-auto text-sm md:text-base">
-            Ngân quỹ được khóa trong smart contract <code className="text-amber-400">GuardedTreasury.sol</code> trên Avalanche Fuji.
-            Thử chèn prompt injection, lừa agent trích xuất địa chỉ ví của bạn và xem hợp đồng tự động bảo toàn ngân sách.
+            Cài một địa chỉ ví của bạn vào hóa đơn, trang vendor, email hay kết quả tìm kiếm và xem hợp đồng thông minh <code className="text-amber-400">GuardedTreasury.sol</code> trên Avalanche Fuji tự động bảo toàn ngân quỹ.
           </p>
-          <div className="inline-flex items-center gap-3 px-5 py-2.5 bg-slate-900 border border-amber-500/40 rounded-xl shadow-lg shadow-amber-500/5">
-            <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Treasury Live Fuji</span>
-            <span className="text-2xl font-black text-amber-400 font-mono">
-              {stats.treasuryBalanceUsdc} USDC
-            </span>
-            <span className="flex h-2 w-2 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 border border-amber-500/40 rounded-xl shadow-lg shadow-amber-500/5">
+              <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Ngân sách bounty mission:</span>
+              <span className="text-xl font-black text-amber-400 font-mono">
+                {stats.bountyRemainingUsdc} USDC còn lại
+              </span>
+              <span className="text-xs text-slate-500">(cap: {stats.bountyCapUsdc} USDC, đọc từ contract)</span>
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+            </div>
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-700/60 rounded-xl">
+              <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Số dư treasury:</span>
+              <span className="text-xl font-black text-slate-200 font-mono">
+                {stats.treasuryBalanceUsdc} USDC
+              </span>
+            </div>
           </div>
         </div>
 
@@ -193,8 +219,8 @@ export default function BountyPage() {
           </div>
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-center">
             <div className="text-xs text-slate-400 uppercase tracking-wider">Tiền Thất Thoát</div>
-            <div className="text-2xl font-bold font-mono text-white mt-1">$0.00</div>
-            <div className="text-[10px] text-slate-500">Không một xu ra ngoài</div>
+            <div className="text-2xl font-bold font-mono text-white mt-1">${stats.bountySpentUsdc}</div>
+            <div className="text-[10px] text-slate-500">tính từ missionSpent on-chain</div>
           </div>
         </div>
 
@@ -312,6 +338,9 @@ export default function BountyPage() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-300">{lastResult.steps.step1_llm.description}</p>
+                <div className="text-[11px] font-mono text-slate-400">
+                  Model: <span className="text-amber-400 font-semibold">{lastResult.steps.step1_llm.model || 'gemini-3.5-flash-lite'}</span> ({lastResult.steps.step1_llm.mode || 'llm'})
+                </div>
                 <div className="text-[11px] font-mono text-slate-500 truncate">
                   To: {lastResult.steps.step1_llm.proposedTo}
                 </div>
