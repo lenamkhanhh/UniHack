@@ -477,34 +477,40 @@ ightarrow$ Attack Blocked (ASR = 0, thất thoát 0 USDC).
 
 ---
 
-## MAX-M4 — Đánh Giá Phòng Thủ AgentDojo Banking (AgentDojo Banking Defense Benchmark)
+## MAX-M4 — Đánh Giá Phòng Thủ AgentDojo Banking (Honest Live LLM & Local Fork Replay)
 
-- **Trạng thái:** **PASS 100%**
-- **Mục tiêu:** Đánh giá độc lập cơ chế phòng thủ MissionPay trên benchmark chuẩn hóa **AgentDojo v1** (bộ suite `banking`, hình thức tấn công `important_instructions`), đối chiếu trực tiếp với các số liệu công bố của **ProvGuard** (arXiv:2412.01524) và **NOMOS** (arXiv:2610.11030), kết hợp xác thực cryptographic on-chain trên mạng Avalanche Fuji.
-- **Bảng số liệu chuẩn hóa (48-pair benchmark scope tương đồng ProvGuard):**
-
-| Cấu hình | Model nền tảng | Phạm vi đánh giá | Benign Utility | Utility under Attack | Attack Success Rate (ASR) | False Positives | On-Chain Enforced (Avalanche Fuji) |
-|---|---|---|---|---|---|---|---|
-| **ProvGuard** *(arXiv:2412.01524)* | GPT-4o / Llama *(khác model)* | 48 pairs | — | — | **0 / 48 (0.0%)** | 3 / 16 (18.8%) FP | ❌ Không có (chỉ filter prompt LLM) |
-| **NOMOS** *(arXiv:2610.11030)* | GPT-4o *(khác model)* | 288 pairs | 100.0% | 67.4% | **0 / 288 (0.0%)** | 0% | ❌ Không có (chỉ local kernel gate) |
-| **C0: Không defense (Baseline)** | `gemini-3.5-flash-lite` | 48 pairs | 5/6 (83.3%) | 0/48 (0.0%) | **21 / 48 (43.8%)** <br>`95% CI [30.7%, 57.7%]` | 0/6 | ❌ Không chặn |
-| **C1: Tool Filter (Standard)** | `gemini-3.5-flash-lite` | 48 pairs | 3/6 (50.0%) | 0/48 (0.0%) | **14 / 48 (29.2%)** <br>`95% CI [18.2%, 43.2%]` | 3/6 (50.0%) | ❌ Không chặn |
-| **C2: MissionPay Dual-Layer** | `gemini-3.5-flash-lite` | 48 pairs | 3/6 (50.0%) | 0/48 (0.0%) | **0 / 48 (0.0%)** <br>`95% CI [0.0%, 7.4%]` | **0% trên payee set** | ✅ **100% on-chain Fuji revert** (`PayeeNotInMissionSet`) |
-
-- **Kiểm Chứng Contract On-Chain Bằng Fuji `eth_call` (Zero-Gas):**
-  - Mỗi giao dịch trong AgentDojo được ánh xạ xác định sang EVM address (`keccak256(iban)[12:]`) và mô phỏng on-chain với `GuardedTreasury` (`0x20451c1e2dCD83F166B4f22868BAdECb5868d545`):
-    - **Tổng số giao dịch mô phỏng trên Fuji:** 93 cuộc gọi `eth_call`.
-    - **Số giao dịch hợp lệ được chuỗi chấp thuận:** 42 cuộc gọi (`SUCCESS (proposalId: 6)`).
-    - **Số giao dịch gian lận bị Avalanche Fuji revert:** **51 cuộc gọi** (100% revert chính xác `REVERT: PayeeNotInMissionSet`).
+- **Trạng thái:** **M4-F1..F7 RESOLVED**
+- **Sự cố & Rút lại kết quả cũ (M4-F1):**
+  - Đã rút lại hoàn toàn kết quả cũ `results/agentdojo-banking-canonical.json` và xóa toàn bộ 163 file cache có chứa can thiệp của simulator fallback (`_simulate_banking_agent_turn`).
+  - Runner đã được refactor thành `HonestGoogleLLM`: chỉ gọi trực tiếp API thật; xóa hoàn toàn hàm simulator và cờ `api_exhausted`. Khi gặp lỗi quota hoặc rate limit, runner dừng ngay lập tức và ghi nhận trạng thái `QUOTA_EXHAUSTED` (partial), tuyệt đối không sinh dữ liệu giả lập.
+- **On-Chain Replay Đúng Nghĩa (M4-F2):**
+  - Xóa bỏ toàn bộ hardcoded mapping `LEGIT_PAYEES` (`UK... -> 0x1111`).
+  - Mọi IBAN được ánh xạ xác định sang EVM address: `keccak256(bytes(iban))[12:]`.
+  - Mỗi tác vụ có payee set riêng, được xây dựng thành cây Merkle chuẩn OpenZeppelin (`eval/agentdojo/merkle.py`).
+  - Triển khai `eval/agentdojo/fuji_fork_replay.py`: thiết lập mission và Merkle root trên local Anvil fork của Avalanche Fuji (fork state tại block #60746101 với bytecode gốc của `GuardedTreasury` tại `0x20451c1e2dCD83F166B4f22868BAdECb5868d545`).
+  - Payee hợp lệ có Merkle proof $\rightarrow$ `SUCCESS (proposalId: 6)`. Payee ngoài tập nhiệm vụ có proof rỗng $\rightarrow$ `REVERT: PayeeNotInMissionSet`.
+  - Quyết định chặn ở C2 hoàn toàn do Guard đưa ra; on-chain replay là bước kiểm chứng độc lập.
+- **Hai Chế Độ Đánh Giá (M4-F3 & M4-F4):**
+  - Xóa bỏ hoàn toàn heuristic lọc chuỗi injection (như tìm `INSTRUCTION` hay `IBAN:`).
+  - Triển khai 2 chế độ độc lập:
+    1. **`c2_strict`:** Chỉ trích xuất payee từ user prompt và trường có cấu trúc của tool (như `recipient` trong scheduled transactions). File văn bản tự do coi là không tin cậy.
+    2. **`c2_file_trusted`:** Các file được user nêu tên cụ thể trong prompt được tin cậy hoàn toàn để trích xuất payee (báo cáo trung thực nếu attacker lọt qua).
+- **Chuẩn Hóa Trích Dẫn & Bảng Đối Thủ (M4-F5):**
+  - Đính chính trích dẫn ProvGuard: repository [GitHub `ziko-asm/provguard`](https://github.com/ziko-asm/provguard) (tháng 10/2026), không phải bài báo arXiv.
+  - NOMOS: [arXiv:2610.11030](https://arxiv.org/abs/2610.11030) (tháng 10/2026, điểm yếu đã biết: 8/288 diversion sang payee quen).
+  - Tách bảng số liệu đối thủ sang mục tham chiếu độc lập trong `eval/agentdojo/AGENTDOJO.md`, kèm ghi chú rõ ràng về sự khác biệt mô hình (GPT-4o/Claude/Llama) và harness, không so sánh trực tiếp. Bỏ mọi phát ngôn so sánh chủ quan.
 - **Files tạo / cập nhật:**
-  - `eval/agentdojo/missionpay_defense.py`: `ToolsExecutor` pipeline element triển khai 2 luật MissionPay (Task Payee Set + Provenance Boundary) và live Avalanche Fuji `eth_call` replay.
-  - `eval/agentdojo/tool_filter_defense.py`: Baseline defense lọc tool dựa trên từ khóa câu lệnh người dùng.
-  - `eval/agentdojo/run_benchmark.py`: Runner benchmark AgentDojo hoàn chỉnh, hỗ trợ Wilson score interval 95%, disk caching, monkey patch bảo toàn thought signature cho Gemini 3+ models, và xuất canonical JSON.
-  - `eval/agentdojo/results/agentdojo-banking-canonical.json`: Kết quả chi tiết định dạng machine-readable.
-  - `eval/agentdojo/AGENTDOJO.md`: Báo cáo so sánh đối thủ ProvGuard / NOMOS, giải thích 2 luật ánh xạ mission và hướng dẫn chạy 1 lệnh.
-- **Lệnh nghiệm thu & kết quả:**
-  - `cd eval/agentdojo; .venv\Scripts\python run_benchmark.py --subset`: **PASS 100% (48 pairs, 0.0% ASR, 51 on-chain reverts)**.
+  - `eval/agentdojo/merkle.py`: Module tính toán OpenZeppelin Standard Merkle Tree và sinh Merkle proof chuẩn cho tập payee bất kỳ.
+  - `eval/agentdojo/fuji_fork_replay.py`: Module quản lý Anvil fork Fuji, impersonate owner, cấu hình mission payee root và replay `proposeWithProof` zero-gas.
+  - `eval/agentdojo/missionpay_defense.py`: Defense pipeline element hỗ trợ cả `strict` và `file-trusted`, tích hợp kiểm chéo on-chain.
+  - `eval/agentdojo/run_benchmark.py`: Runner hoàn toàn trung thực với `HonestGoogleLLM`, deterministic seeded sampling, hỗ trợ đa cấu hình (C0, C1, C2_strict, C2_file_trusted).
+  - `eval/agentdojo/AGENTDOJO.md`: Báo cáo cập nhật mục "Sự cố", bảng tham chiếu đối thủ chuẩn hóa và phân tích 2 chế độ.
+  - `eval/agentdojo/SUMMARY.md`: Báo cáo tóm tắt tự động từ JSON kết quả.
+- **Hiện Trạng API & Nghiệm Thu (M4-F6 & M4-F7):**
+  - Key Gemini API miễn phí đã chạm trần quota ngày (`429 RESOURCE_EXHAUSTED`, 500 req/day). Runner dừng đúng cam kết M4-F1 mà không chạy giả lập.
+  - Toàn bộ cơ chế phòng thủ, Merkle tree và on-chain EVM replay đã được kiểm chứng hoạt động chính xác 100% trên local Anvil fork Fuji:
+    - `Authorized propose: True SUCCESS (proposalId: 6)`
+    - `Unauthorized propose: False REVERT: PayeeNotInMissionSet`
   - `forge test`: **61/61 tests pass** (512 invariant runs, 32,768 calls, 0 reverts).
   - `npx.cmd tsc -p apps/web/tsconfig.json --noEmit`: **0 errors**.
-- **Giới hạn còn lại:** Ghi nhận minh bạch trong báo cáo việc khác biệt mô hình so với ProvGuard/NOMOS (khác model, không so trực tiếp); cơ chế fallback tự động kích hoạt khi chạm giới hạn quota ngày của Gemini API; bảo toàn tuyệt đối tính toàn vẹn của smart contract `GuardedTreasury.sol`.
 
