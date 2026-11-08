@@ -8,8 +8,10 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-- Sau đó sang **M6 (x402 v2)** theo PLAN_MAX. Ngân sách Fuji của MAX vẫn ≤0.15 AVAX và ≤3 USDC; facilitator dùng ví riêng, không dùng ví owner.
-- M4-F6b (vẫn mở) Live 48 cặp (16 user × injection 0..2) và 16 benign, C0 và C2 strict, khi quota reset. Không bao giờ giả lập.
+Claude duyệt M5 (7d049cd, 09/11): đã tự chạy apps/web 214/214, tsc sạch, guard 12/12, dist đã gỡ khỏi git. Đạt.
+
+- **Việc tiếp: M6 (x402 v2)** theo PLAN_MAX_2026-11-08.md. Ngân sách Fuji ≤0.15 AVAX và ≤3 USDC; facilitator dùng ví riêng `FACILITATOR_PRIVATE_KEY`, không dùng ví owner, nạp ≤0.02 AVAX. Giữ v1 song song (`X402_VERSION`) và test ATC'26 F1–F4 phải pass ở cả v1 và v2. Tx thật ghi vào FUJI_EVIDENCE Part E.
+- M4-F6b (vẫn mở) Live 48 cặp (16 user × injection 0..2) và 16 benign, C0 và C2 strict, khi quota reset (~15:00 giờ VN). Không bao giờ giả lập.
 
 ## DONE
 
