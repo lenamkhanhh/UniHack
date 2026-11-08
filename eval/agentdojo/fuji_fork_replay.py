@@ -53,12 +53,19 @@ TREASURY_ABI = [
     },
     {
         "inputs": [
-            {"internalType": "address", "name": "recipient", "type": "address"},
-            {"internalType": "bool", "name": "status", "type": "bool"},
+            {"internalType": "address", "name": "r", "type": "address"},
+            {"internalType": "bool", "name": "allowed", "type": "bool"},
         ],
-        "name": "setRecipientAllowlist",
+        "name": "setRecipient",
         "outputs": [],
         "stateMutability": "nonpayable",
+        "type": "function",
+    },
+    {
+        "inputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "name": "recipientAllowlist",
+        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+        "stateMutability": "view",
         "type": "function",
     },
     {
@@ -108,10 +115,15 @@ class FujiForkReplayer:
         except Exception:
             return False
 
-    def setup_task_mission(self, task_id: str, authorized_addresses: List[str], merkle_root: bytes) -> bytes32:
+    def setup_task_mission(
+        self,
+        task_id: str,
+        authorized_addresses: List[str],
+        merkle_root: bytes,
+        include_attacker_in_allowlist: bool = False,
+        attacker_address: Optional[str] = None,
+    ) -> bytes:
         mission_id = Web3.keccak(text=f"agentdojo-{task_id}")
-        if task_id in self._initialized_missions:
-            return mission_id
 
         if not self.is_available():
             return mission_id
@@ -121,9 +133,9 @@ class FujiForkReplayer:
             self.w3.provider.make_request("anvil_impersonateAccount", [TREASURY_OWNER])
             self.w3.provider.make_request("anvil_setBalance", [TREASURY_OWNER, "0x1000000000000000000"])
 
-            # Check if mission exists
+            # Check if mission exists (struct Mission: 0:id, 1:agent, 2:cap, 3:expiresAt, 4:exists, 5:closed)
             mission = self.treasury.functions.missions(mission_id).call()
-            if not mission[5]:  # exists
+            if not mission[4]:  # exists
                 tx = self.treasury.functions.createMission(
                     mission_id, AGENT_ADDRESS, 1_000_000_000, 86400 * 30
                 ).transact({"from": TREASURY_OWNER})
@@ -135,19 +147,42 @@ class FujiForkReplayer:
             )
             self.w3.eth.wait_for_transaction_receipt(tx_root)
 
-            # Also allowlist authorized addresses on global list to isolate payee set Merkle verification
+            # Allowlist authorized task payees on global list
             for addr in authorized_addresses:
-                tx_al = self.treasury.functions.setRecipientAllowlist(addr, True).transact(
-                    {"from": TREASURY_OWNER}
-                )
+                tx_al = self.treasury.functions.setRecipient(
+                    Web3.to_checksum_address(addr), True
+                ).transact({"from": TREASURY_OWNER})
                 self.w3.eth.wait_for_transaction_receipt(tx_al)
 
-            self._initialized_missions.add(task_id)
+            # Set attacker allowlist status for Config (i) vs Config (ii)
+            if attacker_address:
+                att_csum = Web3.to_checksum_address(attacker_address)
+                tx_att = self.treasury.functions.setRecipient(
+                    att_csum, include_attacker_in_allowlist
+                ).transact({"from": TREASURY_OWNER})
+                self.w3.eth.wait_for_transaction_receipt(tx_att)
+
+            self._initialized_missions.add(f"{task_id}_{include_attacker_in_allowlist}")
         except Exception as e:
-            # Fork setup warning
+            # Fork setup error handling
             pass
 
         return mission_id
+
+    def set_attacker_allowlisted(self, attacker_address: str, allowed: bool) -> None:
+        """
+        Toggles attacker address in the global allowlist for Config (i) vs Config (ii).
+        """
+        if not self.is_available() or not attacker_address:
+            return
+        try:
+            self.w3.provider.make_request("anvil_impersonateAccount", [TREASURY_OWNER])
+            self.w3.provider.make_request("anvil_setBalance", [TREASURY_OWNER, "0x1000000000000000000"])
+            att_csum = Web3.to_checksum_address(attacker_address)
+            tx = self.treasury.functions.setRecipient(att_csum, allowed).transact({"from": TREASURY_OWNER})
+            self.w3.eth.wait_for_transaction_receipt(tx)
+        except Exception:
+            pass
 
     def simulate_proposal(
         self,
@@ -155,16 +190,20 @@ class FujiForkReplayer:
         recipient_address: str,
         amount_usd: float,
         proof: List[bytes],
+        scale_amount_for_fork_balance: bool = True,
     ) -> Tuple[bool, str]:
         """
         Executes zero-gas eth_call against GuardedTreasury on the local Fuji fork.
+        Amount is scaled to 0.01 USDC (10,000 atomic units) by default to prevent
+        reverting on ERC20 balance exhaustion (fork treasury holds ~5.80 USDC).
         """
         if not self.is_available():
             return False, "FORK_UNAVAILABLE"
 
         try:
             mission_id = Web3.keccak(text=f"agentdojo-{task_id}")
-            amount_atomic = int(amount_usd * 1_000_000)
+            # Scale amount to 0.01 USDC (10,000 units) for fork balance compatibility
+            amount_atomic = 10_000 if scale_amount_for_fork_balance else int(amount_usd * 1_000_000)
             op_id = Web3.keccak(text=f"call-{task_id}-{recipient_address}-{amount_atomic}-{time.time()}")
             reason = f"AgentDojo payment task {task_id}"
 
