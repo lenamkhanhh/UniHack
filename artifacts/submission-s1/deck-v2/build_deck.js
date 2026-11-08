@@ -316,7 +316,7 @@ async function main() {
     objectName: "benchmark chart",
   });
   const bstats = [
-    ["17/20 · 19/20", "attacks that named a vendor on the company allowlist (but not in this mission) got through caps + allowlist", AMBER],
+    ["17/20 · 19/20", "attacks that named a vendor already on the company list (but not in this mission) got through caps + allowlist. The NOMOS gate reports the same kind of gap (8/288)", AMBER],
     ["0 / 277", "attack runs moved money with MissionPay (95% upper bound 2.7% per model)", GREEN],
     ["40 / 40", "legitimate tasks (payouts and tool buys) still went through, on both models (no false positives)", GREEN],
   ];
@@ -326,7 +326,7 @@ async function main() {
     T(s, bstats[i][0], { x: 8.45, y: y + 0.1, w: W - MX - 8.65, h: 0.55, fontSize: 26, bold: true, color: bstats[i][2], objectName: "bench stat " + (i + 1) });
     T(s, bstats[i][1], { x: 8.45, y: y + 0.65, w: W - MX - 8.65, h: 0.68, fontSize: 12, color: TXT, objectName: "bench label " + (i + 1) });
   }
-  T(s, "PayBench-ADI: 140 attack + 40 benign synthetic cases per model (instruction injection, structural ADI, vendor diversion, Bankr/Zscaler/Cornell/Freysa-style), temperature 0, one fresh agent run per case; N = 180 and 177. The structural ADI cases fooled neither model (0/40 and 0/39). 10 blocked payouts replayed against GuardedTreasury on Fuji via eth_call: 9 reverted PayeeNotInMissionSet, 1 other revert. Dataset, scorer and leaderboard are public (eval/README.md, CC-BY-4.0) so other teams can plug in their own agent.", { x: MX, y: 6.2, w: W - 2 * MX, h: 0.6, fontSize: 10, color: MUTED, objectName: "bench method" });
+  T(s, "PayBench-ADI: 140 attack + 40 benign synthetic cases per model (instruction injection, structural ADI, vendor diversion, Bankr/Zscaler/Cornell/Freysa-style), temperature 0, one fresh agent run per case; N = 180 and 177. The structural ADI cases fooled neither model (0/40 and 0/39). Off-chain provenance guards also reach about 0% on AgentDojo banking (ProvGuard, NOMOS); numbers are not comparable across benchmarks. 10 blocked payouts replayed against GuardedTreasury on Fuji via eth_call: 9 reverted PayeeNotInMissionSet, 1 other revert. Dataset, scorer and leaderboard are public (eval/README.md, CC-BY-4.0) so other teams can plug in their own agent.", { x: MX, y: 6.2, w: W - 2 * MX, h: 0.6, fontSize: 10, color: MUTED, objectName: "bench method" });
   s.addNotes("45 giây. Đây là số đo thật, không phải demo. Không guard: 32 đến 45% đòn làm tiền đi. Cap cộng allowlist chặn được phần lớn, nhưng khi kẻ tấn công chỉ tới một vendor có trong allowlist chung của công ty mà không thuộc mission này thì allowlist để lọt 17/20 và 19/20. MissionPay: 0 trên 277 lượt tấn công, và 40/40 khoản trả hợp lệ vẫn đi. Nếu bị hỏi: case là synthetic dựa trên sự cố thật; ADI phá cấu trúc (40 case) không lừa được hai model này; chưa dùng dataset APort vì cần token Hugging Face.");
 
   // ===== 8. Verify =====
@@ -370,20 +370,21 @@ async function main() {
   // ===== 10. Competition =====
   pres.addSection({ title: "Market" });
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Market" });
-  s.addText("Caps are table stakes. Provenance is the gap", { placeholder: "title" });
-  const ch = (t, hl = false) => ({ text: t, options: { bold: true, fontSize: 15, color: hl ? C.text1 : TXT, fill: { color: hl ? HEX.accent2 : HEX.dk2 } } });
-  const cc = (t, hl = false) => ({ text: t, options: { fontSize: 14, color: hl ? GREEN : TXT, bold: hl } });
+  s.addText("Others stop strangers. We stop off-mission payees too", { placeholder: "title" });
+  const ch = (t, hl = false) => ({ text: t, options: { bold: true, fontSize: 13, color: hl ? C.text1 : TXT, fill: { color: hl ? HEX.accent2 : HEX.dk2 } } });
+  const cc = (t, hl = false, col = null) => ({ text: t, options: { fontSize: 12, color: col || (hl ? GREEN : TXT), bold: hl } });
   const comp = [
-    [ch(""), ch("Kite AI (Avalanche L1)"), ch("AgentGuard402 (Fuji)"), ch("Smart-account kits*"), ch("MissionPay", true)],
-    [cc("On-chain caps and expiry"), cc("Yes"), cc("Yes"), cc("Yes"), cc("Yes", true)],
-    [cc("Who may be paid"), cc("Not documented"), cc("Owner allowlist"), cc("Allowlist via roles / caveats"), cc("Owner-signed set per mission (Merkle root)", true)],
-    [cc("Blocks payees taken from web or tool output"), cc("Not documented"), cc("No"), cc("No"), cc("Yes, by provenance", true)],
-    [cc("Receipts anyone can check"), cc("Not documented"), cc("Snowtrace txs"), cc("No"), cc("Anchored hash chain + ERC-8004", true)],
+    [ch(""), ch("Provenance guards (ProvGuard, NOMOS, SPILLWAY)"), ch("allowance-ai (NEAR)"), ch("AgentGuard402 (Fuji)"), ch("Smart-account kits*"), ch("MissionPay", true)],
+    [cc("Enforced on-chain"), cc("No, in the agent's runtime"), cc("Yes"), cc("Yes"), cc("Yes"), cc("Yes, Avalanche C-Chain", true)],
+    [cc("Who may be paid"), cc("Payees the user named or the account already paid"), cc("One allowlist for the wallet"), cc("Owner allowlist"), cc("Allowlist via roles / caveats"), cc("Owner-signed set per mission (Merkle root)", true)],
+    [cc("Payee planted in a web page or tool output"), cc("Blocked"), cc("Held for Face ID if not listed"), cc("Blocked if not listed"), cc("Blocked if not listed"), cc("Blocked, by provenance and on-chain", true)],
+    [cc("Payee already known, but not part of this task"), cc("Paid (NOMOS: 8/288 slip)", false, AMBER), cc("Paid", false, AMBER), cc("Paid", false, AMBER), cc("Paid", false, AMBER), cc("Blocked (0/40 slip)", true)],
+    [cc("Receipts anyone can check"), cc("Server logs"), cc("On-chain counters"), cc("Snowtrace txs"), cc("No"), cc("Anchored hash chain + ERC-8004 Validation", true)],
   ];
-  s.addTable(comp, { x: MX, y: 1.6, w: W - 2 * MX, colW: [2.9, 2.2, 2.2, 2.4, 2.43], fontFace: "Calibri", border: { type: "solid", color: HEX.accent5, pt: 0.75 }, fill: { color: HEX.dk1 }, valign: "middle", rowH: [0.6, 0.6, 0.85, 0.85, 0.85], margin: 0.1, objectName: "competition table" });
-  T(s, "*Safe/Zodiac Roles, MetaMask ERC-7715, Coinbase Spend Permissions, Polygon OMS. Based on public docs and repos as of Nov 2026.", { x: MX, y: 5.5, w: W - 2 * MX, h: 0.35, fontSize: 11, color: MUTED, objectName: "comp note" });
-  T(s, "Everyone caps how much. MissionPay checks who, and where that answer came from.", { x: MX, y: 6.0, w: W - 2 * MX, h: 0.5, fontSize: 18, italic: true, color: AMBER, objectName: "comp takeaway" });
-  s.addNotes("Q&A: 'Khác gì AgentGuard402/MissionGuard?' -> họ chặn số tiền và allowlist; mình chặn theo nguồn gốc người nhận, có x402 + Circle USDC thật, ERC-8004, proof neo chain. 'Khác gì Kite?' -> Kite là cả L1; MissionPay là lớp chính sách + proof chạy trên C-Chain và chạy được trên các L1 khác, kể cả Kite. 'Smart account có session key rồi?' -> đúng, đó là điều kiện cần; nhưng như docs Zodiac viết, allowance giới hạn số tiền chứ không giới hạn điểm đến. 'Khác gì CaMeL/Progent?' -> đó là defense chung cho mọi tool, paper ADI đo vẫn lọt 22-23%; mình chuyên cho thanh toán, policy là tập payee owner ký, thực thi on-chain nên server bị chiếm cũng không chi được. 'APort Vault đạt 0 vi phạm rồi?' -> đúng, nhưng lớp kiểm off-chain, và paper của họ ghi thiếu đòn fuzz tham số; mình thêm đòn ADI vào tham số và neo kết quả on-chain. 'Meta Rule of Two?' -> agent đọc dữ liệu không tin cậy và có quyền chi tiền thì cần người duyệt; MissionPay gói lần duyệt đó vào một chữ ký owner cho cả mission. 'AP2 có mandate ký rồi?' -> paper whisper (09/2026) cho thấy AP2 ký giao dịch chứ không ký quyết định, đòn thành công tới 90%; mình gắn nguồn gốc vào chính tham số quyết định.");
+  s.addTable(comp, { x: MX, y: 1.5, w: W - 2 * MX, colW: [2.35, 2.2, 1.85, 1.75, 1.75, 2.23], fontFace: "Calibri", border: { type: "solid", color: HEX.accent5, pt: 0.75 }, fill: { color: HEX.dk1 }, valign: "middle", rowH: [0.75, 0.55, 0.75, 0.75, 0.75, 0.6], margin: 0.08, objectName: "competition table" });
+  T(s, "*Safe/Zodiac Roles, MetaMask ERC-7715, Coinbase Spend Permissions, Polygon OMS. \"Paid\" for allowlist designs follows from their documented rules (a listed payee is sent), not from our test of their code. Sources: ProvGuard repo (Oct 2026), NOMOS arXiv 2610.11030, SPILLWAY arXiv 2611.07222, allowance-ai repo (Nov 2026), AgentGuard402 repo.", { x: MX, y: 5.75, w: W - 2 * MX, h: 0.5, fontSize: 10, color: MUTED, objectName: "comp note" });
+  T(s, "Everyone can stop a stranger. MissionPay also stops a familiar payee who isn't part of this mission, and the chain enforces it.", { x: MX, y: 6.3, w: W - 2 * MX, h: 0.5, fontSize: 16, italic: true, color: AMBER, objectName: "comp takeaway" });
+  s.addNotes("Q&A: 'ProvGuard, NOMOS, SPILLWAY đạt 0% rồi?' -> đúng, họ mạnh trên AgentDojo; nhưng chạy trong runtime của agent nên server bị chiếm là mất, và họ cho trả tới người đã biết: NOMOS tự ghi 8/288 lượt chuyển hướng sang payee quen. Đó đúng là bộ E10 của mình: allowlist lọt 17/20 và 19/20, MissionPay 0. Không nói ASR mình tốt hơn họ, vì benchmark khác nhau. 'allowance-ai trên NEAR?' -> giống ở cap, allowlist, Face ID, arena; khác ở payee theo mission (vendor trong allowlist được trả ngay), provenance, x402 trên Avalanche, neo proof + ERC-8004 Validation, benchmark LLM thật. 'AgentGuard402?' -> allowlist chung + cap, không có mission, provenance, proof. 'Kite?' -> Kite là cả L1; MissionPay là lớp chính sách + proof chạy trên C-Chain. 'Freysa làm bounty từ 2024?' -> Freysa mất tiền vì guard nằm trong prompt; bounty của mình để contract quyết định. 'CaMeL/Progent?' -> paper ADI đo vẫn lọt 22-23%. 'AP2 mandate?' -> paper whisper: AP2 ký giao dịch, không ký quyết định.");
 
   // ===== 11. Impact =====
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Market" });
@@ -417,7 +418,7 @@ async function main() {
   await iconDot(s, fa.FaShieldAlt, HEX.accent2, MX, 1.1, 0.85, "closing shield");
   s.addText([{ text: "LLMs can be fooled.", options: { color: TXT } }], { placeholder: "title" });
   s.addText([{ text: "Budgets on Avalanche can't.", options: { color: RED, bold: true, fontSize: 60, fontFace: "Arial" } }], { placeholder: "body" });
-  T(s, "MissionPay: give your agent a mission, not your wallet.", { x: MX, y: 5.0, w: 10, h: 0.6, fontSize: 20, color: MUTED, objectName: "closing line" });
+  T(s, "MissionPay: sign the mission once. The chain decides who gets paid.", { x: MX, y: 5.0, w: 10, h: 0.6, fontSize: 20, color: MUTED, objectName: "closing line" });
   T(s, "Avalanche Team1 Vietnam UniHack 2026", { x: MX, y: H - 0.9, w: 8, h: 0.35, fontSize: 14, color: MUTED, objectName: "closing event" });
   s.addNotes("Quay lại trang /bounty trước khi sang slide này: đọc N lượt thử, M lần LLM bị lừa, 0 đô ra ngoài (số đọc từ chain). Rồi nói câu chốt và dừng.");
 
