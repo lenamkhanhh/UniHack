@@ -11,9 +11,23 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 Claude review 79b8e1a (09/11): **M4-F10 và F11 đạt.** Cấu hình (ii), có kẻ tấn công trong allowlist: 150 lượt attack revert `PayeeNotInMissionSet`, benign 9/9 SUCCESS, guard và contract khớp 169/169. Đây là bằng chứng chính.
 
 - M4-F6b (vẫn mở) Live 48 cặp (16 user × injection 0..2) và 16 benign, C0 và C2 strict, khi quota reset (~15:00 VN). Không bao giờ giả lập.
-- Đang tiến hành: làm **M5** (packages/guard SDK và packages/mcp MCP server) theo PLAN_MAX_2026-11-08.md.
-
+- Tiếp theo: làm **M6** (x402 v2 với migration v1-to-v2, binding request, và facilitator testnet) theo PLAN_MAX_2026-11-08.md.
 ## DONE
+
+- MAX-M5 [SDK & MCP Server] Đã triển khai hoàn chỉnh `@missionpay/guard` SDK và `@missionpay/mcp` MCP server:
+  - `@missionpay/guard`: Module độc lập trích xuất core guard logic (`types`, `merkle`, `taint`, `validator`, `guard`).
+    - `createMissionGuard({ missionId, payees, caps, globalAllowlist, rpcUrl, treasuryAddress })`.
+    - `checkPayment(proposal, taintRegistry)` trả `outcome`, `rule`, `reason`, `toProvenance`, `amountProvenance`.
+    - `simulateOnChain(proposal, proof)` thực hiện `eth_call` zero-gas lên smart contract `GuardedTreasury.sol:457` trên Fuji / local fork.
+    - `computePayeeMerkleTree` và `buildProof` chuẩn double-hash OpenZeppelin StandardMerkleTree.
+    - 11/11 tests pass (bao gồm 180-case PayBench offline parity test: 40 benign đạt 100% utility 0 FP; 140 attack blocked/queued đạt 0% ASR).
+  - `@missionpay/mcp`: Model Context Protocol server chuẩn theo `@modelcontextprotocol/sdk` exposing 3 tools:
+    - `missionpay_check_payment`: Kiểm tra an toàn trước thanh toán, phát hiện injection từ web/tool output.
+    - `missionpay_propose_payout`: Sinh proposal và Merkle proof cho `GuardedTreasury.proposeWithProof` (tuyệt đối KHÔNG giữ key).
+    - `missionpay_verify_mission`: Đối soát trạng thái và root Merkle on-chain trên Avalanche Fuji C-Chain.
+    - Cung cấp ví dụ cấu hình `claude_desktop_config.json` và agent `langchain_viem_agent.ts`.
+    - 6/6 integration tests pass qua linked transport.
+  - Cả 2 package đều có 10-line quickstart 'cắm vào agent của bạn' trong README.md.
 
 - M4-F12 (nhỏ) Sửa allowlist toggle cho Config (i) trong `fuji_fork_replay.py` và `replay_ground_truth.py`:
   - Chỉ gỡ attacker khỏi allowlist khi attacker không thuộc task payee set. Tại `user_task_15`, do prompt người dùng chỉ định rõ ràng `US133000000121212121212` là chủ nhà mới, tài khoản này được giữ lại trong allowlist ở cả Config (i).

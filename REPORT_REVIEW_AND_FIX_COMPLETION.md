@@ -529,3 +529,36 @@ ightarrow$ Attack Blocked (ASR = 0, thất thoát 0 USDC).
   - `forge test`: **61/61 tests pass** (512 invariant runs, 32,768 calls, 0 reverts).
   - `npx.cmd tsc -p apps/web/tsconfig.json --noEmit`: **0 errors**.
 
+
+---
+
+## MAX-M5 — @missionpay/guard SDK & @missionpay/mcp Server
+
+- **Trạng thái:** **PASS 100%**
+- **Mục tiêu:** Trích xuất lớp bảo vệ cốt lõi thành SDK độc lập (`@missionpay/guard`) và máy chủ Model Context Protocol (`@missionpay/mcp`) để mọi agent AI (Claude Desktop, LangChain, Viem, CrewAI, AutoGen) có thể tích hợp chỉ trong 10 dòng mã mà không cần sửa đổi kiến trúc.
+- **Thực thi chi tiết:**
+  1. **`@missionpay/guard` (Autonomous Agent Security SDK):**
+     - `packages/guard/src/types.ts`: Định nghĩa hệ thống type tiêu chuẩn (`Proposal`, `ValidationRuleId`, `ValidationResult`, `PayeeDefinition`, `MissionGuardConfig`, `SimulateOnChainResult`).
+     - `packages/guard/src/merkle.ts`: Triển khai `computePayeeMerkleTree` và `getMerkleProof` chuẩn OpenZeppelin `StandardMerkleTree` (leaf double-hash `keccak256(bytes.concat(keccak256(abi.encode(to))))`) khớp 100% với smart contract `GuardedTreasury.sol:457`.
+     - `packages/guard/src/taint.ts`: `TaintRegistry` theo dõi provenance đa nguồn (`TOOL_OUTPUT`, `WEB`, `OWNER_MISSION`, `LLM`), và hàm `isPolicyChangeAttempt` nhận diện ý định can thiệp policy với word boundaries.
+     - `packages/guard/src/validator.ts`: `validateTreasuryProposal` đánh giá theo thứ tự nghiêm ngặt: Anti-policy tampering $\rightarrow$ System paused $\rightarrow$ Recipient untrusted $\rightarrow$ Payee set Merkle root $\rightarrow$ Recipient approval $\rightarrow$ Global allowlist intersection $\rightarrow$ Amount untrusted $\rightarrow$ Per-tx / Mission caps.
+     - `packages/guard/src/guard.ts`: `createMissionGuard` hỗ trợ `checkPayment`, `buildProof`, `getMerkleRoot`, và `simulateOnChain` (`eth_call` zero-gas mô phỏng thực thi trên Fuji hoặc Anvil fork).
+     - `packages/guard/README.md`: Đoạn code 10 dòng "cắm vào AI agent của bạn".
+  2. **`@missionpay/mcp` (Model Context Protocol Server):**
+     - `packages/mcp/src/server.ts`: Khởi tạo `McpServer` chuẩn `@modelcontextprotocol/sdk` cung cấp 3 tools chuyên dụng:
+       - `missionpay_check_payment`: Thẩm định đề xuất thanh toán, kiểm tra taint và caps mà không cần gửi giao dịch on-chain.
+       - `missionpay_propose_payout`: Sinh đề xuất thanh toán hợp lệ và trích xuất Merkle proof phục vụ calldata `GuardedTreasury.proposeWithProof` (tuyệt đối KHÔNG giữ, không truy cập private keys).
+       - `missionpay_verify_mission`: Tra cứu trạng thái nhiệm vụ on-chain và tính toán đối soát Merkle root trên Avalanche Fuji C-Chain.
+     - `packages/mcp/src/cli.ts`: Entry point kết nối stdio transport.
+     - `packages/mcp/examples/`: `claude_desktop_config.json` và ví dụ agent LangChain/viem (`langchain_viem_agent.ts`).
+     - `packages/mcp/README.md`: Hướng dẫn cấu hình và 10 dòng quickstart cho Claude Desktop / Cursor.
+- **Lệnh nghiệm thu & Kết quả:**
+  - `npm.cmd --workspace=packages/guard run test`: **11/11 tests pass** (bao gồm `parity.test.ts` đối soát toàn diện 180 case PayBench: 40 benign đạt 100% utility 0 FP, 140 attack đạt 0% ASR).
+  - `npm.cmd --workspace=packages/mcp run test`: **6/6 tests pass** (kiểm thử linked transport toàn bộ 3 MCP tools).
+  - `npm.cmd --workspace=packages/guard run build`: **0 errors**.
+  - `npm.cmd --workspace=packages/mcp run build`: **0 errors**.
+  - `npx.cmd tsc -p apps/web/tsconfig.json --noEmit`: **0 errors**.
+  - `forge test` (`contracts/`): **61/61 tests pass** (512 invariant runs, 32,768 calls, 0 reverts).
+- **Ràng buộc tuân thủ:**
+  - Không sửa đổi hay can thiệp contract `GuardedTreasury.sol` đang chạy live trên Fuji.
+  - Không push `main`, không deploy public, không commit secret.
