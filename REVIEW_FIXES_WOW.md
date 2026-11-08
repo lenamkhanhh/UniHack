@@ -8,10 +8,18 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-Claude review 79b8e1a (09/11): **M4-F10 và F11 đạt.** Cấu hình (ii), có kẻ tấn công trong allowlist: 150 lượt attack revert `PayeeNotInMissionSet`, benign 9/9 SUCCESS, guard và contract khớp 169/169. Đây là bằng chứng chính.
+Claude review M5 (1b6bc91, 09/11). Đã chạy: guard 11/11 và mcp 6/6 tests pass; MCP server không giữ hay dùng private key. Còn 3 mục:
 
-- M4-F6b (vẫn mở) Live 48 cặp (16 user × injection 0..2) và 16 benign, C0 và C2 strict, khi quota reset (~15:00 VN). Không bao giờ giả lập.
-- Tiếp theo: làm **M6** (x402 v2 với migration v1-to-v2, binding request, và facilitator testnet) theo PLAN_MAX_2026-11-08.md.
+- M5-F1 [spec] Logic đang **bị nhân bản**: `packages/guard/src/validator.ts` là bản copy, còn `apps/web` không import gì từ `@missionpay/guard` (grep rỗng). Spec yêu cầu chỉ một nguồn logic:
+  - Chuyển `validateTreasuryProposal`, merkle và taint vào package, rồi cho `apps/web/lib/validator.ts` và `lib/merkle.ts` re-export hoặc import từ package (workspace dependency).
+  - Toàn bộ test của app (211) và của package phải pass. `npm run build` của apps/web phải pass.
+- M5-F2 [spec] `parity.test.ts` hiện chỉ so verdict với kỳ vọng của case, chưa so với validator của app. Thêm **differential test**: với từng case trong 180 case (C2, cùng taint/config như `attack-eval`), so `outcome` và `rule` của package với hàm mà `scripts/attack-eval.ts` đang dùng; lệch dù 1 case là fail và in ra id case.
+  - Sau khi làm M5-F1, test này vẫn giữ để chống tách nhánh logic về sau.
+- M5-F3 Bỏ `packages/*/dist/` khỏi git (thêm vào .gitignore, `git rm --cached`); build bằng `npm run build` khi cần. README ghi cách build.
+- Sau đó sang **M6 (x402 v2)** theo PLAN_MAX. Ngân sách Fuji của MAX vẫn ≤0.15 AVAX và ≤3 USDC; facilitator dùng ví riêng, không dùng ví owner.
+
+- M4-F6b (vẫn mở) Live 48 cặp (16 user × injection 0..2) và 16 benign, C0 và C2 strict, khi quota reset. Không bao giờ giả lập.
+
 ## DONE
 
 - MAX-M5 [SDK & MCP Server] Đã triển khai hoàn chỉnh `@missionpay/guard` SDK và `@missionpay/mcp` MCP server:
