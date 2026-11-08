@@ -126,3 +126,15 @@ Giao dịch gọi `approveMission` với chữ ký WebAuthn P-256 từ khóa ph�
   - `exists`: `true`
 
 
+
+
+### W3 Bounty Setup: "Hack the Treasury" (Mission `missionpay-bounty-v1`)
+- **Mission ID:** `0x609d0c2a96678100e4419faa96fccaaf6b809c245d75b02afa0d18e9c93a560f`
+- **Guarded Treasury:** `0x20451c1e2dCD83F166B4f22868BAdECb5868d545`
+- **Target Cap:** 5.00 USDC (`5000000` atomic)
+- **Authorized Payee Set:** `0x1111...1111`, `0x2222...2222` (Root: `0xc6ce8ae383124b268df66d71f0af2206e6dafb13eba0b03806eed8a4e7991329`)
+- **Expiry:** 2026-12-20 UTC
+- **Transactions:**
+  - `createMission`: [`0x16a4a45ca84dc3a157dccf80a25f989cac24b5d5a004e5b9322124df7c4e7afd`](https://testnet.snowtrace.io/tx/0x16a4a45ca84dc3a157dccf80a25f989cac24b5d5a004e5b9322124df7c4e7afd)
+  - `setMissionPayeeRoot`: [`0x12062261f369384bf06b9f4747f8e335a7a57951ec6509e6791ab1ba879f5dc3`](https://testnet.snowtrace.io/tx/0x12062261f369384bf06b9f4747f8e335a7a57951ec6509e6791ab1ba879f5dc3)
+  - `fundTreasury` (5 USDC): [`0xd0654d4d695ff1b3a81dbc3785c39123859c1907a9b165782a1ea87e6c599934`](https://testnet.snowtrace.io/tx/0xd0654d4d695ff1b3a81dbc3785c39123859c1907a9b165782a1ea87e6c599934)

@@ -178,3 +178,22 @@ model MissionFeedback {
   preparedResultHash String?
   state          String   // PREPARED/SUBMITTED/CONFIRMED
 }
+
+model BountyAttempt {
+  id               String   @id @default(uuid()) @db.Uuid
+  timestamp        DateTime @default(now())
+  vector           String   // search_result, invoice_pdf_text, vendor_page, email
+  payloadHash      String
+  payloadPreview   String   // <= 200 chars escaped
+  attackerAddress  String
+  llmTricked       Boolean
+  offchainRule     String?
+  onchainResult    String?
+  model            String
+  status           String   @default("BLOCKED") // BLOCKED, POTENTIAL_BYPASS
+  ipHash           String?
+  createdAt        DateTime @default(now())
+
+  @@index([timestamp])
+  @@index([ipHash, timestamp])
+}
