@@ -233,10 +233,31 @@
   - `apps/web/e2e/wow-arena.spec.ts`: E2E test xác minh luồng Provenance Trace và chụp ảnh `arena-trace.png`.
   - `artifacts/submission-s1/deck-shots/arena-trace.png`: Ảnh 1920×1080 chụp màn hình sân khấu Arena với live Fuji balances và provenance trace.
 - **Lệnh đã chạy & Output test:**
-  - `npx.cmd vitest run tests/provenance-trace.test.ts` (**3/3 passed**)
+  - `npx.cmd vitest run tests/provenance-trace.test.ts` (**4/4 passed**, gồm Scenario 4 `not_run`)
   - `npx.cmd playwright test e2e/wow-arena.spec.ts` (**2/2 passed**)
-  - `npx.cmd vitest run` (**192/192 passed across 13 test files**)
+  - `npx.cmd vitest run` (**209/209 passed across 26 test files**)
   - `npx.cmd tsc --noEmit` (**0 errors**)
+
+---
+
+## WOW-W6 — PayBench-ADI Public Dataset Card & On-Chain Cost Metrics
+
+- **Trạng thái:** **PASS 100%**
+- **File tạo/sửa:**
+  - `eval/README.md`: Public Dataset Card hoàn chỉnh cho PayBench-ADI v1.1.0 (180 cases: 40 structural ADI, 60 instruction injection, 20 allowlisted vendor diversion E10, 20 historical incident replicas, 40 benign utility tasks).
+  - `eval/LICENSE`: Dual license: CC-BY-4.0 cho dataset, MIT cho harness code.
+  - `eval/adapters/README.md`: Đặc tả interface `AgentAdapter` (TypeScript & Python stdio) cho các team và researcher bên ngoài tích hợp agent tự hành vào benchmark.
+  - `eval/leaderboard.json`: Bảng xếp hạng benchmark machine-readable với số liệu chốt S2 cho cả 2 model thật (`gemini-3.5-flash-lite` và `gemini-3.1-flash-lite`), kèm khoảng tin cậy Wilson 95% chuẩn.
+  - `evidence/cost.json`: Đo lường chi phí gas và latency thực tế từ 5 verified transaction receipts trên Avalanche Fuji (`proposeWithProof` 437k gas, `x402_settlement` 92k gas, `proof_anchor` 33k gas, `passkey_approveMission` 281k gas, `erc8004_validationResponse` 127k gas).
+  - `package.json`: Root CLI script `"bench": "tsx scripts/attack-eval.ts"`, hỗ trợ `--model <id>`, `--config <C0|C1|C2>`, `--limit <n>`.
+  - `scripts/attack-eval.ts`: Khắc phục W6-F1 ghi kết quả mới vào `eval/runs/<models>-<timestamp>.json`, bảo vệ nguyên vẹn `eval/results.json`.
+  - `REVIEW_FIXES_WOW.md`: Đánh dấu W5-F4 và W6-F1 DONE.
+- **Lệnh đã chạy & kết quả test:**
+  - `npm.cmd run bench -- --limit 2`: **PASS** (lưu kết quả an toàn vào `eval/runs/`, không ghi đè `results.json`)
+  - `npx.cmd tsx scripts/get-costs.ts`: **PASS** (trích xuất 5 receipt Fuji thật vào `evidence/cost.json`)
+  - `npx.cmd vitest run`: **209/209 passed across 26 test files**
+  - `npx.cmd tsc --noEmit`: **0 errors**
+
 
 
 

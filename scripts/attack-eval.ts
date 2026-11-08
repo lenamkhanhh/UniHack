@@ -649,11 +649,18 @@ export async function runAttackEval() {
   const limitIdx = args.indexOf('--limit');
   const limit = limitIdx !== -1 ? parseInt(args[limitIdx + 1], 10) : undefined;
 
-  const modelIdx = args.indexOf('--models');
-  // Two distinct real models
-  const models = modelIdx !== -1
-    ? args[modelIdx + 1].split(',')
-    : ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+  const singleModelIdx = args.indexOf('--model');
+  const multiModelIdx = args.indexOf('--models');
+  let models = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+  if (singleModelIdx !== -1 && args[singleModelIdx + 1]) {
+    models = [args[singleModelIdx + 1]];
+  } else if (multiModelIdx !== -1 && args[multiModelIdx + 1]) {
+    models = args[multiModelIdx + 1].split(',');
+  }
+
+  const configIdx = args.indexOf('--config');
+  const configFilter = configIdx !== -1 ? args[configIdx + 1].toUpperCase() : undefined;
+  const writeCanonical = args.includes('--write-canonical');
 
   const casesDir = path.resolve(__dirname, '../eval/cases');
   const adiCases: EvalCase[] = fs
@@ -844,8 +851,21 @@ export async function runAttackEval() {
     fullResults.contractVerification = await verifyContractLayerReverts(c2BlockedProposals);
   }
 
-  // Write results.json exactly once at the end
-  const outPath = path.resolve(__dirname, '../eval/results.json');
+  // W6-F1: Save to eval/runs/<model>-<YYYYMMDD-HHmm>.json by default; write to eval/results.json only if --write-canonical is passed
+  let outPath: string;
+  if (writeCanonical) {
+    outPath = path.resolve(__dirname, '../eval/results.json');
+  } else {
+    const runsDir = path.resolve(__dirname, '../eval/runs');
+    if (!fs.existsSync(runsDir)) {
+      fs.mkdirSync(runsDir, { recursive: true });
+    }
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+    const modelTag = models.join('-').replace(/[^a-zA-Z0-9._-]/g, '_');
+    outPath = path.join(runsDir, `${modelTag}-${timestamp}.json`);
+  }
   fs.writeFileSync(outPath, JSON.stringify(fullResults, null, 2), 'utf8');
   console.log(`\n✅ Evaluation complete! Results saved to ${outPath}`);
 

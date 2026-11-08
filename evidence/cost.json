@@ -1,0 +1,57 @@
+{
+  "network": "Avalanche Fuji Testnet",
+  "chainId": 43113,
+  "recordedAt": "2026-11-08T04:56:22.146Z",
+  "transactions": [
+    {
+      "name": "proposeWithProof",
+      "hash": "0x769484bb45b13a42917972dabb206697ec4f21acd117394017a62e0046cd6c9a",
+      "blockNumber": 60689765,
+      "gasUsed": 437239,
+      "effectiveGasPriceGwei": 1.6e-7,
+      "feeAvax": "0.00000000006995824",
+      "status": "success",
+      "latencyMs": 239
+    },
+    {
+      "name": "x402_settlement",
+      "hash": "0x8c898c904fef42c9a2e5d45b18549bd48dce285ef81d497f588ae41320dc8208",
+      "blockNumber": 60689764,
+      "gasUsed": 92392,
+      "effectiveGasPriceGwei": 0.00200001,
+      "feeAvax": "0.00000018478492392",
+      "status": "success",
+      "latencyMs": 67
+    },
+    {
+      "name": "proof_anchor",
+      "hash": "0x43bd21b81248a9f1a4dc2ff037a3df8119ae098690cd4e353bdbb4ce6ceb0547",
+      "blockNumber": 60689767,
+      "gasUsed": 33687,
+      "effectiveGasPriceGwei": 1.6e-7,
+      "feeAvax": "0.00000000000538992",
+      "status": "success",
+      "latencyMs": 62
+    },
+    {
+      "name": "passkey_approveMission",
+      "hash": "0x9885664fcfc45539af1183fa3768f6e2dbfb52c76544b7b6f1ee14833790cf45",
+      "blockNumber": 60712056,
+      "gasUsed": 281498,
+      "effectiveGasPriceGwei": 1.03e-7,
+      "feeAvax": "0.000000000028994294",
+      "status": "success",
+      "latencyMs": 60
+    },
+    {
+      "name": "erc8004_validationResponse",
+      "hash": "0x62451c36b6488cf4423bd7427e560ac2e3de46144d7ba5c30d81c55df7fe1564",
+      "blockNumber": 60710854,
+      "gasUsed": 127547,
+      "effectiveGasPriceGwei": 1.03e-7,
+      "feeAvax": "0.000000000013137341",
+      "status": "success",
+      "latencyMs": 66
+    }
+  ]
+}
