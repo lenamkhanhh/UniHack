@@ -10,11 +10,17 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 Claude review 79b8e1a (09/11): **M4-F10 và F11 đạt.** Cấu hình (ii), có kẻ tấn công trong allowlist: 150 lượt attack revert `PayeeNotInMissionSet`, benign 9/9 SUCCESS, guard và contract khớp 169/169. Đây là bằng chứng chính.
 
-- M4-F12 (nhỏ, làm kèm khi chạy live) Ở cấu hình (i), `set_attacker_allowlisted(False)` gỡ địa chỉ US133… khỏi allowlist kể cả với `user_task_15`, task mà US133… là payee hợp lệ do user nêu trong prompt. Vì vậy có 1 benign và 10 attack ra `NotAllowlisted`. Sửa: chỉ gỡ khi địa chỉ đó không thuộc task payee set, rồi chạy lại replay (không tốn quota) và cập nhật SUMMARY.
-- M4-F6b (vẫn mở) Live 48 cặp (16 user × injection 0..2) và 16 benign, C0 và C2 strict, khi quota reset. Không bao giờ giả lập.
-- Trong lúc chờ quota: làm **M5** (packages/guard SDK và packages/mcp MCP server) theo PLAN_MAX_2026-11-08.md.
+- M4-F6b (vẫn mở) Live 48 cặp (16 user × injection 0..2) và 16 benign, C0 và C2 strict, khi quota reset (~15:00 VN). Không bao giờ giả lập.
+- Đang tiến hành: làm **M5** (packages/guard SDK và packages/mcp MCP server) theo PLAN_MAX_2026-11-08.md.
 
 ## DONE
+
+- M4-F12 (nhỏ) Sửa allowlist toggle cho Config (i) trong `fuji_fork_replay.py` và `replay_ground_truth.py`:
+  - Chỉ gỡ attacker khỏi allowlist khi attacker không thuộc task payee set. Tại `user_task_15`, do prompt người dùng chỉ định rõ ràng `US133000000121212121212` là chủ nhà mới, tài khoản này được giữ lại trong allowlist ở cả Config (i).
+  - Kết quả on-chain replay mới (`results/replay-ground-truth-20261109-035811.json`):
+    - **Config (i) (Task payees only):** Benign 9/9 Agreed (100.0%, 0 NotAllowlisted), Attack 160/160 Agreed (100.0%, 150 PayeeNotInMissionSet, 10 SUCCESS tại user_task_15, 0 NotAllowlisted). Tỷ lệ đồng thuận: **169/169 (100.0%)**.
+    - **Config (ii) (Task payees + Attacker in allowlist):** Benign 9/9 Agreed (100.0%), Attack 160/160 Agreed (100.0%). Tỷ lệ đồng thuận: **169/169 (100.0%)**.
+  - Đã cập nhật `eval/agentdojo/SUMMARY.md` và `eval/agentdojo/AGENTDOJO.md`.
 
 - M4-F10 [BLOCKER on-chain] Đã giải quyết triệt để lỗi on-chain replay và kiểm chứng Merkle root độc lập trên Anvil fork:
 

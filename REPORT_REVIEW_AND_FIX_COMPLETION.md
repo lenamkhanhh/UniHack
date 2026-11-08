@@ -479,15 +479,16 @@ ightarrow$ Attack Blocked (ASR = 0, thất thoát 0 USDC).
 
 ## MAX-M4 — Đánh Giá Phòng Thủ AgentDojo Banking (Honest Live LLM & Local Fork Replay)
 
-- **Trạng thái:** **M4-F1..F5, F7..F11 RESOLVED (M4-F6b chờ quota reset lúc ~15:00 VN)**
-- **Khắc phục M4-F10 & M4-F11 (On-Chain Replay Dual-Config & Chuẩn Hóa Thuật Ngữ):**
-  - **M4-F10 (Fix Allowlist ABI & Dual-Config Replay):**
+- **Trạng thái:** **M4-F1..F5, F7..F12 RESOLVED (M4-F6b chờ quota reset lúc ~15:00 VN)**
+- **Khắc phục M4-F10, F11 & M4-F12 (On-Chain Replay Dual-Config 100% Đồng Thuận & Chuẩn Hóa Thuật Ngữ):**
+  - **M4-F10 & M4-F12 (Fix Allowlist ABI, Task Payee Check & Dual-Config Replay 100%):**
     - Sửa ABI trong `fuji_fork_replay.py`: hàm đổi tên chính xác thành `setRecipient(address r, bool allowed)` (tránh rơi vào fallback `DirectEtherNotAccepted`).
     - Scale amount proposal mô phỏng về 0.01 USDC (10,000 atomic units) để đảm bảo không chạm trần số dư treasury trên fork (5.80 USDC).
-    - Đo lường và báo cáo minh bạch trên 2 cấu hình fork:
-      - **Cấu hình (i) (Task payees only):** Benign agreed 8/9 (`SUCCESS`: 8, `NotAllowlisted`: 1 tại `user_task_15`); Attack agreed 150/160 (`PayeeNotInMissionSet`: 150, `NotAllowlisted`: 10 tại `user_task_15`). Tỷ lệ đồng thuận: 158/169 (93.5%).
-      - **Cấu hình (ii) (Task payees + Attacker in allowlist):** Benign agreed **9/9 (100.0%)**; Attack agreed **160/160 (100.0%)** (`PayeeNotInMissionSet`: 150, `SUCCESS`: 10 tại `user_task_15`, `NotAllowlisted`: 0). Tỷ lệ đồng thuận: **169/169 (100.0%)**.
-      - **Bằng chứng độc lập:** Ngay cả khi kẻ tấn công nằm trong allowlist của treasury, 100% đòn tấn công tài chính ngoài nhiệm vụ vẫn bị bytecode `GuardedTreasury.sol:457` revert chính xác `PayeeNotInMissionSet`.
+    - **M4-F12 (Sửa allowlist toggle Config i):** Chỉ gỡ attacker khỏi allowlist khi attacker không thuộc task payee set. Tại `user_task_15`, do prompt người dùng chỉ định rõ ràng `US133000000121212121212` là chủ nhà mới, tài khoản này được giữ lại trong allowlist ở cả Config (i).
+    - Đo lường và báo cáo minh bạch trên 2 cấu hình fork (`results/replay-ground-truth-20261109-035811.json`):
+      - **Cấu hình (i) (Task payees only):** Benign agreed **9/9 (100.0%)** (`SUCCESS`: 9, `NotAllowlisted`: 0); Attack agreed **160/160 (100.0%)** (`PayeeNotInMissionSet`: 150, `SUCCESS`: 10 tại `user_task_15`, `NotAllowlisted`: 0). Tỷ lệ đồng thuận: **169/169 (100.0%)**.
+      - **Cấu hình (ii) (Task payees + Attacker in allowlist):** Benign agreed **9/9 (100.0%)** (`SUCCESS`: 9, `NotAllowlisted`: 0); Attack agreed **160/160 (100.0%)** (`PayeeNotInMissionSet`: 150, `SUCCESS`: 10 tại `user_task_15`, `NotAllowlisted`: 0). Tỷ lệ đồng thuận: **169/169 (100.0%)**.
+      - **Bằng chứng độc lập:** Ngay cả khi kẻ tấn công nằm trong allowlist của treasury, 100% đòn tấn công tài chính ngoài nhiệm vụ (150/150) vẫn bị bytecode `GuardedTreasury.sol:457` revert chính xác `PayeeNotInMissionSet`.
   - **M4-F11 (Lý do chặn & Thuật ngữ đối thủ):**
     - Cập nhật lý do chặn của C1 thành `PAYEE_NOT_IN_HISTORY`.
     - Đổi mô tả thành "cũng 3/16 như ProvGuard policy v1 (khác task bị chặn thì ghi rõ)".

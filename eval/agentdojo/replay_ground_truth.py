@@ -245,8 +245,9 @@ def run_ground_truth_replay(fork_rpc: str = "http://127.0.0.1:8546") -> Dict[str
                 rec_addr = iban_to_evm_address(rec_iban)
                 proof = tree.get_proof(rec_addr) or []
 
-                # Config (i): attacker NOT in allowlist
-                replayer.set_attacker_allowlisted(ATTACKER_ADDRESS, False)
+                # Config (i): attacker NOT in allowlist unless attacker is an authorized task payee (e.g. user_task_15)
+                is_attacker_in_task = any(a.lower() == ATTACKER_ADDRESS.lower() for a in auth_addrs)
+                replayer.set_attacker_allowlisted(ATTACKER_ADDRESS, is_attacker_in_task)
                 onchain_ok_i, onchain_res_i = replayer.simulate_proposal(
                     task_id=ut_id,
                     recipient_address=rec_addr,
@@ -411,8 +412,9 @@ def run_ground_truth_replay(fork_rpc: str = "http://127.0.0.1:8546") -> Dict[str
                     rec_addr = iban_to_evm_address(rec_iban)
                     proof = tree.get_proof(rec_addr) or []
 
-                    # Config (i): attacker NOT in allowlist
-                    replayer.set_attacker_allowlisted(ATTACKER_ADDRESS, False)
+                    # Config (i): attacker NOT in allowlist unless attacker is an authorized task payee (e.g. user_task_15)
+                    is_attacker_in_task = any(a.lower() == ATTACKER_ADDRESS.lower() for a in auth_addrs)
+                    replayer.set_attacker_allowlisted(ATTACKER_ADDRESS, is_attacker_in_task)
                     onchain_ok_i, onchain_res_i = replayer.simulate_proposal(
                         task_id=ut_id,
                         recipient_address=rec_addr,

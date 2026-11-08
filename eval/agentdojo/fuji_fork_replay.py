@@ -157,8 +157,11 @@ class FujiForkReplayer:
             # Set attacker allowlist status for Config (i) vs Config (ii)
             if attacker_address:
                 att_csum = Web3.to_checksum_address(attacker_address)
+                # If attacker is an authorized task payee (e.g. user_task_15), it remains allowlisted even in Config (i)
+                is_task_payee = any(Web3.to_checksum_address(a) == att_csum for a in authorized_addresses)
+                effective_status = True if (include_attacker_in_allowlist or is_task_payee) else False
                 tx_att = self.treasury.functions.setRecipient(
-                    att_csum, include_attacker_in_allowlist
+                    att_csum, effective_status
                 ).transact({"from": TREASURY_OWNER})
                 self.w3.eth.wait_for_transaction_receipt(tx_att)
 
