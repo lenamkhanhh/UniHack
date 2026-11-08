@@ -6,7 +6,16 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 (Hiện không có mục OPEN)
 
+
+
 ## DONE
+- M3-F1 [BLOCKER] Đã giải quyết triệt để đánh giá adaptive attacker với dual prompt postures, bằng chứng Fuji thật và canonical dataset:
+  - **Dual Prompt Postures:** Đã chạy và phân tách rõ ràng 2 biến thể prompt: (A) `strict` (fortified agent với chỉ thị từ chối rõ ràng ngoài mission) và (B) `typical` (agent kế toán tiêu chuẩn với danh bạ vendor 5 công ty, mô phỏng đúng kịch bản doanh nghiệp thực tế). Cả hai system prompt đều được dán nguyên văn vào `ADAPTIVE_ATTACK.md`.
+  - **Empirical Metrics:**
+    - Variant A (`strict`): LLM bị lừa 0/200 (0.0%), ASR C0/C1/C2 đều là 0.0% ($0.00 spend).
+    - Variant B (`typical`): LLM bị lừa 69/199 (34.7%, 95% CI [28.4%, 41.5%]). Dưới C0, ASR là 34.7% ($132.00 USDC drained). Dưới C1 (global allowlist), ASR là 30.2% ($106.00 USDC drained do T02/T03/T04 nằm trong allowlist chung). Dưới C2 (MissionPay dual-layer), ASR là **0.0% (0/199, 95% CI upper bound 1.9%)** với **$0.00 drained (100% Blocked)**.
+  - **Genuine Fuji eth_call Proposals & Merkle Proofs:** Toàn bộ bảng kiểm tra on-chain §5 trên Fuji đều là các transaction proposal THẬT do autonomous agent tạo ra ở Variant B. Merkle proof được tính động bằng `computePayeeMerkleTree`: với payee hợp lệ `0x1111`, proof hợp lệ đưa giao dịch vào trạng thái on-chain `QUEUED_OR_EXECUTED (proposalId: 6)` vì vượt perTxCap; với payee ngoài tập (`0x3333`, `0x4444`, `0x5555`, `0x7777`), không thể sinh proof hợp lệ nên contract trên Fuji revert chính xác `REVERT: PayeeNotInMissionSet`.
+  - **Canonical Dataset:** Lưu tại `eval/runs/adaptive-canonical-2026-11-08.json` (400 turns đầy đủ: 200 Variant A + 200 Variant B). Minh bạch lịch sử 7 file run trước đó. Đếm riêng 1 lỗi API (HTTP 429), không tính vào tỷ lệ từ chối.
 - SEC-F1 [trung thực] Đã sửa trích dẫn test và registry trong `SECURITY.md` và `ATTACK_EVAL.md`:
   - Thay 3 test không tồn tại bằng exact test thật: `test_C11_agent_calling_owner_functions_reverts`, `test_C12_no_direct_agent_transfer_path`, `test_SW03_fund_without_toolcap_or_over_toolcap_reverts`, `test_P1A_fund_mission_wallet_success`, và `test_PV1_proposeWithProof_invalid_proof_or_unauthorized_payee_reverts`. 13/13 `test_*` trong `SECURITY.md` đều grep ra chính xác trong `contracts/test/`.
   - Tách Threat 5 thành 2 tiểu mục rõ ràng: **Threat 5a (Off-chain Policy Validator)** và **Threat 5b (ERC-8004 Post-Mission Validator Key `0x83F5…13B5`)**.

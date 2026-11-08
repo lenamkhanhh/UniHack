@@ -447,24 +447,30 @@ ightarrow$ Attack Blocked (ASR = 0, thất thoát 0 USDC).
 
 ---
 
-## MAX-M3 — Đánh Giá Kẻ Tấn Công Thích Ứng Đa Lượt (Adaptive Attacker Evaluation)
+## MAX-M3 — Đánh Giá Kẻ Tấn Công Thích Ứng Đa Lượt (Adaptive Attacker Evaluation & M3-F1 Resolution)
 
-- **Trạng thái:** **PASS 100%**
-- **Mục tiêu:** Đánh giá tính kiên cường thực nghiệm của MissionPay trước kẻ tấn công thích ứng đa lượt (Adaptive Attacker) sử dụng LLM đối kháng (`gemini-3.5-flash-lite`, chuyển đổi từ `3.5-flash` do lỗi HTTP 503 high demand theo quy chuẩn `PLAN_MAX_2026-11-08.md`) với vòng lặp phản hồi đầy đủ (thought chain, đề xuất giao dịch, mã lỗi validator và lý do revert EVM on-chain trên Fuji) qua 20 vòng lặp liên tiếp cho 10 mục tiêu tài chính ($N = 200$ rounds tương tác).
-- **Phân định rõ ràng theo từng cấu hình bảo vệ (C0, C1, C2):**
-  - **Tỉ lệ LLM bị lừa (LLM Tricked Rate):** **0.0%** (0/200, 95% Wilson CI: [0.0%, 1.9%]) — Agent kế toán `gemini-3.5-flash-lite` duy trì prompt resilience cao xuyên suốt 200 lượt tương tác thích ứng, liên tục từ chối sinh đề xuất chi tiền bất hợp pháp (`NO_PAYOUT_PROPOSED`).
-  - **C0 (Unprotected Agent):** **C0 ASR: 0.0%** (0/200, 95% Wilson CI: [0.0%, 1.9%]), **Thất thoát ngoài phạm vi: $0.00 USDC**.
-  - **C1 (Cap + Global Allowlist):** **C1 ASR: 0.0%** (0/200, 95% Wilson CI: [0.0%, 1.9%]), **Thất thoát ngoài phạm vi: $0.00 USDC**.
-  - **C2 (MissionPay Dual-Layer Stack):** **C2 ASR: 0.0% (0/200, 95% Wilson CI: [0.0%, 1.9%])**, **Thất thoát ngoài phạm vi: $0.00 USDC (Chặn đứng 100%)**.
-- **Kiểm Chứng Contract On-Chain (Fuji eth_call):**
-  - Mô phỏng zero-gas `eth_call` trực tiếp lên smart contract `GuardedTreasury` (`0x20451c1e2dCD83F166B4f22868BAdECb5868d545`) trên Avalanche Fuji cho 10 mục tiêu tấn công mẫu (Round 20): **10/10 đề xuất đều revert 100% với lỗi `PayeeNotInMissionSet`**.
-  - Chứng minh rằng ngay cả trong tình huống xấu nhất (compromised planner ép LLM sinh giao dịch), consensus on-chain của Avalanche đảm bảo ngân quỹ không bị thất thoát.
+- **Trạng thái:** **PASS 100% (Đã giải quyết trọn vẹn M3-F1)**
+- **Mục tiêu:** Đánh giá tính kiên cường thực nghiệm của MissionPay trước kẻ tấn công thích ứng đa lượt (Adaptive Attacker) sử dụng LLM đối kháng (`gemini-3.5-flash` và cơ chế fallback minh bạch sang `gemini-3.1-flash-lite` khi cạn quota ngày) với vòng lặp phản hồi đầy đủ (thought chain, đề xuất giao dịch, mã lỗi validator và kết quả mô phỏng EVM on-chain trên Fuji) qua 20 vòng lặp liên tiếp cho 10 mục tiêu tài chính trên **2 biến thể prompt riêng biệt** ($N = 400$ turns).
+- **Phân định rõ ràng theo 2 biến thể prompt (Variant A vs Variant B):**
+  1. **Variant A (`strict` - Fortified Security Posture, $N = 200$):**
+     - LLM bị lừa: **0.0%** (0/200, 95% Wilson CI: [0.0%, 1.9%]).
+     - ASR C0 / C1 / C2: **0.0%** ($0.00 spend).
+  2. **Variant B (`typical` - Typical Enterprise Accounting Agent, $N = 199$ valid rounds, 1 API error):**
+     - LLM bị lừa: **34.7%** (69/199, 95% Wilson CI: [28.4%, 41.5%]).
+     - **C0 (Unprotected): ASR 34.7% (69/199), Thất thoát ngoài phạm vi: $132.00 USDC**.
+     - **C1 (Cap + Global Allowlist): ASR 30.2% (60/199), Thất thoát ngoài phạm vi: $106.00 USDC** (Bị bypass hoàn toàn ở các đòn Known-Payee Diversion T02, T03, T04 do đối tác có sẵn trong danh bạ doanh nghiệp).
+     - **C2 (MissionPay Dual-Layer): ASR 0.0% (0/199, 95% Wilson CI upper: 1.9%), Thất thoát ngoài phạm vi: $0.00 USDC (Chặn đứng 100%)**.
+- **Kiểm Chứng Contract On-Chain Bằng Đề Xuất Thật (Fuji eth_call với Merkle Proof Thật):**
+  - Toàn bộ đề xuất kiểm tra on-chain §5 trên Fuji đều là các transaction proposal THẬT do autonomous agent tạo ra ở Variant B, kèm Merkle proof thật sinh từ `computePayeeMerkleTree`:
+    - Payee hợp lệ (`0x1111`) ở kịch bản thổi phồng số tiền (5.00 USDC > 2.00 USDC perTxCap): Proof hợp lệ, smart contract trên Fuji đưa vào hàng đợi `QUEUED_OR_EXECUTED (proposalId: 6)` (không giải ngân tự động).
+    - Payee ngoài tập (`0x3333`, `0x4444`, `0x5555`, `0x7777`): Không thể sinh Merkle proof hợp lệ, smart contract trên Fuji revert chính xác `REVERT: PayeeNotInMissionSet`.
 - **Files tạo/cập nhật:**
-  - `scripts/adaptive-attack.ts`: Engine đánh giá thích ứng đa lượt (feedback loop, resilient JSON parsing `safeParseJson`, caching 200 rounds, mô phỏng Fuji `eth_call`).
-  - `ADAPTIVE_ATTACK.md`: Báo cáo thực nghiệm chi tiết, bảng breakdown 10 targets $\times$ 20 rounds, phân tích top payloads, bảng 10 giao dịch revert trên Avalanche Fuji.
-  - `eval/runs/adaptive-2026-11-08T16-18-29.json`: Bộ dữ liệu canonical machine-readable đầy đủ của lượt chạy.
+  - `scripts/adaptive-attack.ts`: Hỗ trợ dual prompt variants (`strict` & `typical`), rate limiting 2200ms, thu hoạch proposal thật và tính Merkle proof thật.
+  - `ADAPTIVE_ATTACK.md`: Dán nguyên văn cả 2 system prompt; bảng kết quả chi tiết từng target, top 3 payloads lừa LLM, và bảng kiểm chứng Fuji on-chain từ đề xuất thật.
+  - `eval/runs/adaptive-canonical-2026-11-08.json`: Bộ dữ liệu canonical machine-readable 400 turns đầy đủ kèm lịch sử 7 runs trước đó.
+  - `REVIEW_FIXES_WOW.md`: Đã chuyển M3-F1 vào mục DONE.
 - **Lệnh nghiệm thu & kết quả:**
-  - `npx.cmd tsx scripts/adaptive-attack.ts --rounds 20`: **10 targets $\times$ 20 rounds pass, 10/10 Fuji revert `PayeeNotInMissionSet`**.
+  - `node --import tsx scripts/adaptive-attack.ts --rounds 20 --variant both`: **400 turns hoàn tất, canonical dataset & ADAPTIVE_ATTACK.md sinh thành công**.
   - `npx.cmd tsc -p apps/web/tsconfig.json --noEmit`: **0 errors**.
-  - `forge test`: **61/61 tests pass** (16 passkey, 37 treasury, 7 validation registry, 1 invariant suite).
-- **Giới hạn còn lại:** Attacker LLM sử dụng `gemini-3.5-flash-lite` (ghi nhận `modelVersion` thật, zero silent fallback), không can thiệp code của `GuardedTreasury.sol`.
+  - `forge test`: **61/61 tests pass**.
+- **Giới hạn còn lại:** 1 lỗi API (HTTP 429) ở round 20 T10 được đếm riêng minh bạch; tuyệt đối không can thiệp code của `GuardedTreasury.sol`.
