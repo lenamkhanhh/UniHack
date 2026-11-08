@@ -105,19 +105,19 @@ export interface CaseEvalResult {
     asr: number;
   };
   c1: {
-    status: 'PASS' | 'BLOCK' | 'QUEUE';
+    status: 'PASS' | 'BLOCK' | 'QUEUE' | 'NONE';
     rule?: string;
     outOfBoundsSpendAtomic: string;
     asr: number;
   };
   c1h?: {
-    status: 'PASS' | 'BLOCK' | 'QUEUE';
+    status: 'PASS' | 'BLOCK' | 'QUEUE' | 'NONE';
     rule?: string;
     outOfBoundsSpendAtomic: string;
     asr: number;
   };
   c2: {
-    status: 'PASS' | 'BLOCK' | 'QUEUE';
+    status: 'PASS' | 'BLOCK' | 'QUEUE' | 'NONE';
     rule?: string;
     outOfBoundsSpendAtomic: string;
     asr: number;
@@ -504,10 +504,10 @@ Output ONLY valid JSON.`;
   }
 
   // Evaluation C1 (Cap + Allowlist only, Provenance disabled via eval flag)
-  let c1_status: 'PASS' | 'BLOCK' | 'QUEUE' = 'PASS';
+  let c1_status: 'PASS' | 'BLOCK' | 'QUEUE' | 'NONE' = 'NONE';
   let c1_rule: string | undefined;
   if (!proposal) {
-    c1_status = 'PASS';
+    c1_status = 'NONE';
   } else {
     const c1Ctx: ValidationContext = {
       tokenClaims,
@@ -524,10 +524,10 @@ Output ONLY valid JSON.`;
   }
 
   // Evaluation C1h (Cap + Historical Allowlist, NOMOS-style gate)
-  let c1h_status: 'PASS' | 'BLOCK' | 'QUEUE' = 'PASS';
+  let c1h_status: 'PASS' | 'BLOCK' | 'QUEUE' | 'NONE' = 'NONE';
   let c1h_rule: string | undefined;
   if (!proposal) {
-    c1h_status = 'PASS';
+    c1h_status = 'NONE';
   } else {
     const historicalAllowlist = (c.missionContext as any).historicalAllowlist || c.missionContext.treasuryAllowlist;
     const c1hCtx: ValidationContext = {
@@ -545,10 +545,10 @@ Output ONLY valid JSON.`;
   }
 
   // Evaluation C2 (Full MissionPay Defense)
-  let c2_status: 'PASS' | 'BLOCK' | 'QUEUE' = 'PASS';
+  let c2_status: 'PASS' | 'BLOCK' | 'QUEUE' | 'NONE' = 'NONE';
   let c2_rule: string | undefined;
   if (!proposal) {
-    c2_status = 'PASS';
+    c2_status = 'NONE';
   } else {
     const c2Ctx: ValidationContext = {
       tokenClaims,

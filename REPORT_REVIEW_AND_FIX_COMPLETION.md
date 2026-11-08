@@ -350,7 +350,7 @@
 ## MAX-M1 — PayBench: Nhóm "Payee Đã Biết Nhưng Ngoài Mission" (Kịch Bản NOMOS arXiv:2610.11030)
 
 - **Trạng thái:** **PASS 100%**
-- **Mục tiêu:** Tái hiện thực nghiệm lỗ hổng "Known-Payee Diversion" từ bài báo bảo mật NOMOS (arXiv:2610.11030 §5.2); chứng minh thực nghiệm rằng cơ chế kiểm soát dựa trên lịch sử giao dịch (C1h: Cap + Historical Allowlist) hoàn toàn thất bại khi prompt injection chuyển hướng thanh toán sang một đối tác quen thuộc trong lịch sử tài khoản, trong khi MissionPay (C2: Merkle mission set + provenance taint) ngăn chặn thành công 100% (ASR = 0%).
+- **Mục tiêu:** Tái hiện thực nghiệm lỗ hổng "Known-Payee Diversion" từ bài báo bảo mật arXiv:2610.11030 (stated limitation: diversion to a payee already in account history, 8/288 pairs); chứng minh thực nghiệm rằng cơ chế kiểm soát dựa trên lịch sử giao dịch (C1h: Cap + Historical Allowlist) hoàn toàn thất bại khi prompt injection chuyển hướng thanh toán sang một đối tác quen thuộc trong lịch sử tài khoản, trong khi MissionPay (C2: Merkle mission set + provenance taint) ngăn chặn thành công 100% (ASR = 0%).
 - **Bộ Dữ Liệu Case Mới (`eval/cases/known_payee.jsonl`):**
   - 30 synthetic cases chuẩn hóa (`nomos-kp-01` đến `nomos-kp-30`).
   - Lịch sử tài khoản có 5 đối tác quen thuộc:
@@ -367,8 +367,10 @@
   - Hỗ trợ tham số `--cases <filename>` và `--out-prefix <prefix>` để xuất báo cáo riêng lẻ mà không ảnh hưởng tới kết quả canonical của vòng S2.
 - **Unit Test Nghiệm Thu (`apps/web/tests/attack-scoring.test.ts`):**
   - Suite `M1: NOMOS Known-Payee Diversion Scenario (arXiv:2610.11030)`:
-    - Test C1h: Giao dịch chuyển tiền sang vendor quen trong lịch sử được C1h chấp thuận $ightarrow$ Attack Success (ASR = 1, thất thoát 1.00 USDC).
-    - Test C2: Giao dịch bị MissionPay chặn đứng với đúng mã lỗi `PAYEE_NOT_IN_MISSION_SET` $ightarrow$ Attack Blocked (ASR = 0, thất thoát 0 USDC).
+    - Test C1h: Giao dịch chuyển tiền sang vendor quen trong lịch sử được C1h chấp thuận $
+ightarrow$ Attack Success (ASR = 1, thất thoát 1.00 USDC).
+    - Test C2: Giao dịch bị MissionPay chặn đứng với đúng mã lỗi `PAYEE_NOT_IN_MISSION_SET` $
+ightarrow$ Attack Blocked (ASR = 0, thất thoát 0 USDC).
   - Toàn bộ **9/9 unit tests passed** trong `apps/web/tests/attack-scoring.test.ts`.
   - Typecheck `npx tsc -p apps/web/tsconfig.json --noEmit`: **0 errors**.
 - **Kết Quả Đo Đạc Thực Nghiệm Multi-Model ($N = 30$):**

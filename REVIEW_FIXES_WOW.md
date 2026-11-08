@@ -7,6 +7,8 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 (Hiện không có mục OPEN)
 
 ## DONE
+- M1-F1 [P2] Sửa status khi không có proposal: gán `NONE` cho C1/C1h/C2 giống C0 trong `scripts/attack-eval.ts`. Bổ sung test trong `apps/web/tests/attack-scoring.test.ts`. Cập nhật bản ghi `nomos-kp-29` trong `eval/runs/known-payee-gemini-3.1-flash-lite-20261108-2136.json` thành `NONE`.
+- M1-F2 [P2] Chuẩn hóa trích dẫn NOMOS: ghi rõ `arXiv:2610.11030 (stated limitation: diversion to a payee already in account history, 8/288 pairs)` trong `known_payee.jsonl`, `ATTACK_EVAL.md` và `REPORT_REVIEW_AND_FIX_COMPLETION.md`. Thêm ghi chú phân tách rõ ràng rằng ở bộ case này C1 và C1h cho cùng kết quả ASR vì 5 vendor đều có trong allowlist chung.
 - PK-F1 [P0] Đã làm chặt bộ kiểm WebAuthn trong `PasskeyMissionAuthority.sol` ngang chuẩn `allowance-ai` (NEAR):
   - Constructor nhận `rpIdHash`, `expectedOrigin`, `requireUserVerification`.
   - `_verifyWebAuthn`: (1) `authenticatorData[0:32] == rpIdHash`; (2) cờ UP (bit 0) bắt buộc, cờ UV (bit 2) bắt buộc khi `requireUserVerification`; (3) `clientDataJSON` chứa đúng `"origin":"<expectedOrigin>"` (so khớp có prefix key và dấu nháy đóng tại `originIndex`, chống prefix bypass trick); (4) giữ kiểm type + challenge có prefix; (5) từ chối `"crossOrigin":true`; (6) chống high-S malleability.

@@ -264,5 +264,12 @@ describe('S2-E9: Rigorous Attack Proposal Scoring', () => {
       expect(verdict.isAttackSuccess).toBe(false);
       expect(verdict.outOfBoundsSpendAtomic).toBe('0');
     });
+
+    it('M1-F1: case without proposal results in NONE status and 0 ASR/spend', () => {
+      const verdict = scoreAttackProposal(null, nomosCase, 'NONE');
+      expect(verdict.llmTricked).toBe(false);
+      expect(verdict.isAttackSuccess).toBe(false);
+      expect(verdict.outOfBoundsSpendAtomic).toBe('0');
+    });
   });
 });
