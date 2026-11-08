@@ -68,3 +68,31 @@ Toàn bộ lifecycle được điều phối qua App API, ký challenge EIP-191 
 5. **Neo đỉnh chuỗi kiểm toán thật (Bước B7 & B8):**
    - Đỉnh băm chuỗi kiểm toán `0x7d46d87541ed812ada52afe7f1d3144d6a2b90b359a66162e54c8e41d675be2f` được đọc trực tiếp từ DB (`mission.auditHeadHash`) và neo bất biến lên smart contract `GuardedTreasury`.
    - Trang `/verify/fuji-live-mission-s1b` kiểm tra tính lại hash chain hoàn toàn khớp với on-chain.
+
+---
+
+## PHẦN C: BẰNG CHỨNG WOW (W2: ERC-8004 VALIDATION REGISTRY TRÊN FUJI)
+
+| Bước | Hành động | Trạng thái | Block | Transaction Hash | Chi tiết kiểm chứng |
+|---|---|---|---|---|---|
+| **C1** | Deploy ValidationRegistry | `SUCCESS` | `#60710685` | [`0x08ff8ae8...4ff26`](https://testnet.snowtrace.io/tx/0x08ff8ae876a23c2f7cf35ef2a326822a16fe83a394c4526ae1a52d714bd4ff26) | Deploy `ValidationRegistry.sol` tại [`0x4c5ccda2a630cd1cb706799deadcc8483d06697e`](https://testnet.snowtrace.io/address/0x4c5ccda2a630cd1cb706799deadcc8483d06697e), verified trên Snowtrace/Routescan & Sourcify |
+| **C2** | Owner Funds Validator Gas | `SUCCESS` | `#60710618` | [`0xc7301ee0...83202`](https://testnet.snowtrace.io/tx/0xc7301ee0cd4d0ba6d9d9ea58a6acf8a7a75cc31ccea68a292538fc2e9d283202) | Nạp 0.03 AVAX từ Owner sang ví Validator EOA `0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5` |
+| **C3** | Register Agent on IdentityRegistry | `SUCCESS` | `#60710648` | [`0xb5646950...507c8`](https://testnet.snowtrace.io/tx/0xb5646950b8a1541b5b18a3812b8c17b7c3abc88fb91b0857bd142dd9991507c8) | Đăng ký Agent MissionPay trên IdentityRegistry chính thức Fuji (`0x8004A818BFB912233c491871b3d84c89A494BD9e`), cấp Agent ID **#294** |
+| **C4** | Broadcast validationRequest | `SUCCESS` | `#60710837` | [`0x0374b23d...ca48e`](https://testnet.snowtrace.io/tx/0x0374b23d87c4b46e8121a776d0c6419aea2de2808651614403a79ca02b0ca48e) | Owner gửi yêu cầu xác thực độc lập cho mission s1b với `requestHash = 0x20f83cc1...d6110` |
+| **C5** | Broadcast validationResponse | `SUCCESS` | `#60710854` | [`0x62451c36...fe1564`](https://testnet.snowtrace.io/tx/0x62451c36b6488cf4423bd7427e560ac2e3de46144d7ba5c30d81c55df7fe1564) | Validator EOA độc lập đọc chain và gửi phản hồi: `score = 100`, tag = `"verified-full"`, `isComplete = true` |
+| **C6** | Verify UI Display & E2E | `SUCCESS` | — | Ảnh: `deck-shots/wow-w2-erc8004.png` | Playwright test `erc8004-validation.spec.ts` xác thực hiển thị trực tiếp điểm 100/100, tag verified-full, địa chỉ validator và link Snowtrace |
+
+### Lệnh kiểm chứng độc lập bằng `cast call`:
+```bash
+cast call --rpc-url https://api.avax-test.network/ext/bc/C/rpc \
+  0x4c5ccda2a630cd1cb706799deadcc8483d06697e \
+  "getValidationStatus(bytes32)(address,uint256,uint8,bytes32,string,uint256)" \
+  0x20f83cc1c500af5ad3bf7b8fc2d1c5827cf2acf10454c72391e4f3f5765d6110
+```
+Kết quả trả về:
+- `validatorAddress`: `0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5`
+- `agentId`: `294`
+- `response` (score): `100`
+- `tag`: `"verified-full"`
+- `lastUpdate`: `1794105823`
+

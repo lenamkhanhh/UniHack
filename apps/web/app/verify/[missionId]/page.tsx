@@ -12,6 +12,7 @@ export default function VerifyMissionProofPage() {
   const [originalEntries, setOriginalEntries] = useState<any[]>([]);
   const [currentEntries, setCurrentEntries] = useState<any[]>([]);
   const [anchorStatus, setAnchorStatus] = useState<any>(null);
+  const [ercValidation, setErcValidation] = useState<any>(null);
   const [isTampered, setIsTampered] = useState(false);
   const [tamperedIndex, setTamperedIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,6 +37,7 @@ export default function VerifyMissionProofPage() {
           setOriginalEntries(json.entries);
           setCurrentEntries(json.entries);
           setAnchorStatus(json.anchorStatus);
+          setErcValidation(json.erc8004Validation || null);
           setIsSeededDemo(Boolean(json.isSeededDemo));
         }
       } catch {
@@ -300,6 +302,70 @@ export default function VerifyMissionProofPage() {
             <div className="text-[11px] text-gray-500">
               {anchorStatus?.note || 'Không giả lập tx; chỉ xác nhận khi có receipt hợp lệ.'}
             </div>
+          </div>
+
+          {/* ERC-8004 Independent Validation Card (WOW-W2) */}
+          <div className="mt-4 pt-3 border-t border-gray-800/80 flex flex-col space-y-2 text-xs font-mono">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-gray-400">ERC-8004 Validation:</span>
+                <span
+                  data-testid="erc8004-status-badge"
+                  className={`px-2.5 py-0.5 rounded border font-bold ${
+                    ercValidation?.isComplete
+                      ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/40'
+                      : 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50'
+                  }`}
+                >
+                  {ercValidation?.isComplete
+                    ? `Điểm xác thực: ${ercValidation.score}/100`
+                    : 'Chưa được validate'}
+                </span>
+                {ercValidation?.isComplete && (
+                  <span
+                    data-testid="erc8004-tag-badge"
+                    className="bg-cyan-950 text-cyan-300 border border-cyan-700 px-2 py-0.5 rounded text-[10px] font-bold"
+                  >
+                    {ercValidation.tag || 'verified-full'}
+                  </span>
+                )}
+              </div>
+
+              {ercValidation?.snowtraceUrl && (
+                <a
+                  href={ercValidation.snowtraceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="erc8004-tx-link"
+                  className="text-cyan-400 hover:text-cyan-300 underline inline-flex items-center space-x-1 text-[11px]"
+                >
+                  <span>Xem tx phản hồi trên Snowtrace ↗</span>
+                </a>
+              )}
+            </div>
+
+            {ercValidation?.isComplete && (
+              <div className="bg-[#0b0e14] border border-gray-800 p-3 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] mt-2">
+                <div>
+                  <span className="text-gray-500 block text-[10px]">Independent Validator EOA:</span>
+                  <span
+                    data-testid="erc8004-validator-address"
+                    className="font-mono text-emerald-300 break-all select-all font-bold"
+                  >
+                    {ercValidation.validatorAddress}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500 block text-[10px]">ERC-8004 Agent ID:</span>
+                  <span
+                    data-testid="erc8004-agent-id"
+                    className="font-mono text-cyan-300 break-all select-all font-bold"
+                  >
+                    #{ercValidation.agentId || '294'}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Error messages if tampered */}

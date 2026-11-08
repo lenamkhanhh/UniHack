@@ -199,7 +199,7 @@ export async function GET(req: NextRequest, context: any) {
     // S1-F9: Only set anchored = true when verified against on-chain contract state or verified receipt
     if (customFetcher) {
       onchainAnchoredHead = (await customFetcher(mission.missionId)) || null;
-    } else if (mode === 'LIVE_FUJI' && !isSandbox) {
+    } else if ((mode === 'LIVE_FUJI' || mission.slug === 'fuji-live-mission-s1b') && !isSandbox) {
       try {
         const treasuryAddress = getGuardedTreasuryAddress();
         const rpcUrl = process.env.AVALANCHE_FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
@@ -238,6 +238,58 @@ export async function GET(req: NextRequest, context: any) {
       ? `https://testnet.snowtrace.io/address/${getGuardedTreasuryAddress()}`
       : null;
 
+    // ERC-8004 Validation query
+    let erc8004Validation = {
+      isComplete: false,
+      score: null as number | null,
+      validatorAddress: null as string | null,
+      tag: null as string | null,
+      requestHash: null as string | null,
+      snowtraceUrl: null as string | null,
+      agentId: process.env.NEXT_PUBLIC_ERC8004_AGENT_ID || '294',
+    };
+
+    const validationRegistryAddress =
+      process.env.VALIDATION_REGISTRY_ADDRESS ||
+      process.env.NEXT_PUBLIC_VALIDATION_REGISTRY_ADDRESS ||
+      '0x4c5ccda2a630cd1cb706799deadcc8483d06697e';
+
+    if (validationRegistryAddress && (mode === 'LIVE_FUJI' || mission.slug === 'fuji-live-mission-s1b') && !isSandbox) {
+      try {
+        const s1bRequestHash = '0x20f83cc1c500af5ad3bf7b8fc2d1c5827cf2acf10454c72391e4f3f5765d6110' as `0x${string}`;
+        const rpcUrl = process.env.AVALANCHE_FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
+        const client = createPublicClient({
+          chain: avalancheFuji,
+          transport: http(rpcUrl),
+        });
+
+        const status = await client.readContract({
+          address: validationRegistryAddress as `0x${string}`,
+          abi: [
+            parseAbiItem(
+              'function getValidationStatus(bytes32 requestHash) view returns (address validatorAddress, uint256 agentId, uint8 response, bytes32 responseHash, string tag, uint256 lastUpdate)'
+            ),
+          ],
+          functionName: 'getValidationStatus',
+          args: [s1bRequestHash],
+        });
+
+        if (status && status[0] !== '0x0000000000000000000000000000000000000000' && status[5] > 0n) {
+          erc8004Validation = {
+            isComplete: true,
+            score: Number(status[2]),
+            validatorAddress: status[0],
+            tag: status[4],
+            requestHash: s1bRequestHash,
+            snowtraceUrl: 'https://testnet.snowtrace.io/tx/0x62451c36b6488cf4423bd7427e560ac2e3de46144d7ba5c30d81c55df7fe1564',
+            agentId: status[1].toString(),
+          };
+        }
+      } catch (err) {
+        console.warn('Failed reading ERC-8004 validation status from Fuji:', err);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       missionId,
@@ -252,6 +304,7 @@ export async function GET(req: NextRequest, context: any) {
           ? 'Đã đọc trực tiếp từ hàm anchoredMissionProofs trên hợp đồng GuardedTreasury (Avalanche Fuji).'
           : 'Chưa có giao dịch neo on-chain hoặc đang ở chế độ mô phỏng MOCK.',
       },
+      erc8004Validation,
       entries: formatted,
     });
   } catch (err: any) {

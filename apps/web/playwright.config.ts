@@ -45,7 +45,10 @@ export default defineConfig({
     : {
         command: `npm run dev -- -p ${TEST_PORT}`,
         url: `${TEST_BASE_URL}/demo`,
-        reuseExistingServer: true,
+        reuseExistingServer: false,
         timeout: 120000,
+        env: {
+          PAYMENT_MODE: 'LIVE_FUJI',
+        },
       },
 });

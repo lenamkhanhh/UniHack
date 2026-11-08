@@ -122,3 +122,37 @@
 - **Tx Hash:** Không áp dụng (W1 chạy hoàn toàn trong môi trường fuzzing và symbolic engine local).
 - **Giới hạn còn lại:** Bounded proof length ($\le 2$ trong symbolic), giả định token chuẩn ERC-20/EIP-3009 không có fee-on-transfer.
 
+---
+
+## WOW-W2 — ERC-8004 Validation Registry trên Avalanche Fuji
+
+- **Trạng thái:** **PASS 100%**
+- **File tạo/sửa:**
+  - `contracts/src/erc8004/ValidationRegistry.sol` (port từ `ava-labs/8004-boilerplate` MIT, chuẩn ERC-721 auth)
+  - `contracts/src/erc8004/IValidationRegistry.sol` (interface chuẩn ERC-8004 ValidationRegistry)
+  - `contracts/test/ValidationRegistry.t.sol` (7 unit tests cho ValidationRegistry)
+  - `contracts/script/DeployValidationRegistry.s.sol` (Foundry deploy script)
+  - `docs/erc8004/missionpay-agent.json` (ERC-8004 metadata cho MissionPay agent)
+  - `apps/web/lib/validation-bundle.ts` (tính deterministic validation requestHash, on-chain bundle verification)
+  - `apps/web/tests/validation-bundle.test.ts` (6 unit tests, test vectors)
+  - `apps/web/app/verify/[missionId]/page.tsx` (thẻ ERC-8004 Validation hiển thị live score 100, tag, validator, agent ID)
+  - `apps/web/app/api/verify/[missionId]/route.ts` (query trực tiếp `getValidationStatus` trên Fuji)
+  - `apps/web/e2e/erc8004-validation.spec.ts` (Playwright E2E test cho thẻ ERC-8004 trên /verify)
+  - `evidence/validation/s1b.json` & `s1b.response.json` (bằng chứng request & response bundle)
+  - `artifacts/submission-s1/deck-shots/wow-w2-erc8004.png` (ảnh 1920×1080 chụp thẻ ERC-8004 live)
+  - `artifacts/submission-s1/FUJI_EVIDENCE.md` (Phần C: bảng giao dịch và kết quả cast call)
+  - `scripts/setup-validator.ts`, `scripts/erc8004-register.ts`, `scripts/validator-run.ts`, `scripts/deploy-validation-registry.ts`
+- **Lệnh đã chạy & Output test:**
+  - `forge test --match-path "test/ValidationRegistry.t.sol" -vv` (**7/7 passed**)
+  - `npx.cmd vitest run tests/validation-bundle.test.ts` (**6/6 passed**)
+  - `npx.cmd tsc --noEmit` (**0 errors**)
+  - `npx.cmd playwright test e2e/erc8004-validation.spec.ts` (**1/1 passed**)
+- **Tx Hash Snowtrace (Avalanche Fuji):**
+  - **ValidationRegistry contract:** [`0x4c5ccda2a630cd1cb706799deadcc8483d06697e`](https://testnet.snowtrace.io/address/0x4c5ccda2a630cd1cb706799deadcc8483d06697e) (Tx: [`0x08ff8ae8...`](https://testnet.snowtrace.io/tx/0x08ff8ae876a23c2f7cf35ef2a326822a16fe83a394c4526ae1a52d714bd4ff26), verified trên Snowtrace/Routescan & Sourcify)
+  - **Fund Validator Gas (0.03 AVAX):** Tx [`0xc7301ee0...`](https://testnet.snowtrace.io/tx/0xc7301ee0cd4d0ba6d9d9ea58a6acf8a7a75cc31ccea68a292538fc2e9d283202)
+  - **ERC-8004 Agent ID #294:** Tx [`0xb5646950...`](https://testnet.snowtrace.io/tx/0xb5646950b8a1541b5b18a3812b8c17b7c3abc88fb91b0857bd142dd9991507c8) trên IdentityRegistry `0x8004A818BFB912233c491871b3d84c89A494BD9e`
+  - **validationRequest:** Tx [`0x0374b23d...`](https://testnet.snowtrace.io/tx/0x0374b23d87c4b46e8121a776d0c6419aea2de2808651614403a79ca02b0ca48e)
+  - **validationResponse:** Tx [`0x62451c36...`](https://testnet.snowtrace.io/tx/0x62451c36b6488cf4423bd7427e560ac2e3de46144d7ba5c30d81c55df7fe1564) (Score 100/100, tag `"verified-full"`, validator `0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5`)
+- **Giới hạn còn lại:** Không có. Bundle hash và on-chain validation đã được xác nhận khớp 100%.
+
+
