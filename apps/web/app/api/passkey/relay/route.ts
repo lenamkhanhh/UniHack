@@ -62,17 +62,48 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const relayerKey = (process.env.DEPLOYER_PRIVATE_KEY || process.env.OWNER_PRIVATE_KEY) as Hex | undefined;
+    // W4-F1: Relayer privilege separation - strictly read ONLY RELAYER_PRIVATE_KEY
+    const relayerKey = process.env.RELAYER_PRIVATE_KEY as Hex | undefined;
     if (!relayerKey) {
       return NextResponse.json(
-        { success: false, error: 'Relayer private key not configured' },
-        { status: 500 }
+        { success: false, error: 'Relayer service not configured' },
+        { status: 503 }
       );
     }
 
     const relayerAccount = privateKeyToAccount(
       relayerKey.startsWith('0x') ? relayerKey : (`0x${relayerKey}` as Hex)
     );
+
+    const ownerAddress = (process.env.OWNER_ADDRESS || '0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c').toLowerCase();
+    const mainTreasuryAddress = (process.env.GUARDED_TREASURY_ADDRESS || '0x20451c1e2dCD83F166B4f22868BAdECb5868d545').toLowerCase();
+
+    // Refuse if relayer address == OWNER_ADDRESS
+    if (relayerAccount.address.toLowerCase() === ownerAddress) {
+      console.error(`[SECURITY ALERT] Relayer address ${relayerAccount.address} matches OWNER_ADDRESS. Execution refused.`);
+      return NextResponse.json(
+        { success: false, error: 'Security violation: Relayer cannot be owner address' },
+        { status: 500 }
+      );
+    }
+
+    // Refuse if relayer address == owner() of main treasury
+    try {
+      const treasuryOwner = await publicClient.readContract({
+        address: mainTreasuryAddress as `0x${string}`,
+        abi: parseAbi(['function owner() view returns (address)']),
+        functionName: 'owner',
+      });
+      if (relayerAccount.address.toLowerCase() === treasuryOwner.toLowerCase()) {
+        console.error(`[SECURITY ALERT] Relayer address ${relayerAccount.address} matches treasury owner(). Execution refused.`);
+        return NextResponse.json(
+          { success: false, error: 'Security violation: Relayer cannot be treasury owner' },
+          { status: 500 }
+        );
+      }
+    } catch {
+      // In offline/test environments, ownerAddress check suffices
+    }
 
     const walletClient = createWalletClient({
       account: relayerAccount,

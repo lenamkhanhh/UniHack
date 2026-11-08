@@ -63,8 +63,8 @@ export function buildWebAuthnAssertion(privKey: crypto.KeyObject, challengeHex: 
 
   const clientDataJSON = `{"type":"webauthn.get","challenge":"${challengeB64}","origin":"http://localhost:3100"}`;
 
-  const typeIndex = clientDataJSON.indexOf('"webauthn.get"');
-  const challengeIndex = clientDataJSON.indexOf(challengeB64);
+  const typeIndex = clientDataJSON.indexOf('"type":"webauthn.get"');
+  const challengeIndex = clientDataJSON.indexOf(`"challenge":"${challengeB64}"`);
 
   const clientDataHash = crypto.createHash('sha256').update(clientDataJSON).digest();
   const message = Buffer.concat([authenticatorData, clientDataHash]);

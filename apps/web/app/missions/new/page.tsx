@@ -101,8 +101,8 @@ export default function NewMissionPasskeyPage() {
           authPayload = {
             authenticatorData: '0x' + Array.from(authData).map(b => b.toString(16).padStart(2, '0')).join(''),
             clientDataJSON,
-            challengeIndex: clientDataJSON.indexOf('challenge'),
-            typeIndex: clientDataJSON.indexOf('webauthn.get'),
+            challengeIndex: clientDataJSON.indexOf('"challenge":"'),
+            typeIndex: clientDataJSON.indexOf('"type":"webauthn.get"'),
             r: '0x01', // normalized in real parser
             s: '0x01',
           };
@@ -114,8 +114,8 @@ export default function NewMissionPasskeyPage() {
         authPayload = {
           authenticatorData: '0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f200100000001',
           clientDataJSON: `{"type":"webauthn.get","challenge":"mIVmT8_EUzmvEYP6N2j24tv7UsdlRLtvef4Ug3kPxFUS","origin":"http://localhost:3100"}`,
-          challengeIndex: 36,
-          typeIndex: 10,
+          challengeIndex: 23,
+          typeIndex: 1,
           r: '0x8849b2ba45e0544521dd98ecbf4dd49d9a19c50e20601d368dcf0656a5cfa797',
           s: '0x2bf99c30f40d7ba9180ae283995f324ec94b9f0d7e671c6dcabcf8b76ce81451',
         };

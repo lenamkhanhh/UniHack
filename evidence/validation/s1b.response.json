@@ -2,7 +2,7 @@
   "requestHash": "0x20f83cc1c500af5ad3bf7b8fc2d1c5827cf2acf10454c72391e4f3f5765d6110",
   "missionId": "0xeb8f4a47323136c557439a5f0f90b73222f28b8725c0e4e480256621c10682f4",
   "missionSlug": "fuji-live-mission-s1b",
-  "evaluatedAt": "2026-11-08T02:43:41.508Z",
+  "evaluatedAt": "2026-11-08T03:40:52.299Z",
   "validatorAddress": "0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5",
   "agentId": "294",
   "score": 100,
@@ -12,14 +12,15 @@
     "rootMatchesOnChain": true,
     "payeesGenerateRoot": true,
     "executedPayeesValid": true,
-    "totalSpendWithinCap": true
+    "totalSpendWithinCap": true,
+    "hasExecutions": true
   },
   "details": {
     "onChainHead": "0x7d46d87541ed812ada52afe7f1d3144d6a2b90b359a66162e54c8e41d675be2f",
     "onChainRoot": "0xa7409058568815d08a7ad3c7d4fd44cf1dec90c620cb31e55ad24c654f7ba34f",
     "computedRoot": "0xa7409058568815d08a7ad3c7d4fd44cf1dec90c620cb31e55ad24c654f7ba34f",
-    "executedCount": 0,
-    "totalExecutedAmount": "0",
+    "executedCount": 1,
+    "totalExecutedAmount": "200000",
     "missionCap": "2000000",
     "failedChecks": []
   }

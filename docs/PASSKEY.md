@@ -44,11 +44,13 @@ sequenceDiagram
 
 ### 3.1. Tính Độc Lập của Relayer
 Relayer được sử dụng chỉ để submit giao dịch on-chain nhằm mang lại trải nghiệm gasless cho người dùng. 
+- **Phân tách đặc quyền nghiêm ngặt (W4-F1):** Backend tuyệt đối không nắm giữ hay truy cập `OWNER_PRIVATE_KEY` hoặc `DEPLOYER_PRIVATE_KEY`. Relay route (`/api/passkey/relay`) chỉ đọc `RELAYER_PRIVATE_KEY` riêng biệt (được cấp một lượng gas nhỏ ~0.02 AVAX).
+- **Từ chối nếu trùng Owner:** Nếu địa chỉ ví Relayer trùng khớp với `OWNER_ADDRESS` hoặc `owner()` của GuardedTreasury, hệ thống sẽ lập tức từ chối thực thi (HTTP 500) và ghi log cảnh báo bảo mật.
 - Ngay cả khi Relayer bị chiếm quyền (compromised), kẻ tấn công **không thể tự ý tạo hay sửa đổi mission**.
 - Hàm `approveMission` yêu cầu chữ ký P-256 tương ứng với tọa độ public key `(passkeyX, passkeyY)` đã đăng ký cố định trên smart contract.
 - Nonce tuần tự tăng dần (`nextNonce`) bảo vệ 100% chống lại các cuộc tấn công replay giao dịch cũ.
 
-### 3.2. Chống Tấn Công Giả Mạo Challenge
+### 3.2. Chống Tấn Công Giả Mạo Challenge & Prefix Matching (W4-F3)
 Challenge được hash trực tiếp trên contract bằng công thức:
 ```solidity
 bytes32 challenge = keccak256(
@@ -66,10 +68,10 @@ bytes32 challenge = keccak256(
     )
 );
 ```
-Chữ ký chỉ hợp lệ khi clientDataJSON chứa chuỗi base64url của đúng challenge này và nằm ở đúng vị trí `challengeIndex`.
-
-### 3.3. Yêu Cầu Hiện Diện Người Dùng (User Presence)
-Cờ `UP` (User Present - bit 0 của byte thứ 33 trong `authenticatorData`) bắt buộc phải bật. Nếu phần cứng không ghi nhận sự can thiệp vật lý của con người, giao dịch sẽ bị revert với lỗi `UserPresenceRequired`.
+Chữ ký chỉ hợp lệ khi `clientDataJSON` khớp cả chuỗi prefix và field name:
+- `"type":"webauthn.get"` tại vị trí `typeIndex`.
+- `"challenge":"<b64>"` tại vị trí `challengeIndex`.
+Nếu chuỗi challenge xuất hiện trong một field khác (ví dụ `"other_field":"<b64>"`), hợp đồng sẽ revert với lỗi `ChallengeMismatch`.
 
 ---
 
@@ -92,5 +94,7 @@ Giao dịch thực tế đã broadcast và verify thành công trên mạng Aval
 
 ## 5. Giới Hạn & Phạm Vi Ứng Dụng
 
-1. **Đồng bộ Passkey đám mây (Cloud Sync):** Khi người dùng đồng bộ Passkey qua iCloud Keychain hoặc Google Password Manager, rủi ro chuyển dịch từ việc mất private key sang việc bị xâm phạm tài khoản dịch vụ đám mây của người dùng.
-2. **Instance Thử Nghiệm Tách Biệt:** Hệ thống Passkey Mission Authority trên Fuji được triển khai trên instance treasury demo riêng biệt để phục vụ đánh giá và trình diễn công nghệ native RIP-7212 mà không ảnh hưởng tới treasury vận hành cốt lõi của giao thức.
+1. **Khóa Phần Mềm trong RAM (W4-F2):** Script demo `scripts/passkey-fuji-demo.ts` tạo cặp khóa P-256 phần mềm trong RAM để tự động hóa kiểm thử live. Để deploy authority liên kết với khóa sinh trắc học phần cứng thực tế của Owner, sử dụng `scripts/passkey-deploy-for-owner.ts` cùng tọa độ `(qx, qy)` xuất từ `/missions/new`.
+2. **Phiên bản Hợp đồng trên Fuji (W4-F3):** Instance trên Fuji (`0x77235386fe59A934645C5F273e411b0Bea8cCc9C`) là bản triển khai ban đầu (commit `5650e6d`). Source code mới trong `contracts/src/PasskeyMissionAuthority.sol` đã được tăng cường với tiền tố `"type":"webauthn.get"` và `"challenge":"<b64>"`.
+3. **Đồng bộ Passkey đám mây (Cloud Sync):** Khi người dùng đồng bộ Passkey qua iCloud Keychain hoặc Google Password Manager, rủi ro chuyển dịch từ việc mất private key sang việc bị xâm phạm tài khoản dịch vụ đám mây của người dùng.
+4. **Instance Thử Nghiệm Tách Biệt:** Hệ thống Passkey Mission Authority trên Fuji được triển khai trên instance treasury demo riêng biệt để phục vụ đánh giá và trình diễn công nghệ native RIP-7212 mà không ảnh hưởng tới treasury vận hành cốt lõi của giao thức.

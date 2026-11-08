@@ -151,8 +151,8 @@ contract PasskeyMissionAuthorityTest is Test {
             )
         );
 
-        uint256 typeIndex = 8; // start of "webauthn.get" in clientDataJSON
-        uint256 challengeIndex = 36; // start of challenge in clientDataJSON
+        uint256 typeIndex = 1; // start of '"type":"webauthn.get"' in clientDataJSON
+        uint256 challengeIndex = 23; // start of '"challenge":"<b64>"' in clientDataJSON
 
         bytes32 clientDataHash = sha256(bytes(clientDataJSON));
         bytes32 messageHash = sha256(abi.encodePacked(authenticatorData, clientDataHash));
@@ -244,11 +244,69 @@ contract PasskeyMissionAuthorityTest is Test {
         authority.approveMission(missionId, agent, payeeRoot, cap, duration, toolCap, nonce, auth);
     }
 
+    function _buildWrongFieldWebAuthnAuth(
+        bytes32 challenge,
+        uint256 privKey
+    ) internal returns (PasskeyMissionAuthority.WebAuthnAuth memory) {
+        bytes memory authenticatorData = new bytes(37);
+        for (uint256 i = 0; i < 32; i++) {
+            authenticatorData[i] = bytes1(uint8(i + 1));
+        }
+        authenticatorData[32] = bytes1(uint8(0x01)); // UP flag
+        authenticatorData[36] = 0x01; // signCount = 1
+
+        bytes memory challengeB64 = authority.encodeBase64Url32(challenge);
+        string memory clientDataJSON = string(
+            abi.encodePacked(
+                '{"type":"webauthn.get","other_field":"',
+                string(challengeB64),
+                '","origin":"http://localhost:3100"}'
+            )
+        );
+
+        bytes32 clientDataHash = sha256(bytes(clientDataJSON));
+        bytes32 messageHash = sha256(abi.encodePacked(authenticatorData, clientDataHash));
+        (bytes32 r, bytes32 s) = vm_signP256(privKey, messageHash);
+
+        return PasskeyMissionAuthority.WebAuthnAuth({
+            authenticatorData: authenticatorData,
+            clientDataJSON: clientDataJSON,
+            challengeIndex: 23,
+            typeIndex: 1,
+            r: uint256(r),
+            s: uint256(s)
+        });
+    }
+
     function test_approveMission_wrongChallenge_reverts() public {
         uint256 nonce = authority.nextNonce();
         bytes32 corruptedChallenge = keccak256("corrupted_challenge");
 
         PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWebAuthnAuth(corruptedChallenge, passkeyPrivKey, 0x01);
+
+        vm_prank(relayer);
+        vm_expectRevertString("ChallengeMismatch");
+        authority.approveMission(missionId, agent, payeeRoot, cap, duration, toolCap, nonce, auth);
+    }
+
+    function test_approveMission_challengeInWrongField_reverts() public {
+        uint256 nonce = authority.nextNonce();
+        bytes32 challenge = keccak256(
+            abi.encode(
+                "MissionPay-passkey-v1",
+                block.chainid,
+                address(authority),
+                missionId,
+                agent,
+                payeeRoot,
+                cap,
+                duration,
+                toolCap,
+                nonce
+            )
+        );
+
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWrongFieldWebAuthnAuth(challenge, passkeyPrivKey);
 
         vm_prank(relayer);
         vm_expectRevertString("ChallengeMismatch");

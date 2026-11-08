@@ -30,6 +30,7 @@ export interface ValidationCheckResult {
     payeesGenerateRoot: boolean;
     executedPayeesValid: boolean;
     totalSpendWithinCap: boolean;
+    hasExecutions: boolean;
   };
   tag: string;
   details: {
@@ -75,7 +76,7 @@ const TREASURY_READ_ABI = [
 ] as const;
 
 const EXECUTED_EVENT_ABI = parseAbiItem(
-  'event Executed(uint256 indexed proposalId, bytes32 indexed missionId, address indexed to, uint256 amount)'
+  'event Executed(uint256 indexed id, address indexed to, uint256 amount, bytes32 missionId)'
 );
 
 /**
@@ -114,8 +115,8 @@ export function computeValidationRequestHash(bundle: ValidationBundle): `0x${str
 export async function validateBundleOnChain(
   publicClient: PublicClient,
   bundle: ValidationBundle,
-  fromBlock: bigint = 60689760n,
-  toBlock: bigint = 60689770n
+  fromBlock?: bigint,
+  toBlock?: bigint
 ): Promise<ValidationCheckResult> {
   const treasuryAddress = getAddress(bundle.treasury);
 
@@ -159,16 +160,26 @@ export async function validateBundleOnChain(
   const treeResult = computePayeeMerkleTree(bundle.payees);
   const payeesGenerateRoot = treeResult.root.toLowerCase() === bundle.payeeRoot.toLowerCase();
 
-  // 4. Query Executed events for this mission within a valid block range
-  const executedLogs = await publicClient.getLogs({
-    address: treasuryAddress,
-    event: EXECUTED_EVENT_ABI,
-    args: {
-      missionId: bundle.missionId,
-    },
-    fromBlock,
-    toBlock,
-  });
+  // 4. Query Executed events for this mission in chunks <= 90 blocks (Avalanche Fuji public RPC limit: 100 blocks)
+  const targetStartBlock = fromBlock ?? 60689760n;
+  const targetEndBlock = toBlock ?? (fromBlock ? targetStartBlock + 90n : 60689770n);
+  const CHUNK_SIZE = 90n;
+
+  const executedLogs: any[] = [];
+  for (let b = targetStartBlock; b <= targetEndBlock; b += CHUNK_SIZE) {
+    const end = b + CHUNK_SIZE - 1n > targetEndBlock ? targetEndBlock : b + CHUNK_SIZE - 1n;
+    const logs = await publicClient.getLogs({
+      address: treasuryAddress,
+      event: EXECUTED_EVENT_ABI,
+      fromBlock: b,
+      toBlock: end,
+    });
+    for (const log of logs) {
+      if ((log.args as any).missionId?.toLowerCase() === bundle.missionId.toLowerCase()) {
+        executedLogs.push(log);
+      }
+    }
+  }
 
   const normalizedBundlePayees = new Set(bundle.payees.map((p) => p.toLowerCase()));
   let totalExecutedAmount = 0n;
@@ -185,6 +196,8 @@ export async function validateBundleOnChain(
 
   // Check (d): total spend <= cap
   const totalSpendWithinCap = totalExecutedAmount <= missionCap;
+  // Check (e): must have at least 1 execution for verified-full
+  const hasExecutions = executedLogs.length > 0;
 
   const checks = {
     headMatchesOnChain,
@@ -192,12 +205,14 @@ export async function validateBundleOnChain(
     payeesGenerateRoot,
     executedPayeesValid,
     totalSpendWithinCap,
+    hasExecutions,
   };
 
   const failedChecks: string[] = [];
   if (!headMatchesOnChain) failedChecks.push('HEAD_MISMATCH');
   if (!rootMatchesOnChain) failedChecks.push('ROOT_MISMATCH');
   if (!payeesGenerateRoot) failedChecks.push('PAYEE_TREE_MISMATCH');
+  if (!hasExecutions) failedChecks.push('NO_EXECUTIONS_FOUND');
   if (!executedPayeesValid) failedChecks.push('EXECUTED_PAYEE_UNAUTHORIZED');
   if (!totalSpendWithinCap) failedChecks.push('SPEND_EXCEEDS_CAP');
 

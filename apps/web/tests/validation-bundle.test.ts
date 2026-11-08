@@ -50,8 +50,10 @@ describe('ERC-8004 Validation Bundle Specification', () => {
     const logs = overrides.logs ?? [
       {
         args: {
+          id: 1n,
           to: '0x1111111111111111111111111111111111111111',
           amount: 200000n,
+          missionId: baseBundle.missionId,
         },
       },
     ];
@@ -65,7 +67,7 @@ describe('ERC-8004 Validation Bundle Specification', () => {
         }
         throw new Error(`Unexpected function call: ${functionName}`);
       }),
-      getBlockNumber: vi.fn().mockResolvedValue(60700000n),
+      getBlockNumber: vi.fn().mockResolvedValue(60685230n),
       getLogs: vi.fn().mockResolvedValue(logs),
     } as any;
   }
@@ -119,8 +121,10 @@ describe('ERC-8004 Validation Bundle Specification', () => {
       logs: [
         {
           args: {
+            id: 1n,
             to: '0x9999999999999999999999999999999999999999',
             amount: 100000n,
+            missionId: baseBundle.missionId,
           },
         },
       ],
@@ -140,8 +144,10 @@ describe('ERC-8004 Validation Bundle Specification', () => {
       logs: [
         {
           args: {
+            id: 1n,
             to: '0x1111111111111111111111111111111111111111',
             amount: 200000n, // Spent: 0.2 USDC
+            missionId: baseBundle.missionId,
           },
         },
       ],
@@ -153,5 +159,52 @@ describe('ERC-8004 Validation Bundle Specification', () => {
     expect(result.score).toBe(0);
     expect(result.checks.totalSpendWithinCap).toBe(false);
     expect(result.details.failedChecks).toContain('SPEND_EXCEEDS_CAP');
+  });
+
+  it('W2-F1: verifies real transaction 0x769484bb...6c9a fixture log produces executedCount = 1 and total = 200000', async () => {
+    // Real Fuji tx 0x769484bb45b13a42917972dabb206697ec4f21acd117394017a62e0046cd6c9a (block 60689765)
+    const realFujiLog = {
+      address: baseBundle.treasury,
+      blockNumber: 60689765n,
+      transactionHash: '0x769484bb45b13a42917972dabb206697ec4f21acd117394017a62e0046cd6c9a',
+      args: {
+        id: 1n,
+        to: '0x1111111111111111111111111111111111111111',
+        amount: 200000n,
+        missionId: baseBundle.missionId,
+      },
+    };
+
+    const mockClient = createMockPublicClient({ logs: [realFujiLog] });
+    const result = await validateBundleOnChain(mockClient, baseBundle);
+
+    expect(result.valid).toBe(true);
+    expect(result.score).toBe(100);
+    expect(result.tag).toBe('verified-full');
+    expect(result.details.executedCount).toBe(1);
+    expect(result.details.totalExecutedAmount).toBe('200000');
+
+    // Tampered bundle: removing 0x1111... from payees causes EXECUTED_PAYEE_UNAUTHORIZED and score 0
+    const tamperedBundle: ValidationBundle = {
+      ...baseBundle,
+      payees: ['0x2222222222222222222222222222222222222222'],
+    };
+    const tamperedResult = await validateBundleOnChain(mockClient, tamperedBundle);
+    expect(tamperedResult.valid).toBe(false);
+    expect(tamperedResult.score).toBe(0);
+    expect(tamperedResult.checks.executedPayeesValid).toBe(false);
+    expect(tamperedResult.details.failedChecks).toContain('EXECUTED_PAYEE_UNAUTHORIZED');
+  });
+
+  it('W2-F1: marks no executions found when executedCount = 0 and denies verified-full', async () => {
+    const mockClient = createMockPublicClient({ logs: [] });
+    const result = await validateBundleOnChain(mockClient, baseBundle);
+
+    expect(result.valid).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.checks.hasExecutions).toBe(false);
+    expect(result.details.executedCount).toBe(0);
+    expect(result.details.failedChecks).toContain('NO_EXECUTIONS_FOUND');
+    expect(result.tag).not.toBe('verified-full');
   });
 });

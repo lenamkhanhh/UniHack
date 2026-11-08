@@ -200,36 +200,25 @@ async function main() {
   fs.writeFileSync(responsePath, responseJsonString, 'utf8');
   console.log(`[Validator Run] Saved response evidence to ${responsePath}`);
 
-  // 4. Submit validationResponse if not already complete
-  const isComplete = await publicClient.readContract({
-    address: registryAddress,
-    abi: VALIDATION_REGISTRY_ABI,
-    functionName: 'isValidationComplete',
-    args: [requestHash],
+  // 4. Submit validationResponse (contract permits update by authorized validator)
+  console.log('[Validator Run] Submitting/updating validationResponse from Validator...');
+  const validatorWalletClient = createWalletClient({
+    account: validatorAccount,
+    chain: avalancheFuji,
+    transport: http(FUJI_RPC_URL),
   });
 
-  if (!isComplete) {
-    console.log('[Validator Run] Submitting validationResponse from Validator...');
-    const validatorWalletClient = createWalletClient({
-      account: validatorAccount,
-      chain: avalancheFuji,
-      transport: http(FUJI_RPC_URL),
-    });
+  const responseURI = `evidence/validation/${targetMission}.response.json`;
+  const respTx = await validatorWalletClient.writeContract({
+    address: registryAddress,
+    abi: VALIDATION_REGISTRY_ABI,
+    functionName: 'validationResponse',
+    args: [requestHash, validationResult.score, responseURI, responseHash, validationResult.tag],
+  });
 
-    const responseURI = `evidence/validation/${targetMission}.response.json`;
-    const respTx = await validatorWalletClient.writeContract({
-      address: registryAddress,
-      abi: VALIDATION_REGISTRY_ABI,
-      functionName: 'validationResponse',
-      args: [requestHash, validationResult.score, responseURI, responseHash, validationResult.tag],
-    });
-
-    console.log(`[Validator Run] validationResponse broadcast tx: ${respTx}`);
-    const respReceipt = await publicClient.waitForTransactionReceipt({ hash: respTx });
-    console.log(`[Validator Run] validationResponse confirmed in block ${respReceipt.blockNumber}, status: ${respReceipt.status}`);
-  } else {
-    console.log(`[Validator Run] validationResponse already recorded and complete on-chain.`);
-  }
+  console.log(`[Validator Run] validationResponse broadcast tx: ${respTx}`);
+  const respReceipt = await publicClient.waitForTransactionReceipt({ hash: respTx });
+  console.log(`[Validator Run] validationResponse confirmed in block ${respReceipt.blockNumber}, status: ${respReceipt.status}`);
 }
 
 main().catch((err) => {

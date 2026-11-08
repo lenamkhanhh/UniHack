@@ -36,7 +36,7 @@ This document details the property-based fuzz testing and symbolic execution pro
 ### 3.1 `invariant_payeeAlwaysInRoot`
 - **Definition:** Every time token funds are disbursed from `GuardedTreasury` for a mission with `missionPayeeRoot[missionId] != bytes32(0)`, the recipient address `to` must strictly belong to the pre-committed Merkle leaf set.
 - **Handler Implementation:** The handler exercises random combinations of `proposeWithProof` (with valid proofs, empty proofs, corrupted proofs, and mismatched leaves) and queued proposal execution. Ghost accounting records all outflow events.
-- **Mutation Verification (`evidence/formal/mutant.txt`):** In `GuardedTreasuryMutant.sol`, the Merkle check `_verifyMerkle` was commented out. The invariant fuzzer immediately identified an exploit sequence (run 7, call 402, shrunk to 1 step) where funds flowed to an allowlisted vendor outside the mission Merkle root, causing the invariant assertion to FAIL deterministically. This proves that the invariant is non-vacuous.
+- **Mutation Verification (`evidence/formal/mutant.txt`):** In `GuardedTreasuryMutant.sol`, the Merkle check `_verifyMerkle` was commented out. The invariant fuzzer immediately identified an exploit sequence (runs: 1, calls: 1, shrunk to 1 step) where funds flowed to an allowlisted vendor outside the mission Merkle root, causing the invariant assertion to FAIL deterministically. This proves that the invariant is non-vacuous.
 
 ### 3.2 `invariant_missionSpendWithinCap` & `invariant_dailySpendWithinCap`
 - **Definition:** For every mission $m$, $\sum \text{disbursements}(m) \le \text{cap}(m)$, and for every UTC calendar day $d$, $\sum \text{disbursements}(d) \le \text{dailyCap}$.

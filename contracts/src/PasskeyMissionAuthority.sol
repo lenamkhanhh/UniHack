@@ -167,25 +167,27 @@ contract PasskeyMissionAuthority {
         // 2. Check User Present (UP) flag (bit 0 of flags byte at index 32)
         require((uint8(auth.authenticatorData[32]) & 0x01) != 0, "UserPresenceRequired");
 
-        // 3. Verify type in clientDataJSON matches "webauthn.get"
+        // 3. Verify type in clientDataJSON matches '"type":"webauthn.get"' (W4-F3)
         bytes memory clientBytes = bytes(auth.clientDataJSON);
+        bytes memory expectedType = bytes('"type":"webauthn.get"');
         require(
-            auth.typeIndex + 14 <= clientBytes.length,
+            auth.typeIndex + expectedType.length <= clientBytes.length,
             "TypeIndexOutOfBounds"
         );
         require(
-            _matchesSubsequence(clientBytes, auth.typeIndex, bytes('"webauthn.get"')),
+            _matchesSubsequence(clientBytes, auth.typeIndex, expectedType),
             "InvalidWebAuthnType"
         );
 
-        // 4. Verify challenge in clientDataJSON matches base64url(challenge)
+        // 4. Verify challenge in clientDataJSON matches '"challenge":"' + base64url(challenge) + '"' (W4-F3)
         bytes memory expectedChallengeB64 = encodeBase64Url32(challenge);
+        bytes memory expectedChallengePattern = abi.encodePacked('"challenge":"', string(expectedChallengeB64), '"');
         require(
-            auth.challengeIndex + 43 <= clientBytes.length,
+            auth.challengeIndex + expectedChallengePattern.length <= clientBytes.length,
             "ChallengeIndexOutOfBounds"
         );
         require(
-            _matchesSubsequence(clientBytes, auth.challengeIndex, expectedChallengeB64),
+            _matchesSubsequence(clientBytes, auth.challengeIndex, expectedChallengePattern),
             "ChallengeMismatch"
         );
 
