@@ -27,3 +27,10 @@ eval/runs/
 
 # Builder Hub console wallet key exports
 console-wallet-*.txt
+
+# Python venvs and caches
+.venv/
+__pycache__/
+eval/agentdojo/cache/
+eval/agentdojo/**/__pycache__/
+
