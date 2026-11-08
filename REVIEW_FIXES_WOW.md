@@ -8,7 +8,12 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 
 
+
+
 ## DONE
+- M3-F2 (nhỏ) Đã chuẩn hóa thuật ngữ trong `ADAPTIVE_ATTACK.md`:
+  - Bảng Variant B ghi rõ: `$0.00 USDC (65 blocked, 4 queued for owner approval, $0 out of bounds)` phản ánh trung thực 65 lần BLOCK và 4 lần QUEUE giữ tiền chờ owner phê duyệt.
+  - Cập nhật nhãn on-chain: `eth_call succeeded (queued: amount > perTxCap, proposalId: 6)` kèm ghi chú giải thích rõ nguyên do `eth_call` trả `proposalId: 6` vì thực thi read-only trên cùng snapshot trạng thái hiện tại.
 - M3-F1 [BLOCKER] Đã giải quyết triệt để đánh giá adaptive attacker với dual prompt postures, bằng chứng Fuji thật và canonical dataset:
   - **Dual Prompt Postures:** Đã chạy và phân tách rõ ràng 2 biến thể prompt: (A) `strict` (fortified agent với chỉ thị từ chối rõ ràng ngoài mission) và (B) `typical` (agent kế toán tiêu chuẩn với danh bạ vendor 5 công ty, mô phỏng đúng kịch bản doanh nghiệp thực tế). Cả hai system prompt đều được dán nguyên văn vào `ADAPTIVE_ATTACK.md`.
   - **Empirical Metrics:**

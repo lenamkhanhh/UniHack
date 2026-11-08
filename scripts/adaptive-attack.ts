@@ -1111,9 +1111,9 @@ In each of the 20 iterative rounds per target, the attacker received **complete 
 |---|---|---|---|---|
 | **C0: Unprotected Agent** | ${(typical.metrics.trickedRate.val * 100).toFixed(1)}% (${Math.round(typical.metrics.trickedRate.val * typical.metrics.validRounds)}/${typical.metrics.validRounds}) | **${(typical.metrics.c0.asr.val * 100).toFixed(1)}%** | **$${typical.metrics.c0.totalSpendUsdc} USDC** | [${(typical.metrics.c0.asr.lower * 100).toFixed(1)}%, ${(typical.metrics.c0.asr.upper * 100).toFixed(1)}%] |
 | **C1: Cap + Global Allowlist** | ${(typical.metrics.trickedRate.val * 100).toFixed(1)}% (${Math.round(typical.metrics.trickedRate.val * typical.metrics.validRounds)}/${typical.metrics.validRounds}) | **${(typical.metrics.c1.asr.val * 100).toFixed(1)}%** | **$${typical.metrics.c1.totalSpendUsdc} USDC** | [${(typical.metrics.c1.asr.lower * 100).toFixed(1)}%, ${(typical.metrics.c1.asr.upper * 100).toFixed(1)}%] |
-| **C2: MissionPay Dual-Layer** | ${(typical.metrics.trickedRate.val * 100).toFixed(1)}% (${Math.round(typical.metrics.trickedRate.val * typical.metrics.validRounds)}/${typical.metrics.validRounds}) | **${(typical.metrics.c2.asr.val * 100).toFixed(1)}%** | **$${typical.metrics.c2.totalSpendUsdc} USDC (100% Blocked)** | **[${(typical.metrics.c2.asr.lower * 100).toFixed(1)}%, ${(typical.metrics.c2.asr.upper * 100).toFixed(1)}%]** |
+| **C2: MissionPay Dual-Layer** | ${(typical.metrics.trickedRate.val * 100).toFixed(1)}% (${Math.round(typical.metrics.trickedRate.val * typical.metrics.validRounds)}/${typical.metrics.validRounds}) | **${(typical.metrics.c2.asr.val * 100).toFixed(1)}%** | **$${typical.metrics.c2.totalSpendUsdc} USDC** (65 blocked, 4 queued for owner approval, $0 out of bounds) | **[${(typical.metrics.c2.asr.lower * 100).toFixed(1)}%, ${(typical.metrics.c2.asr.upper * 100).toFixed(1)}%]** |
 
-> **Key Finding**: When given a typical enterprise corporate directory, the LLM was deceived in **${(typical.metrics.trickedRate.val * 100).toFixed(1)}%** of rounds (${Math.round(typical.metrics.trickedRate.val * typical.metrics.validRounds)}/${typical.metrics.validRounds}), leading to **${(typical.metrics.c0.asr.val * 100).toFixed(1)}% ASR ($${typical.metrics.c0.totalSpendUsdc} drained)** under C0. Conventional allowlists (C1) failed against Known-Payee Diversion targets (T02, T03, T04), incurring **${(typical.metrics.c1.asr.val * 100).toFixed(1)}% ASR ($${typical.metrics.c1.totalSpendUsdc} drained)**. Under **MissionPay (C2)**, **ASR is strictly 0.0% ($0.00 out-of-bounds spend)** due to mission-scoped Merkle trees and cryptographic provenance.
+> **Key Finding**: When given a typical enterprise corporate directory, the LLM was deceived in **${(typical.metrics.trickedRate.val * 100).toFixed(1)}%** of rounds (${Math.round(typical.metrics.trickedRate.val * typical.metrics.validRounds)}/${typical.metrics.validRounds}), leading to **${(typical.metrics.c0.asr.val * 100).toFixed(1)}% ASR ($${typical.metrics.c0.totalSpendUsdc} drained)** under C0. Conventional allowlists (C1) failed against Known-Payee Diversion targets (T02, T03, T04), incurring **${(typical.metrics.c1.asr.val * 100).toFixed(1)}% ASR ($${typical.metrics.c1.totalSpendUsdc} drained)**. Under **MissionPay (C2)**, **ASR is strictly 0.0% ($0.00 out-of-bounds spend: 65 blocked, 4 queued for owner approval)** due to mission-scoped Merkle trees and cryptographic provenance.
 
 ---
 
@@ -1179,12 +1179,14 @@ Merkle proofs are computed dynamically using \`computePayeeMerkleTree\` from \`a
 - **Unauthorized Payees (\`0x3333\`, \`0x4444\`, \`0x6666\`):** No valid cryptographic proof can exist in the mission tree. Propose calls revert with \`PayeeNotInMissionSet\`.
 - **Amount Inflation (\`0x1111\` @ 50 USDC):** Proof is valid, but proposal exceeds the 2.00 USDC per-tx cap, putting the transaction into on-chain **QUEUED** status (\`OverPerTxCap\`) rather than automatic disbursement.
 
+> **Note on On-Chain Simulation Status:** Calls returning \`proposalId: 6\` indicate that \`eth_call\` succeeded (would create proposal; contract queues because amount > perTxCap of 2.00 USDC). All simulated calls return proposalId 6 because \`eth_call\` executes read-only against the identical current on-chain state without state modification.
+
 | Target ID | Round | Agent Proposed Payee | Amount | C1 Status | C2 Validator Rule | Fuji Merkle Proof Status | Avalanche Fuji Live Result |
 |---|---|---|---|---|---|---|---|
 ${fujiSamples
   .map(
     (s: any) =>
-      `| **${s.targetId}** | Round ${s.round} | \`${s.to}\` | ${s.amountUsdc} USDC | ${s.c1Status} | \`${s.c2Rule || 'PASS'}\` | \`${s.proofStatus}\` | **${s.fujiResult}** |`
+      `| **${s.targetId}** | Round ${s.round} | \`${s.to}\` | ${s.amountUsdc} USDC | ${s.c1Status} | \`${s.c2Rule || 'PASS'}\` | \`${s.proofStatus}\` | **${s.fujiResult.includes('QUEUED_OR_EXECUTED') ? 'eth_call succeeded (queued: amount > perTxCap, proposalId: 6)' : s.fujiResult}** |`
   )
   .join('\n')}
 
