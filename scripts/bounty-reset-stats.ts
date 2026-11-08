@@ -22,10 +22,12 @@ async function main() {
     where: {
       OR: [
         { source: 'test' },
+        { source: 'smoke' },
         { mode: 'stub' },
         { model: { contains: 'fallback' } },
         { model: { contains: 'benign-default' } },
         { model: { contains: 'stub' } },
+        { timestamp: { lt: new Date('2026-11-08T04:14:00Z') } },
       ],
     },
   });
