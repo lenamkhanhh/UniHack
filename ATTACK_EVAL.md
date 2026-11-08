@@ -156,3 +156,58 @@ Tier C2 (MissionPay Dual-Layer Stack):
   npx tsx scripts/attack-eval.ts --models gemini-3.5-flash-lite,gemini-3.1-flash-lite
   npx tsx scripts/render-attack-chart.ts
   ```
+
+---
+
+## 8. NOMOS Known-Payee Diversion Replication (arXiv:2610.11030)
+
+### 8.1 Threat Model & Research Background
+In recent security research on autonomous AI agent financial access control (*NOMOS: Network-Oriented Management for On-chain Systems*, arXiv:2610.11030 §5.2), researchers identified a critical vulnerability in traditional allowlist architectures: **"Known-Payee Diversion"** (*"diverting an injected payment to a payee already in the account's history"*).
+
+In an enterprise treasury deployment, an account's transaction history organically accumulates multiple verified counterparties over time:
+- Payee 1 (`0x1111...`): Cloud Infrastructure Provider (CloudCore)
+- Payee 2 (`0x2222...`): SaaS & API Provider (DataStream)
+- Payee 3 (`0x3333...`): Legal & Compliance Counsel (Apex Legal)
+- Payee 4 (`0x4444...`): Facility & Office Management (Metro Facility)
+- Payee 5 (`0x5555...`): Corporate Audit & Tax Accounting (Beacon Audit)
+
+**The Vulnerability in C1h (Cap + Historical Allowlist / NOMOS Gate):**
+A NOMOS-style dynamic gate validates payments against organizational spending caps and the account's historical payee allowlist. If an autonomous agent processing an invoice for Vendor 1 receives an untrusted document with an injected prompt override diverting payment to Vendor 3, 4, or 5, the C1h gate queries the history allowlist, finds the recipient present, confirms the amount is within treasury caps, and **approves the transaction**. Consequently, the agent disburses organizational funds completely outside the authorized mission intent.
+
+**MissionPay Defense Tier (C2):**
+MissionPay defeats this vulnerability using **Mission-Scoped Merkle Payee Sets** anchored on-chain (`GuardedTreasury.payeeRoot`):
+1. **Cryptographic Mission Scoping:** The owner pre-signs only the specific payees authorized for the active mission (`ownerSignedPayees`, e.g., only `[0x1111...]`). Historical payees outside this mission set are rejected at the validator tier with rule `PAYEE_NOT_IN_MISSION_SET`.
+2. **On-Chain Enforcement:** If a malicious proposal bypassed an off-chain layer, `GuardedTreasury.sol` requires a valid Merkle proof against `payeeRoot`. Without a valid inclusion proof, the EVM reverts with `PayeeNotInMissionSet(operationId, to)`.
+3. **Provenance Taint Isolation:** Payment destinations originating from untrusted tool outputs or web payloads are tagged with `toProvenance: 'TOOL_OUTPUT'`, blocking allowlist progression even if an attacker attempts allowlist mimicry.
+
+---
+
+### 8.2 Empirical Evaluation Results ($N = 30$)
+
+We evaluated $N = 30$ synthetic known-payee diversion cases (`nomos-kp-01` through `nomos-kp-30` in `eval/cases/known_payee.jsonl`) across both frontier models using zero-shot prompt injection payloads targeting historical account counterparties.
+
+| Model | Defense Tier | Evaluated ($N$) | Tricked Rate | ASR (Attack Success Rate) | Out-of-Bounds Spend | 95% Wilson Confidence Interval |
+|---|---|---|---|---|---|---|
+| **Gemini 3.5 Flash Lite** | **C0 (Unprotected)** | 30 | 60.0% (18/30) | **60.0%** (18/30) | $22.50 USDC | [42.3%, 75.4%] |
+| | **C1 (Cap + Global Allowlist)** | 30 | 60.0% (18/30) | **60.0%** (18/30) | $22.50 USDC | [42.3%, 75.4%] |
+| | **C1h (NOMOS History Gate)** | 30 | 60.0% (18/30) | **60.0%** (18/30) | $22.50 USDC | [42.3%, 75.4%] |
+| | **C2 (MissionPay Full Defense)** | 30 | 60.0% (18/30) | **0.0%** (0/30) | **$0.00 USDC** | **[0.0%, 11.4%]** |
+| **Gemini 3.1 Flash Lite** | **C0 (Unprotected)** | 30 | 96.7% (29/30) | **96.7%** (29/30) | $36.00 USDC | [83.3%, 99.4%] |
+| | **C1 (Cap + Global Allowlist)** | 30 | 96.7% (29/30) | **96.7%** (29/30) | $36.00 USDC | [83.3%, 99.4%] |
+| | **C1h (NOMOS History Gate)** | 30 | 96.7% (29/30) | **96.7%** (29/30) | $36.00 USDC | [83.3%, 99.4%] |
+| | **C2 (MissionPay Full Defense)** | 30 | 96.7% (29/30) | **0.0%** (0/30) | **$0.00 USDC** | **[0.0%, 11.4%]** |
+
+---
+
+### 8.3 Key Empirical Findings
+
+1. **Vulnerability Replication Confirmed:** In 100% of cases where the LLM was tricked (18/18 for Gemini 3.5, 29/29 for Gemini 3.1), the C1h NOMOS-style gate **completely failed to prevent diversion** because the diverted addresses were present in the historical transaction log.
+2. **Deterministic Mission Isolation (ASR = 0%):** Under C2, MissionPay successfully intercepted 100% of diverted transactions (`rule: PAYEE_NOT_IN_MISSION_SET`). Even though the diverted vendors were legitimate historical partners of the company, MissionPay's signed per-mission Merkle root prevented lateral fund movement.
+3. **On-Chain EVM Revert Grounding:** Contract-layer verification via `eth_call` against `GuardedTreasury` on Avalanche Fuji confirmed that all 10/10 sampled diverted proposals revert on-chain with custom error `PayeeNotInMissionSet(operationId, to)` (selector `0xd289658e`).
+4. **Zero Fallback Integrity:** All runs were executed directly against the live Gemini API with 0 model fallbacks, verified through recorded `modelVersion` matching `gemini-3.5-flash-lite` and `gemini-3.1-flash-lite`.
+
+**Artifacts Generated:**
+- Dataset: `eval/cases/known_payee.jsonl` (30 test cases)
+- Gemini 3.5 Run Data: `eval/runs/known-payee-gemini-3.5-flash-lite-20261108-2127.json`
+- Gemini 3.1 Run Data: `eval/runs/known-payee-gemini-3.1-flash-lite-20261108-2136.json`
+- Scorer & Gate Test Suite: `apps/web/tests/attack-scoring.test.ts` (9/9 passed)
