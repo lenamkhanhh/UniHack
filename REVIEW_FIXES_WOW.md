@@ -8,7 +8,9 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-- **Việc tiếp: M7 (Validator tự động khi đóng mission)** theo PLAN_MAX_2026-11-08.md (0.5 ngày). Khi owner đóng mission (`closeMission`) hoặc anchor proof: job gọi `validator-run` cho mission đó (validator key riêng như hiện tại), gửi `validationResponse`. `/verify` hiện kết quả. Test: mission đóng → có request + response; tamper → score 0 (trên anvil fork).
+Claude duyệt M6 (2f2ba4a, 09/11): apps/web 226/226 pass; cờ version đọc từ env; ATC'26 chạy `describe.each([1,2])`; Part E ghi facilitator PayAI public (relayer 0xc669…). Đạt.
+
+- **M7 đang làm.** Acceptance thêm: trước khi commit, `npx tsc --noEmit -p apps/web` phải sạch. Lúc Claude kiểm thì bản M7 chưa commit còn lỗi: `latestAuditHead` chưa khai báo ở `verify/[missionId]/route.ts:296`; route export thêm `setValidationFetcherForTesting` (Next route chỉ được export handler, phải chuyển sang module riêng); `writeContract` thiếu `chain` ở `validator-job.ts:335`; test dùng `payeesJson` và `createChallenge` không tồn tại. Test tamper → score 0 phải chạy trên anvil fork như PLAN_MAX ghi; validator dùng key riêng, không dùng owner.
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
