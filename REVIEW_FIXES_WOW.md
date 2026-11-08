@@ -7,6 +7,14 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 (Hiện không có mục OPEN)
 
 ## DONE
+- SEC-F1 [trung thực] Đã sửa trích dẫn test và registry trong `SECURITY.md` và `ATTACK_EVAL.md`:
+  - Thay 3 test không tồn tại bằng exact test thật: `test_C11_agent_calling_owner_functions_reverts`, `test_C12_no_direct_agent_transfer_path`, `test_SW03_fund_without_toolcap_or_over_toolcap_reverts`, `test_P1A_fund_mission_wallet_success`, và `test_PV1_proposeWithProof_invalid_proof_or_unauthorized_payee_reverts`. 13/13 `test_*` trong `SECURITY.md` đều grep ra chính xác trong `contracts/test/`.
+  - Tách Threat 5 thành 2 tiểu mục rõ ràng: **Threat 5a (Off-chain Policy Validator)** và **Threat 5b (ERC-8004 Post-Mission Validator Key `0x83F5…13B5`)**.
+  - Đính chính rõ: Fuji không có ValidationRegistry chính thức. Chỉ Identity (`0x8004A818...`) và Reputation (`0x8004B663...`) là chính thức; ValidationRegistry là bản port tự deploy tại `0x4c5ccda2a630cd1cb706799deadcc8483d06697e`.
+  - Ghi nhận residual risk trung thực cho Threat 5b: key validator chỉ ký attestation thông tin điểm 100/100, không bảo vệ hay giải ngân tiền; người dùng cần tự kiểm tra qua `/verify` hoặc chạy lại `scripts/validator-run.ts`.
+  - Trích đúng hàm internal `require(_verifyMerkle(proof, root, leaf), "PayeeNotInMissionSet");` trong `GuardedTreasury.sol:457`.
+  - Đổi thuật ngữ "static analysis verified" $\rightarrow$ "static analysis run (Slither v0.11.6, Aderyn v0.1.9), findings triaged".
+  - Sửa `ATTACK_EVAL.md` mục 8.1 trích dẫn chuẩn `arXiv:2610.11030 (stated limitation: diversion to a payee already in account history, 8/288 pairs)` và bổ sung ghi chú giải thích vì sao C1 và C1h cho kết quả ASR bằng nhau trên bộ case này do 5 vendor đều có trong allowlist chung.
 - M1-F1 [P2] Sửa status khi không có proposal: gán `NONE` cho C1/C1h/C2 giống C0 trong `scripts/attack-eval.ts`. Bổ sung test trong `apps/web/tests/attack-scoring.test.ts`. Cập nhật bản ghi `nomos-kp-29` trong `eval/runs/known-payee-gemini-3.1-flash-lite-20261108-2136.json` thành `NONE`.
 - M1-F2 [P2] Chuẩn hóa trích dẫn NOMOS: ghi rõ `arXiv:2610.11030 (stated limitation: diversion to a payee already in account history, 8/288 pairs)` trong `known_payee.jsonl`, `ATTACK_EVAL.md` và `REPORT_REVIEW_AND_FIX_COMPLETION.md`. Thêm ghi chú phân tách rõ ràng rằng ở bộ case này C1 và C1h cho cùng kết quả ASR vì 5 vendor đều có trong allowlist chung.
 - PK-F1 [P0] Đã làm chặt bộ kiểm WebAuthn trong `PasskeyMissionAuthority.sol` ngang chuẩn `allowance-ai` (NEAR):

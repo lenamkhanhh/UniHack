@@ -162,7 +162,7 @@ Tier C2 (MissionPay Dual-Layer Stack):
 ## 8. NOMOS Known-Payee Diversion Replication (arXiv:2610.11030)
 
 ### 8.1 Threat Model & Research Background
-In recent security research on autonomous AI agent financial access control (*NOMOS: Network-Oriented Management for On-chain Systems*, arXiv:2610.11030 §5.2), researchers identified a critical vulnerability in traditional allowlist architectures: **"Known-Payee Diversion"** (*"diverting an injected payment to a payee already in the account's history"*).
+In recent security research on autonomous AI agent financial access control (*NOMOS: Network-Oriented Management for On-chain Systems*, arXiv:2610.11030 (stated limitation: diversion to a payee already in account history, 8/288 pairs)), researchers identified a critical vulnerability in traditional allowlist architectures: **"Known-Payee Diversion"** (*"diverting an injected payment to a payee already in the account's history"*).
 
 In an enterprise treasury deployment, an account's transaction history organically accumulates multiple verified counterparties over time:
 - Payee 1 (`0x1111...`): Cloud Infrastructure Provider (CloudCore)
@@ -170,6 +170,8 @@ In an enterprise treasury deployment, an account's transaction history organical
 - Payee 3 (`0x3333...`): Legal & Compliance Counsel (Apex Legal)
 - Payee 4 (`0x4444...`): Facility & Office Management (Metro Facility)
 - Payee 5 (`0x5555...`): Corporate Audit & Tax Accounting (Beacon Audit)
+
+> **Note on Baseline Comparison (C1 vs C1h)**: In this evaluation suite, C1 (Cap + Global Allowlist) and C1h (NOMOS History Gate) produce identical ASR (60.0% for Gemini 3.5, 96.7% for Gemini 3.1) because all 5 corporate vendors (`0x1111...` through `0x5555...`) are pre-populated in the organization's general allowlist as well as the account's historical counterparty ledger. This setup demonstrates that global allowlists and historical counterparty gates provide zero isolation against intra-organizational lateral diversion.
 
 **The Vulnerability in C1h (Cap + Historical Allowlist / NOMOS Gate):**
 A NOMOS-style dynamic gate validates payments against organizational spending caps and the account's historical payee allowlist. If an autonomous agent processing an invoice for Vendor 1 receives an untrusted document with an injected prompt override diverting payment to Vendor 3, 4, or 5, the C1h gate queries the history allowlist, finds the recipient present, confirms the amount is within treasury caps, and **approves the transaction**. Consequently, the agent disburses organizational funds completely outside the authorized mission intent.

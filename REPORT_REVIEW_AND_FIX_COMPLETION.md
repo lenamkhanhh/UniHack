@@ -428,14 +428,15 @@ ightarrow$ Attack Blocked (ASR = 0, thất thoát 0 USDC).
   - **Quy tắc bất di bất dịch:** Tuyệt đối **KHÔNG sửa `GuardedTreasury.sol`** vì hợp đồng đã verified và đang hoạt động thực tế trên Avalanche Fuji.
 - **Tài Liệu Bảo Mật Chính Thức (`SECURITY.md`):**
   - Thiết lập `SECURITY.md` hoàn chỉnh bao gồm:
-    1. Cam kết thuật ngữ: "static analysis verified (Slither v0.11.6, Aderyn v0.1.9) and formal invariant tested", không dùng "audited".
+    1. Cam kết thuật ngữ: "static analysis run (Slither v0.11.6, Aderyn v0.1.9), findings triaged and formal invariant tested", không dùng "audited" hay "verified".
     2. Bảng triage chi tiết cho toàn bộ findings từ Slither và Aderyn.
-    3. Threat Model toàn diện cho 6 nguy cơ bảo mật:
+    3. Threat Model toàn diện cho 6 nguy cơ bảo mật (đã tích hợp các điểm sửa đổi theo review SEC-F1):
        - **Threat 1: Agent compromised / Prompt injection** (Taint Registry off-chain + Merkle payee root on-chain `PayeeNotInMissionSet`).
-       - **Threat 2: Agent session private key leaked** (Ví phiên ephemeral per-mission giới hạn thiệt hại tối đa đúng `toolCap`).
+       - **Threat 2: Agent session private key leaked** (Ví phiên ephemeral per-mission giới hạn thiệt hại tối đa đúng `toolCap`; minh chứng bằng các test hiện hữu: `test_C11_agent_calling_owner_functions_reverts`, `test_C12_no_direct_agent_transfer_path`, `test_SW03_fund_without_toolcap_or_over_toolcap_reverts`, `test_P1A_fund_mission_wallet_success`).
        - **Threat 3: Backend application server compromised** (Backend không giữ owner key, bất biến contract Avalanche giới hạn cap, hash chain audit neo on-chain).
        - **Threat 4: Facilitator acting maliciously** (EIP-3009 request-bound nonces theo ATC'26 arXiv:2605.30998, chống replay và chuyển hướng).
-       - **Threat 5: Validator key compromised or collusion** (Contract độc lập xác thực Merkle proof, đăng ký ERC-8004 on-chain bất biến).
+       - **Threat 5a: Off-chain Policy Validator Compromised** (Off-chain validator chỉ là UX pre-flight; `GuardedTreasury.sol` độc lập thực thi `_verifyMerkle` on-chain, minh chứng bởi `test_PV1_proposeWithProof_invalid_proof_or_unauthorized_payee_reverts` và invariant test `invariant_payeeAlwaysInRoot`).
+       - **Threat 5b: ERC-8004 Post-Mission Validator Key Compromised (`0x83F5…13B5`)** (Phân định rõ Fuji không có ValidationRegistry chính thức; contract tại `0x4c5ccda2a630cd1cb706799deadcc8483d06697e` là bản port do dự án deploy. Key validator chỉ ký attestation điểm 100/100, không thể giải ngân quỹ).
        - **Threat 6: Passkey WebAuthn phishing / origin spoofing / replay** (Bảo vệ 9 lớp: RP ID hash, origin exact matching có dấu nháy đóng, UV+UP flags, chống high-S, native RIP-7212 precompile `0x100`).
     4. Bảng liên kết Invariant Formal Verification (INV-1 đến INV-5, Foundry Invariant, Halmos Symbolic, Mutant Testing).
     5. Quy trình Responsible Disclosure.

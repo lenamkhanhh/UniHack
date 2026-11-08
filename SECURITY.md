@@ -1,12 +1,12 @@
 # Security Policy & Formal Threat Model — MissionPay
 
-> **Notice on Terminology**: MissionPay smart contracts and architecture are **not** "audited" by a third-party audit firm. They are **static analysis verified** (via Slither v0.11.6 and Aderyn v0.1.9), **formally invariant tested** (Foundry 512 runs / 64 depth), **symbolically property checked** (Halmos / Z3), and **empirically validated** against live prompt injection benchmarks and Avalanche Fuji testnet execution.
+> **Notice on Terminology**: MissionPay smart contracts and architecture are **not** "audited" by a third-party audit firm. They have undergone **static analysis (Slither v0.11.6, Aderyn v0.1.9) with findings triaged**, are **formally invariant tested** (Foundry 512 runs / 64 depth), **symbolically property checked** (Halmos / Z3), and **empirically validated** against live prompt injection benchmarks and Avalanche Fuji testnet execution.
 
 ---
 
-## 1. Static Analysis Verification & Triage
+## 1. Static Analysis (Slither v0.11.6, Aderyn v0.1.9) & Findings Triage
 
-Static security analysis is integrated into the development pipeline across all contracts in `contracts/src/`:
+Static security analysis was run with findings triaged across all contracts in `contracts/src/`:
 - **Slither Analyzer v0.11.6** (Crytic / Trail of Bits): 9 contracts analyzed with 102 detectors. Output: `evidence/security/slither.txt`.
 - **Aderyn v0.1.9** (Cyfrin): AST-level vulnerability detection across all source contracts. Output: `evidence/security/aderyn.md`.
 
@@ -81,7 +81,7 @@ MissionPay secures autonomous AI agent spending across multi-agent tool executio
   2. *Bounded Loss Guarantee*: If the agent key is leaked, the maximum possible loss is strictly bounded by the remaining unspent `toolCap` of that specific active mission.
   3. *Treasury Inaccessibility*: The agent key cannot call `execute`, `approve`, or alter any parameters in `GuardedTreasury.sol`. All treasury disbursements require owner signature or queued timelock.
 - **Test & Proof Evidence**:
-  - `contracts/test/GuardedTreasury.t.sol`: `test_agentCannotCallPrivilegedFunctions` and `test_fundMissionWallet_boundedToToolCap`.
+  - `contracts/test/GuardedTreasury.t.sol`: `test_C11_agent_calling_owner_functions_reverts` (agent cannot invoke privileged owner functions), `test_C12_no_direct_agent_transfer_path` (agent has no direct ERC-20 transfer path), `test_SW03_fund_without_toolcap_or_over_toolcap_reverts` (wallet funding is bounded strictly to mission `toolCap`), and `test_P1A_fund_mission_wallet_success` (bounded session wallet allocation).
   - `contracts/test/halmos/GuardedTreasury.halmos.t.sol`: Symbolic proof proving that non-owner callers cannot modify caps, allowlists, or roots.
 - **Residual Risk & Stated Limitations**: Any remaining USDC residing in the ephemeral session wallet before the mission is closed/swept can be spent by the possessor of the session key.
 
@@ -115,16 +115,31 @@ MissionPay secures autonomous AI agent spending across multi-agent tool executio
 
 ---
 
-### Threat 5: Validator Key Compromised or Validator Collusion
-- **Threat Vector**: The off-chain validator node is corrupted or colludes with an attacker to emit fraudulent validation responses or approve illicit transactions.
+### Threat 5a: Off-Chain Policy Validator Compromised
+- **Threat Vector**: The off-chain policy validator in the application backend (`lib/validator.ts`) is compromised, tampered with, or bypassed, outputting a falsified `PASS` verdict for an unauthorized transaction.
 - **Mitigation Architecture**:
-  1. *Dual-Layer Enforcement*: Off-chain validators only serve as a pre-flight filter for user experience. The smart contract does NOT trust the off-chain validator's approval for critical invariants.
-  2. *Immutable Smart Contract Invariants*: `GuardedTreasury.sol` independently executes Merkle verification (`require(MerkleProof.verify(proof, missionPayeeRoot[missionId], leaf))` and checks `spent + amount <= missionCap`. Even with 100% validator collusion, the smart contract reverts any illegal transfer.
-  3. *ERC-8004 On-Chain Attestation*: Validator responses are recorded on the official Avalanche Fuji `ValidationRegistry` contract (`0x8004...`), creating an immutable, non-repudiable on-chain trail of all validator decisions.
+  1. *Dual-Layer Enforcement*: Off-chain validators serve solely as a pre-flight UX filter and simulation layer. The smart contract never trusts off-chain validator assertions for state transitions.
+  2. *Immutable Smart Contract Invariants*: `GuardedTreasury.sol` on Avalanche independently executes on-chain Merkle verification:
+     ```solidity
+     require(_verifyMerkle(proof, root, leaf), "PayeeNotInMissionSet");
+     ```
+     (calling internal function `_verifyMerkle` at line 457) and enforces `spent + amount <= missionCap`. Even with 100% off-chain validator compromise, the smart contract on-chain reverts any illegal transfer.
 - **Test & Proof Evidence**:
-  - `contracts/test/GuardedTreasury.t.sol`: `test_proposeWithProof_invalidProof_reverts` passes regardless of caller identity.
-  - Live Fuji Tx [`0xb641...059`]: On-chain validation response on official Avalanche Fuji ERC-8004 registry.
-- **Residual Risk & Stated Limitations**: Colluding validators could reject valid proposals (false rejections), halting mission progress, but cannot extract unauthorized funds.
+  - `contracts/test/GuardedTreasury.t.sol`: `test_PV1_proposeWithProof_invalid_proof_or_unauthorized_payee_reverts` (on-chain revert `PayeeNotInMissionSet` regardless of off-chain simulation status).
+  - `contracts/test/invariant/GuardedTreasury.invariant.t.sol`: `invariant_payeeAlwaysInRoot` fuzzed across 512 runs / 32,768 calls without a single invalid payee disbursement.
+- **Residual Risk & Stated Limitations**: A compromised off-chain validator could falsely reject valid proposals (denial of service), halting mission execution, but cannot extract unauthorized treasury funds.
+
+---
+
+### Threat 5b: ERC-8004 Post-Mission Validator Key Compromised (`0x83F5…13B5`)
+- **Threat Vector**: The private key of the post-mission ERC-8004 validator (`0x83F53eE2b62A512d7d6b38c227447783D99513B5`) is compromised by an adversary.
+- **Mitigation Architecture**:
+  1. *Registry Architecture Distinction*: Avalanche Fuji hosts official ERC-8004 registries only for Identity (`0x8004A818BFB912233c491871b3d84c89A494BD9e`) and Reputation (`0x8004B663056A597Dffe9eCcC1965A193B7388713`). There is NO official Avalanche Fuji ValidationRegistry. MissionPay deploys a custom open-source port of `ValidationRegistry.sol` (derived from `ava-labs/8004-boilerplate`, MIT) at `0x4c5ccda2a630cd1cb706799deadcc8483d06697e`.
+  2. *Attestation-Only Decoupling*: The ERC-8004 validation score is an informational, post-mission public attestation. It has zero custody over treasury funds and zero ability to authorize, trigger, or unpause disbursements in `GuardedTreasury.sol`.
+- **Test & Proof Evidence**:
+  - `contracts/test/ValidationRegistry.t.sol`: 7 unit tests verifying validator authorization, request hash binding, and score bounds.
+  - Live Fuji Tx [`0xb641353c...`](https://testnet.snowtrace.io/tx/0xb641353ca4922115ec66c7504f2f056ec136aa3e877a5611f01c905efbfe8059): Validation response on deployed `ValidationRegistry` (`0x4c5c...`).
+- **Residual Risk & Stated Limitations**: An adversary holding the validator key (`0x83F5…13B5`) can post a fraudulent 100/100 validation score for an incorrectly executed or malicious mission. This score is purely an attestation and does not protect or disburse funds; users must independently verify execution via `/verify/[missionId]` or re-run `scripts/validator-run.ts`.
 
 ---
 
