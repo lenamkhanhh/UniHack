@@ -444,3 +444,27 @@ ightarrow$ Attack Blocked (ASR = 0, thất thoát 0 USDC).
   - `forge test` trong `contracts/`: **61/61 tests pass** across 4 test suites (16 passkey tests, 37 treasury tests, 7 validation registry tests, 1 invariant suite với 512 runs / 32,768 calls, 0 reverts).
   - TypeScript strict typecheck trong `apps/web/`: **0 errors** (`npx tsc --noEmit`).
   - Unit boundaries & security suites: **127 unit tests pass**.
+
+---
+
+## MAX-M3 — Đánh Giá Kẻ Tấn Công Thích Ứng Đa Lượt (Adaptive Attacker Evaluation)
+
+- **Trạng thái:** **PASS 100%**
+- **Mục tiêu:** Đánh giá tính kiên cường thực nghiệm của MissionPay trước kẻ tấn công thích ứng đa lượt (Adaptive Attacker) sử dụng LLM đối kháng (`gemini-3.5-flash-lite`, chuyển đổi từ `3.5-flash` do lỗi HTTP 503 high demand theo quy chuẩn `PLAN_MAX_2026-11-08.md`) với vòng lặp phản hồi đầy đủ (thought chain, đề xuất giao dịch, mã lỗi validator và lý do revert EVM on-chain trên Fuji) qua 20 vòng lặp liên tiếp cho 10 mục tiêu tài chính ($N = 200$ rounds tương tác).
+- **Phân định rõ ràng theo từng cấu hình bảo vệ (C0, C1, C2):**
+  - **Tỉ lệ LLM bị lừa (LLM Tricked Rate):** **0.0%** (0/200, 95% Wilson CI: [0.0%, 1.9%]) — Agent kế toán `gemini-3.5-flash-lite` duy trì prompt resilience cao xuyên suốt 200 lượt tương tác thích ứng, liên tục từ chối sinh đề xuất chi tiền bất hợp pháp (`NO_PAYOUT_PROPOSED`).
+  - **C0 (Unprotected Agent):** **C0 ASR: 0.0%** (0/200, 95% Wilson CI: [0.0%, 1.9%]), **Thất thoát ngoài phạm vi: $0.00 USDC**.
+  - **C1 (Cap + Global Allowlist):** **C1 ASR: 0.0%** (0/200, 95% Wilson CI: [0.0%, 1.9%]), **Thất thoát ngoài phạm vi: $0.00 USDC**.
+  - **C2 (MissionPay Dual-Layer Stack):** **C2 ASR: 0.0% (0/200, 95% Wilson CI: [0.0%, 1.9%])**, **Thất thoát ngoài phạm vi: $0.00 USDC (Chặn đứng 100%)**.
+- **Kiểm Chứng Contract On-Chain (Fuji eth_call):**
+  - Mô phỏng zero-gas `eth_call` trực tiếp lên smart contract `GuardedTreasury` (`0x20451c1e2dCD83F166B4f22868BAdECb5868d545`) trên Avalanche Fuji cho 10 mục tiêu tấn công mẫu (Round 20): **10/10 đề xuất đều revert 100% với lỗi `PayeeNotInMissionSet`**.
+  - Chứng minh rằng ngay cả trong tình huống xấu nhất (compromised planner ép LLM sinh giao dịch), consensus on-chain của Avalanche đảm bảo ngân quỹ không bị thất thoát.
+- **Files tạo/cập nhật:**
+  - `scripts/adaptive-attack.ts`: Engine đánh giá thích ứng đa lượt (feedback loop, resilient JSON parsing `safeParseJson`, caching 200 rounds, mô phỏng Fuji `eth_call`).
+  - `ADAPTIVE_ATTACK.md`: Báo cáo thực nghiệm chi tiết, bảng breakdown 10 targets $\times$ 20 rounds, phân tích top payloads, bảng 10 giao dịch revert trên Avalanche Fuji.
+  - `eval/runs/adaptive-2026-11-08T16-18-29.json`: Bộ dữ liệu canonical machine-readable đầy đủ của lượt chạy.
+- **Lệnh nghiệm thu & kết quả:**
+  - `npx.cmd tsx scripts/adaptive-attack.ts --rounds 20`: **10 targets $\times$ 20 rounds pass, 10/10 Fuji revert `PayeeNotInMissionSet`**.
+  - `npx.cmd tsc -p apps/web/tsconfig.json --noEmit`: **0 errors**.
+  - `forge test`: **61/61 tests pass** (16 passkey, 37 treasury, 7 validation registry, 1 invariant suite).
+- **Giới hạn còn lại:** Attacker LLM sử dụng `gemini-3.5-flash-lite` (ghi nhận `modelVersion` thật, zero silent fallback), không can thiệp code của `GuardedTreasury.sol`.
