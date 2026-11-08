@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, withLockOrder } from '@/lib/db';
 import { verifyAndConsumeChallenge, ChallengeError } from '@/lib/challenges';
+import { runMissionValidatorJob } from '@/lib/validator-job';
 
 export async function POST(
   req: NextRequest,
@@ -49,7 +50,31 @@ export async function POST(
       { missionSlug: slug }
     );
 
-    return NextResponse.json({ success: true, status: 'CLOSED' });
+    // M7: Trigger automated independent validator job upon mission close
+    let validationResult: any = null;
+    try {
+      const isLiveFuji = process.env.PAYMENT_MODE === 'LIVE_FUJI';
+      const jobResult = await runMissionValidatorJob(slug, {
+        skipOnChainBroadcast: !isLiveFuji,
+      });
+      validationResult = {
+        requestHash: jobResult.requestHash,
+        score: jobResult.validationResult.score,
+        tag: jobResult.validationResult.tag,
+        valid: jobResult.validationResult.valid,
+        isRegisteredOnChain: jobResult.isRegisteredOnChain,
+        responseTxHash: jobResult.responseTxHash,
+      };
+    } catch (jobErr) {
+      // Soft-fail validation runner so close operation is never blocked
+      console.warn('[Validator Auto Job Warning]', jobErr);
+    }
+
+    return NextResponse.json({
+      success: true,
+      status: 'CLOSED',
+      validation: validationResult,
+    });
   } catch (err: any) {
     if (err instanceof ChallengeError) {
       return NextResponse.json({ error: err.message }, { status: err.statusCode });

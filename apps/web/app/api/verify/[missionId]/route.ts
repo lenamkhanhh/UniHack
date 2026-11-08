@@ -5,6 +5,9 @@ import { keccak256, stringToBytes, createPublicClient, http, parseAbiItem } from
 import { avalancheFuji } from 'viem/chains';
 import { verifyToken } from '@/lib/auth';
 import { getPaymentMode, getGuardedTreasuryAddress, getAnchorFetcherForTesting } from '@/lib/config';
+import { computeValidationRequestHash, ValidationBundle } from '@/lib/validation-bundle';
+import { computePayeeMerkleTree } from '@/lib/merkle';
+import { getMemoryValidationRecord, getValidationFetcherForTesting } from '@/lib/validator-job';
 
 // Clear sandbox addresses (WOW-F6) — not Anvil, not real wallets
 const SANDBOX_OWNER = '0x00000000000000000000000000000000000A11CE';
@@ -254,39 +257,105 @@ export async function GET(req: NextRequest, context: any) {
       process.env.NEXT_PUBLIC_VALIDATION_REGISTRY_ADDRESS ||
       '0x4c5ccda2a630cd1cb706799deadcc8483d06697e';
 
-    if (validationRegistryAddress && mode === 'LIVE_FUJI' && !isSandbox) {
+    // Compute dynamic requestHash for mission
+    let targetRequestHash: `0x${string}` | null = null;
+    if (mission.slug === 'fuji-live-mission-s1b') {
+      targetRequestHash = '0x20f83cc1c500af5ad3bf7b8fc2d1c5827cf2acf10454c72391e4f3f5765d6110';
+    } else {
       try {
-        const s1bRequestHash = '0x20f83cc1c500af5ad3bf7b8fc2d1c5827cf2acf10454c72391e4f3f5765d6110' as `0x${string}`;
-        const rpcUrl = process.env.AVALANCHE_FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
-        const client = createPublicClient({
-          chain: avalancheFuji,
-          transport: http(rpcUrl),
-        });
-
-        const status = await client.readContract({
-          address: validationRegistryAddress as `0x${string}`,
-          abi: [
-            parseAbiItem(
-              'function getValidationStatus(bytes32 requestHash) view returns (address validatorAddress, uint256 agentId, uint8 response, bytes32 responseHash, string tag, uint256 lastUpdate)'
-            ),
-          ],
-          functionName: 'getValidationStatus',
-          args: [s1bRequestHash],
-        });
-
-        if (status && status[0] !== '0x0000000000000000000000000000000000000000' && status[5] > 0n) {
-          erc8004Validation = {
-            isComplete: true,
-            score: Number(status[2]),
-            validatorAddress: status[0],
-            tag: status[4],
-            requestHash: s1bRequestHash,
-            snowtraceUrl: 'https://testnet.snowtrace.io/tx/0x62451c36b6488cf4423bd7427e560ac2e3de46144d7ba5c30d81c55df7fe1564',
-            agentId: status[1].toString(),
-          };
+        let payees: string[] = [];
+        if (mission.payeesJson) {
+          try {
+            payees = JSON.parse(mission.payeesJson);
+          } catch {
+            payees = [];
+          }
         }
-      } catch (err) {
-        console.warn('Failed reading ERC-8004 validation status from Fuji:', err);
+        let payeeRoot = mission.payeeRoot;
+        if (!payeeRoot || !payeeRoot.startsWith('0x')) {
+          payeeRoot = computePayeeMerkleTree(payees).root;
+        }
+        const missionIdBytes32 = (
+          mission.missionId.startsWith('0x')
+            ? mission.missionId
+            : `0x${mission.missionId}`
+        ).padEnd(66, '0') as `0x${string}`;
+
+        const computedHead =
+          entries.length > 0
+            ? entries[entries.length - 1].missionEntryHash || entries[entries.length - 1].entryHash
+            : mission.auditHeadHash;
+
+        const bundle: ValidationBundle = {
+          version: 'MissionPay-validation-v1',
+          missionId: missionIdBytes32,
+          missionSlug: mission.slug,
+          payeeRoot: payeeRoot as `0x${string}`,
+          auditHead: (onchainAnchoredHead || computedHead || '0x0000000000000000000000000000000000000000000000000000000000000000') as `0x${string}`,
+          anchorTxHash: (anchorTxHash || '0x0000000000000000000000000000000000000000000000000000000000000000') as `0x${string}`,
+          chainId: 43113,
+          treasury: getGuardedTreasuryAddress(),
+          payees,
+        };
+        targetRequestHash = computeValidationRequestHash(bundle);
+      } catch {}
+    }
+
+    const customValidationFetcher = getValidationFetcherForTesting();
+    if (customValidationFetcher && targetRequestHash) {
+      const customVal = await customValidationFetcher(mission.slug, targetRequestHash);
+      if (customVal) {
+        erc8004Validation = customVal;
+      }
+    } else if (targetRequestHash) {
+      const memoryRecord = getMemoryValidationRecord(targetRequestHash);
+      if (memoryRecord && memoryRecord.isComplete) {
+        erc8004Validation = {
+          isComplete: true,
+          score: memoryRecord.score,
+          validatorAddress: memoryRecord.validatorAddress,
+          tag: memoryRecord.tag,
+          requestHash: targetRequestHash,
+          snowtraceUrl: memoryRecord.txHash
+            ? `https://testnet.snowtrace.io/tx/${memoryRecord.txHash}`
+            : `https://testnet.snowtrace.io/address/${validationRegistryAddress}`,
+          agentId: memoryRecord.agentId,
+        };
+      } else if (validationRegistryAddress && mode === 'LIVE_FUJI' && !isSandbox) {
+        try {
+          const rpcUrl = process.env.AVALANCHE_FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
+          const client = createPublicClient({
+            chain: avalancheFuji,
+            transport: http(rpcUrl),
+          });
+
+          const status = await client.readContract({
+            address: validationRegistryAddress as `0x${string}`,
+            abi: [
+              parseAbiItem(
+                'function getValidationStatus(bytes32 requestHash) view returns (address validatorAddress, uint256 agentId, uint8 response, bytes32 responseHash, string tag, uint256 lastUpdate)'
+              ),
+            ],
+            functionName: 'getValidationStatus',
+            args: [targetRequestHash],
+          });
+
+          if (status && status[0] !== '0x0000000000000000000000000000000000000000' && status[5] > 0n) {
+            erc8004Validation = {
+              isComplete: true,
+              score: Number(status[2]),
+              validatorAddress: status[0],
+              tag: status[4],
+              requestHash: targetRequestHash,
+              snowtraceUrl: mission.slug === 'fuji-live-mission-s1b'
+                ? 'https://testnet.snowtrace.io/tx/0x62451c36b6488cf4423bd7427e560ac2e3de46144d7ba5c30d81c55df7fe1564'
+                : `https://testnet.snowtrace.io/address/${validationRegistryAddress}`,
+              agentId: status[1].toString(),
+            };
+          }
+        } catch (err) {
+          console.warn('Failed reading ERC-8004 validation status from Fuji:', err);
+        }
       }
     }
 

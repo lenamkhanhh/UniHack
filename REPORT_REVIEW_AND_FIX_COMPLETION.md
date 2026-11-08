@@ -1204,3 +1204,30 @@ ightarrow$ Attack Blocked (ASR = 0, thất thoát 0 USDC).
     - Kết quả khảo sát các facilitator trên Fuji ngày 08/11/2026: Ultravioleta trả lỗi HTTP 502 Bad Gateway; PayAI hoạt động; giải pháp fallback tự host `facilitator-fallback.ts` với ví relayer `0xE90c...` sẵn sàng kích hoạt nếu facilitator public timeout.
     - Sửa thuật ngữ "khí gas bằng 0" thành "cơ chế gasless cho Agent (Agent / ví phiên không phải trả gas; toàn bộ phí gas do Facilitator Relayer thanh toán)".
     - Ghi nhận chính xác `Gas Used: 92,372`.
+
+
+## MAX-M7: AUTOMATED POST-MISSION VALIDATOR RUNNER & DYNAMIC VERIFICATION
+
+**Thời điểm:** 2026-11-09 (Asia/Saigon) | **Nhánh:** `feat/s1-app`
+
+### 1. Bảng Nghiệm Thu Milestone MAX-M7
+
+| ID | Yêu cầu kỹ thuật | Trạng thái | Chi tiết thực hiện & Kiểm chứng |
+|---|---|---|---|
+| **M7-01** | Trích xuất Bundle & RequestHash xác định | **ĐẠT** | Triển khai `buildMissionValidationBundle(slug)` trong `apps/web/lib/validator-job.ts` trích xuất `ValidationBundle` chuẩn (auditHead, payeeRoot, treasury, payees, cap) và tính toán `requestHash` xác định qua keccak256 ABI encode. |
+| **M7-02** | Runner độc lập & Đánh giá On-Chain | **ĐẠT** | Triển khai `runMissionValidatorJob(slug, options)` độc lập với database ứng dụng: đối soát trực tiếp `anchoredMissionProofs`, `missionPayeeRoot`, `missions` qua public client. Bundle hợp lệ đạt điểm `score: 100` với tag `verified-full`. |
+| **M7-03** | Phát hiện giả mạo (Tamper -> Score 0) | **ĐẠT** | Bất kỳ sự sai lệch nào về `auditHead` hoặc `payeeRoot` đều bị phát hiện ngay lập tức: validator trả về `score: 0`, `valid: false`, và tag chứa lý do lỗi (`failed:HEAD_MISMATCH`, `failed:ROOT_MISMATCH`). |
+| **M7-04** | Tự động kích hoạt khi đóng mission | **ĐẠT** | `POST /api/missions/[slug]/close` tự động gọi `runMissionValidatorJob` sau khi owner ký xác thực đóng mission, trả về kết quả validation ngay trong response và lưu vào in-memory cache. |
+| **M7-05** | Phân quyền nghiêm ngặt: Dedicated Validator Key | **ĐẠT** | Validator sử dụng khóa chuyên dụng `VALIDATOR_PRIVATE_KEY` (`0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5`), độc lập tuyệt đối với ví owner (`0x4BC9...`). Gọi `writeContract` với `chain: avalancheFuji` và `account: validatorAccount`. |
+| **M7-06** | Kiểm chứng On-Chain Live trên Anvil Fork | **ĐẠT** | Test M7-06 chạy trực tiếp trên Anvil fork (`http://127.0.0.1:8546`): kiểm tra bundle giả mạo, phát sóng `validationResponse` lên smart contract `ValidationRegistry` (`0x4c5ccda2a630cd1cb706799deadcc8483d06697e`), chờ receipt, và xác nhận `getValidationStatus` on-chain lưu trữ `score: 0`, `tag: failed:ROOT_MISMATCH...`, `validator: 0x83F5...`. |
+| **M7-07** | Tích hợp Dynamic Verification Route `/api/verify` | **ĐẠT** | Tuyệt đối tuân thủ chuẩn Next.js route: chỉ export handler `GET`, testing fetcher hook chuyển về module thư viện. Route tự động tính `requestHash` và truy vấn trạng thái ERC-8004 từ `ValidationRegistry` on-chain hoặc validation cache. |
+| **M7-08** | Typecheck & Test Suite Toàn Diện | **ĐẠT** | `npx tsc --noEmit -p apps/web` sạch 100% (0 errors). M7 suite pass 6/6 tests. Toàn bộ `apps/web` pass 232/232 tests (29 files). Contracts Forge suite pass 61/61 tests. Packages pass 18/18 tests. Next.js production build pass 33/33 static pages. |
+
+### 2. Tổng Hợp Kết Quả Kiểm Thử Toàn Diện
+- `apps/web` (Vitest): **29/29 files passed, 232/232 tests passed (100%)**
+- `apps/web/tests/m7-validator-automation.test.ts`: **6/6 tests passed** (gồm M7-06 Anvil fork live contract verification)
+- `packages/guard` (Vitest): **2/2 files passed, 12/12 tests passed** (180-case differential parity)
+- `packages/mcp` (Vitest): **1/1 file passed, 6/6 tests passed**
+- `contracts` (Foundry): **4 suites passed, 61/61 tests passed** (gồm 512 invariant runs, 32,768 calls, 0 reverts)
+- TypeScript Typecheck (`tsc --noEmit -p apps/web`): **0 errors (100% clean)**
+- Production Build (`next build`): **33/33 static & dynamic routes compiled successfully**

@@ -83,6 +83,10 @@ export async function createTestMission(params?: {
   durationSeconds?: number;
   status?: string;
   stage?: 'S1' | 'S2';
+  payeesJson?: string;
+  payeeRoot?: string;
+  publicPublished?: boolean;
+  auditHeadHash?: string;
 }) {
   const stage = params?.stage || 'S1';
   if (stage === 'S2') {
@@ -114,6 +118,10 @@ export async function createTestMission(params?: {
       status: params?.status || 'ACTIVE',
       configVersion: 1,
       policyHash,
+      payeesJson: params?.payeesJson,
+      payeeRoot: params?.payeeRoot,
+      publicPublished: params?.publicPublished ?? false,
+      auditHeadHash: params?.auditHeadHash,
     },
   });
 

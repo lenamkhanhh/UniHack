@@ -10,10 +10,17 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 Claude duyệt M6 (2f2ba4a, 09/11): apps/web 226/226 pass; cờ version đọc từ env; ATC'26 chạy `describe.each([1,2])`; Part E ghi facilitator PayAI public (relayer 0xc669…). Đạt.
 
-- **M7 đang làm.** Acceptance thêm: trước khi commit, `npx tsc --noEmit -p apps/web` phải sạch. Lúc Claude kiểm thì bản M7 chưa commit còn lỗi: `latestAuditHead` chưa khai báo ở `verify/[missionId]/route.ts:296`; route export thêm `setValidationFetcherForTesting` (Next route chỉ được export handler, phải chuyển sang module riêng); `writeContract` thiếu `chain` ở `validator-job.ts:335`; test dùng `payeesJson` và `createChallenge` không tồn tại. Test tamper → score 0 phải chạy trên anvil fork như PLAN_MAX ghi; validator dùng key riêng, không dùng owner.
+
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
+
+- MAX-M7 [Automated Post-Mission Validator Runner & Dynamic Verification]:
+  - **Tách biệt module & Tuân thủ Next.js Route Exports:** Chuyển `setValidationFetcherForTesting` và `getValidationFetcherForTesting` vào `apps/web/lib/validator-job.ts`. `apps/web/app/api/verify/[missionId]/route.ts` chỉ export duy nhất HTTP handler `GET`. Khai báo và sử dụng chính xác `computedHead` (từ `entries` hoặc `mission.auditHeadHash`).
+  - **Runner độc lập & Tự động kích hoạt khi đóng mission:** Tạo `apps/web/lib/validator-job.ts` với `buildMissionValidationBundle(slug)` và `runMissionValidatorJob(slug)`. Tự động gọi runner khi đóng mission thành công tại `POST /api/missions/[slug]/close`.
+  - **Validator chuyên dụng (Dedicated Key):** Sử dụng khóa riêng `VALIDATOR_PRIVATE_KEY` (`0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5`), độc lập tuyệt đối với ví owner. Bổ sung tham số `chain: avalancheFuji` và `account: validatorAccount` cho `writeContract` chuẩn viem.
+  - **Kiểm chứng On-Chain trên Anvil Fork (Tamper -> Score 0):** Test M7-06 chạy trực tiếp trên Anvil fork (`http://127.0.0.1:8546`), đánh giá bundle giả mạo (`ROOT_MISMATCH`), phát sóng giao dịch `validationResponse` lên `ValidationRegistry` (`0x4c5ccda2a630cd1cb706799deadcc8483d06697e`) và kiểm tra `getValidationStatus` on-chain xác nhận `score: 0`, `tag: failed:ROOT_MISMATCH...`, `validator: 0x83F5...`.
+  - **Đảm bảo Type-safety & Test Suites hoàn hảo:** `npx tsc --noEmit -p apps/web` sạch 100% (0 errors). Test suite `apps/web/tests/m7-validator-automation.test.ts` pass 6/6. Toàn bộ `apps/web` test suite pass 232/232 (29 files). Contracts Forge suite pass 61/61 tests. Packages pass 18/18 tests. Next.js production build pass 33/33 static pages.
 
 - M6-F1..F3 [x402 v2 Refinements, Dual-Version ATC'26 Parameterization & Facilitator Evidence]:
   - **M6-F1 (Dynamic X402_VERSION Flag & Callers Cleaned):** Đã loại bỏ hằng số gán cứng `export const X402_VERSION = 2;`. Toàn bộ caller (`constants.ts`, `payments.ts`, `tools.ts`, `route.ts`) chuyển sang gọi trực tiếp `getActiveX402Version()` (hoặc alias `getX402Version`). Khi `X402_VERSION=1`, route 402 trả về header `X-PAYMENT` và body kiểu v1 (`maxAmountRequired`, network `avalanche-fuji`); khi `X402_VERSION=2`, trả về header `PAYMENT-REQUIRED` và body kiểu v2 (`amount`, network `eip155:43113`). Đã bổ sung 2 unit test kiểm chứng trong `x402-v2.test.ts`.
