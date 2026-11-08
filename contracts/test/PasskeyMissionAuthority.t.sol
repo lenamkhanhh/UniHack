@@ -40,6 +40,10 @@ contract PasskeyMissionAuthorityTest is Test {
     uint256 internal passkeyX;
     uint256 internal passkeyY;
 
+    bytes32 internal defaultRpIdHash = sha256(bytes("localhost"));
+    string internal defaultOrigin = "http://localhost:3100";
+    bool internal defaultRequireUV = true;
+
     address internal relayer = address(0x9999);
     address internal agent = address(0x1111);
     address internal attacker = address(0x6666);
@@ -93,6 +97,21 @@ contract PasskeyMissionAuthorityTest is Test {
         return address(uint160(uint256(keccak256(data))));
     }
 
+    function _indexOf(bytes memory haystack, bytes memory needle) internal pure returns (uint256) {
+        if (needle.length == 0 || needle.length > haystack.length) return type(uint256).max;
+        for (uint256 i = 0; i <= haystack.length - needle.length; i++) {
+            bool found = true;
+            for (uint256 j = 0; j < needle.length; j++) {
+                if (haystack[i + j] != needle[j]) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) return i;
+        }
+        return type(uint256).max;
+    }
+
     function setUp() public {
         (bytes32 qx, bytes32 qy) = vm_publicKeyP256(passkeyPrivKey);
         passkeyX = uint256(qx);
@@ -121,10 +140,96 @@ contract PasskeyMissionAuthorityTest is Test {
         authority = new PasskeyMissionAuthority(
             address(treasury),
             passkeyX,
-            passkeyY
+            passkeyY,
+            defaultRpIdHash,
+            defaultOrigin,
+            defaultRequireUV
         );
 
         require(address(authority) == predictedAuthority, "AuthorityAddressMismatch");
+    }
+
+    struct CustomAuthParams {
+        bytes32 challenge;
+        uint256 privKey;
+        bytes32 rpIdHashVal;
+        uint8 flagByte;
+        string typeVal;
+        string originVal;
+        bool addCrossOriginTrue;
+        bool forceHighS;
+    }
+
+    function _makeAuthenticatorData(bytes32 rpIdHashVal, uint8 flagByte) internal pure returns (bytes memory) {
+        bytes memory authData = new bytes(37);
+        for (uint256 i = 0; i < 32; i++) {
+            authData[i] = rpIdHashVal[i];
+        }
+        authData[32] = bytes1(flagByte);
+        authData[36] = 0x01;
+        return authData;
+    }
+
+    function _makeClientDataJSON(
+        bytes memory challengeB64,
+        string memory typeVal,
+        string memory originVal,
+        bool addCrossOriginTrue
+    ) internal pure returns (string memory) {
+        if (addCrossOriginTrue) {
+            return string(
+                abi.encodePacked(
+                    '{"type":"', typeVal,
+                    '","challenge":"', string(challengeB64),
+                    '","origin":"', originVal,
+                    '","crossOrigin":true}'
+                )
+            );
+        }
+        return string(
+            abi.encodePacked(
+                '{"type":"', typeVal,
+                '","challenge":"', string(challengeB64),
+                '","origin":"', originVal,
+                '"}'
+            )
+        );
+    }
+
+    function _buildCustomAuth(CustomAuthParams memory p) internal returns (PasskeyMissionAuthority.WebAuthnAuth memory) {
+        bytes memory authenticatorData = _makeAuthenticatorData(p.rpIdHashVal, p.flagByte);
+        bytes memory challengeB64 = authority.encodeBase64Url32(p.challenge);
+        string memory clientDataJSON = _makeClientDataJSON(challengeB64, p.typeVal, p.originVal, p.addCrossOriginTrue);
+
+        bytes memory clientBytes = bytes(clientDataJSON);
+        bytes memory typeNeedle = abi.encodePacked('"type":"', p.typeVal, '"');
+        bytes memory challengeNeedle = abi.encodePacked('"challenge":"', string(challengeB64), '"');
+        bytes memory originNeedle = abi.encodePacked('"origin":"', p.originVal, '"');
+
+        bytes32 messageHash = sha256(abi.encodePacked(authenticatorData, sha256(clientBytes)));
+        (bytes32 r, bytes32 s) = vm_signP256(p.privKey, messageHash);
+
+        uint256 secp256r1N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;
+        uint256 sInt = uint256(s);
+        if (p.forceHighS) {
+            if (sInt <= secp256r1N / 2) {
+                sInt = secp256r1N - sInt;
+            }
+        } else {
+            if (sInt > secp256r1N / 2) {
+                sInt = secp256r1N - sInt;
+            }
+        }
+
+        return PasskeyMissionAuthority.WebAuthnAuth({
+            authenticatorData: authenticatorData,
+            clientDataJSON: clientDataJSON,
+            challengeIndex: _indexOf(clientBytes, challengeNeedle),
+            typeIndex: _indexOf(clientBytes, typeNeedle),
+            originIndex: _indexOf(clientBytes, originNeedle),
+            r: uint256(r),
+            s: sInt
+        });
     }
 
     function _buildWebAuthnAuth(
@@ -132,47 +237,16 @@ contract PasskeyMissionAuthorityTest is Test {
         uint256 privKey,
         uint8 flagByte
     ) internal returns (PasskeyMissionAuthority.WebAuthnAuth memory) {
-        bytes memory authenticatorData = new bytes(37);
-        for (uint256 i = 0; i < 32; i++) {
-            authenticatorData[i] = bytes1(uint8(i + 1));
-        }
-        authenticatorData[32] = bytes1(flagByte); // UP / UV flags
-        authenticatorData[33] = 0x00;
-        authenticatorData[34] = 0x00;
-        authenticatorData[35] = 0x00;
-        authenticatorData[36] = 0x01; // signCount = 1
-
-        bytes memory challengeB64 = authority.encodeBase64Url32(challenge);
-        string memory clientDataJSON = string(
-            abi.encodePacked(
-                '{"type":"webauthn.get","challenge":"',
-                string(challengeB64),
-                '","origin":"http://localhost:3100"}'
-            )
-        );
-
-        uint256 typeIndex = 1; // start of '"type":"webauthn.get"' in clientDataJSON
-        uint256 challengeIndex = 23; // start of '"challenge":"<b64>"' in clientDataJSON
-
-        bytes32 clientDataHash = sha256(bytes(clientDataJSON));
-        bytes32 messageHash = sha256(abi.encodePacked(authenticatorData, clientDataHash));
-
-        (bytes32 r, bytes32 s) = vm_signP256(privKey, messageHash);
-
-        uint256 secp256r1N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;
-        uint256 sInt = uint256(s);
-        if (sInt > secp256r1N / 2) {
-            sInt = secp256r1N - sInt;
-        }
-
-        return PasskeyMissionAuthority.WebAuthnAuth({
-            authenticatorData: authenticatorData,
-            clientDataJSON: clientDataJSON,
-            challengeIndex: challengeIndex,
-            typeIndex: typeIndex,
-            r: uint256(r),
-            s: sInt
-        });
+        return _buildCustomAuth(CustomAuthParams({
+            challenge: challenge,
+            privKey: privKey,
+            rpIdHashVal: defaultRpIdHash,
+            flagByte: flagByte,
+            typeVal: "webauthn.get",
+            originVal: defaultOrigin,
+            addCrossOriginTrue: false,
+            forceHighS: false
+        }));
     }
 
     function test_approveMission_happyPath() public {
@@ -192,7 +266,8 @@ contract PasskeyMissionAuthorityTest is Test {
             )
         );
 
-        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWebAuthnAuth(challenge, passkeyPrivKey, 0x01);
+        // Flag 0x05 = User Present (0x01) + User Verified (0x04)
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWebAuthnAuth(challenge, passkeyPrivKey, 0x05);
 
         vm_prank(relayer);
         authority.approveMission(missionId, agent, payeeRoot, cap, duration, toolCap, nonce, auth);
@@ -234,7 +309,7 @@ contract PasskeyMissionAuthorityTest is Test {
             )
         );
 
-        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWebAuthnAuth(challenge, passkeyPrivKey, 0x01);
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWebAuthnAuth(challenge, passkeyPrivKey, 0x05);
 
         vm_prank(relayer);
         authority.approveMission(missionId, agent, payeeRoot, cap, duration, toolCap, nonce, auth);
@@ -248,13 +323,7 @@ contract PasskeyMissionAuthorityTest is Test {
         bytes32 challenge,
         uint256 privKey
     ) internal returns (PasskeyMissionAuthority.WebAuthnAuth memory) {
-        bytes memory authenticatorData = new bytes(37);
-        for (uint256 i = 0; i < 32; i++) {
-            authenticatorData[i] = bytes1(uint8(i + 1));
-        }
-        authenticatorData[32] = bytes1(uint8(0x01)); // UP flag
-        authenticatorData[36] = 0x01; // signCount = 1
-
+        bytes memory authenticatorData = _makeAuthenticatorData(defaultRpIdHash, 0x05);
         bytes memory challengeB64 = authority.encodeBase64Url32(challenge);
         string memory clientDataJSON = string(
             abi.encodePacked(
@@ -264,8 +333,8 @@ contract PasskeyMissionAuthorityTest is Test {
             )
         );
 
-        bytes32 clientDataHash = sha256(bytes(clientDataJSON));
-        bytes32 messageHash = sha256(abi.encodePacked(authenticatorData, clientDataHash));
+        bytes memory clientBytes = bytes(clientDataJSON);
+        bytes32 messageHash = sha256(abi.encodePacked(authenticatorData, sha256(clientBytes)));
         (bytes32 r, bytes32 s) = vm_signP256(privKey, messageHash);
 
         return PasskeyMissionAuthority.WebAuthnAuth({
@@ -273,6 +342,7 @@ contract PasskeyMissionAuthorityTest is Test {
             clientDataJSON: clientDataJSON,
             challengeIndex: 23,
             typeIndex: 1,
+            originIndex: _indexOf(clientBytes, bytes('"origin":"http://localhost:3100"')),
             r: uint256(r),
             s: uint256(s)
         });
@@ -282,7 +352,7 @@ contract PasskeyMissionAuthorityTest is Test {
         uint256 nonce = authority.nextNonce();
         bytes32 corruptedChallenge = keccak256("corrupted_challenge");
 
-        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWebAuthnAuth(corruptedChallenge, passkeyPrivKey, 0x01);
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWebAuthnAuth(corruptedChallenge, passkeyPrivKey, 0x05);
 
         vm_prank(relayer);
         vm_expectRevertString("ChallengeMismatch");
@@ -330,11 +400,321 @@ contract PasskeyMissionAuthorityTest is Test {
             )
         );
 
-        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWebAuthnAuth(challenge, passkeyPrivKey, 0x00);
+        // Flag 0x04 = UV only without UP (bit 0 is 0)
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWebAuthnAuth(challenge, passkeyPrivKey, 0x04);
 
         vm_prank(relayer);
         vm_expectRevertString("UserPresenceRequired");
         authority.approveMission(missionId, agent, payeeRoot, cap, duration, toolCap, nonce, auth);
+    }
+
+    // ==========================================
+    // 8 SPECIFIC TESTS FOR PK-F1 HARDENING
+    // ==========================================
+
+    function test_wrongRpIdHash_reverts() public {
+        uint256 nonce = authority.nextNonce();
+        bytes32 challenge = keccak256(
+            abi.encode(
+                "MissionPay-passkey-v1",
+                block.chainid,
+                address(authority),
+                missionId,
+                agent,
+                payeeRoot,
+                cap,
+                duration,
+                toolCap,
+                nonce
+            )
+        );
+
+        bytes32 wrongRpIdHash = sha256(bytes("attacker-phishing.com"));
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildCustomAuth(CustomAuthParams({
+            challenge: challenge,
+            privKey: passkeyPrivKey,
+            rpIdHashVal: wrongRpIdHash,
+            flagByte: 0x05,
+            typeVal: "webauthn.get",
+            originVal: defaultOrigin,
+            addCrossOriginTrue: false,
+            forceHighS: false
+        }));
+
+        vm_prank(relayer);
+        vm_expectRevertString("InvalidRpIdHash");
+        authority.approveMission(missionId, agent, payeeRoot, cap, duration, toolCap, nonce, auth);
+    }
+
+    function test_phishingOrigin_reverts() public {
+        uint256 nonce = authority.nextNonce();
+        bytes32 challenge = keccak256(
+            abi.encode(
+                "MissionPay-passkey-v1",
+                block.chainid,
+                address(authority),
+                missionId,
+                agent,
+                payeeRoot,
+                cap,
+                duration,
+                toolCap,
+                nonce
+            )
+        );
+
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildCustomAuth(CustomAuthParams({
+            challenge: challenge,
+            privKey: passkeyPrivKey,
+            rpIdHashVal: defaultRpIdHash,
+            flagByte: 0x05,
+            typeVal: "webauthn.get",
+            originVal: "https://phishing-missionpay.com",
+            addCrossOriginTrue: false,
+            forceHighS: false
+        }));
+
+        vm_prank(relayer);
+        vm_expectRevertString("OriginMismatch");
+        authority.approveMission(missionId, agent, payeeRoot, cap, duration, toolCap, nonce, auth);
+    }
+
+    function test_originPrefixTrick_reverts() public {
+        uint256 nonce = authority.nextNonce();
+        bytes32 challenge = keccak256(
+            abi.encode(
+                "MissionPay-passkey-v1",
+                block.chainid,
+                address(authority),
+                missionId,
+                agent,
+                payeeRoot,
+                cap,
+                duration,
+                toolCap,
+                nonce
+            )
+        );
+
+        // Attacker attempts subdomain prefix bypass trick
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildCustomAuth(CustomAuthParams({
+            challenge: challenge,
+            privKey: passkeyPrivKey,
+            rpIdHashVal: defaultRpIdHash,
+            flagByte: 0x05,
+            typeVal: "webauthn.get",
+            originVal: "http://localhost:3100.evil.com",
+            addCrossOriginTrue: false,
+            forceHighS: false
+        }));
+
+        vm_prank(relayer);
+        vm_expectRevertString("OriginMismatch");
+        authority.approveMission(missionId, agent, payeeRoot, cap, duration, toolCap, nonce, auth);
+    }
+
+    function test_userPresentWithoutVerification_reverts() public {
+        uint256 nonce = authority.nextNonce();
+        bytes32 challenge = keccak256(
+            abi.encode(
+                "MissionPay-passkey-v1",
+                block.chainid,
+                address(authority),
+                missionId,
+                agent,
+                payeeRoot,
+                cap,
+                duration,
+                toolCap,
+                nonce
+            )
+        );
+
+        // UP (0x01) without UV (0x04) -> flag 0x01
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildCustomAuth(CustomAuthParams({
+            challenge: challenge,
+            privKey: passkeyPrivKey,
+            rpIdHashVal: defaultRpIdHash,
+            flagByte: 0x01,
+            typeVal: "webauthn.get",
+            originVal: defaultOrigin,
+            addCrossOriginTrue: false,
+            forceHighS: false
+        }));
+
+        vm_prank(relayer);
+        vm_expectRevertString("UserVerificationRequired");
+        authority.approveMission(missionId, agent, payeeRoot, cap, duration, toolCap, nonce, auth);
+    }
+
+    function test_registrationCeremonyAsAssertion_reverts() public {
+        uint256 nonce = authority.nextNonce();
+        bytes32 challenge = keccak256(
+            abi.encode(
+                "MissionPay-passkey-v1",
+                block.chainid,
+                address(authority),
+                missionId,
+                agent,
+                payeeRoot,
+                cap,
+                duration,
+                toolCap,
+                nonce
+            )
+        );
+
+        // Type "webauthn.create" instead of "webauthn.get"
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildCustomAuth(CustomAuthParams({
+            challenge: challenge,
+            privKey: passkeyPrivKey,
+            rpIdHashVal: defaultRpIdHash,
+            flagByte: 0x05,
+            typeVal: "webauthn.create",
+            originVal: defaultOrigin,
+            addCrossOriginTrue: false,
+            forceHighS: false
+        }));
+
+        vm_prank(relayer);
+        vm_expectRevertString("InvalidWebAuthnType");
+        authority.approveMission(missionId, agent, payeeRoot, cap, duration, toolCap, nonce, auth);
+    }
+
+    function test_highS_reverts() public {
+        uint256 nonce = authority.nextNonce();
+        bytes32 challenge = keccak256(
+            abi.encode(
+                "MissionPay-passkey-v1",
+                block.chainid,
+                address(authority),
+                missionId,
+                agent,
+                payeeRoot,
+                cap,
+                duration,
+                toolCap,
+                nonce
+            )
+        );
+
+        // Force s > N / 2 (high-S malleability)
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildCustomAuth(CustomAuthParams({
+            challenge: challenge,
+            privKey: passkeyPrivKey,
+            rpIdHashVal: defaultRpIdHash,
+            flagByte: 0x05,
+            typeVal: "webauthn.get",
+            originVal: defaultOrigin,
+            addCrossOriginTrue: false,
+            forceHighS: true
+        }));
+
+        vm_prank(relayer);
+        vm_expectRevertString("InvalidSignatureS");
+        authority.approveMission(missionId, agent, payeeRoot, cap, duration, toolCap, nonce, auth);
+    }
+
+    function test_crossOriginTrue_reverts() public {
+        uint256 nonce = authority.nextNonce();
+        bytes32 challenge = keccak256(
+            abi.encode(
+                "MissionPay-passkey-v1",
+                block.chainid,
+                address(authority),
+                missionId,
+                agent,
+                payeeRoot,
+                cap,
+                duration,
+                toolCap,
+                nonce
+            )
+        );
+
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildCustomAuth(CustomAuthParams({
+            challenge: challenge,
+            privKey: passkeyPrivKey,
+            rpIdHashVal: defaultRpIdHash,
+            flagByte: 0x05,
+            typeVal: "webauthn.get",
+            originVal: defaultOrigin,
+            addCrossOriginTrue: true,
+            forceHighS: false
+        }));
+
+        vm_prank(relayer);
+        vm_expectRevertString("CrossOriginNotAllowed");
+        authority.approveMission(missionId, agent, payeeRoot, cap, duration, toolCap, nonce, auth);
+    }
+
+    function test_rotatePasskey_requiresSameChecks() public {
+        uint256 newPrivKey = 0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890;
+        (bytes32 nqx, bytes32 nqy) = vm_publicKeyP256(newPrivKey);
+        uint256 newX = uint256(nqx);
+        uint256 newY = uint256(nqy);
+
+        uint256 nonce = authority.nextNonce();
+        bytes32 challenge = keccak256(
+            abi.encode(
+                "MissionPay-passkey-rotate-v1",
+                block.chainid,
+                address(authority),
+                newX,
+                newY,
+                nonce
+            )
+        );
+
+        // Case 1: Wrong RP ID hash in rotation assertion
+        bytes32 wrongRpIdHash = sha256(bytes("attacker-phishing.com"));
+        PasskeyMissionAuthority.WebAuthnAuth memory badAuthRp = _buildCustomAuth(CustomAuthParams({
+            challenge: challenge,
+            privKey: passkeyPrivKey,
+            rpIdHashVal: wrongRpIdHash,
+            flagByte: 0x05,
+            typeVal: "webauthn.get",
+            originVal: defaultOrigin,
+            addCrossOriginTrue: false,
+            forceHighS: false
+        }));
+        vm_expectRevertString("InvalidRpIdHash");
+        authority.rotatePasskey(newX, newY, nonce, badAuthRp);
+
+        // Case 2: Phishing origin in rotation assertion
+        PasskeyMissionAuthority.WebAuthnAuth memory badAuthOrigin = _buildCustomAuth(CustomAuthParams({
+            challenge: challenge,
+            privKey: passkeyPrivKey,
+            rpIdHashVal: defaultRpIdHash,
+            flagByte: 0x05,
+            typeVal: "webauthn.get",
+            originVal: "https://phishing.evil",
+            addCrossOriginTrue: false,
+            forceHighS: false
+        }));
+        vm_expectRevertString("OriginMismatch");
+        authority.rotatePasskey(newX, newY, nonce, badAuthOrigin);
+
+        // Case 3: Missing UV in rotation assertion
+        PasskeyMissionAuthority.WebAuthnAuth memory badAuthUV = _buildCustomAuth(CustomAuthParams({
+            challenge: challenge,
+            privKey: passkeyPrivKey,
+            rpIdHashVal: defaultRpIdHash,
+            flagByte: 0x01, // UP only
+            typeVal: "webauthn.get",
+            originVal: defaultOrigin,
+            addCrossOriginTrue: false,
+            forceHighS: false
+        }));
+        vm_expectRevertString("UserVerificationRequired");
+        authority.rotatePasskey(newX, newY, nonce, badAuthUV);
+
+        // Case 4: Happy path rotation
+        PasskeyMissionAuthority.WebAuthnAuth memory validAuth = _buildWebAuthnAuth(challenge, passkeyPrivKey, 0x05);
+        authority.rotatePasskey(newX, newY, nonce, validAuth);
+
+        assertEq(authority.passkeyX(), newX);
+        assertEq(authority.passkeyY(), newY);
     }
 
     function test_rotatePasskey_happyPath() public {
@@ -355,7 +735,7 @@ contract PasskeyMissionAuthorityTest is Test {
             )
         );
 
-        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWebAuthnAuth(challenge, passkeyPrivKey, 0x01);
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWebAuthnAuth(challenge, passkeyPrivKey, 0x05);
 
         authority.rotatePasskey(newX, newY, nonce, auth);
 
@@ -380,7 +760,7 @@ contract PasskeyMissionAuthorityTest is Test {
             )
         );
 
-        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWebAuthnAuth(challenge, passkeyPrivKey, 0x01);
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWebAuthnAuth(challenge, passkeyPrivKey, 0x05);
 
         address randomUntrustedRelayer = address(0x5555);
         vm_prank(randomUntrustedRelayer);
@@ -407,7 +787,7 @@ contract PasskeyMissionAuthorityTest is Test {
             )
         );
 
-        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWebAuthnAuth(challenge, passkeyPrivKey, 0x01);
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWebAuthnAuth(challenge, passkeyPrivKey, 0x05);
 
         vm_prank(relayer);
         authority.approveMission(missionId, agent, payeeRoot, cap, duration, toolCap, nonce, auth);

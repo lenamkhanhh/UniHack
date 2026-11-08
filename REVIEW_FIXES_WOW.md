@@ -7,6 +7,13 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 (Hiện không có mục OPEN)
 
 ## DONE
+- PK-F1 [P0] Đã làm chặt bộ kiểm WebAuthn trong `PasskeyMissionAuthority.sol` ngang chuẩn `allowance-ai` (NEAR):
+  - Constructor nhận `rpIdHash`, `expectedOrigin`, `requireUserVerification`.
+  - `_verifyWebAuthn`: (1) `authenticatorData[0:32] == rpIdHash`; (2) cờ UP (bit 0) bắt buộc, cờ UV (bit 2) bắt buộc khi `requireUserVerification`; (3) `clientDataJSON` chứa đúng `"origin":"<expectedOrigin>"` (so khớp có prefix key và dấu nháy đóng tại `originIndex`, chống prefix bypass trick); (4) giữ kiểm type + challenge có prefix; (5) từ chối `"crossOrigin":true`; (6) chống high-S malleability.
+  - 8 tests Foundry mới (tên cố định): `test_wrongRpIdHash_reverts`, `test_phishingOrigin_reverts`, `test_originPrefixTrick_reverts`, `test_userPresentWithoutVerification_reverts`, `test_registrationCeremonyAsAssertion_reverts`, `test_highS_reverts`, `test_crossOriginTrue_reverts`, `test_rotatePasskey_requiresSameChecks`. Toàn bộ 16/16 passkey tests pass, 60/60 tests toàn repo pass.
+  - Cập nhật `scripts/passkey-deploy-for-owner.ts`, `apps/web/app/missions/new/page.tsx`, `apps/web/app/api/passkey/relay/route.ts`. Vitest passkey relay 4/4 pass, tsc 0 lỗi.
+  - Deploy instance mới độc lập lên Avalanche Fuji: GuardedTreasury (`0x58d5bcd57c3cf089dc93b0e3f5f6def3a69a81af`, block #60724322) và PasskeyMissionAuthority (`0x46f48bece672266541d73d752684859a8f3c8aef`, block #60724326). Giao dịch `approveMission` thật bằng khóa P-256 + UV assertion thành công trên Fuji: Tx [`0x494b664be33d2c2d08575884f3ceb546779e8c7eb8eaec0bed171a11f0d7a929`](https://testnet.snowtrace.io/tx/0x494b664be33d2c2d08575884f3ceb546779e8c7eb8eaec0bed171a11f0d7a929), block #60724328, gasUsed 400,354. Ghi nhận vào `artifacts/submission-s1/FUJI_EVIDENCE.md` Part D và `evidence/cost.json` (giữ dòng cũ pre-hardening).
+  - Cập nhật tài liệu đầy đủ tại `docs/PASSKEY.md`.
 - W6-F2 `cost.json` đã đổi `latencyMs` thành `receiptFetchMs`, đơn vị gas price ghi rõ `effectiveGasPriceWei` (160 wei, 103 wei). Đã chạy đo finality thực tế trên Avalanche Fuji bằng 3 giao dịch gửi từ ví relayer chờ receipt on-chain: `samplesMs: [3116, 4155, 4222]`, `medianMs: 4155` ms (~4.1 giây).
 - W6-F3 `cost.json` cập nhật `erc8004_validationResponse` trỏ đúng tx hash mới `0xb641353c51d0f44192bcbf40743c20940b88a83c52a2c41f5852aea1ebe4d059` (gasUsed: 50,747 tại block #60712718).
 - W6-F4 Đã chuyển toàn bộ link tuyệt đối `file:///D:/...` trong `eval/README.md` sang đường dẫn tương đối trong repository. `git grep "file:///" "*.md"` ngoài file này trả về rỗng.

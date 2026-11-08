@@ -1,7 +1,7 @@
 {
   "network": "Avalanche Fuji Testnet",
   "chainId": 43113,
-  "recordedAt": "2026-11-08T05:05:35.903Z",
+  "recordedAt": "2026-11-08T09:15:47.176Z",
   "transactions": [
     {
       "name": "proposeWithProof",
@@ -11,7 +11,7 @@
       "effectiveGasPriceWei": 160,
       "feeAvax": "0.00000000006995824",
       "status": "success",
-      "receiptFetchMs": 188
+      "receiptFetchMs": 570
     },
     {
       "name": "x402_settlement",
@@ -21,7 +21,7 @@
       "effectiveGasPriceWei": 2000010,
       "feeAvax": "0.00000018478492392",
       "status": "success",
-      "receiptFetchMs": 62
+      "receiptFetchMs": 128
     },
     {
       "name": "proof_anchor",
@@ -31,17 +31,29 @@
       "effectiveGasPriceWei": 160,
       "feeAvax": "0.00000000000538992",
       "status": "success",
-      "receiptFetchMs": 61
+      "receiptFetchMs": 105
     },
     {
-      "name": "passkey_approveMission",
+      "name": "passkey_approveMission_pre_hardening",
       "hash": "0x9885664fcfc45539af1183fa3768f6e2dbfb52c76544b7b6f1ee14833790cf45",
       "blockNumber": 60712056,
       "gasUsed": 281498,
       "effectiveGasPriceWei": 103,
       "feeAvax": "0.000000000028994294",
       "status": "success",
-      "receiptFetchMs": 66
+      "receiptFetchMs": 95,
+      "note": "Initial deployment without origin/rpId/UV enforcement"
+    },
+    {
+      "name": "passkey_approveMission_hardened",
+      "hash": "0x494b664be33d2c2d08575884f3ceb546779e8c7eb8eaec0bed171a11f0d7a929",
+      "blockNumber": 60724328,
+      "gasUsed": 400354,
+      "effectiveGasPriceWei": 103,
+      "feeAvax": "0.000000000041236462",
+      "status": "success",
+      "receiptFetchMs": 85,
+      "note": "PK-F1 hardened: rpIdHash, exact origin match, UP+UV flags, RIP-7212 precompile 0x100"
     },
     {
       "name": "erc8004_validationResponse",
@@ -51,16 +63,16 @@
       "effectiveGasPriceWei": 103,
       "feeAvax": "0.000000000005226941",
       "status": "success",
-      "receiptFetchMs": 57
+      "receiptFetchMs": 94
     }
   ],
   "finality": {
     "method": "real sendTransaction to receipt confirmation on Fuji C-Chain",
     "samplesMs": [
-      3116,
-      4155,
-      4222
+      6330,
+      6409,
+      6714
     ],
-    "medianMs": 4155
+    "medianMs": 6409
   }
 }

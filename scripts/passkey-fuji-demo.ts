@@ -1,15 +1,17 @@
 /**
- * Live Avalanche Fuji Demonstration: PasskeyMissionAuthority (WOW-W4)
+ * Live Avalanche Fuji Demonstration: PasskeyMissionAuthority (WOW-W4 / PK-F1 Hardened)
  *
  * Demonstrates owner approving a mission via biometric WebAuthn P-256 signature
  * verified on-chain by Avalanche RIP-7212 P-256 precompile (0x100).
+ * Hardened with RP ID hash, strict origin validation, User Verification (UV) enforcement,
+ * crossOrigin rejection, and high-S protection.
  *
  * Steps:
  * 1. Generates a fresh software P-256 key pair (representing user's biometric passkey).
  * 2. Predicts CREATE address for PasskeyMissionAuthority.
  * 3. Deploys GuardedTreasury instance with predicted Authority as owner.
- * 4. Deploys PasskeyMissionAuthority with GuardedTreasury address and P-256 public coordinates.
- * 5. Constructs WebAuthn assertion for mission approval.
+ * 4. Deploys PasskeyMissionAuthority with GuardedTreasury address, P-256 coordinates, rpIdHash, expectedOrigin, and requireUV.
+ * 5. Constructs WebAuthn assertion for mission approval (with UP + UV flags).
  * 6. Broadcasts approveMission transaction on Fuji testnet.
  * 7. Records transaction hash, gas used, and contracts to artifacts/submission-s1/FUJI_EVIDENCE.md.
  */
@@ -50,12 +52,11 @@ function updateEnvFile(filePath: string, key: string, value: string) {
 }
 
 export function buildWebAuthnAssertion(privKey: crypto.KeyObject, challengeHex: `0x${string}`) {
-  // 37 bytes authenticatorData: 32 bytes rpIdHash + 1 byte flags (0x01 UP) + 4 bytes signCount
+  // 37 bytes authenticatorData: 32 bytes rpIdHash + 1 byte flags (0x01 UP | 0x04 UV = 0x05) + 4 bytes signCount
+  const rpIdHash = crypto.createHash('sha256').update('localhost').digest();
   const authenticatorData = Buffer.alloc(37);
-  for (let i = 0; i < 32; i++) {
-    authenticatorData[i] = (i + 1) & 0xff;
-  }
-  authenticatorData[32] = 0x01; // User Present (UP) bit set
+  rpIdHash.copy(authenticatorData, 0);
+  authenticatorData[32] = 0x05; // User Present (0x01) + User Verified (0x04)
   authenticatorData[36] = 0x01; // signCount = 1
 
   const challengeRaw = Buffer.from(challengeHex.slice(2), 'hex');
@@ -65,6 +66,7 @@ export function buildWebAuthnAssertion(privKey: crypto.KeyObject, challengeHex: 
 
   const typeIndex = clientDataJSON.indexOf('"type":"webauthn.get"');
   const challengeIndex = clientDataJSON.indexOf(`"challenge":"${challengeB64}"`);
+  const originIndex = clientDataJSON.indexOf('"origin":"http://localhost:3100"');
 
   const clientDataHash = crypto.createHash('sha256').update(clientDataJSON).digest();
   const message = Buffer.concat([authenticatorData, clientDataHash]);
@@ -98,13 +100,14 @@ export function buildWebAuthnAssertion(privKey: crypto.KeyObject, challengeHex: 
     clientDataJSON,
     typeIndex: BigInt(typeIndex),
     challengeIndex: BigInt(challengeIndex),
+    originIndex: BigInt(originIndex),
     r: rBig,
     s: sBig,
   };
 }
 
 async function main() {
-  console.log('[Passkey Fuji Demo] Starting Passkey Mission Authority live workflow on Avalanche Fuji...');
+  console.log('[Passkey Fuji Demo] Starting Hardened Passkey Mission Authority live workflow on Avalanche Fuji...');
 
   const ownerAccount = getOwnerAccount();
   console.log(`[Passkey Fuji Demo] Relayer/Deployer Address: ${ownerAccount.address}`);
@@ -164,15 +167,19 @@ async function main() {
   const treasuryAddress = treasuryReceipt.contractAddress!;
   console.log(`[Passkey Fuji Demo] GuardedTreasury deployed at: ${treasuryAddress} (block #${treasuryReceipt.blockNumber}, gasUsed: ${treasuryReceipt.gasUsed})`);
 
-  // 4. Deploy PasskeyMissionAuthority
+  // 4. Deploy PasskeyMissionAuthority (PK-F1 Hardened)
   const authorityArtifactPath = path.resolve(__dirname, '../contracts/out/PasskeyMissionAuthority.sol/PasskeyMissionAuthority.json');
   const authorityArtifact = JSON.parse(fs.readFileSync(authorityArtifactPath, 'utf8'));
 
-  console.log('[Passkey Fuji Demo] Step 2: Deploying PasskeyMissionAuthority...');
+  const rpIdHash = ('0x' + crypto.createHash('sha256').update('localhost').digest('hex')) as `0x${string}`;
+  const expectedOrigin = 'http://localhost:3100';
+  const requireUserVerification = true;
+
+  console.log('[Passkey Fuji Demo] Step 2: Deploying PasskeyMissionAuthority (PK-F1 Hardened)...');
   const authorityDeployTx = await walletClient.deployContract({
     abi: authorityArtifact.abi,
     bytecode: authorityArtifact.bytecode.object as Hex,
-    args: [treasuryAddress, passkeyX, passkeyY],
+    args: [treasuryAddress, passkeyX, passkeyY, rpIdHash, expectedOrigin, requireUserVerification],
   });
 
   console.log(`[Passkey Fuji Demo] Authority Deploy Tx: ${authorityDeployTx}`);
@@ -185,7 +192,7 @@ async function main() {
   }
 
   // 5. Construct Mission & Passkey Challenge
-  const missionSlug = 'passkey-live-demo-s1';
+  const missionSlug = `passkey-live-hardened-${Date.now()}`;
   const missionId = keccak256(Buffer.from(missionSlug)) as `0x${string}`;
   const agentAddress = '0x374b8A126FDb9e5deEc8307da385076155Af3D72' as `0x${string}`;
   const payeeRoot = '0xa7409058568815d08a7ad3c7d4fd44cf1dec90c620cb31e55ad24c654f7ba34f' as `0x${string}`;

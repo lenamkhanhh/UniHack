@@ -20,7 +20,8 @@ interface IGuardedTreasuryAuthority {
  * @title PasskeyMissionAuthority
  * @notice WebAuthn P-256 passkey mission authority utilizing Avalanche RIP-7212 P-256 precompile (0x100).
  * Allows owners to create and authorize missions using biometric credentials (Face ID, Touch ID, Windows Hello)
- * without holding an EOA private key on their client device.
+ * without holding an EOA private key on their client device. Hardened with RP ID hash, strict origin validation,
+ * User Verification enforcement, crossOrigin rejection, and high-S malleability protection.
  */
 contract PasskeyMissionAuthority {
     // secp256r1 curve order n
@@ -38,6 +39,7 @@ contract PasskeyMissionAuthority {
         string clientDataJSON;
         uint256 challengeIndex;
         uint256 typeIndex;
+        uint256 originIndex;
         uint256 r;
         uint256 s;
     }
@@ -46,6 +48,10 @@ contract PasskeyMissionAuthority {
     uint256 public passkeyX;
     uint256 public passkeyY;
     uint256 public nextNonce;
+
+    bytes32 public immutable rpIdHash;
+    string public expectedOrigin;
+    bool public immutable requireUserVerification;
 
     event MissionApprovedByPasskey(
         bytes32 indexed missionId,
@@ -59,12 +65,24 @@ contract PasskeyMissionAuthority {
 
     event PasskeyRotated(uint256 oldX, uint256 oldY, uint256 newX, uint256 newY, uint256 nonce);
 
-    constructor(address _treasury, uint256 _passkeyX, uint256 _passkeyY) {
+    constructor(
+        address _treasury,
+        uint256 _passkeyX,
+        uint256 _passkeyY,
+        bytes32 _rpIdHash,
+        string memory _expectedOrigin,
+        bool _requireUserVerification
+    ) {
         require(_treasury != address(0), "InvalidTreasury");
         require(_passkeyX != 0 && _passkeyY != 0, "InvalidPasskeyCoordinates");
+        require(_rpIdHash != bytes32(0), "InvalidRpIdHashParameter");
+        require(bytes(_expectedOrigin).length > 0, "InvalidExpectedOrigin");
         treasury = _treasury;
         passkeyX = _passkeyX;
         passkeyY = _passkeyY;
+        rpIdHash = _rpIdHash;
+        expectedOrigin = _expectedOrigin;
+        requireUserVerification = _requireUserVerification;
     }
 
     /**
@@ -164,10 +182,18 @@ contract PasskeyMissionAuthority {
         // 1. Check authenticatorData length (must be >= 37 bytes)
         require(auth.authenticatorData.length >= 37, "InvalidAuthenticatorDataLength");
 
-        // 2. Check User Present (UP) flag (bit 0 of flags byte at index 32)
+        // 2. Check RP ID hash in authenticatorData[0:32] matches rpIdHash
+        require(bytes32(auth.authenticatorData[:32]) == rpIdHash, "InvalidRpIdHash");
+
+        // 3. Check User Present (UP) flag (bit 0 of flags byte at index 32)
         require((uint8(auth.authenticatorData[32]) & 0x01) != 0, "UserPresenceRequired");
 
-        // 3. Verify type in clientDataJSON matches '"type":"webauthn.get"' (W4-F3)
+        // 4. Check User Verification (UV) flag (bit 2 of flags byte at index 32) when required
+        if (requireUserVerification) {
+            require((uint8(auth.authenticatorData[32]) & 0x04) != 0, "UserVerificationRequired");
+        }
+
+        // 5. Verify type in clientDataJSON matches '"type":"webauthn.get"'
         bytes memory clientBytes = bytes(auth.clientDataJSON);
         bytes memory expectedType = bytes('"type":"webauthn.get"');
         require(
@@ -179,7 +205,7 @@ contract PasskeyMissionAuthority {
             "InvalidWebAuthnType"
         );
 
-        // 4. Verify challenge in clientDataJSON matches '"challenge":"' + base64url(challenge) + '"' (W4-F3)
+        // 6. Verify challenge in clientDataJSON matches '"challenge":"' + base64url(challenge) + '"'
         bytes memory expectedChallengeB64 = encodeBase64Url32(challenge);
         bytes memory expectedChallengePattern = abi.encodePacked('"challenge":"', string(expectedChallengeB64), '"');
         require(
@@ -191,18 +217,51 @@ contract PasskeyMissionAuthority {
             "ChallengeMismatch"
         );
 
-        // 5. Enforce malleability protection (low-s)
+        // 7. Verify origin in clientDataJSON matches '"origin":"' + expectedOrigin + '"' (closing quote prevents prefix trick)
+        bytes memory expectedOriginPattern = abi.encodePacked('"origin":"', expectedOrigin, '"');
+        require(
+            auth.originIndex + expectedOriginPattern.length <= clientBytes.length,
+            "OriginIndexOutOfBounds"
+        );
+        require(
+            _matchesSubsequence(clientBytes, auth.originIndex, expectedOriginPattern),
+            "OriginMismatch"
+        );
+
+        // 8. Reject crossOrigin:true if present
+        require(
+            !_contains(clientBytes, bytes('"crossOrigin":true')) &&
+            !_contains(clientBytes, bytes('"crossOrigin": true')),
+            "CrossOriginNotAllowed"
+        );
+
+        // 9. Enforce malleability protection (low-s and valid r)
         require(auth.s > 0 && auth.s <= SECP256R1_HALF_N, "InvalidSignatureS");
         require(auth.r > 0 && auth.r < SECP256R1_N, "InvalidSignatureR");
 
-        // 6. Compute WebAuthn verification message: authenticatorData || sha256(clientDataJSON)
+        // 10. Compute WebAuthn verification message: authenticatorData || sha256(clientDataJSON)
         bytes32 clientDataHash = sha256(clientBytes);
         bytes32 messageHash = sha256(abi.encodePacked(auth.authenticatorData, clientDataHash));
 
-        // 7. Invoke RIP-7212 precompile at 0x100
+        // 11. Invoke RIP-7212 precompile at 0x100
         bytes memory input = abi.encodePacked(messageHash, auth.r, auth.s, qx, qy);
         (bool success, bytes memory output) = PRECOMPILE_P256.staticcall(input);
         require(success && output.length == 32 && abi.decode(output, (uint256)) == 1, "P256VerificationFailed");
+    }
+
+    function _contains(bytes memory haystack, bytes memory needle) internal pure returns (bool) {
+        if (needle.length == 0 || needle.length > haystack.length) return false;
+        for (uint256 i = 0; i <= haystack.length - needle.length; i++) {
+            bool found = true;
+            for (uint256 j = 0; j < needle.length; j++) {
+                if (haystack[i + j] != needle[j]) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) return true;
+        }
+        return false;
     }
 
     function _matchesSubsequence(

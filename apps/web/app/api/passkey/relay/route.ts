@@ -10,11 +10,14 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { avalancheFuji } from 'viem/chains';
 
 const PASSKEY_AUTHORITY_ABI = parseAbi([
-  'function approveMission(bytes32 missionId, address agent, bytes32 payeeRoot, uint256 cap, uint256 duration, uint256 toolCap, uint256 nonce, (bytes authenticatorData, string clientDataJSON, uint256 challengeIndex, uint256 typeIndex, uint256 r, uint256 s) auth) external',
+  'function approveMission(bytes32 missionId, address agent, bytes32 payeeRoot, uint256 cap, uint256 duration, uint256 toolCap, uint256 nonce, (bytes authenticatorData, string clientDataJSON, uint256 challengeIndex, uint256 typeIndex, uint256 originIndex, uint256 r, uint256 s) auth) external',
   'function nextNonce() view returns (uint256)',
   'function treasury() view returns (address)',
   'function passkeyX() view returns (uint256)',
   'function passkeyY() view returns (uint256)',
+  'function rpIdHash() view returns (bytes32)',
+  'function expectedOrigin() view returns (string)',
+  'function requireUserVerification() view returns (bool)',
 ]);
 
 export async function POST(req: NextRequest) {
@@ -118,6 +121,7 @@ export async function POST(req: NextRequest) {
       clientDataJSON: auth.clientDataJSON,
       challengeIndex: BigInt(auth.challengeIndex),
       typeIndex: BigInt(auth.typeIndex),
+      originIndex: BigInt(auth.originIndex !== undefined ? auth.originIndex : (auth.clientDataJSON?.indexOf('"origin":"') ?? 0)),
       r: BigInt(auth.r),
       s: BigInt(auth.s),
     };

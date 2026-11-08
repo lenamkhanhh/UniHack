@@ -286,3 +286,61 @@
 
 
 
+
+
+---
+
+## WOW-PK — Làm Chặt Bộ Kiểm WebAuthn trong PasskeyMissionAuthority (PK-F1)
+
+- **Trạng thái:** **PASS 100%**
+- **Mục tiêu:** Nâng cấp độ an toàn WebAuthn P-256 của `PasskeyMissionAuthority.sol` lên ngang hàng các chuẩn WebAuthn khắt khe nhất trong Web3 (đạt chuẩn tương đương `allowance-ai` trên NEAR): kiểm tra RP ID hash, so khớp origin tuyệt đối có dấu nháy đóng (ngăn chặn subdomain prefix trick), bắt buộc User Verification (UV flag) và User Presence (UP flag), từ chối `crossOrigin:true`, và chống malleability high-S.
+- **Smart Contract & Tests (`contracts/`):**
+  - `contracts/src/PasskeyMissionAuthority.sol`:
+    - Constructor nhận thêm `bytes32 _rpIdHash`, `string memory _expectedOrigin`, `bool _requireUserVerification`.
+    - Thêm các biến lưu trữ: `rpIdHash` (immutable), `expectedOrigin` (string), `requireUserVerification` (immutable).
+    - Struct `WebAuthnAuth` bổ sung `uint256 originIndex`.
+    - `_verifyWebAuthn`:
+      1. Kiểm tra độ dài `authenticatorData >= 37`.
+      2. Kiểm tra RP ID hash: `bytes32(auth.authenticatorData[:32]) == rpIdHash`.
+      3. Kiểm tra cờ User Presence (UP, bit 0 của byte 32).
+      4. Kiểm tra cờ User Verification (UV, bit 2 của byte 32) khi `requireUserVerification == true`.
+      5. So khớp type `"type":"webauthn.get"` tại `typeIndex`.
+      6. So khớp challenge `"challenge":"<b64>"` tại `challengeIndex`.
+      7. So khớp origin `"origin":"<expectedOrigin>"` tại `originIndex` (có dấu nháy đóng, loại bỏ prefix bypass trick).
+      8. Từ chối `"crossOrigin":true` nếu có trong `clientDataJSON`.
+      9. Chặn malleability high-S: `require(auth.s <= SECP256R1_HALF_N)`.
+      10. Gọi native precompile RIP-7212 `0x100` xác thực chữ ký P-256.
+  - `contracts/test/PasskeyMissionAuthority.t.sol`:
+    - 8 unit tests bảo mật WebAuthn mới (tên cố định theo spec):
+      1. `test_wrongRpIdHash_reverts` (revert `InvalidRpIdHash`)
+      2. `test_phishingOrigin_reverts` (revert `OriginMismatch`)
+      3. `test_originPrefixTrick_reverts` (revert `OriginMismatch` khi origin là `http://localhost:3100.evil.com`)
+      4. `test_userPresentWithoutVerification_reverts` (revert `UserVerificationRequired` khi flags = 0x01)
+      5. `test_registrationCeremonyAsAssertion_reverts` (revert `InvalidWebAuthnType` khi type là `webauthn.create`)
+      6. `test_highS_reverts` (revert `InvalidSignatureS` khi s > N/2)
+      7. `test_crossOriginTrue_reverts` (revert `CrossOriginNotAllowed` khi `crossOrigin:true`)
+      8. `test_rotatePasskey_requiresSameChecks` (xác nhận toàn bộ các kiểm tra trên áp dụng khi đổi passkey)
+    - Toàn bộ 8 tests cũ tiếp tục pass (happy path, replay nonce, challenge mismatch, UV presence, rotation, relayer, Fuji fork).
+    - **Tổng số test Foundry:** **16/16 passed** trong `PasskeyMissionAuthority.t.sol`, **60/60 passed** toàn bộ hợp đồng.
+- **Web App & Scripts:**
+  - `apps/web/app/missions/new/page.tsx`: Gửi `originIndex` và `rpId` dựa trên `window.location`.
+  - `apps/web/app/api/passkey/relay/route.ts`: Nhận `originIndex` và cập nhật ABI struct WebAuthn.
+  - `scripts/passkey-deploy-for-owner.ts`: Bổ sung tham số `--rp-id`, `--origin`, `--no-uv`.
+  - `scripts/passkey-fuji-demo.ts`: Cập nhật sinh assertion có UP + UV (flag `0x05`), rpIdHash `sha256("localhost")`, origin `http://localhost:3100`.
+- **Triển khai Trực Tiếp trên Avalanche Fuji Testnet (Chain ID 43113):**
+  - **GuardedTreasury (Passkey Demo v2):** [`0x58d5bcd57c3cf089dc93b0e3f5f6def3a69a81af`](https://testnet.snowtrace.io/address/0x58d5bcd57c3cf089dc93b0e3f5f6def3a69a81af) (Deploy Tx: [`0xc533510d...266d`](https://testnet.snowtrace.io/tx/0xc533510d3d1d5087ea4dcfccb2cdda768abb00822f279fe73e8420b76f4e266d), Block `#60724322`, Gas: 3,717,453)
+  - **PasskeyMissionAuthority (PK-F1 Hardened):** [`0x46f48bece672266541d73d752684859a8f3c8aef`](https://testnet.snowtrace.io/address/0x46f48bece672266541d73d752684859a8f3c8aef) (Deploy Tx: [`0x3633e6c6...46f4`](https://testnet.snowtrace.io/tx/0x3633e6c64e3428882e5c1e07df1d58e2b89bf457373d827b4b63c8e0c32946f4), Block `#60724326`, Gas: 1,545,639)
+  - **Giao dịch Duyệt Mission với Khóa Phần Mềm P-256 + UV Assertion:**
+    - Tx Hash: [`0x494b664be33d2c2d08575884f3ceb546779e8c7eb8eaec0bed171a11f0d7a929`](https://testnet.snowtrace.io/tx/0x494b664be33d2c2d08575884f3ceb546779e8c7eb8eaec0bed171a11f0d7a929)
+    - Block Number: `#60724328`
+    - Gas Used: **400,354 gas** (Trạng thái: `SUCCESS`, RIP-7212 precompile `0x100` xác thực thành công on-chain)
+    - On-chain mission verified: `cap = 2 USDC`, `toolCap = 0.5 USDC`, `payeeRoot` khớp 100%.
+  - Ngân sách tiêu tốn: ~0.005 AVAX (nằm sâu trong ngân sách $\le 0.03$ AVAX cho phép).
+- **Cập nhật Bằng Chứng & Tài Liệu:**
+  - `artifacts/submission-s1/FUJI_EVIDENCE.md`: Bổ sung Part D với thông tin 2 instance (Pre-hardening vs PK-F1 Hardened).
+  - `evidence/cost.json`: Lưu trữ giao dịch hardened mới và giữ lại bản ghi pre-hardening.
+  - `docs/PASSKEY.md`: Bảng mapping chi tiết 9 check WebAuthn tương ứng với 9 tests Foundry; ghi rõ giới hạn origin/rpId cố định theo bản deploy, domain public sẽ deploy authority mới qua CLI owner.
+- **Kết quả Kiểm tra Chất lượng Hệ thống:**
+  - `forge test`: **60/60 tests passed** (16/16 passkey tests, 37/37 treasury tests, 7/7 validation registry tests).
+  - `npx.cmd tsc --noEmit`: **0 errors**.
+  - `vitest run tests/passkey-relay.test.ts`: **4/4 passed**.

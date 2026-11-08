@@ -103,6 +103,7 @@ export default function NewMissionPasskeyPage() {
             clientDataJSON,
             challengeIndex: clientDataJSON.indexOf('"challenge":"'),
             typeIndex: clientDataJSON.indexOf('"type":"webauthn.get"'),
+            originIndex: clientDataJSON.indexOf('"origin":"' + window.location.origin + '"') >= 0 ? clientDataJSON.indexOf('"origin":"' + window.location.origin + '"') : clientDataJSON.indexOf('"origin":"'),
             r: '0x01', // normalized in real parser
             s: '0x01',
           };
@@ -112,7 +113,8 @@ export default function NewMissionPasskeyPage() {
       // If simulated or virtual
       if (!authPayload) {
         authPayload = {
-          authenticatorData: '0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f200100000001',
+          authenticatorData: '0x49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97630500000001',
+          originIndex: 81,
           clientDataJSON: `{"type":"webauthn.get","challenge":"mIVmT8_EUzmvEYP6N2j24tv7UsdlRLtvef4Ug3kPxFUS","origin":"http://localhost:3100"}`,
           challengeIndex: 23,
           typeIndex: 1,

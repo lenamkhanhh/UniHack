@@ -98,32 +98,37 @@ Kết quả trả về:
 
 ---
 
-## Phần D — Bằng chứng WOW-W4: Passkey Mission Authority (RIP-7212 Precompile 0x100)
+## Phần D — Bằng chứng WOW-W4 & PK-F1: Passkey Mission Authority (RIP-7212 Precompile 0x100)
 
 Hệ thống xác thực WebAuthn P-256 sinh trắc học (Passkey) trực tiếp trên Avalanche Fuji thông qua native precompile RIP-7212 tại địa chỉ `0x0000000000000000000000000000000000000100`.
 
 ### 1. Smart Contracts Triển khai trên Avalanche Fuji
 
-| Hợp đồng | Địa chỉ Fuji | Giao dịch Triển khai | Block |
-|---|---|---|---|
-| **GuardedTreasury (Passkey Demo)** | [`0x33a6bcf988a9056a3fc78b62560ec40b3c8c4bb3`](https://testnet.snowtrace.io/address/0x33a6bcf988a9056a3fc78b62560ec40b3c8c4bb3) | [`0x2e68262b7e102803ec8eebbbc4ae1398dfc2c05359155fb84667482280cfcc2b`](https://testnet.snowtrace.io/tx/0x2e68262b7e102803ec8eebbbc4ae1398dfc2c05359155fb84667482280cfcc2b) | #60712046 |
-| **PasskeyMissionAuthority** | [`0x77235386fe59A934645C5F273e411b0Bea8cCc9C`](https://testnet.snowtrace.io/address/0x77235386fe59A934645C5F273e411b0Bea8cCc9C) | [`0x5a63204914dcd34568790681bae0c608d012cc64c5328903d9dcb6db9d71c97e`](https://testnet.snowtrace.io/tx/0x5a63204914dcd34568790681bae0c608d012cc64c5328903d9dcb6db9d71c97e) | #60712049 |
-
-*Ghi chú: PasskeyMissionAuthority đã được verify mã nguồn trên Snowtrace / Routescan (GUID: `00ec6faf-8b0f-52be-8754-0cc6679e968e`).*
+| Hợp đồng | Địa chỉ Fuji | Giao dịch Triển khai | Block | Ghi chú |
+|---|---|---|---|---|
+| **PasskeyMissionAuthority (PK-F1 Hardened)** | [`0x46f48bece672266541d73d752684859a8f3c8aef`](https://testnet.snowtrace.io/address/0x46f48bece672266541d73d752684859a8f3c8aef) | [`0x3633e6c6...46f4`](https://testnet.snowtrace.io/tx/0x3633e6c64e3428882e5c1e07df1d58e2b89bf457373d827b4b63c8e0c32946f4) | #60724326 | Bản nâng cấp PK-F1: kiểm RP ID hash, strict origin, UV flag, reject crossOrigin, low-S |
+| **GuardedTreasury (Passkey Demo v2)** | [`0x58d5bcd57c3cf089dc93b0e3f5f6def3a69a81af`](https://testnet.snowtrace.io/address/0x58d5bcd57c3cf089dc93b0e3f5f6def3a69a81af) | [`0xc533510d...266d`](https://testnet.snowtrace.io/tx/0xc533510d3d1d5087ea4dcfccb2cdda768abb00822f279fe73e8420b76f4e266d) | #60724322 | Treasury do PasskeyAuthority hardened sở hữu |
+| **PasskeyMissionAuthority (Pre-Hardening)** | [`0x77235386fe59A934645C5F273e411b0Bea8cCc9C`](https://testnet.snowtrace.io/address/0x77235386fe59A934645C5F273e411b0Bea8cCc9C) | [`0x5a632049...1c97e`](https://testnet.snowtrace.io/tx/0x5a63204914dcd34568790681bae0c608d012cc64c5328903d9dcb6db9d71c97e) | #60712049 | Bản triển khai ban đầu (Verified trên Snowtrace/Routescan, GUID: `00ec6faf...`) |
+| **GuardedTreasury (Passkey Demo v1)** | [`0x33a6bcf988a9056a3fc78b62560ec40b3c8c4bb3`](https://testnet.snowtrace.io/address/0x33a6bcf988a9056a3fc78b62560ec40b3c8c4bb3) | [`0x2e68262b...cc2b`](https://testnet.snowtrace.io/tx/0x2e68262b7e102803ec8eebbbc4ae1398dfc2c05359155fb84667482280cfcc2b) | #60712046 | Treasury demo instance ban đầu |
 
 ### 2. Giao dịch Duyệt Mission qua WebAuthn Assertion
 
-Giao dịch gọi `approveMission` với chữ ký WebAuthn P-256 từ khóa phần cứng:
+#### A. PK-F1 Hardened Instance (Bản Nâng Cấp Hoàn Toàn):
+- **Tx Hash:** [`0x494b664be33d2c2d08575884f3ceb546779e8c7eb8eaec0bed171a11f0d7a929`](https://testnet.snowtrace.io/tx/0x494b664be33d2c2d08575884f3ceb546779e8c7eb8eaec0bed171a11f0d7a929)
+- **Block Number:** #60724328
+- **Gas Used:** **400,354 gas** (Bao gồm kiểm tra đầy đủ RP ID hash, origin match `"origin":"http://localhost:3100"`, User Presence & User Verification flags `0x05`, RIP-7212 precompile `0x100`)
+- **Status:** `SUCCESS` (100% on-chain verification)
+- **Thông số nhiệm vụ on-chain:**
+  - `agent`: `0x374b8A126FDb9e5deEc8307da385076155Af3D72`
+  - `cap`: 2,000,000 ($2.00 USDC)
+  - `toolCap`: 500,000 ($0.50 USDC)
+  - `payeeRoot`: `0xa7409058568815d08a7ad3c7d4fd44cf1dec90c620cb31e55ad24c654f7ba34f`
+  - `exists`: `true`
+
+#### B. Pre-Hardening Instance (Giao Dịch Ban Đầu):
 - **Tx Hash:** [`0x9885664fcfc45539af1183fa3768f6e2dbfb52c76544b7b6f1ee14833790cf45`](https://testnet.snowtrace.io/tx/0x9885664fcfc45539af1183fa3768f6e2dbfb52c76544b7b6f1ee14833790cf45)
 - **Block Number:** #60712056
-- **Gas Used:** **281,498 gas** (Precompile P-256 tiêu tốn ~3,450 gas)
-- **Thông số nhiệm vụ on-chain được khởi tạo:**
-  - `missionId`: `0x1000000000000000000000000000000000000000000000000000000000000001`
-  - `agent`: `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c`
-  - `cap`: 2,000,000 (2 USDC)
-  - `toolCap`: 500,000 (0.5 USDC)
-  - `payeeRoot`: `0xa7409058b8f2c3bfbb2e9f0b5d56b0d9e8df34906a282f10b74108d8108a8a47`
-  - `exists`: `true`
+- **Gas Used:** **281,498 gas**
 
 
 

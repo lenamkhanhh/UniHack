@@ -1,8 +1,8 @@
 /**
- * Deploy dedicated GuardedTreasury + PasskeyMissionAuthority for Owner's Hardware Passkey (W4-F2).
+ * Deploy dedicated GuardedTreasury + PasskeyMissionAuthority for Owner's Hardware Passkey (W4-F2 / PK-F1).
  *
  * Usage:
- *   npx tsx scripts/passkey-deploy-for-owner.ts --qx <0xHex> --qy <0xHex> [--broadcast]
+ *   npx tsx scripts/passkey-deploy-for-owner.ts --qx <0xHex> --qy <0xHex> [--rp-id localhost] [--origin http://localhost:3100] [--broadcast]
  *
  * Accepts public coordinates (qx, qy) exported by owner from /missions/new
  * after registering hardware biometric passkey (Windows Hello / Touch ID / Face ID).
@@ -10,6 +10,7 @@
  * NOTE: DO NOT broadcast automatically. This script is intended for execution by the OWNER.
  */
 
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import {
@@ -30,6 +31,9 @@ async function main() {
   const args = process.argv.slice(2);
   let qxArg = '';
   let qyArg = '';
+  let rpIdArg = 'localhost';
+  let originArg = 'http://localhost:3100';
+  let requireUV = true;
   let doBroadcast = false;
 
   for (let i = 0; i < args.length; i++) {
@@ -37,13 +41,19 @@ async function main() {
       qxArg = args[++i];
     } else if (args[i] === '--qy' && args[i + 1]) {
       qyArg = args[++i];
+    } else if (args[i] === '--rp-id' && args[i + 1]) {
+      rpIdArg = args[++i];
+    } else if (args[i] === '--origin' && args[i + 1]) {
+      originArg = args[++i];
+    } else if (args[i] === '--no-uv') {
+      requireUV = false;
     } else if (args[i] === '--broadcast') {
       doBroadcast = true;
     }
   }
 
   if (!qxArg || !qyArg) {
-    console.error('Usage: npx tsx scripts/passkey-deploy-for-owner.ts --qx <0xHex> --qy <0xHex> [--broadcast]');
+    console.error('Usage: npx tsx scripts/passkey-deploy-for-owner.ts --qx <0xHex> --qy <0xHex> [--rp-id localhost] [--origin http://localhost:3100] [--broadcast]');
     console.error('Example:');
     console.error('  npx tsx scripts/passkey-deploy-for-owner.ts --qx 0x1111... --qy 0x2222... --broadcast');
     process.exit(1);
@@ -51,10 +61,14 @@ async function main() {
 
   const passkeyX = BigInt(qxArg.startsWith('0x') ? qxArg : `0x${qxArg}`);
   const passkeyY = BigInt(qyArg.startsWith('0x') ? qyArg : `0x${qyArg}`);
+  const rpIdHash = ('0x' + crypto.createHash('sha256').update(rpIdArg).digest('hex')) as Hex;
 
   console.log('[Passkey Deploy For Owner] Initializing setup with Owner hardware credentials:');
   console.log(`  qx: 0x${passkeyX.toString(16)}`);
   console.log(`  qy: 0x${passkeyY.toString(16)}`);
+  console.log(`  RP ID: ${rpIdArg} (hash: ${rpIdHash})`);
+  console.log(`  Expected Origin: ${originArg}`);
+  console.log(`  Require User Verification (UV): ${requireUV}`);
   console.log(`  Broadcast mode: ${doBroadcast ? 'ENABLED (LIVE FUJI)' : 'DRY-RUN (Simulated)'}`);
 
   const ownerAccount = getOwnerAccount();
@@ -115,11 +129,11 @@ async function main() {
   const treasuryAddress = treasuryReceipt.contractAddress!;
   console.log(`  GuardedTreasury deployed at: ${treasuryAddress} (block #${treasuryReceipt.blockNumber}, gasUsed: ${treasuryReceipt.gasUsed})`);
 
-  console.log('\n[Passkey Deploy For Owner] Step 2: Deploying PasskeyMissionAuthority...');
+  console.log('\n[Passkey Deploy For Owner] Step 2: Deploying PasskeyMissionAuthority (PK-F1 Hardened)...');
   const authorityDeployTx = await walletClient.deployContract({
     abi: authorityArtifact.abi,
     bytecode: authorityArtifact.bytecode.object as Hex,
-    args: [treasuryAddress, passkeyX, passkeyY],
+    args: [treasuryAddress, passkeyX, passkeyY, rpIdHash, originArg, requireUV],
   });
 
   console.log(`  Authority Deploy Tx: ${authorityDeployTx}`);
