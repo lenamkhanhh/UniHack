@@ -129,7 +129,7 @@ export default function ArenaStagePage() {
         </div>
       </div>
 
-      {/* Live Fuji On-Chain Status Bar (WOW-W5) */}
+      {/* Live Fuji Realtime Balances (WOW-W5) */}
       <div className="bg-[#0c1018] border border-gray-800 rounded-xl px-4 py-2.5 my-3 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
         <div className="flex items-center space-x-2">
           {fujiBalances?.mode === 'LIVE_FUJI' ? (
