@@ -69,8 +69,14 @@ const VALIDATION_REGISTRY_ABI = [
       { name: 'responseHash', type: 'bytes32' },
       { name: 'tag', type: 'string' },
       { name: 'lastUpdate', type: 'uint256' },
-      { name: 'isComplete', type: 'bool' },
     ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'isValidationComplete',
+    inputs: [{ name: 'requestHash', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'bool' }],
     stateMutability: 'view',
   },
 ] as const;
@@ -195,14 +201,12 @@ async function main() {
   console.log(`[Validator Run] Saved response evidence to ${responsePath}`);
 
   // 4. Submit validationResponse if not already complete
-  const statusAfterCheck = await publicClient.readContract({
+  const isComplete = await publicClient.readContract({
     address: registryAddress,
     abi: VALIDATION_REGISTRY_ABI,
-    functionName: 'getValidationStatus',
+    functionName: 'isValidationComplete',
     args: [requestHash],
   });
-
-  const isComplete = statusAfterCheck[6];
 
   if (!isComplete) {
     console.log('[Validator Run] Submitting validationResponse from Validator...');
@@ -224,7 +228,7 @@ async function main() {
     const respReceipt = await publicClient.waitForTransactionReceipt({ hash: respTx });
     console.log(`[Validator Run] validationResponse confirmed in block ${respReceipt.blockNumber}, status: ${respReceipt.status}`);
   } else {
-    console.log(`[Validator Run] validationResponse already recorded: score=${statusAfterCheck[2]}, tag=${statusAfterCheck[4]}`);
+    console.log(`[Validator Run] validationResponse already recorded and complete on-chain.`);
   }
 }
 
