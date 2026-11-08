@@ -225,7 +225,7 @@ async function main() {
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Product" });
   s.addText("Mission → Budget → Proof", { placeholder: "title" });
   const steps = [
-    [fa.FaFileSignature, "1  Mission", "The owner signs a mission in MetaMask: a goal, a $10 treasury cap, a $5 tool cap and an expiry. The backend never holds the owner's key."],
+    [fa.FaFileSignature, "1  Mission", "The owner signs a mission with their own wallet: a goal, a $10 treasury cap, a $5 tool cap and an expiry. The backend never holds the owner's key."],
     [fa.FaWallet, "2  Budget", "The agent gets its own session wallet for this mission only. It buys tools with gasless USDC over x402. Before money moves, the validator checks the caps and where the recipient came from."],
     [fa.FaLink, "3  Proof", "Each step lands in a hash-chained ledger. The head hash is anchored in GuardedTreasury and the owner can rate the agent on ERC-8004."],
   ];
@@ -257,7 +257,7 @@ async function main() {
     T(s, callouts[i][2], { x: 9.85, y, w: 2.9, h: 0.45, fontSize: 18, bold: true, objectName: "callout title " + (i + 1) });
     T(s, callouts[i][3], { x: 9.85, y: y + 0.48, w: 2.9, h: 1.0, fontSize: 13, color: MUTED, objectName: "callout body " + (i + 1) });
   }
-  T(s, "Left panel is a labelled simulation of an unguarded wallet. Contract-layer evidence on Fuji is added after the live run.", { x: MX, y: 6.4, w: W - 2 * MX, h: 0.4, fontSize: 11, color: AMBER, objectName: "honesty note" });
+  T(s, "Left panel is a labelled simulation of an unguarded wallet. On Fuji, a payout to an unapproved payee reverted in GuardedTreasury: tx 0xc5f13e5d…fea4f1ff.", { x: MX, y: 6.4, w: W - 2 * MX, h: 0.4, fontSize: 11, color: AMBER, objectName: "honesty note" });
   s.addNotes("Bấm phím 2 trên /stage. Để màn hình tự chạy. Nói: agent đã bị thuyết phục, nhưng tiền đã chuyển là 0 đô. Không đọc slide.");
 
   // ===== 6. Demo: Arena =====
@@ -290,8 +290,39 @@ async function main() {
     [cell("A paid x402 request is swapped or replayed"), cell("The payment signature is bound to the exact request, and a nonce settles once (fixes from the ATC '26 x402 study)"), cell("$0 extra", GREEN, true)],
   ];
   s.addTable(rows, { x: MX, y: 1.55, w: W - 2 * MX, colW: [3.6, 5.6, 2.93], fontFace: "Calibri", border: { type: "solid", color: HEX.accent5, pt: 0.75 }, fill: { color: HEX.dk1 }, valign: "middle", rowH: [0.45, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7], margin: 0.08, objectName: "loss table" });
-  T(s, "Tests today: 37 Foundry contract tests · 169 app tests. Fuji transaction links are added after the live run.", { x: MX, y: 6.4, w: W - 2 * MX, h: 0.4, fontSize: 12, color: MUTED, objectName: "tests note" });
+  T(s, "Tests today: 37 Foundry contract tests · 169 app tests. Live on Fuji: an unapproved payout reverted with PayeeNotInMissionSet (tx 0xc5f13e5d…fea4f1ff).", { x: MX, y: 6.4, w: W - 2 * MX, h: 0.4, fontSize: 12, color: MUTED, objectName: "tests note" });
   s.addNotes("Đây là slide giám khảo kỹ thuật thích. Mỗi lỗi đều có trần. Câu hỏi 'nếu lộ key agent?' → mất tối đa số dư ví phiên, không chạm treasury.");
+
+  // ===== 7b. Benchmark (PayBench-ADI) =====
+  s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Why it holds" });
+  s.addText("We attacked it 357 times with real LLMs", { placeholder: "title" });
+  s.addChart(pres.charts.BAR, [
+    { name: "No guard", labels: ["Gemini 3.5 Flash-Lite", "Gemini 3.1 Flash-Lite"], values: [32.1, 44.5] },
+    { name: "Caps + allowlist", labels: ["Gemini 3.5 Flash-Lite", "Gemini 3.1 Flash-Lite"], values: [12.1, 13.9] },
+    { name: "MissionPay", labels: ["Gemini 3.5 Flash-Lite", "Gemini 3.1 Flash-Lite"], values: [0, 0] },
+  ], {
+    x: MX, y: 1.5, w: 7.3, h: 4.6, barDir: "col", barGrouping: "clustered",
+    chartColors: [HEX.accent1, HEX.accent3, HEX.accent2],
+    showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: '0.0"%"', dataLabelColor: HEX.lt1, dataLabelFontSize: 13, dataLabelFontFace: "+mn-lt",
+    showLegend: true, legendPos: "b", legendColor: HEX.lt2, legendFontSize: 12, legendFontFace: "+mn-lt",
+    showTitle: true, title: "Attacks that moved money (% of attack runs)", titleColor: HEX.lt1, titleFontSize: 14, titleFontFace: "+mn-lt",
+    catAxisLabelColor: HEX.lt2, catAxisLabelFontSize: 12, catAxisLabelFontFace: "+mn-lt",
+    valAxisHidden: true, valAxisMaxVal: 55, valAxisMinVal: 0, valGridLine: { style: "none" }, catGridLine: { style: "none" },
+    objectName: "benchmark chart",
+  });
+  const bstats = [
+    ["17/20 · 19/20", "attacks that named a vendor on the company allowlist (but not in this mission) got through caps + allowlist", AMBER],
+    ["0 / 277", "attack runs moved money with MissionPay (95% upper bound 2.7% per model)", GREEN],
+    ["40 / 40", "legitimate tasks (payouts and tool buys) still went through, on both models (no false positives)", GREEN],
+  ];
+  for (let i = 0; i < 3; i++) {
+    const y = 1.5 + i * 1.55;
+    card(s, 8.25, y, W - MX - 8.25, 1.38, "bench stat card " + (i + 1));
+    T(s, bstats[i][0], { x: 8.45, y: y + 0.1, w: W - MX - 8.65, h: 0.55, fontSize: 26, bold: true, color: bstats[i][2], objectName: "bench stat " + (i + 1) });
+    T(s, bstats[i][1], { x: 8.45, y: y + 0.65, w: W - MX - 8.65, h: 0.68, fontSize: 12, color: TXT, objectName: "bench label " + (i + 1) });
+  }
+  T(s, "PayBench-ADI: 140 attack + 40 benign synthetic cases per model (instruction injection, structural ADI, vendor diversion, Bankr/Zscaler/Cornell/Freysa-style), temperature 0, one fresh agent run per case; N = 180 and 177. The structural ADI cases fooled neither model (0/40 and 0/39). 10 blocked payouts replayed against GuardedTreasury on Fuji via eth_call: 9 reverted PayeeNotInMissionSet, 1 other revert. Full method: ATTACK_EVAL.md.", { x: MX, y: 6.2, w: W - 2 * MX, h: 0.6, fontSize: 10, color: MUTED, objectName: "bench method" });
+  s.addNotes("45 giây. Đây là số đo thật, không phải demo. Không guard: 32 đến 45% đòn làm tiền đi. Cap cộng allowlist chặn được phần lớn, nhưng khi kẻ tấn công chỉ tới một vendor có trong allowlist chung của công ty mà không thuộc mission này thì allowlist để lọt 17/20 và 19/20. MissionPay: 0 trên 277 lượt tấn công, và 40/40 khoản trả hợp lệ vẫn đi. Nếu bị hỏi: case là synthetic dựa trên sự cố thật; ADI phá cấu trúc (40 case) không lừa được hai model này; chưa dùng dataset APort vì cần token Hugging Face.");
 
   // ===== 8. Verify =====
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Why it holds" });
@@ -310,7 +341,7 @@ async function main() {
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Avalanche" });
   s.addText("Built on Avalanche, not just deployed there", { placeholder: "title" });
   const tiles = [
-    [fa.FaBolt, "x402 on Fuji", "Gasless USDC tool payments (EIP-3009). Ultravioleta facilitator, PayAI as fallback. The agent needs no AVAX."],
+    [fa.FaBolt, "x402 on Fuji", "Gasless USDC tool payments (EIP-3009). A facilitator settles and pays the gas, so the mission's session wallet needs no AVAX."],
     [fa.FaCubes, "GuardedTreasury.sol", "Per-mission caps, session wallets funded and swept by the owner, BLOCK / QUEUE / EXECUTE on-chain."],
     [fa.FaIdBadge, "ERC-8004", "Official Fuji Identity and Reputation registries. Only the mission owner can leave feedback for the agent."],
     [fa.FaAnchor, "Proof anchoring", "The audit head hash is written to the chain (MissionProofAnchored) so receipts can't be rewritten later."],
@@ -323,12 +354,12 @@ async function main() {
     T(s, tiles[i][1], { x: x + 0.25, y: 2.7, w: tw - 0.5, h: 0.5, fontSize: 17, bold: true, objectName: "tile title " + (i + 1) });
     T(s, tiles[i][2], { x: x + 0.3, y: 3.3, w: tw - 0.6, h: 2.3, fontSize: 14, color: TXT, objectName: "tile body " + (i + 1) });
   }
-  card(s, MX, 5.95, W - 2 * MX, 0.7, "status card");
+  card(s, MX, 5.88, W - 2 * MX, 0.85, "status card");
   T(s, [
-    { text: "Status: ", options: { bold: true, color: AMBER } },
-    { text: "code complete and tested against Fuji contracts and ABIs. Snowtrace links for deploy, settlements, payout, anchor and feedback go here after the live run.", options: { color: TXT } },
-  ], { x: MX + 0.3, y: 6.0, w: W - 2 * MX - 0.6, h: 0.6, fontSize: 13, valign: "middle", objectName: "status text" });
-  s.addNotes("Avalanche là 25 điểm. Sau khi chạy Fuji, thay dòng Status bằng 5 link Snowtrace thật (hoặc QR). Chưa có tx thật thì không được nói là đã live.");
+    { text: "Live on Fuji: ", options: { bold: true, color: GREEN } },
+    { text: "GuardedTreasury 0x2045…d545 (source verified) · x402 settlement 0x8c89…8208 · payee root 0x2a4c…90a4 · payout with proof 0x7694…6c9a · unapproved payout reverted 0xc5f1…f1ff · proof anchor 0x43bd…0547 (matches /verify) · ERC-8004 feedback 0xeddd…9105. Every link: FUJI_EVIDENCE.md in the repo.", options: { color: TXT } },
+  ], { x: MX + 0.3, y: 5.92, w: W - 2 * MX - 0.6, h: 0.77, fontSize: 12, valign: "middle", objectName: "status text" });
+  s.addNotes("Avalanche là 25 điểm. Mọi hash trên slide là tx thật trên Fuji, reviewer đã kiểm bằng cast (ngày 07/11). Nếu được hỏi: mở FUJI_EVIDENCE.md hoặc Snowtrace. Câu chốt: tx 0xc5f1 là lúc chính contract từ chối trả tiền cho người nhận không có trong danh sách owner ký.");
 
   // ===== 10. Competition =====
   pres.addSection({ title: "Market" });
@@ -366,7 +397,7 @@ async function main() {
   await iconDot(s, fa.FaRoute, HEX.accent4, MX + 6.58, 4.3, 0.6, "roadmap icon");
   T(s, "Next", { x: MX + 7.33, y: 4.35, w: 4.5, h: 0.5, fontSize: 19, bold: true, valign: "middle", objectName: "roadmap title" });
   T(s, [
-    { text: "Live evidence on Fuji", options: { bullet: true, breakLine: true } },
+    { text: "Attack benchmark with a real LLM (ADI + APort sets)", options: { bullet: true, breakLine: true } },
     { text: "C-Chain mainnet with audited contracts", options: { bullet: true, breakLine: true } },
     { text: "MCP plugin so any agent framework can use it", options: { bullet: true, breakLine: true } },
     { text: "A dedicated Avalanche L1 for agent payments", options: { bullet: true } },
