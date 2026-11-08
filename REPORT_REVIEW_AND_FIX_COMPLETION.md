@@ -82,3 +82,43 @@
 - **Rủi ro còn lại:**
   - Nhánh hiện tại: `feat/s1-app`, giữ nguyên không push `main`.
   - Không deploy public hoặc nộp bài portal trước khi có lệnh của Owner.
+
+---
+
+## WOW-W1 — Chứng minh bất biến (Foundry Invariant + Halmos Symbolic)
+
+- **Trạng thái:** **PASS 100%**
+- **File tạo/sửa:**
+  - `contracts/test/invariant/Handler.sol` (11 action selectors, ghost variables)
+  - `contracts/test/invariant/GuardedTreasury.invariant.t.sol` (6 core invariants)
+  - `contracts/test/invariant/mutants/GuardedTreasuryMutant.sol` (mutant bỏ qua Merkle check)
+  - `contracts/test/invariant/mutants/Mutant.t.sol` (mutation test harness)
+  - `contracts/test/halmos/GuardedTreasury.halmos.t.sol` (4 symbolic property checks)
+  - `contracts/foundry.toml` (config `[invariant]` 512 runs, 64 depth)
+  - `FORMAL.md` (tài liệu bảng thuộc tính, phương pháp, giới hạn trung thực)
+  - `evidence/formal/invariant.txt` (output test invariant thật)
+  - `evidence/formal/mutant.txt` (output mutant fail thật)
+  - `evidence/formal/halmos.txt` (output halmos symbolic pass thật)
+- **Lệnh đã chạy:**
+  - `forge test --match-path "test/invariant/GuardedTreasury.invariant.t.sol" -vv`
+  - `forge test --match-contract MutantInvariantTest -vv`
+  - `halmos --contract GuardedTreasuryHalmos`
+- **Output test thật:**
+  - **Foundry Invariant Fuzz (512 runs, 32,768 calls, 0 reverts):**
+    - `[PASS] invariant_payeeAlwaysInRoot`
+    - `[PASS] invariant_missionSpendWithinCap`
+    - `[PASS] invariant_dailySpendWithinCap`
+    - `[PASS] invariant_nonOwnerCannotChangePolicy`
+    - `[PASS] invariant_pausedNoOutflow`
+    - `[PASS] invariant_balanceAccounting`
+  - **Mutation Check (`evidence/formal/mutant.txt`):**
+    - `[FAIL] invariant_payeeAlwaysInRoot` kích hoạt lỗi thành công tại run 7 (call 402, shrunk 1 step) khi Merkle check bị comment out, chứng minh invariant không rỗng (non-vacuous).
+  - **Halmos Symbolic Execution (`evidence/formal/halmos.txt`):**
+    - `[PASS] check_amountNeverExceedsPerTxCap(uint256)` (paths: 3, time: 0.39s)
+    - `[PASS] check_onlyOwnerSetsCaps(address,uint256,uint256)` (paths: 5, time: 0.17s)
+    - `[PASS] check_onlyOwnerSetsRoot(address,bytes32,bytes32)` (paths: 6, time: 0.26s)
+    - `[PASS] check_proposeWithProof_rejectsNonMember(address,uint256,bytes32[2])` (paths: 53, time: 3.42s)
+    - `Symbolic test result: 4 passed; 0 failed; time: 4.44s`
+- **Tx Hash:** Không áp dụng (W1 chạy hoàn toàn trong môi trường fuzzing và symbolic engine local).
+- **Giới hạn còn lại:** Bounded proof length ($\le 2$ trong symbolic), giả định token chuẩn ERC-20/EIP-3009 không có fee-on-transfer.
+

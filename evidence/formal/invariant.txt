@@ -1,0 +1,42 @@
+﻿No files changed, compilation skipped
+
+Ran 1 test for test/invariant/GuardedTreasury.invariant.t.sol:GuardedTreasuryInvariantTest
+[PASS]
+GuardedTreasuryInvariantTest invariants:
+[PASS] invariant_balanceAccounting
+[PASS] invariant_dailySpendWithinCap
+[PASS] invariant_missionSpendWithinCap
+[PASS] invariant_nonOwnerCannotChangePolicy
+[PASS] invariant_pausedNoOutflow
+[PASS] invariant_payeeAlwaysInRoot
+ GuardedTreasuryInvariantTest invariants (runs: 512, calls: 32768, reverts: 0)
+
+╭----------+---------------------------+-------+---------+----------╮
+| Contract | Selector                  | Calls | Reverts | Discards |
++===================================================================+
+| Handler  | actionApproveAndExecute   | 3009  | 0       | 0        |
+|----------+---------------------------+-------+---------+----------|
+| Handler  | actionAttemptPolicyChange | 3012  | 0       | 0        |
+|----------+---------------------------+-------+---------+----------|
+| Handler  | actionEmergencyWithdraw   | 3089  | 0       | 0        |
+|----------+---------------------------+-------+---------+----------|
+| Handler  | actionExpire              | 2976  | 0       | 0        |
+|----------+---------------------------+-------+---------+----------|
+| Handler  | actionFundMissionWallet   | 2994  | 0       | 0        |
+|----------+---------------------------+-------+---------+----------|
+| Handler  | actionPauseToggle         | 2897  | 0       | 0        |
+|----------+---------------------------+-------+---------+----------|
+| Handler  | actionPropose             | 2849  | 0       | 0        |
+|----------+---------------------------+-------+---------+----------|
+| Handler  | actionProposeWithProof    | 2954  | 0       | 0        |
+|----------+---------------------------+-------+---------+----------|
+| Handler  | actionReject              | 3017  | 0       | 0        |
+|----------+---------------------------+-------+---------+----------|
+| Handler  | actionSetMissionPayeeRoot | 3069  | 0       | 0        |
+|----------+---------------------------+-------+---------+----------|
+| Handler  | actionWarpTime            | 2902  | 0       | 0        |
+╰----------+---------------------------+-------+---------+----------╯
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 6.82s (6.81s CPU time)
+
+Ran 1 test suite in 6.82s (6.82s CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)
