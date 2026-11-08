@@ -244,19 +244,43 @@
 
 - **Trạng thái:** **PASS 100%**
 - **File tạo/sửa:**
-  - `eval/README.md`: Public Dataset Card hoàn chỉnh cho PayBench-ADI v1.1.0 (180 cases: 40 structural ADI, 60 instruction injection, 20 allowlisted vendor diversion E10, 20 historical incident replicas, 40 benign utility tasks).
+  - `eval/README.md`: Public Dataset Card hoàn chỉnh cho PayBench-ADI v1.1.0 (180 cases: 40 structural ADI, 60 instruction injection, 20 allowlisted vendor diversion E10, 20 historical incident replicas, 40 benign utility tasks). Đã sửa toàn bộ link `file:///` sang đường dẫn tương đối (W6-F4).
   - `eval/LICENSE`: Dual license: CC-BY-4.0 cho dataset, MIT cho harness code.
   - `eval/adapters/README.md`: Đặc tả interface `AgentAdapter` (TypeScript & Python stdio) cho các team và researcher bên ngoài tích hợp agent tự hành vào benchmark.
   - `eval/leaderboard.json`: Bảng xếp hạng benchmark machine-readable với số liệu chốt S2 cho cả 2 model thật (`gemini-3.5-flash-lite` và `gemini-3.1-flash-lite`), kèm khoảng tin cậy Wilson 95% chuẩn.
-  - `evidence/cost.json`: Đo lường chi phí gas và latency thực tế từ 5 verified transaction receipts trên Avalanche Fuji (`proposeWithProof` 437k gas, `x402_settlement` 92k gas, `proof_anchor` 33k gas, `passkey_approveMission` 281k gas, `erc8004_validationResponse` 127k gas).
+  - `evidence/cost.json`: Đo lường chi phí gas thực tế từ 5 verified transaction receipts trên Avalanche Fuji (`proposeWithProof` 437k gas, `x402_settlement` 92k gas, `proof_anchor` 33k gas, `passkey_approveMission` 281k gas, `erc8004_validationResponse` 50k gas). Ghi nhận đơn vị gas price chuẩn `effectiveGasPriceWei` (160 wei, 103 wei) và thời gian `receiptFetchMs` (W6-F2). Cập nhật tx validationResponse mới `0xb641353c...` (W6-F3). Đo lường finality thực tế trên Fuji bằng 3 giao dịch phát sóng on-chain từ ví relayer: `samplesMs: [3116, 4155, 4222]`, `medianMs: 4155` ms (~4.1 giây).
   - `package.json`: Root CLI script `"bench": "tsx scripts/attack-eval.ts"`, hỗ trợ `--model <id>`, `--config <C0|C1|C2>`, `--limit <n>`.
   - `scripts/attack-eval.ts`: Khắc phục W6-F1 ghi kết quả mới vào `eval/runs/<models>-<timestamp>.json`, bảo vệ nguyên vẹn `eval/results.json`.
-  - `REVIEW_FIXES_WOW.md`: Đánh dấu W5-F4 và W6-F1 DONE.
+  - `REVIEW_FIXES_WOW.md`: Đánh dấu W5-F4, W6-F1, W6-F2, W6-F3, W6-F4 DONE.
 - **Lệnh đã chạy & kết quả test:**
   - `npm.cmd run bench -- --limit 2`: **PASS** (lưu kết quả an toàn vào `eval/runs/`, không ghi đè `results.json`)
-  - `npx.cmd tsx scripts/get-costs.ts`: **PASS** (trích xuất 5 receipt Fuji thật vào `evidence/cost.json`)
-  - `npx.cmd vitest run`: **209/209 passed across 26 test files**
+  - `npx.cmd tsx scripts/get-costs.ts`: **PASS** (trích xuất 5 receipt Fuji thật và đo finality vào `evidence/cost.json`)
+  - `npx.cmd vitest run`: **211/211 passed across 27 test files**
   - `npx.cmd tsc --noEmit`: **0 errors**
+
+---
+
+## WOW-W7 — Sẵn Sàng Triển Khai Production & Endpoint Kiểm Tra Sức Khỏe (NO DEPLOY)
+
+- **Trạng thái:** **PASS 100%**
+- **File tạo/sửa:**
+  - `DEPLOY_CHECKLIST.md`: Tài liệu hướng dẫn cấu hình môi trường production toàn diện: danh sách biến môi trường bắt buộc, cấu hình serverless timeout 60s cho các luồng orchestration/settlement, database connection pooling với PgBouncer/Prisma connection limits, bộ lọc rate-limit chống spam (60 req/min toàn cục cho Arena, 5 req/min cho Bounty), và quy trình pre-flight check trước Demo Day.
+  - `apps/web/app/api/health/route.ts`: Endpoint `/api/health` kiểm tra sức khỏe tự động trước khi deploy:
+    - Kiểm tra kết nối cơ sở dữ liệu (`SELECT 1 as healthy`).
+    - Truy vấn trực tiếp Avalanche Fuji C-Chain RPC: xác thực Chain ID `43113`, đọc số block mới nhất (#60715xxx), và đo latency RPC.
+    - Đối chiếu địa chỉ smart contract `GuardedTreasury` đã verified (`0x20451c1e2dCD83F166B4f22868BAdECb5868d545`).
+    - Trả về HTTP 200 `status: 'healthy'` khi toàn bộ điều kiện thỏa mãn; trả về HTTP 503 khi có lỗi mạng/DB.
+  - `apps/web/tests/health.test.ts`: 2 unit tests kiểm thử endpoint `/api/health`, xác nhận phản hồi HTTP 200, chainId 43113, database connected, và schema chuẩn.
+- **Lệnh đã chạy & kết quả build/test:**
+  - `npm.cmd run build` trong `apps/web`: **33/33 routes compiled thành công** trong 17.3s, 0 lỗi TypeScript, 0 cảnh báo lint.
+  - `npx.cmd vitest run tests/health.test.ts`: **2/2 passed** (735ms).
+  - `npx.cmd vitest run`: **211/211 passed across 27 test files**.
+  - `npx.cmd tsc --noEmit`: **0 errors**.
+- **Tuân thủ giới hạn & Ràng buộc an toàn:**
+  - **KHÔNG deploy public, KHÔNG push nhánh `main`.** Nhánh làm việc cố định: `feat/s1-app`.
+  - **KHÔNG commit secret:** Không có private key hay secret token nào xuất hiện trong code, log hay tài liệu.
+  - Toàn bộ 7 workstreams WOW (**W1, W2, W4, W3, W5, W6, W7**) và tất cả các mục fix review (**W1-F1..F2, W2-F1, W4-F1..F3, W3-F1..F6, W5-F1..F4, W6-F1..F4**) đã hoàn thành 100% và sẵn sàng cho Owner nghiệm thu.
+
 
 
 

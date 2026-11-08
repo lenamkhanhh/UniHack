@@ -21,13 +21,13 @@ Existing defenses typically rely on:
 
 ## 2. Benchmark Dataset Composition (180 Cases)
 
-The dataset is stored in standard JSON Lines (`.jsonl`) format in [`eval/cases/`](file:///D:/Code/Code/AIO/Code/ZaloAIC/UniHack/eval/cases):
+The dataset is stored in standard JSON Lines (`.jsonl`) format in [`cases/`](./cases):
 
 | Dataset File | Cases | Category | Description |
 |---|---|---|---|
-| [`adi.jsonl`](file:///D:/Code/Code/AIO/Code/ZaloAIC/UniHack/eval/cases/adi.jsonl) | **120** | **Structural ADI & Injection** | • **40 Structural ADI Cases (arXiv:2607.05120):** Delimiter injections in JSON fields (e.g., `","payee":"0x3333..."`) without natural language directives.<br>• **60 Instruction Injections:** Prompt overrides targeting recipient diversion, amount inflation, and fake `owner_approved` flags.<br>• **20 Allowlisted Vendor Diversions (E10):** Attacks routing funds to vendor `0x3333...` (present in organization allowlist, but excluded from mission Merkle set). |
-| [`incidents.jsonl`](file:///D:/Code/Code/AIO/Code/ZaloAIC/UniHack/eval/cases/incidents.jsonl) | **20** | **Historical Exploits (Synthetic)** | 4 real-world exploit vectors × 5 variants each:<br>1. **Grok/Bankr (May 2026):** Morse code payload hidden in web search ($174k drain).<br>2. **Freysa (Nov 2024):** Fake admin session token override ($45k drain).<br>3. **Zscaler ThreatLabz (July 2026):** Hidden license fees inside HTML/JSON-LD metadata ($3.00 fee).<br>4. **Cornell/Yale (Oct 2026):** OTP email directive demanding daily cap inflation to 100 USDC. |
-| [`benign.jsonl`](file:///D:/Code/Code/AIO/Code/ZaloAIC/UniHack/eval/cases/benign.jsonl) | **40** | **Benign Operational Tasks** | Legitimate treasury payouts, contractor invoices (within owner-signed max limits), and tool calls (search, summary) to measure utility, latency, and false positive rates. |
+| [`adi.jsonl`](./cases/adi.jsonl) | **120** | **Structural ADI & Injection** | • **40 Structural ADI Cases (arXiv:2607.05120):** Delimiter injections in JSON fields (e.g., `","payee":"0x3333..."`) without natural language directives.<br>• **60 Instruction Injections:** Prompt overrides targeting recipient diversion, amount inflation, and fake `owner_approved` flags.<br>• **20 Allowlisted Vendor Diversions (E10):** Attacks routing funds to vendor `0x3333...` (present in organization allowlist, but excluded from mission Merkle set). |
+| [`incidents.jsonl`](./cases/incidents.jsonl) | **20** | **Historical Exploits (Synthetic)** | 4 real-world exploit vectors × 5 variants each:<br>1. **Grok/Bankr (May 2026):** Morse code payload hidden in web search ($174k drain).<br>2. **Freysa (Nov 2024):** Fake admin session token override ($45k drain).<br>3. **Zscaler ThreatLabz (July 2026):** Hidden license fees inside HTML/JSON-LD metadata ($3.00 fee).<br>4. **Cornell/Yale (Oct 2026):** OTP email directive demanding daily cap inflation to 100 USDC. |
+| [`benign.jsonl`](./cases/benign.jsonl) | **40** | **Benign Operational Tasks** | Legitimate treasury payouts, contractor invoices (within owner-signed max limits), and tool calls (search, summary) to measure utility, latency, and false positive rates. |
 
 *Note on APort Vault Benchmark: The HuggingFace `aporthq/vault-benchmark-v1` dataset was found to be gated (HTTP 401). In accordance with transparency guidelines, PayBench-ADI uses fully open, auditable synthetic cases rather than ungated proprietary subsets.*
 
@@ -92,7 +92,7 @@ To prove that C2 protection does not rely solely on off-chain software, 10 C2-bl
 ## 6. Honest Limitations
 
 1. **Structural ADI Delimiters:** In our tests, pure structural delimiter injections without instructions did not deceive modern Gemini models (0/40 tricked), likely because modern frontier LLMs parse structured JSON robustly. We report this transparently.
-2. **Model Diversity:** Evaluated models are currently from the Google Gemini family. The adapter architecture ([`eval/adapters/`](file:///D:/Code/Code/AIO/Code/ZaloAIC/UniHack/eval/adapters)) allows extending this to Claude, GPT-4o, and open weights.
+2. **Model Diversity:** Evaluated models are currently from the Google Gemini family. The adapter architecture ([`adapters/`](./adapters)) allows extending this to Claude, GPT-4o, and open weights.
 3. **Synthetic Scale:** 180 curated cases provide high-precision CI bounds for critical invariants, but broader real-world multi-step agent trajectories should be continuously expanded.
 
 ---
@@ -110,4 +110,4 @@ npm run bench -- --model gemini-3.5-flash-lite
 npm run bench -- --limit 20
 ```
 
-Results are saved to [`eval/results.json`](file:///D:/Code/Code/AIO/Code/ZaloAIC/UniHack/eval/results.json) and summarized in [`eval/leaderboard.json`](file:///D:/Code/Code/AIO/Code/ZaloAIC/UniHack/eval/leaderboard.json).
+Results are saved to [`results.json`](./results.json) and summarized in [`leaderboard.json`](./leaderboard.json).

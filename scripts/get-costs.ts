@@ -1,7 +1,12 @@
-import { createPublicClient, http, formatEther } from 'viem';
+import { createPublicClient, createWalletClient, http, formatEther } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { avalancheFuji } from 'viem/chains';
 import fs from 'fs';
 import path from 'path';
+
+try {
+  process.loadEnvFile(path.resolve(__dirname, '../apps/web/.env'));
+} catch {}
 
 const client = createPublicClient({
   chain: avalancheFuji,
@@ -13,26 +18,68 @@ const txs = [
   { name: 'x402_settlement', hash: '0x8c898c904fef42c9a2e5d45b18549bd48dce285ef81d497f588ae41320dc8208' },
   { name: 'proof_anchor', hash: '0x43bd21b81248a9f1a4dc2ff037a3df8119ae098690cd4e353bdbb4ce6ceb0547' },
   { name: 'passkey_approveMission', hash: '0x9885664fcfc45539af1183fa3768f6e2dbfb52c76544b7b6f1ee14833790cf45' },
-  { name: 'erc8004_validationResponse', hash: '0x62451c36b6488cf4423bd7427e560ac2e3de46144d7ba5c30d81c55df7fe1564' },
+  // W6-F3: Updated validationResponse tx from W2-F1
+  { name: 'erc8004_validationResponse', hash: '0xb641353c51d0f44192bcbf40743c20940b88a83c52a2c41f5852aea1ebe4d059' },
 ];
 
+async function measureFinality(): Promise<{ samplesMs: number[]; medianMs: number } | null> {
+  const relayerKey = process.env.RELAYER_PRIVATE_KEY;
+  if (!relayerKey) {
+    console.log('No RELAYER_PRIVATE_KEY found, skipping live finality measurement');
+    return null;
+  }
+
+  const account = privateKeyToAccount(relayerKey.startsWith('0x') ? relayerKey as `0x${string}` : `0x${relayerKey}`);
+  const wallet = createWalletClient({
+    account,
+    chain: avalancheFuji,
+    transport: http('https://api.avax-test.network/ext/bc/C/rpc'),
+  });
+
+  const samples: number[] = [];
+  console.log(`Measuring real Avalanche Fuji finality with 3 zero-value txs from relayer ${account.address}...`);
+
+  for (let i = 0; i < 3; i++) {
+    const t0 = Date.now();
+    const hash = await wallet.sendTransaction({
+      to: account.address,
+      value: 0n,
+    });
+    const receipt = await client.waitForTransactionReceipt({ hash });
+    const elapsed = Date.now() - t0;
+    samples.push(elapsed);
+    console.log(`[Sample ${i + 1}/3] Tx: ${hash.slice(0, 18)}... | Status: ${receipt.status} | Finality: ${elapsed}ms`);
+  }
+
+  samples.sort((a, b) => a - b);
+  const medianMs = samples[1];
+  return { samplesMs: samples, medianMs };
+}
+
 async function main() {
-  const results = [];
+  const transactionResults = [];
   for (const t of txs) {
     const start = Date.now();
     const receipt = await client.getTransactionReceipt({ hash: t.hash as `0x${string}` });
-    const latencyMs = Date.now() - start;
+    const receiptFetchMs = Date.now() - start;
     const feeWei = receipt.gasUsed * receipt.effectiveGasPrice;
-    results.push({
+    transactionResults.push({
       name: t.name,
       hash: t.hash,
       blockNumber: Number(receipt.blockNumber),
       gasUsed: Number(receipt.gasUsed),
-      effectiveGasPriceGwei: Number(receipt.effectiveGasPrice) / 1e9,
+      effectiveGasPriceWei: Number(receipt.effectiveGasPrice),
       feeAvax: formatEther(feeWei),
       status: receipt.status,
-      latencyMs,
+      receiptFetchMs,
     });
+  }
+
+  let finalityData = null;
+  try {
+    finalityData = await measureFinality();
+  } catch (err: any) {
+    console.error('Finality measurement error:', err.message);
   }
 
   const outDir = path.resolve(__dirname, '../evidence');
@@ -44,7 +91,16 @@ async function main() {
     network: 'Avalanche Fuji Testnet',
     chainId: 43113,
     recordedAt: new Date().toISOString(),
-    transactions: results,
+    transactions: transactionResults,
+    finality: finalityData
+      ? {
+          method: 'real sendTransaction to receipt confirmation on Fuji C-Chain',
+          samplesMs: finalityData.samplesMs,
+          medianMs: finalityData.medianMs,
+        }
+      : {
+          note: 'Chưa đo finality trực tiếp trong đợt này',
+        },
   };
 
   fs.writeFileSync(path.join(outDir, 'cost.json'), JSON.stringify(costData, null, 2));
