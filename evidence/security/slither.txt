@@ -1,0 +1,139 @@
+Slither Analyzer v0.11.6
+Command: python -m slither . --filter-paths lib/|test/|contracts/test/
+Exit Code: 4294967295
+
+STDOUT:
+'forge clean' running (wd: D:\Code\Code\AIO\Code\ZaloAIC\UniHack\contracts)
+'forge config --json' running
+'forge build --build-info --deny never --skip ./test/** ./script/** --force' running (wd: D:\Code\Code\AIO\Code\ZaloAIC\UniHack\contracts)
+
+
+STDERR:
+INFO:Detectors:
+Detector: locked-ether
+Contract locking ether found:
+	Contract GuardedTreasury (src/GuardedTreasury.sol#88-608) has payable functions:
+	 - GuardedTreasury.receive() (src/GuardedTreasury.sol#210-212)
+	 - GuardedTreasury.fallback() (src/GuardedTreasury.sol#214-216)
+	But does not have a function to withdraw the ether
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#contracts-that-lock-ether
+INFO:Detectors:
+Detector: reentrancy-events
+Reentrancy in PasskeyMissionAuthority.approveMission(bytes32,address,bytes32,uint256,uint256,uint256,uint256,PasskeyMissionAuthority.WebAuthnAuth) (src/PasskeyMissionAuthority.sol#99-137):
+	External calls:
+	- IGuardedTreasuryAuthority(treasury).createMission(missionId,agent,cap,duration) (src/PasskeyMissionAuthority.sol#130)
+	- IGuardedTreasuryAuthority(treasury).setMissionPayeeRoot(missionId,payeeRoot) (src/PasskeyMissionAuthority.sol#131)
+	- IGuardedTreasuryAuthority(treasury).setMissionToolCap(missionId,toolCap) (src/PasskeyMissionAuthority.sol#133)
+	Event emitted after the call(s):
+	- MissionApprovedByPasskey(missionId,agent,payeeRoot,cap,duration,toolCap,nonce) (src/PasskeyMissionAuthority.sol#136)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#reentrancy-vulnerabilities-4
+INFO:Detectors:
+Detector: timestamp
+GuardedTreasury.createMission(bytes32,address,uint256,uint256) (src/GuardedTreasury.sol#249-274) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(! missions[missionId].exists,MissionAlreadyExists) (src/GuardedTreasury.sol#256)
+GuardedTreasury.closeMission(bytes32) (src/GuardedTreasury.sol#276-284) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(missions[missionId].exists,MissionNotFound) (src/GuardedTreasury.sol#277)
+	- require(bool,string)(! missions[missionId].closed,MissionAlreadyClosed) (src/GuardedTreasury.sol#278)
+GuardedTreasury.setMissionCap(bytes32,uint256) (src/GuardedTreasury.sol#286-294) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(missions[missionId].exists,MissionNotFound) (src/GuardedTreasury.sol#287)
+GuardedTreasury.setMissionToolCap(bytes32,uint256) (src/GuardedTreasury.sol#332-337) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(missions[missionId].exists,MissionNotFound) (src/GuardedTreasury.sol#333)
+GuardedTreasury.fundMissionWallet(bytes32,address,uint256) (src/GuardedTreasury.sol#339-355) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(missions[missionId].exists,MissionNotFound) (src/GuardedTreasury.sol#340)
+	- require(bool,string)(! missions[missionId].closed,MissionAlreadyClosed) (src/GuardedTreasury.sol#341)
+	- require(bool,string)(block.timestamp < missions[missionId].expiresAt,MissionExpired) (src/GuardedTreasury.sol#342)
+GuardedTreasury.sweepMissionWalletWithAuthorization(bytes32,uint256,uint256,uint256,bytes32,uint8,bytes32,bytes32) (src/GuardedTreasury.sol#368-397) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(missions[missionId].exists,MissionNotFound) (src/GuardedTreasury.sol#378)
+GuardedTreasury.anchorMissionProof(bytes32,bytes32) (src/GuardedTreasury.sol#400-406) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(missions[missionId].exists,MissionNotFound) (src/GuardedTreasury.sol#401)
+GuardedTreasury.setMissionPayeeRoot(bytes32,bytes32) (src/GuardedTreasury.sol#409-418) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(missions[missionId].exists,MissionNotFound) (src/GuardedTreasury.sol#410)
+	- require(bool,string)(! missions[missionId].closed,MissionAlreadyClosed) (src/GuardedTreasury.sol#411)
+	- require(bool,string)(block.timestamp < missions[missionId].expiresAt,MissionExpired) (src/GuardedTreasury.sol#412)
+GuardedTreasury._propose(bytes32,address,uint256,bytes32,string) (src/GuardedTreasury.sol#462-549) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(mission.exists,InvalidMission) (src/GuardedTreasury.sol#478)
+	- require(bool,string)(! mission.closed,MissionClosed) (src/GuardedTreasury.sol#479)
+	- require(bool,string)(block.timestamp < mission.expiresAt,MissionExpired) (src/GuardedTreasury.sol#480)
+	- require(bool,string)(msg.sender == mission.agent,NotMissionAgent) (src/GuardedTreasury.sol#481)
+	- require(bool,string)(to != mission.agent,CannotPayAgent) (src/GuardedTreasury.sol#484)
+GuardedTreasury.approve(uint256) (src/GuardedTreasury.sol#552-565) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(p.status == 1,NotQueued) (src/GuardedTreasury.sol#554)
+	- require(bool,string)(block.timestamp <= p.expiresAt,ProposalExpired) (src/GuardedTreasury.sol#555)
+	- require(bool,string)(m.exists && ! m.closed && block.timestamp < m.expiresAt,MissionInvalidOrExpired) (src/GuardedTreasury.sol#559)
+	- require(bool,string)(recipientAllowlist[p.to],RecipientNotAllowlisted) (src/GuardedTreasury.sol#560)
+	- require(bool,string)(p.to != m.agent,CannotPayAgent) (src/GuardedTreasury.sol#561)
+GuardedTreasury.execute(uint256) (src/GuardedTreasury.sol#567-586) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(p.status == 2,NotApproved) (src/GuardedTreasury.sol#569)
+	- require(bool,string)(block.timestamp <= p.expiresAt,ProposalExpired) (src/GuardedTreasury.sol#570)
+	- require(bool,string)(m.exists && ! m.closed && block.timestamp < m.expiresAt,MissionInvalidOrExpired) (src/GuardedTreasury.sol#574)
+	- require(bool,string)(recipientAllowlist[p.to],RecipientNotAllowlisted) (src/GuardedTreasury.sol#575)
+	- require(bool,string)(p.to != m.agent,CannotPayAgent) (src/GuardedTreasury.sol#576)
+GuardedTreasury.reject(uint256,string) (src/GuardedTreasury.sol#588-594) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(p.status == 1 || p.status == 2,NotQueuedOrApproved) (src/GuardedTreasury.sol#590)
+GuardedTreasury.expire(uint256) (src/GuardedTreasury.sol#596-603) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(p.status == 1 || p.status == 2,NotQueuedOrApproved) (src/GuardedTreasury.sol#598)
+	- require(bool,string)(block.timestamp > p.expiresAt,NotYetExpired) (src/GuardedTreasury.sol#599)
+ValidationRegistry.validationRequest(address,uint256,string,bytes32) (src/erc8004/ValidationRegistry.sol#78-102) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(_validations[requestHash].lastUpdate == 0,Request already exists) (src/erc8004/ValidationRegistry.sol#86)
+ValidationRegistry.validationResponse(bytes32,uint8,string,bytes32,string) (src/erc8004/ValidationRegistry.sol#105-132) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(status.lastUpdate > 0,Request does not exist) (src/erc8004/ValidationRegistry.sol#113)
+	- require(bool,string)(status.validatorAddress == msg.sender,Not the designated validator) (src/erc8004/ValidationRegistry.sol#114)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#block-timestamp
+INFO:Detectors:
+Detector: assembly
+SafeERC20.safeTransfer(IERC20,address,uint256) (src/GuardedTreasury.sol#49-64) uses assembly
+	- INLINE ASM (src/GuardedTreasury.sol#55-58)
+SafeERC20.safeTransferFrom(IERC20,address,address,uint256) (src/GuardedTreasury.sol#66-81) uses assembly
+	- INLINE ASM (src/GuardedTreasury.sol#72-75)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#assembly-usage
+INFO:Detectors:
+Detector: low-level-calls
+Low level call in SafeERC20.safeTransfer(IERC20,address,uint256) (src/GuardedTreasury.sol#49-64):
+	- (success,returndata) = address(token).call(data) (src/GuardedTreasury.sol#52)
+Low level call in SafeERC20.safeTransferFrom(IERC20,address,address,uint256) (src/GuardedTreasury.sol#66-81):
+	- (success,returndata) = address(token).call(data) (src/GuardedTreasury.sol#69)
+Low level call in PasskeyMissionAuthority._verifyWebAuthn(bytes32,PasskeyMissionAuthority.WebAuthnAuth,uint256,uint256) (src/PasskeyMissionAuthority.sol#176-250):
+	- (success,output) = PRECOMPILE_P256.staticcall(input) (src/PasskeyMissionAuthority.sol#248)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#low-level-calls
+INFO:Detectors:
+Detector: missing-inheritance
+GuardedTreasury (src/GuardedTreasury.sol#88-608) should inherit from IGuardedTreasuryAuthority (src/PasskeyMissionAuthority.sol#4-17)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#missing-inheritance
+INFO:Detectors:
+Detector: naming-convention
+Parameter GuardedTreasury.setCaps(uint256,uint256)._perTxCap (src/GuardedTreasury.sol#296) is not in mixedCase
+Parameter GuardedTreasury.setCaps(uint256,uint256)._dailyCap (src/GuardedTreasury.sol#296) is not in mixedCase
+Variable GuardedTreasury.USDC (src/GuardedTreasury.sol#120) is not in mixedCase
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#conformance-to-solidity-naming-conventions
+INFO:Detectors:
+Detector: too-many-digits
+PasskeyMissionAuthority.slitherConstructorConstantVariables() (src/PasskeyMissionAuthority.sol#26-306) uses literals with too many digits:
+	- SECP256R1_N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551 (src/PasskeyMissionAuthority.sol#28-29)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#too-many-digits
+INFO:Detectors:
+Detector: unindexed-event-address
+Event GuardedTreasury.Paused(address) (src/GuardedTreasury.sol#112) has address parameters but no indexed parameters
+Event GuardedTreasury.Unpaused(address) (src/GuardedTreasury.sol#113) has address parameters but no indexed parameters
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#unindexed-event-address-parameters
+INFO:Detectors:
+Detector: immutable-states
+GuardedTreasury._owner (src/GuardedTreasury.sol#121) should be immutable 
+GuardedTreasury.missionCapDefault (src/GuardedTreasury.sol#127) should be immutable 
+ValidationRegistry.owner (src/erc8004/ValidationRegistry.sol#31) should be immutable 
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#state-variables-that-could-be-declared-immutable
+INFO:Slither:. analyzed (9 contracts with 102 detectors), 32 result(s) found

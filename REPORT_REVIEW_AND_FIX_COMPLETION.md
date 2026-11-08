@@ -394,3 +394,52 @@ ightarrow$ Attack Blocked (ASR = 0, thất thoát 0 USDC).
     - `eval/runs/known-payee-gemini-3.5-flash-lite-20261108-2127.json`
     - `eval/runs/known-payee-gemini-3.1-flash-lite-20261108-2136.json`
   - Báo cáo cập nhật: Mục 8 trong `ATTACK_EVAL.md`.
+
+---
+
+## MAX-M2 — Static Analysis (Slither + Aderyn) & Formal Threat Model (SECURITY.md)
+
+- **Trạng thái:** **PASS 100%**
+- **Mục tiêu:** Thực thi phân tích tĩnh toàn diện trên toàn bộ smart contract nguồn (`contracts/src/`) bằng 2 công cụ phân tích tĩnh tiêu chuẩn công nghiệp (Slither Analyzer v0.11.6 và Aderyn v0.1.9); phân loại và đánh giá rủi ro cho từng phát hiện; thiết lập tài liệu chính thức `SECURITY.md` chi tiết hóa Threat Model cho 6 kịch bản tấn công trọng yếu; cam kết chuẩn mực trung thực "static analysis verified & formally invariant tested" (tuyệt đối không dùng chữ "audited").
+- **Công Cụ Phân Tích Tĩnh Đã Chạy & Artifacts:**
+  1. **Slither Analyzer v0.11.6** (Trail of Bits / Crytic):
+     - Lệnh chạy: `python -m slither . --filter-paths "lib/|test/|contracts/test/"`
+     - Báo cáo thô lưu tại: `evidence/security/slither.txt`
+     - Phạm vi: 9 contracts, 102 detectors, phát hiện 32 findings (0 Critical, 0 High).
+  2. **Aderyn v0.1.9** (Cyfrin):
+     - Lệnh chạy: `C:\Users\HP\.cargo\bin\aderyn.exe . --src src/ -o ../evidence/security/aderyn.md --skip-update-check`
+     - Báo cáo thô lưu tại: `evidence/security/aderyn.md`
+     - Phạm vi: 4 source contracts, 63 detectors, phát hiện 3 High (toàn bộ False Positive / Accepted with Rationale) và 8 Low.
+- **Bảng Phân Loại & Đánh Giá Từng Finding (Triage Matrix):**
+  - **Slither:**
+    - `SL-01` (`locked-ether`): `GuardedTreasury` nhận native AVAX nhưng không có hàm rút native AVAX. **Chấp nhận có lý do (Accepted with Rationale)**: `GuardedTreasury` là hợp đồng quản lý ERC-20 (USDC native `0x5425...`), không lưu ký native AVAX; quỹ treasury giải ngân qua `USDC.safeTransfer`.
+    - `SL-02` (`reentrancy-events`): Event `MissionApprovedByPasskey` phát sau external call tới treasury. **False Positive**: External call chỉ trỏ tới hợp đồng `treasury` bất biến, đáng tin cậy được cấu hình từ constructor, không có state change nào sau call.
+    - `SL-03` (`timestamp`): So sánh `block.timestamp` cho hạn nhiệm vụ (`expiresAt`). **Chấp nhận có lý do**: Cơ chế thời gian cần thiết cho TTL nhiệm vụ; cơ chế đồng thuận Avalanche Snowman đảm bảo timestamp tăng đơn điệu và lệch thực tế chỉ vài giây, không thể thao túng qua các khung giờ/ngày của mission.
+    - `SL-04` (`assembly` / `low-level-calls`): Inline assembly trong `SafeERC20` và gọi precompile RIP-7212 `0x100`. **False Positive**: Chuẩn OpenZeppelin/Solady cho ERC-20 và precompile native phần cứng P-256 trên Avalanche Fuji.
+    - `SL-05` (`missing-inheritance`): `GuardedTreasury` không khai báo `is IGuardedTreasuryAuthority`. **Chấp nhận có lý do**: `GuardedTreasury` cài đặt đầy đủ các hàm đúng signature; hợp đồng đang live trên Fuji testnet nên giữ nguyên cấu trúc.
+    - `SL-06` (`naming-convention`, `unindexed-event-address`, `immutable-states`): Gợi ý style và gas optimization. **Chấp nhận có lý do**.
+  - **Aderyn:**
+    - `H-1` (`abi.encodePacked()` dynamic types): Trong `PasskeyMissionAuthority.sol` L210 & L221. **False Positive**: Kết quả không đưa vào `keccak256` sinh hash key mà dùng làm chuỗi mẫu byte so khớp chuỗi con trong `clientDataJSON`. Đã có 16/16 test Foundry chứng minh tính an toàn.
+    - `H-2` (Uninitialized state variables): `nextProposalId`, `nextNonce`. **False Positive**: EVM mặc định khởi tạo `uint256` = 0, đây đúng là giá trị khởi đầu mong muốn.
+    - `H-3` (Locks Ether without withdraw): Trùng với `SL-01`. **Chấp nhận có lý do**.
+    - `L-1` (Centralization risk for trusted owners): **By Design**: Owner đại diện cho người dùng/passkey cấp ngân sách; AI agent mới là đối tượng không tin cậy.
+    - `L-2` (Unsafe ERC20 operations): `SafeERC20` tự cài đặt. **False Positive**: Triển khai đầy đủ kiểm tra boolean và returndata.
+    - `L-3`..`L-8`: Khuyến nghị visibility, hằng số, ký hiệu khoa học. **Chấp nhận có lý do**.
+  - **Quy tắc bất di bất dịch:** Tuyệt đối **KHÔNG sửa `GuardedTreasury.sol`** vì hợp đồng đã verified và đang hoạt động thực tế trên Avalanche Fuji.
+- **Tài Liệu Bảo Mật Chính Thức (`SECURITY.md`):**
+  - Thiết lập `SECURITY.md` hoàn chỉnh bao gồm:
+    1. Cam kết thuật ngữ: "static analysis verified (Slither v0.11.6, Aderyn v0.1.9) and formal invariant tested", không dùng "audited".
+    2. Bảng triage chi tiết cho toàn bộ findings từ Slither và Aderyn.
+    3. Threat Model toàn diện cho 6 nguy cơ bảo mật:
+       - **Threat 1: Agent compromised / Prompt injection** (Taint Registry off-chain + Merkle payee root on-chain `PayeeNotInMissionSet`).
+       - **Threat 2: Agent session private key leaked** (Ví phiên ephemeral per-mission giới hạn thiệt hại tối đa đúng `toolCap`).
+       - **Threat 3: Backend application server compromised** (Backend không giữ owner key, bất biến contract Avalanche giới hạn cap, hash chain audit neo on-chain).
+       - **Threat 4: Facilitator acting maliciously** (EIP-3009 request-bound nonces theo ATC'26 arXiv:2605.30998, chống replay và chuyển hướng).
+       - **Threat 5: Validator key compromised or collusion** (Contract độc lập xác thực Merkle proof, đăng ký ERC-8004 on-chain bất biến).
+       - **Threat 6: Passkey WebAuthn phishing / origin spoofing / replay** (Bảo vệ 9 lớp: RP ID hash, origin exact matching có dấu nháy đóng, UV+UP flags, chống high-S, native RIP-7212 precompile `0x100`).
+    4. Bảng liên kết Invariant Formal Verification (INV-1 đến INV-5, Foundry Invariant, Halmos Symbolic, Mutant Testing).
+    5. Quy trình Responsible Disclosure.
+- **Kết Quả Kiểm Thử Toàn Diện:**
+  - `forge test` trong `contracts/`: **61/61 tests pass** across 4 test suites (16 passkey tests, 37 treasury tests, 7 validation registry tests, 1 invariant suite với 512 runs / 32,768 calls, 0 reverts).
+  - TypeScript strict typecheck trong `apps/web/`: **0 errors** (`npx tsc --noEmit`).
+  - Unit boundaries & security suites: **127 unit tests pass**.
