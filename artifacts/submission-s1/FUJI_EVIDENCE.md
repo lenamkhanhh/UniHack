@@ -96,3 +96,33 @@ Kết quả trả về:
 - `tag`: `"verified-full"`
 - `lastUpdate`: `1794105823`
 
+---
+
+## Phần D — Bằng chứng WOW-W4: Passkey Mission Authority (RIP-7212 Precompile 0x100)
+
+Hệ thống xác thực WebAuthn P-256 sinh trắc học (Passkey) trực tiếp trên Avalanche Fuji thông qua native precompile RIP-7212 tại địa chỉ `0x0000000000000000000000000000000000000100`.
+
+### 1. Smart Contracts Triển khai trên Avalanche Fuji
+
+| Hợp đồng | Địa chỉ Fuji | Giao dịch Triển khai | Block |
+|---|---|---|---|
+| **GuardedTreasury (Passkey Demo)** | [`0x33a6bcf988a9056a3fc78b62560ec40b3c8c4bb3`](https://testnet.snowtrace.io/address/0x33a6bcf988a9056a3fc78b62560ec40b3c8c4bb3) | [`0x2e68262b7e102803ec8eebbbc4ae1398dfc2c05359155fb84667482280cfcc2b`](https://testnet.snowtrace.io/tx/0x2e68262b7e102803ec8eebbbc4ae1398dfc2c05359155fb84667482280cfcc2b) | #60712046 |
+| **PasskeyMissionAuthority** | [`0x77235386fe59A934645C5F273e411b0Bea8cCc9C`](https://testnet.snowtrace.io/address/0x77235386fe59A934645C5F273e411b0Bea8cCc9C) | [`0x5a63204914dcd34568790681bae0c608d012cc64c5328903d9dcb6db9d71c97e`](https://testnet.snowtrace.io/tx/0x5a63204914dcd34568790681bae0c608d012cc64c5328903d9dcb6db9d71c97e) | #60712049 |
+
+*Ghi chú: PasskeyMissionAuthority đã được verify mã nguồn trên Snowtrace / Routescan (GUID: `00ec6faf-8b0f-52be-8754-0cc6679e968e`).*
+
+### 2. Giao dịch Duyệt Mission qua WebAuthn Assertion
+
+Giao dịch gọi `approveMission` với chữ ký WebAuthn P-256 từ khóa phần cứng:
+- **Tx Hash:** [`0x9885664fcfc45539af1183fa3768f6e2dbfb52c76544b7b6f1ee14833790cf45`](https://testnet.snowtrace.io/tx/0x9885664fcfc45539af1183fa3768f6e2dbfb52c76544b7b6f1ee14833790cf45)
+- **Block Number:** #60712056
+- **Gas Used:** **281,498 gas** (Precompile P-256 tiêu tốn ~3,450 gas)
+- **Thông số nhiệm vụ on-chain được khởi tạo:**
+  - `missionId`: `0x1000000000000000000000000000000000000000000000000000000000000001`
+  - `agent`: `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c`
+  - `cap`: 2,000,000 (2 USDC)
+  - `toolCap`: 500,000 (0.5 USDC)
+  - `payeeRoot`: `0xa7409058b8f2c3bfbb2e9f0b5d56b0d9e8df34906a282f10b74108d8108a8a47`
+  - `exists`: `true`
+
+

@@ -155,4 +155,30 @@
   - **validationResponse:** Tx [`0x62451c36...`](https://testnet.snowtrace.io/tx/0x62451c36b6488cf4423bd7427e560ac2e3de46144d7ba5c30d81c55df7fe1564) (Score 100/100, tag `"verified-full"`, validator `0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5`)
 - **Giới hạn còn lại:** Không có. Bundle hash và on-chain validation đã được xác nhận khớp 100%.
 
+---
+
+## WOW-W4 — Passkey Mission Authority (RIP-7212 P-256 Precompile trên Avalanche)
+
+- **Trạng thái:** **PASS 100%**
+- **File tạo/sửa:**
+  - `contracts/src/PasskeyMissionAuthority.sol` (WebAuthn P-256 passkey verification via RIP-7212 precompile `0x100`, replay-protected sequential nonce, Base64URL challenge parser, user-presence validation)
+  - `contracts/test/PasskeyMissionAuthority.t.sol` (7 unit & fork tests: happy path, replay nonce revert, invalid challenge revert, user presence revert, passkey rotation, gasless relayer, and live Avalanche Fuji precompile `0x100` fork test)
+  - `scripts/passkey-fuji-demo.ts` (Script triển khai live trên Fuji: deploy demo GuardedTreasury + PasskeyMissionAuthority, thực hiện `approveMission` thật bằng chữ ký WebAuthn assertion)
+  - `apps/web/app/api/passkey/relay/route.ts` (API route submit `approveMission` qua relayer trả gas)
+  - `apps/web/app/missions/new/page.tsx` (Giao diện đăng ký & duyệt mission bằng Passkey sinh trắc học với live metrics)
+  - `apps/web/e2e/passkey.spec.ts` (Playwright E2E test sử dụng CDP virtual authenticator WebAuthn)
+  - `docs/PASSKEY.md` (Tài liệu kiến trúc, threat model, gas benchmark 281k gas, phân quyền relayer)
+  - `artifacts/submission-s1/FUJI_EVIDENCE.md` (Phần D: Bằng chứng giao dịch & thông số on-chain)
+- **Lệnh đã chạy & Output test:**
+  - `forge test --match-path "test/PasskeyMissionAuthority.t.sol" -vv` (**7/7 passed**)
+  - `forge test` toàn bộ suite (**52/52 passed**)
+  - `npx.cmd tsc --noEmit` (**0 errors**)
+  - `npx.cmd vitest run` (**189/189 tests passed**, 23 files)
+- **Tx Hash Snowtrace (Avalanche Fuji):**
+  - **GuardedTreasury (Passkey Demo):** [`0x33a6bcf988a9056a3fc78b62560ec40b3c8c4bb3`](https://testnet.snowtrace.io/address/0x33a6bcf988a9056a3fc78b62560ec40b3c8c4bb3) (Tx: [`0x2e68262b...`](https://testnet.snowtrace.io/tx/0x2e68262b7e102803ec8eebbbc4ae1398dfc2c05359155fb84667482280cfcc2b), Block `#60712046`)
+  - **PasskeyMissionAuthority:** [`0x77235386fe59A934645C5F273e411b0Bea8cCc9C`](https://testnet.snowtrace.io/address/0x77235386fe59A934645C5F273e411b0Bea8cCc9C) (Tx: [`0x5a632049...`](https://testnet.snowtrace.io/tx/0x5a63204914dcd34568790681bae0c608d012cc64c5328903d9dcb6db9d71c97e), Block `#60712049`, verified trên Snowtrace/Routescan)
+  - **approveMission Tx:** [`0x9885664fcfc45539af1183fa3768f6e2dbfb52c76544b7b6f1ee14833790cf45`](https://testnet.snowtrace.io/tx/0x9885664fcfc45539af1183fa3768f6e2dbfb52c76544b7b6f1ee14833790cf45) (Block `#60712056`, gas used: **281,498**, precompile 0x100 gas ~3,450)
+- **Giới hạn còn lại:** Passkey demo chạy trên instance GuardedTreasury riêng biệt để cách ly hoàn toàn rủi ro khỏi treasury chính.
+
+
 

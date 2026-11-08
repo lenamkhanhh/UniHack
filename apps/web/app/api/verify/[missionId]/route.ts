@@ -199,7 +199,7 @@ export async function GET(req: NextRequest, context: any) {
     // S1-F9: Only set anchored = true when verified against on-chain contract state or verified receipt
     if (customFetcher) {
       onchainAnchoredHead = (await customFetcher(mission.missionId)) || null;
-    } else if ((mode === 'LIVE_FUJI' || mission.slug === 'fuji-live-mission-s1b') && !isSandbox) {
+    } else if (mode === 'LIVE_FUJI' && !isSandbox) {
       try {
         const treasuryAddress = getGuardedTreasuryAddress();
         const rpcUrl = process.env.AVALANCHE_FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
@@ -254,7 +254,7 @@ export async function GET(req: NextRequest, context: any) {
       process.env.NEXT_PUBLIC_VALIDATION_REGISTRY_ADDRESS ||
       '0x4c5ccda2a630cd1cb706799deadcc8483d06697e';
 
-    if (validationRegistryAddress && (mode === 'LIVE_FUJI' || mission.slug === 'fuji-live-mission-s1b') && !isSandbox) {
+    if (validationRegistryAddress && mode === 'LIVE_FUJI' && !isSandbox) {
       try {
         const s1bRequestHash = '0x20f83cc1c500af5ad3bf7b8fc2d1c5827cf2acf10454c72391e4f3f5765d6110' as `0x${string}`;
         const rpcUrl = process.env.AVALANCHE_FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
