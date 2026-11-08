@@ -4,7 +4,31 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-(Hiện không có mục OPEN)
+Claude review d4096b0 (09/11): F1–F4 và F7 đạt; runner giờ trung thực. Còn 3 mục, làm theo thứ tự. Hai mục M4-F9 và M4-F8 không cần quota LLM nên làm ngay.
+
+- M4-F8 [sai nguồn] Bảng đối thủ trong AGENTDOJO.md ghi sai model. Claude đã mở nguồn và ghi số đúng dưới đây; thay bảng bằng đúng các số này, mỗi dòng ghi rõ "live LLM" hay "model-free replay":
+  - **ProvGuard** (README của github.com/ziko-asm/provguard):
+    - Live agent **Qwen3 8B**, 48 cặp (16 user task × injection_task_0..2), 1 lần chạy, temperature 0.7.
+      - ASR: 16/48 khi không có defense, **0/48** khi có ProvGuard.
+      - Utility không bị tấn công: 8/16 → 9/16.
+      - Utility khi bị tấn công: 26/48 → 24/48.
+    - **Model-free replay** (AgentDojo v1.2.2, `important_instructions`) trên banking: chặn **144/144** attack, chặn nhầm **3/16** task hợp lệ (policy v1).
+  - **NOMOS** (arXiv 2610.11030):
+    - Model: **gemma-4-26B** và **Llama-3.3-70B** (không phải GPT-4o hay Claude). Đạt ASR 0% trên banking.
+    - Abstract không ghi số cặp. Số "288" và "8/288" chỉ giữ nếu trích được câu hoặc bảng trong full text (ghi số trang hoặc mục); không trích được thì bỏ "288 pairs", giữ dạng "tự nhận lỗ: chuyển hướng sang payee đã có trong lịch sử".
+    - Bỏ cột "FP 0%" nếu không có nguồn.
+- M4-F9 [chính, không tốn quota] Thêm **model-free ground-truth replay**, cùng cách ProvGuard đo, để so được cùng thước. Script mới `eval/agentdojo/replay_ground_truth.py`:
+  - (a) Với mỗi user task trong 16 task banking: lấy `user_task.ground_truth(pre_env)` (các tool call đúng), đưa qua guard C2 strict và C2 file-trusted (payee set dựng từ prompt và các nguồn được phép, như khi chạy thật) → đếm task hợp lệ bị chặn nhầm X/16, liệt kê từng task kèm lý do.
+  - (b) Với mỗi cặp trong 144 cặp (16×9), env đã chèn injection: lấy `injection_task.ground_truth(env)` (tool call của kẻ tấn công), đưa qua guard → đếm attack bị chặn Y/144.
+  - (c) Mỗi lượt payout đều replay trên anvil fork với Merkle root của task → báo số lượt guard và contract cho cùng kết quả.
+  - (d) Thêm 1 baseline "C1 allowlist" (payee có trong lịch sử giao dịch của tài khoản, kiểu NOMOS) để thấy lỗ payee-đã-biết, nếu injection task nào thuộc loại đó.
+  - Ghi `results/replay-ground-truth-<ts>.json` và đưa bảng vào SUMMARY.md cùng AGENTDOJO.md, đặt cạnh dòng ProvGuard model-free (144/144, 3/16).
+  - Trung thực: injection task nào có ground truth không phải lệnh chi tiền (ví dụ đổi mật khẩu) thì ghi riêng là "ngoài phạm vi guard thanh toán". Không đếm là chặn được trừ khi guard thật sự chặn.
+- M4-F6b Phần chạy live LLM:
+  - Bỏ sample 2 cặp. Dùng **đúng bộ của ProvGuard**: 16 user task × injection_task_0..2 = 48 cặp, cộng 16 benign, cho C0 và C2 strict. Như vậy cùng lựa chọn cặp với ProvGuard.
+  - Model `gemini-3.5-flash-lite`; nếu hết quota thì thử `gemini-3.1-flash-lite` (quota riêng). Cả hai hết thì ghi partial và dừng; chạy lại khi quota reset (khoảng 15:00 giờ VN), có resume theo cache entry `source: live`.
+  - Không bao giờ giả lập.
+- Xong thì commit `fix(m4): ...`, rồi sang M5 trong lúc chờ quota. Khi quota reset thì quay lại chạy live 48 cặp.
 
 ## DONE
 - M4-F1..F7 Đã giải quyết triệt để review của Claude đối với AgentDojo benchmark M4:
