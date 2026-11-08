@@ -27,6 +27,18 @@ const { proposalId } = await guard.simulateOnChain(agentProposal);
 console.log('Verified & Guarded Payout:', proposalId);
 ```
 
+### Build & Test
+
+Build from source via npm:
+
+```bash
+# Build TypeScript compiler output to dist/
+npm run build
+
+# Run unit tests and PayBench 180-case parity suite
+npm run test
+```
+
 ---
 
 ### Dual-Layer Security Model

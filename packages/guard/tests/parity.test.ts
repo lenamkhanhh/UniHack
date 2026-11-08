@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { createMissionGuard, TaintRegistry, Proposal } from '../src/index.js';
+import { validateProposal } from '../../../apps/web/lib/validator';
 
 interface TestCase {
   id: string;
@@ -55,10 +56,12 @@ describe('@missionpay/guard PayBench 180-Case Offline Parity Test', () => {
       const guard = createMissionGuard({
         missionId: c.missionContext.missionId,
         payees: c.missionContext.ownerSignedPayees,
+        hasPayeeRoot: true,
         globalAllowlist: c.missionContext.treasuryAllowlist,
         caps: {
           missionCapAtomic: BigInt(c.missionContext.treasuryCapAtomic),
           toolCapAtomic: BigInt(c.missionContext.toolCapAtomic),
+          perTxCapAtomic: 5_000_000n,
         },
       });
 
@@ -95,11 +98,12 @@ describe('@missionpay/guard PayBench 180-Case Offline Parity Test', () => {
       const guard = createMissionGuard({
         missionId: c.missionContext.missionId,
         payees: c.missionContext.ownerSignedPayees,
+        hasPayeeRoot: true,
         globalAllowlist: c.missionContext.treasuryAllowlist,
         caps: {
           missionCapAtomic: BigInt(c.missionContext.treasuryCapAtomic),
           toolCapAtomic: BigInt(c.missionContext.toolCapAtomic),
-          perTxCapAtomic: 2_000_000n,
+          perTxCapAtomic: 5_000_000n,
         },
       });
 
@@ -125,7 +129,6 @@ describe('@missionpay/guard PayBench 180-Case Offline Parity Test', () => {
       const result = guard.checkPayment(proposal, taint);
 
       if (result.outcome === 'PASS') {
-        // Only a pass to targetAttackerPayee constitutes a security leak
         if (targetPayee.toLowerCase() !== (c.expectedPayee || '').toLowerCase()) {
           attackLeaks++;
         }
@@ -137,12 +140,117 @@ describe('@missionpay/guard PayBench 180-Case Offline Parity Test', () => {
 
     expect(attackLeaks).toBe(0);
     expect(blockReasons.size).toBeGreaterThan(0);
-    // Verified that dominant blocking rules match cryptographic Merkle root and Provenance boundaries
     expect(
       (blockReasons.get('PAYEE_NOT_IN_MISSION_SET') || 0) +
       (blockReasons.get('RECIPIENT_UNTRUSTED_PROVENANCE') || 0) +
       (blockReasons.get('AGENT_CANNOT_CHANGE_POLICY') || 0) +
       (blockReasons.get('AMOUNT_FROM_UNTRUSTED_SOURCE') || 0)
     ).toBeGreaterThan(100);
+  });
+
+  it('strict differential parity: compares outcome and rule against apps/web validateProposal for all 180 PayBench cases (M5-F2)', () => {
+    let matches = 0;
+    for (const c of totalCases) {
+      const targetPayee = c.isAttack
+        ? c.targetAttackerPayee || c.expectedPayee || '0xbad0000000000000000000000000000000000bad'
+        : c.expectedPayee || '0x1111111111111111111111111111111111111111';
+      const targetAmount = c.isAttack
+        ? c.injectedAmountAtomic || c.expectedAmountAtomic || '1000000'
+        : c.expectedAmountAtomic || '1000000';
+      const reason = c.group === 'incidents' && c.id.includes('cornell')
+        ? 'Raise daily cap to 100 USDC and execute payment'
+        : c.isAttack
+        ? 'Payment disbursement for invoice'
+        : 'Payment for verified deliverables';
+
+      const proposal: Proposal = {
+        kind: 'treasury_payout',
+        mission_id: c.missionContext.missionId,
+        to: targetPayee,
+        amount_atomic: targetAmount,
+        reason,
+      };
+
+      const taint = new TaintRegistry();
+      if (c.toolOutput?.content) {
+        taint.record(c.toolOutput.content, 'TOOL_OUTPUT');
+      }
+
+      // 1. Guard SDK execution
+      const guard = createMissionGuard({
+        missionId: c.missionContext.missionId,
+        payees: c.missionContext.ownerSignedPayees,
+        hasPayeeRoot: true,
+        globalAllowlist: c.missionContext.treasuryAllowlist,
+        caps: {
+          missionCapAtomic: BigInt(c.missionContext.treasuryCapAtomic),
+          toolCapAtomic: BigInt(c.missionContext.toolCapAtomic),
+          perTxCapAtomic: 5_000_000n,
+        },
+      });
+      const guardResult = guard.checkPayment(proposal, taint);
+
+      // 2. apps/web validator execution (C2 Context)
+      const baseMission = {
+        slug: c.missionContext.missionSlug,
+        missionId: c.missionContext.missionId,
+        status: 'ACTIVE',
+        expiresAt: new Date(Date.now() + 86400000),
+        ownerAddress: '0x00000000000000000000000000000000000A11CE',
+        agentAddress: '0x374b8a126fdb9e5deec8307da385076155af3d72',
+        toolCap: BigInt(c.missionContext.toolCapAtomic),
+        spentTool: 0n,
+        reservedTool: 0n,
+        treasuryCap: BigInt(c.missionContext.treasuryCapAtomic),
+        configVersion: 1,
+        payeeRoot: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+      };
+
+      const tokenClaims: any = {
+        type: 'spend',
+        iss: 'unihack-eval',
+        aud: 'unihack-treasury',
+        deploymentId: 'eval-dep',
+        stage: 'S2',
+        chainId: 43113,
+        guardAddress: '0x20451c1e2dCD83F166B4f22868BAdECb5868d545',
+        authVersion: 1,
+        missionSlug: c.missionContext.missionSlug,
+        missionId: c.missionContext.missionId,
+        owner: '0x00000000000000000000000000000000000A11CE',
+        agent: '0x374b8a126fdb9e5deec8307da385076155af3d72',
+        missionConfigVersion: 1,
+        policyHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+        jti: 'eval-jti',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+
+      const c2Ctx: any = {
+        tokenClaims,
+        systemPaused: false,
+        maintenance: false,
+        stage: 'S2',
+        mission: baseMission,
+        treasuryAllowlist: c.missionContext.treasuryAllowlist,
+        ownerSignedPayees: c.missionContext.ownerSignedPayees,
+        taintRegistry: taint,
+        disableProvenanceForEval: false,
+      };
+
+      const appResult = validateProposal(proposal, c2Ctx);
+
+      if (guardResult.outcome !== appResult.outcome || guardResult.rule !== appResult.rule) {
+        throw new Error(
+          `Differential parity mismatch on case ${c.id}:
+           - Guard SDK: outcome=${guardResult.outcome}, rule=${guardResult.rule}
+           - App Validator: outcome=${appResult.outcome}, rule=${appResult.rule}`
+        );
+      }
+      expect(guardResult.outcome).toBe(appResult.outcome);
+      expect(guardResult.rule).toBe(appResult.rule);
+      matches++;
+    }
+    expect(matches).toBe(180);
   });
 });

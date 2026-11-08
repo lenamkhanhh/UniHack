@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.16",
+    "@missionpay/guard": "*",
     "@openzeppelin/merkle-tree": "^1.0.8",
     "@prisma/client": "5.22.0",
     "@types/qrcode": "^1.5.6",

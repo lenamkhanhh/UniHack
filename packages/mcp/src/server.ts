@@ -125,6 +125,7 @@ export function createMissionPayMcpServer(): McpServer {
       const guard = createMissionGuard({
         missionId: mission_id,
         payees,
+        hasPayeeRoot: Boolean(payees && payees.length > 0),
       });
 
       const proposal: Proposal = {

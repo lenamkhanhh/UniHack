@@ -25,6 +25,15 @@ export type Proposal = ToolPurchaseProposal | TreasuryPayoutProposal;
 export type ValidationRuleId =
   | 'AGENT_CANNOT_CHANGE_POLICY'
   | 'SYSTEM_PAUSED'
+  | 'SYSTEM_MAINTENANCE'
+  | 'STAGE_S1_NO_TREASURY'
+  | 'INVALID_CREDENTIAL_TYPE'
+  | 'CREDENTIAL_MISSION_MISMATCH'
+  | 'PROPOSAL_MISSION_MISMATCH'
+  | 'STAGE_MISMATCH'
+  | 'CONFIG_VERSION_REVOKED'
+  | 'MISSION_NOT_ACTIVE'
+  | 'MISSION_PAUSED'
   | 'MISSION_EXPIRED'
   | 'INVALID_RECIPIENT'
   | 'CANNOT_PAY_AGENT'
@@ -35,6 +44,11 @@ export type ValidationRuleId =
   | 'AMOUNT_FROM_UNTRUSTED_SOURCE'
   | 'OVER_PER_TX_CAP'
   | 'MISSION_CAP_EXHAUSTED'
+  | 'UNKNOWN_TOOL'
+  | 'PRICE_MISMATCH'
+  | 'INVALID_TOOL_ARGUMENTS'
+  | 'OVER_PER_CALL_CAP'
+  | 'INSUFFICIENT_TOOL_BUDGET'
   | 'VALIDATION_PASSED';
 
 export type ValidationDecision = 'PASS' | 'BLOCK' | 'QUEUE';
@@ -43,6 +57,7 @@ export interface ValidationResult {
   outcome: ValidationDecision;
   rule?: ValidationRuleId | string;
   reason?: string;
+  canonicalArguments?: any;
   toProvenance?: Provenance;
   amountProvenance?: Provenance;
 }
@@ -63,13 +78,16 @@ export interface MissionCaps {
 
 export interface MissionGuardConfig {
   missionId: string | `0x${string}`;
-  payees: PayeeDefinition[];
+  payees?: PayeeDefinition[];
+  payeeRoot?: string;
+  hasPayeeRoot?: boolean;
   caps?: MissionCaps;
   globalAllowlist?: string[];
   rpcUrl?: string;
   treasuryAddress?: `0x${string}`;
   agentAddress?: string;
   isSystemPaused?: boolean;
+  disableProvenance?: boolean;
 }
 
 export interface SimulateOnChainResult {

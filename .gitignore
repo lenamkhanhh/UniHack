@@ -34,3 +34,7 @@ __pycache__/
 eval/agentdojo/cache/
 eval/agentdojo/**/__pycache__/
 
+# Packages build artifacts
+packages/*/dist/
+
+

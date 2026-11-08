@@ -1,6 +1,16 @@
 import { StandardMerkleTree } from '@openzeppelin/merkle-tree';
 import { encodeFunctionData, parseAbiItem } from 'viem';
 import { normalizeAddress } from './chain';
+import {
+  computePayeeMerkleTree,
+  getMerkleProof,
+  PayeeMerkleTreeResult,
+  PayeeDefinition,
+} from '@missionpay/guard';
+
+export { computePayeeMerkleTree, getMerkleProof };
+export type { PayeeMerkleTreeResult };
+export type PayeeInput = PayeeDefinition;
 
 export const setMissionPayeeRootAbi = parseAbiItem(
   'function setMissionPayeeRoot(bytes32 missionId, bytes32 root) external'
@@ -9,63 +19,6 @@ export const setMissionPayeeRootAbi = parseAbiItem(
 export const proposeWithProofAbi = parseAbiItem(
   'function proposeWithProof(bytes32 operationId, address to, uint256 amount, bytes32 missionId, string reason, bytes32[] proof) external returns (uint256)'
 );
-
-export interface PayeeMerkleTreeResult {
-  root: `0x${string}`;
-  payees: string[];
-  tree: StandardMerkleTree<[string]>;
-  getProof: (address: string) => `0x${string}`[] | null;
-}
-
-export type PayeeInput = string | { address: string; maxAtomic?: string | bigint };
-
-/**
- * Computes an OpenZeppelin StandardMerkleTree over recipient addresses.
- * Leaf double-hash standard matches GuardedTreasury.sol:
- * keccak256(bytes.concat(keccak256(abi.encode(to))))
- */
-export function computePayeeMerkleTree(payees: PayeeInput[]): PayeeMerkleTreeResult {
-  const normalizedSet = new Set<string>();
-  for (const p of payees) {
-    const rawAddr = typeof p === 'string' ? p : p?.address;
-    if (rawAddr && typeof rawAddr === 'string') {
-      try {
-        normalizedSet.add(normalizeAddress(rawAddr));
-      } catch {}
-    }
-  }
-
-  const normalized = Array.from(normalizedSet);
-
-  if (normalized.length === 0) {
-    const emptyRoot = '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
-    return {
-      root: emptyRoot,
-      payees: [],
-      tree: null as any,
-      getProof: () => null,
-    };
-  }
-
-  // Double-hashed leaves matching StandardMerkleTree.of(..., ["address"])
-  const values: [string][] = normalized.map((addr) => [addr]);
-  const tree = StandardMerkleTree.of(values, ['address']);
-  const root = tree.root as `0x${string}`;
-
-  return {
-    root,
-    payees: normalized,
-    tree,
-    getProof: (address: string) => {
-      try {
-        const nor = normalizeAddress(address);
-        return tree.getProof([nor]) as `0x${string}`[];
-      } catch {
-        return null;
-      }
-    },
-  };
-}
 
 // In-memory store of mission payee sets
 interface MissionPayeeRecord {

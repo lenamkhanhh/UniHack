@@ -53,6 +53,7 @@ describe('@missionpay/guard SDK', () => {
     const guard = createMissionGuard({
       missionId: 'test-mission-01',
       payees: [legitPayee1],
+      hasPayeeRoot: false,
     });
 
     const taint = new TaintRegistry();
@@ -76,6 +77,7 @@ describe('@missionpay/guard SDK', () => {
     const guard = createMissionGuard({
       missionId: 'test-mission-01',
       payees: [legitPayee1],
+      hasPayeeRoot: true,
       globalAllowlist: [legitPayee1, orgVendor3], // orgVendor3 is in global allowlist, but NOT in mission
     });
 

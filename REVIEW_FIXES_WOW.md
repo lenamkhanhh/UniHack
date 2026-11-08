@@ -8,19 +8,15 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-Claude review M5 (1b6bc91, 09/11). Đã chạy: guard 11/11 và mcp 6/6 tests pass; MCP server không giữ hay dùng private key. Còn 3 mục:
-
-- M5-F1 [spec] Logic đang **bị nhân bản**: `packages/guard/src/validator.ts` là bản copy, còn `apps/web` không import gì từ `@missionpay/guard` (grep rỗng). Spec yêu cầu chỉ một nguồn logic:
-  - Chuyển `validateTreasuryProposal`, merkle và taint vào package, rồi cho `apps/web/lib/validator.ts` và `lib/merkle.ts` re-export hoặc import từ package (workspace dependency).
-  - Toàn bộ test của app (211) và của package phải pass. `npm run build` của apps/web phải pass.
-- M5-F2 [spec] `parity.test.ts` hiện chỉ so verdict với kỳ vọng của case, chưa so với validator của app. Thêm **differential test**: với từng case trong 180 case (C2, cùng taint/config như `attack-eval`), so `outcome` và `rule` của package với hàm mà `scripts/attack-eval.ts` đang dùng; lệch dù 1 case là fail và in ra id case.
-  - Sau khi làm M5-F1, test này vẫn giữ để chống tách nhánh logic về sau.
-- M5-F3 Bỏ `packages/*/dist/` khỏi git (thêm vào .gitignore, `git rm --cached`); build bằng `npm run build` khi cần. README ghi cách build.
 - Sau đó sang **M6 (x402 v2)** theo PLAN_MAX. Ngân sách Fuji của MAX vẫn ≤0.15 AVAX và ≤3 USDC; facilitator dùng ví riêng, không dùng ví owner.
-
 - M4-F6b (vẫn mở) Live 48 cặp (16 user × injection 0..2) và 16 benign, C0 và C2 strict, khi quota reset. Không bao giờ giả lập.
 
 ## DONE
+
+- M5-F1..F3 [SDK & MCP Single Source, Differential Parity & Clean Git]:
+  - **M5-F1 (Single Source of Truth):** Đã hợp nhất logic validator vào `@missionpay/guard`. `apps/web/lib/validator.ts` và `apps/web/lib/merkle.ts` re-export các type, `TaintRegistry`, `isPolicyChangeAttempt`, `validateTreasuryProposal`, `computePayeeMerkleTree`, `getMerkleProof` trực tiếp từ `@missionpay/guard`. Step 5 của `validateProposal` ủy quyền trực tiếp cho `validateTreasuryProposal`. 214/214 tests của apps/web pass; `next build` của apps/web tạo 33/33 static pages thành công (0 errors).
+  - **M5-F2 (Strict Differential Parity):** Đã bổ sung differential parity test trong `packages/guard/tests/parity.test.ts` so khớp từng case trong toàn bộ 180 case của PayBench giữa `@missionpay/guard` và `apps/web` (`validateProposal`). Kết quả: 180/180 case khớp 100% về cả `outcome` và `rule` (40/40 benign pass, 140/140 attack block/queue). 12/12 tests của package guard pass; 6/6 tests của package mcp pass.
+  - **M5-F3 (Untrack dist):** Thêm `packages/*/dist/` vào `.gitignore`, `git rm --cached` toàn bộ file build khỏi git. Cập nhật README của cả 2 package hướng dẫn build từ source bằng `npm run build`.
 
 - MAX-M5 [SDK & MCP Server] Đã triển khai hoàn chỉnh `@missionpay/guard` SDK và `@missionpay/mcp` MCP server:
   - `@missionpay/guard`: Module độc lập trích xuất core guard logic (`types`, `merkle`, `taint`, `validator`, `guard`).

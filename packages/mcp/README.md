@@ -37,9 +37,15 @@ Giờ đây, bất cứ khi nào agent đề xuất chuyển tiền, nó bắt b
 
 ---
 
-### Running Locally
+### Running Locally & Building
 
 ```bash
+# Build TypeScript compiler output to dist/
+npm run build
+
+# Run unit tests via vitest
+npm run test
+
 # Start MCP server over stdio
 npx tsx src/cli.ts
 ```

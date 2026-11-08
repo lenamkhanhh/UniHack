@@ -1,109 +1,35 @@
 import { TokenClaims } from './auth';
 import { toolCatalog } from './tools';
 import { isValidAddress, normalizeAddress } from './chain';
+import {
+  TaintRegistry,
+  isPolicyChangeAttempt,
+  validateTreasuryProposal,
+  type ProposalKind,
+  type Provenance,
+  type BaseProposal,
+  type ToolPurchaseProposal,
+  type TreasuryPayoutProposal,
+  type Proposal,
+  type ValidationResult,
+  type ValidationRuleId,
+} from '@missionpay/guard';
 
-export type ProposalKind = 'tool_purchase' | 'treasury_payout';
-export type Provenance = 'OWNER_MISSION' | 'ERC8004_VERIFIED' | 'TOOL_OUTPUT' | 'WEB' | 'LLM';
-
-export class TaintRegistry {
-  private taintedAddresses: Map<string, 'TOOL_OUTPUT' | 'WEB'> = new Map();
-  private taintedAmounts: Set<string> = new Set();
-
-  record(text: string, source: 'TOOL_OUTPUT' | 'WEB' = 'TOOL_OUTPUT'): void {
-    if (!text || typeof text !== 'string') return;
-
-    // Normalize and match addresses (0x or 0X followed by 40 hex chars)
-    const matches = text.match(/0x[a-f0-9]{40}/gi);
-    if (matches) {
-      for (const m of matches) {
-        this.taintedAddresses.set(m.toLowerCase(), source);
-      }
-    }
-
-    // Match numbers and currency values (e.g. $3, 3 USDC, 3.00, 50, 500)
-    const amtMatches = text.match(/(?:\$|USDC\s*|USD\s*)?(\d+(?:\.\d+)?)/gi);
-    if (amtMatches) {
-      for (const raw of amtMatches) {
-        const cleaned = raw.replace(/[^\d.]/g, '');
-        if (cleaned) {
-          this.taintedAmounts.add(cleaned);
-          const parts = cleaned.split('.');
-          const whole = parts[0];
-          const frac = (parts[1] || '').padEnd(6, '0').slice(0, 6);
-          try {
-            const atomic = (BigInt(whole) * 1_000_000n + BigInt(frac)).toString();
-            this.taintedAmounts.add(atomic);
-          } catch {}
-        }
-      }
-    }
-  }
-
-  isAddressTainted(address: string): boolean {
-    if (!address) return false;
-    const clean = address.startsWith('0x') || address.startsWith('0X') ? address.toLowerCase() : `0x${address}`.toLowerCase();
-    return this.taintedAddresses.has(clean);
-  }
-
-  getAddressSource(address: string): 'TOOL_OUTPUT' | 'WEB' | undefined {
-    if (!address) return undefined;
-    const clean = address.startsWith('0x') || address.startsWith('0X') ? address.toLowerCase() : `0x${address}`.toLowerCase();
-    return this.taintedAddresses.get(clean);
-  }
-
-  isAmountTainted(amountAtomicOrDecimal: string): boolean {
-    if (!amountAtomicOrDecimal) return false;
-    return this.taintedAmounts.has(amountAtomicOrDecimal);
-  }
-
-  getTaintedAddresses(): string[] {
-    return Array.from(this.taintedAddresses.keys());
-  }
-}
-
-export function isPolicyChangeAttempt(proposal: Proposal): boolean {
-  // PV-F5 & PV-F10b: Word boundaries and scoped evaluation: only evaluate payout reason and tool_id.
-  // Never scan search query / text arguments for policy keywords.
-  if (proposal.kind === 'treasury_payout') {
-    const reasonText = (proposal.reason || '').toLowerCase();
-    const policyKeywords = /(?:^|[\s.,;:!?()"'`])(?:set|change|update|raise|increase|bypass|override|nâng|tăng|đổi|sửa)\b(?:\s+(?:the\s+)?(?:daily|per[_\-\s]*tx|mission|spending|tool|treasury)?\s*(?:cap|limit|allowlist|payee[_\-\s]*root|root|pause|policy|hạn\s*mức|giới\s*hạn|ngân\s*sách)(?:$|[\s.,;:!?()"'`]))/i;
-    const adminKeywords = /\b(?:setcaps|setrecipient|setmissioncap|setmissionpayeeroot|pause|unpause)\b/i;
-
-    if (policyKeywords.test(reasonText) || adminKeywords.test(reasonText)) {
-      return true;
-    }
-  }
-
-  if (proposal.kind === 'tool_purchase') {
-    const toolId = (proposal.tool_id || '').toLowerCase();
-    const adminToolKeywords = /\b(?:policy|cap|admin|setcaps|setrecipient|setmissioncap|setmissionpayeeroot|pause|unpause)\b/i;
-    if (adminToolKeywords.test(toolId)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-export interface BaseProposal {
-  kind: ProposalKind;
-  mission_id: string;
-  amount_atomic: string;
-  reason: string;
-}
-
-export interface ToolPurchaseProposal extends BaseProposal {
-  kind: 'tool_purchase';
-  tool_id: string;
-  arguments: Record<string, any>;
-}
-
-export interface TreasuryPayoutProposal extends BaseProposal {
-  kind: 'treasury_payout';
-  to: string;
-}
-
-export type Proposal = ToolPurchaseProposal | TreasuryPayoutProposal;
+export {
+  TaintRegistry,
+  isPolicyChangeAttempt,
+  validateTreasuryProposal,
+};
+export type {
+  ProposalKind,
+  Provenance,
+  BaseProposal,
+  ToolPurchaseProposal,
+  TreasuryPayoutProposal,
+  Proposal,
+  ValidationResult,
+  ValidationRuleId,
+};
 
 export interface ValidationContext {
   tokenClaims: TokenClaims;
@@ -129,15 +55,6 @@ export interface ValidationContext {
   taintRegistry?: TaintRegistry;
   erc8004VerifiedPayees?: string[];
   disableProvenanceForEval?: boolean;
-}
-
-export interface ValidationResult {
-  outcome: 'PASS' | 'BLOCK' | 'QUEUE';
-  rule?: string;
-  reason?: string;
-  canonicalArguments?: any;
-  toProvenance?: Provenance;
-  amountProvenance?: Provenance;
 }
 
 export function computeProposalProvenance(
@@ -411,104 +328,38 @@ export function validateProposal(proposal: Proposal, ctx: ValidationContext): Va
 
   const amount = BigInt(proposal.amount_atomic);
 
-  // Step 5: Treasury checks (if S2)
+  // Step 5: Treasury checks (if S2) - Single source of truth via @missionpay/guard
   if (proposal.kind === 'treasury_payout') {
-    const to = normalizeAddress(proposal.to);
-    if (!to || to === '0x0000000000000000000000000000000000000000') {
-      return {
-        outcome: 'BLOCK',
-        rule: 'INVALID_RECIPIENT',
-        reason: 'Zero recipient address is forbidden',
-        toProvenance,
-        amountProvenance,
-      };
-    }
-    if (to === normalizeAddress(ctx.mission.agentAddress)) {
-      return {
-        outcome: 'BLOCK',
-        rule: 'CANNOT_PAY_AGENT',
-        reason: 'Treasury payout directly to agent is strictly forbidden (no auto-refill)',
-        toProvenance,
-        amountProvenance,
-      };
-    }
+    const treasuryResult = validateTreasuryProposal(
+      proposal,
+      {
+        missionId: ctx.mission.missionId,
+        payees: ctx.ownerSignedPayees,
+        payeeRoot: ctx.mission.payeeRoot,
+        hasPayeeRoot: Boolean(
+          ctx.mission.payeeRoot &&
+          ctx.mission.payeeRoot !== '0x0000000000000000000000000000000000000000000000000000000000000000'
+        ),
+        globalAllowlist: ctx.treasuryAllowlist,
+        agentAddress: ctx.mission.agentAddress,
+        caps: {
+          missionCapAtomic: ctx.mission.treasuryCap,
+          toolCapAtomic: ctx.mission.toolCap,
+          perTxCapAtomic: 5_000_000n,
+        },
+        isSystemPaused: ctx.systemPaused,
+        disableProvenance: isEvalProvenanceDisabled,
+      },
+      ctx.taintRegistry
+    );
 
-    if (!isEvalProvenanceDisabled) {
-      // PV-F4: If mission has an active payeeRoot, any recipient outside ownerSignedPayees is hard-blocked
-      const hasPayeeRoot = Boolean(
-        ctx.mission.payeeRoot &&
-        ctx.mission.payeeRoot !== '0x0000000000000000000000000000000000000000000000000000000000000000'
-      );
-      if (hasPayeeRoot) {
-        const ownerPayees = (ctx.ownerSignedPayees || []).map((p: any) => {
-          const raw = typeof p === 'string' ? p : p?.address;
-          return normalizeAddress(raw);
-        });
-        if (!ownerPayees.includes(to)) {
-          return {
-            outcome: 'BLOCK',
-            rule: 'PAYEE_NOT_IN_MISSION_SET',
-            reason: `Recipient ${to} is not in the owner-signed payee set for this mission (payee root active)`,
-            toProvenance,
-            amountProvenance,
-          };
-        }
-      }
-
-      // PV-2: Provenance checks strictly placed BEFORE allowlist check
-      if (toProvenance === 'TOOL_OUTPUT' || toProvenance === 'WEB') {
-        return {
-          outcome: 'BLOCK',
-          rule: 'RECIPIENT_UNTRUSTED_PROVENANCE',
-          reason: `Recipient address was derived from untrusted ${toProvenance} data`,
-          toProvenance,
-          amountProvenance,
-        };
-      }
-
-      if (toProvenance === 'LLM') {
-        return {
-          outcome: 'QUEUE',
-          rule: 'RECIPIENT_NEEDS_OWNER_APPROVAL',
-          reason: 'Recipient address generated by LLM requires explicit owner approval and Merkle payee signature',
-          toProvenance,
-          amountProvenance,
-        };
-      }
-
-      if (amountProvenance === 'TOOL_OUTPUT' || amountProvenance === 'WEB') {
-        return {
-          outcome: 'QUEUE',
-          rule: 'AMOUNT_FROM_UNTRUSTED_SOURCE',
-          reason: 'Payment amount extracted from untrusted external data requires owner review',
-          toProvenance,
-          amountProvenance,
-        };
-      }
-    }
-
-    const allowlist = ctx.treasuryAllowlist?.map(normalizeAddress) || [];
-    if (!allowlist.includes(to)) {
-      return {
-        outcome: 'BLOCK',
-        rule: 'RECIPIENT_NOT_ALLOWLISTED',
-        reason: 'Recipient is not on the treasury allowlist',
-        toProvenance,
-        amountProvenance,
-      };
-    }
-
-    // Soft caps for treasury => QUEUE
-    if (amount > 5_000_000n) {
-      return {
-        outcome: 'QUEUE',
-        rule: 'OVER_PER_TX_CAP',
-        reason: 'Amount exceeds per-tx treasury cap',
-        toProvenance,
-        amountProvenance,
-      };
-    }
-    return { outcome: 'PASS', toProvenance, amountProvenance };
+    return {
+      outcome: treasuryResult.outcome,
+      rule: treasuryResult.rule,
+      reason: treasuryResult.reason,
+      toProvenance: treasuryResult.toProvenance || toProvenance,
+      amountProvenance: treasuryResult.amountProvenance || amountProvenance,
+    };
   }
 
   // Step 6: Tool catalog and price verification
