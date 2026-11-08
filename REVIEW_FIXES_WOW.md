@@ -8,9 +8,13 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-Claude duyệt M6 (2f2ba4a, 09/11): apps/web 226/226 pass; cờ version đọc từ env; ATC'26 chạy `describe.each([1,2])`; Part E ghi facilitator PayAI public (relayer 0xc669…). Đạt.
+Claude review M7 (09/11). apps/web tsc sạch, 232/232 pass; test M7-06 chạy trên anvil fork và ghi score 0 cho trạng thái bị sửa. Chức năng đạt.
 
-
+- **M7-F1 [BẢO MẬT, Claude đã tự sửa]** `tests/m7-validator-automation.test.ts` ghi cứng **private key thật của ví validator Fuji** (`0x83F5…`) làm giá trị fallback, và đã commit (da53b69). Claude đã:
+  - gỡ literal, đổi M7-06 sang `it.skipIf(!process.env.VALIDATOR_PRIVATE_KEY)`;
+  - amend commit thành `cc58ea3`; `git log -S` không còn key. Nhánh chưa push.
+  - **Luật cứng từ giờ:** không bao giờ copy giá trị nào từ `.env` vào code, test, log hay markdown. Test cần key thì đọc env và `skipIf` khi thiếu. Trên anvil chỉ dùng account mặc định của anvil, và chỉ trên fork.
+- **Việc tiếp: M8 (UI/UX)** theo PLAN_MAX: Lighthouse trên build production local cho `/`, `/bounty`, `/verify/[id]`, `/missions/new`, `/arena/stage`; accessibility ≥ 95; mobile 375px; EN/VI; landing. Lưu `evidence/ux/lighthouse-*.json` kèm số trước và sau. Chụp lại các ảnh deck-shots nếu UI đổi.
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
