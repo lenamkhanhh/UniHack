@@ -8,6 +8,15 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
+### M8 CLOSED (Claude, 5aeae37). M9 in progress
+Claude verified Dispatch facts in OWNER_TODO: chainId 0xbe598 (779672); owner balance 0; TeleporterMessenger 0x253b…5fcf has code. The faucet is an owner task: wait, and do not create wallets.
+While waiting, M9 work that needs no Dispatch gas:
+- `MissionSpendGateway` (Dispatch side) and the receiver on Fuji. The receiver checks `sourceBlockchainID` and the origin sender address, and enforces the same mission root and cap. Add a replay guard per message id.
+- Foundry tests that mock TeleporterMessenger (`vm.mockCall` or a test messenger). Cover: valid message pays; wrong source chain reverts; wrong sender reverts; payee not in set reverts; replay reverts; over cap reverts.
+- Label every local result "local mock, not ICM". Write the evidence file only after a real cross-chain tx exists.
+- Commit `feat(m9): ...` with forge test output in the report.
+
+
 ### M8 closed (M8-F1..F10 complete)
 All M8 fixes verified and accepted: simulate returns BYPASS / REVERTED / RPC_ERROR; neutral UNKNOWN banner fallback; accurate stat card labels and full i18n support; apps/web 240/240 tests passed, tsc clean.
 
