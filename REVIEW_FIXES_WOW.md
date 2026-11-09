@@ -8,22 +8,38 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-### M8 CLOSED (Claude, 5aeae37). M9 in progress
-Claude verified Dispatch facts in OWNER_TODO: chainId 0xbe598 (779672); owner balance 0; TeleporterMessenger 0x253b…5fcf has code. The faucet is an owner task: wait, and do not create wallets.
-While waiting, M9 work that needs no Dispatch gas:
-- `MissionSpendGateway` (Dispatch side) and the receiver on Fuji. The receiver checks `sourceBlockchainID` and the origin sender address, and enforces the same mission root and cap. Add a replay guard per message id.
-- Foundry tests that mock TeleporterMessenger (`vm.mockCall` or a test messenger). Cover: valid message pays; wrong source chain reverts; wrong sender reverts; payee not in set reverts; replay reverts; over cap reverts.
-- Label every local result "local mock, not ICM". Write the evidence file only after a real cross-chain tx exists.
-- Commit `feat(m9): ...` with forge test output in the report.
-
-
-### M8 closed (M8-F1..F10 complete)
-All M8 fixes verified and accepted: simulate returns BYPASS / REVERTED / RPC_ERROR; neutral UNKNOWN banner fallback; accurate stat card labels and full i18n support; apps/web 240/240 tests passed, tsc clean.
+### M9 (Local Contracts & Mock ICM Complete, Awaiting Owner Dispatch Faucet for Live Broadcast)
+- Hoàn thành Phase 1 của M9 (không cần gas Dispatch):
+  - `MissionSpendGateway.sol` (Dispatch L1) & `MissionBudgetHub.sol` (Fuji C-Chain).
+  - Mock Teleporter Messenger (`MockTeleporterMessenger.sol`) & Mock ERC20 (`MockERC20.sol`).
+  - Foundry Test Suite (`MissionCrossChainICM.t.sol`): 8/8 tests pass (100%), bao phủ toàn bộ 6 kịch bản bảo mật: valid message pays, wrong source chain reverts, wrong sender reverts, payee not in set reverts, replay reverts, over cap reverts (tất cả được gắn nhãn minh bạch "local mock, not ICM").
+  - Toàn bộ Foundry test suites: 69/69 passed (512 invariant runs, 32,768 calls, 0 reverts).
+- Phase 2 (Live Testnet Broadcast): DỪNG chờ Owner xin faucet Dispatch cho ví `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c` (chi tiết tại `OWNER_TODO.md`). Không tự tạo ví mới, không vượt ngân sách Fuji.
 
 
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
+
+- MAX-M9 [Avalanche ICM Cross-L1 Mission Budgeting — Gateway, BudgetHub & Mock Test Suite]:
+  - **Hợp đồng `MissionSpendGateway.sol` (Dispatch L1):** Khởi tạo `sendSpendRequest(messageId, missionId, payee, amount, proof)` đóng gói payload chuẩn Avalanche Teleporter `ITeleporterMessenger.sendCrossChainMessage` gửi xuyên L1 tới C-Chain.
+  - **Hợp đồng `MissionBudgetHub.sol` (Fuji C-Chain):** Cài đặt `ITeleporterReceiver` tiếp nhận message ICM; xác thực nghiêm ngặt 6 tầng phòng thủ:
+    1. Chỉ chấp nhận gọi từ `teleporterMessenger` đã cấu hình (`UnauthorizedMessenger`).
+    2. Chỉ chấp nhận nguồn từ `allowedSourceBlockchainID` (Dispatch Blockchain ID) (`WrongSourceChain`).
+    3. Chỉ chấp nhận người gửi từ `allowedOriginSender` (Gateway contract) (`WrongOriginSender`).
+    4. Replay protection per `messageId` qua mapping `executedMessages` (`MessageAlreadyExecuted`).
+    5. Kiểm tra hạn mức `mission.spent + amount <= mission.cap` (`OverCap`).
+    6. Kiểm tra bằng chứng Merkle `_verifyMerkle` chuẩn OpenZeppelin double-hash đối chiếu `mission.payeeRoot` (`PayeeNotInMissionSet`).
+  - **Foundry Test Suite (`MissionCrossChainICM.t.sol`):** 8/8 tests passed với nhãn minh bạch `local mock, not ICM`:
+    - `test_01_valid_message_pays_local_mock`: PASS (payee nhận 25 USDC, cap ghi nhận chính xác).
+    - `test_02_wrong_source_chain_reverts_local_mock`: PASS (revert WrongSourceChain).
+    - `test_03_wrong_sender_reverts_local_mock`: PASS (revert WrongOriginSender).
+    - `test_04_payee_not_in_set_reverts_local_mock`: PASS (revert PayeeNotInMissionSet).
+    - `test_05_replay_reverts_local_mock`: PASS (revert MessageAlreadyExecuted).
+    - `test_06_over_cap_reverts_local_mock`: PASS (revert OverCap).
+    - `test_07_unauthorized_messenger_reverts_local_mock`: PASS (revert UnauthorizedMessenger).
+    - `test_08_end_to_end_gateway_to_hub_relay_local_mock`: PASS (Gateway -> Teleporter -> Hub end-to-end auto-relay).
+  - **Kiểm chứng hồi quy:** Contracts 69/69 passed (5 suites); apps/web 240/240 passed (30 files); `tsc --noEmit` 0 errors.
 
 - M8-F10 [Bounty Stat Card Phrasing & i18n]:
   - **M8-F10 (Stat Card Phrasing & Dynamic Labels):**

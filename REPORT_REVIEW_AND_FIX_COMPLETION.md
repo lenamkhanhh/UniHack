@@ -1351,3 +1351,52 @@ Mobile UX capture complete!
 ### 2. Kết Quả Kiểm Thử
 - **Vitest apps/web:** **30/30 files passed, 240/240 tests passed (100%)**.
 - **TypeScript Typecheck (`tsc --noEmit`):** **0 errors (100% clean)**.
+
+
+---
+
+## MAX-M9: AVALANCHE ICM CROSS-L1 MISSION BUDGETING (PHASE 1 — LOCAL MOCK CONTRACTS & TEST SUITE)
+
+**Thời điểm:** 2026-11-09 11:42 (Asia/Saigon) | **Nhánh:** `feat/s1-app`
+
+### 1. Bảng Nghiệm Thu Các Điểm Triển Khai M9
+
+| ID | Thành phần | Trạng thái | File chính | Chi tiết thay đổi & Kiểm chứng |
+|---|---|:---:|---|---|
+| **M9-01** | **Gateway Contract** | **ĐẠT** | `contracts/src/MissionSpendGateway.sol` | Triển khai trên Dispatch L1 (Chain ID 779672). Hàm `sendSpendRequest(messageId, missionId, payee, amount, proof)` đóng gói payload ABI và gửi xuyên chuỗi qua chuẩn Avalanche Teleporter `ITeleporterMessenger.sendCrossChainMessage` tới `MissionBudgetHub` trên Fuji C-Chain. |
+| **M9-02** | **BudgetHub Receiver Contract** | **ĐẠT** | `contracts/src/MissionBudgetHub.sol` | Triển khai trên Fuji C-Chain (Chain ID 43113), kế thừa `ITeleporterReceiver`. Xác thực 6 lớp an toàn: (1) Messenger thẩm quyền `UnauthorizedMessenger`; (2) Chuỗi nguồn `WrongSourceChain`; (3) Địa chỉ Gateway nguồn `WrongOriginSender`; (4) Replay guard `MessageAlreadyExecuted`; (5) Hạn mức nhiệm vụ `OverCap`; (6) Bằng chứng Merkle OpenZeppelin `PayeeNotInMissionSet`. |
+| **M9-03** | **Mock Teleporter & Token** | **ĐẠT** | `contracts/test/mock/MockTeleporterMessenger.sol`<br>`contracts/test/mock/MockERC20.sol` | Cung cấp môi trường mô phỏng Teleporter relay chính xác cho local testing, hỗ trợ cả manual relay và auto-relay để kiểm thử end-to-end. |
+| **M9-04** | **Foundry Acceptance Suite** | **ĐẠT** | `contracts/test/MissionCrossChainICM.t.sol` | **8/8 tests pass (100%)**, gắn nhãn minh bạch `local mock, not ICM`: (1) Valid message pays; (2) Wrong source chain reverts; (3) Wrong sender reverts; (4) Payee not in set reverts; (5) Replay reverts; (6) Over cap reverts; (7) Unauthorized messenger reverts; (8) End-to-end Gateway -> Teleporter -> Hub relay. |
+| **M9-05** | **Owner Faucet Coordination** | **DỪNG CHỜ OWNER** | `OWNER_TODO.md` | Đã probe đầy đủ Dispatch L1 (Chain ID 779672, TeleporterMessenger có sẵn 13,013 bytes). Do số dư gas Dispatch của Owner và Agent = 0 wei, hệ thống **DỪNG** đúng cam kết an toàn, ghi rõ hướng dẫn faucet vào `OWNER_TODO.md`. Không tự tạo ví, không broadcast thiếu gas. |
+
+### 2. Kết Quả Kiểm Thử Thật (Foundry & Vitest)
+
+#### Foundry Contracts Test Suite (`cd contracts && forge test`):
+```text
+Ran 5 test suites: 69 tests passed, 0 failed, 0 skipped (69 total tests)
+- ValidationRegistryTest: 7 passed
+- PasskeyMissionAuthorityTest: 16 passed
+- MissionCrossChainICMTest: 8 passed (all 6 security invariants + supplementary)
+- GuardedTreasuryTest: 37 passed
+- GuardedTreasuryInvariantTest: 1 passed (512 invariant runs, 32,768 calls, 0 reverts)
+```
+
+#### Chi tiết test suite `MissionCrossChainICMTest`:
+```text
+[PASS] test_01_valid_message_pays_local_mock() (gas: 170356)
+[PASS] test_02_wrong_source_chain_reverts_local_mock() (gas: 47576)
+[PASS] test_03_wrong_sender_reverts_local_mock() (gas: 47612)
+[PASS] test_04_payee_not_in_set_reverts_local_mock() (gas: 71672)
+[PASS] test_05_replay_reverts_local_mock() (gas: 184912)
+[PASS] test_06_over_cap_reverts_local_mock() (gas: 59252)
+[PASS] test_07_unauthorized_messenger_reverts_local_mock() (gas: 40160)
+[PASS] test_08_end_to_end_gateway_to_hub_relay_local_mock() (gas: 502234)
+```
+
+#### TypeScript & Vitest Suite (`apps/web`):
+- `npx tsc --noEmit`: **0 errors (100% clean)**.
+- `vitest run`: **30 test files passed, 240 tests passed (100%)**.
+
+### 3. Giới Hạn & Bước Kế Tiếp
+- Toàn bộ kết quả hiện tại là **local mock, not ICM**. Tuyệt đối không ghi file bằng chứng `FUJI_EVIDENCE` khi chưa có transaction cross-chain thật trên mạng Dispatch/Fuji.
+- Sau khi Owner nạp token gas Dispatch theo `OWNER_TODO.md`, sẽ tiến hành deploy và phát sóng 1 tx approve và 1 tx deny xuyên chuỗi thật.
