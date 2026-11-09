@@ -1,7 +1,39 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useI18n } from '@/lib/i18n';
+import {
+  extractP256Coordinates,
+  parseDerSignature,
+  base64UrlToBytes,
+  bytesToBase64Url,
+  findUtf8ByteIndex,
+  slugToMissionId,
+  parseDecimalUnits6,
+  computeMissionPasskeyChallenge,
+} from '@/lib/webauthn-p256';
+
+interface AuthorityConfig {
+  authorityAddress: string;
+  treasuryAddress: string;
+  passkeyX: string;
+  passkeyY: string;
+  nextNonce: string;
+  rpIdHash: string;
+  expectedOrigin: string;
+  requireUserVerification: boolean;
+  chainId: number;
+}
+
+interface RegisteredKeyData {
+  id: string; // base64url credential id
+  x: string;  // 0x + 64 hex
+  y: string;  // 0x + 64 hex
+  rawPublicKey?: string;
+  createdAt: string;
+}
+
+const LOCAL_STORAGE_KEY = 'missionpay_registered_passkey';
 
 export default function NewMissionPasskeyPage() {
   const { t } = useI18n();
@@ -12,22 +44,64 @@ export default function NewMissionPasskeyPage() {
   const [toolCapUsdc, setToolCapUsdc] = useState('0.5');
   const [durationHours, setDurationHours] = useState('24');
 
-  const [registeredKey, setRegisteredKey] = useState<{ id: string; x?: string; y?: string } | null>(null);
+  const [authorityConfig, setAuthorityConfig] = useState<AuthorityConfig>({
+    authorityAddress: '0x77235386fe59A934645C5F273e411b0Bea8cCc9C',
+    treasuryAddress: '0x20451c1e2dCD83F166B4f22868BAdECb5868d545',
+    passkeyX: '0x0',
+    passkeyY: '0x0',
+    nextNonce: '0',
+    rpIdHash: '0x0000000000000000000000000000000000000000000000000000000000000000',
+    expectedOrigin: 'http://localhost:3100',
+    requireUserVerification: true,
+    chainId: 43113,
+  });
+
+  const [registeredKey, setRegisteredKey] = useState<RegisteredKeyData | null>(null);
   const [status, setStatus] = useState<string>('');
+  const [errorMessage, setErrorMessage] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [relayResult, setRelayResult] = useState<any>(null);
+  const [copiedExport, setCopiedExport] = useState<boolean>(false);
 
-  // Challenge helper
-  function computeChallengeHex(): `0x${string}` {
-    return '0x9885664fcfc45539af1183fa3768f6e2dbfb52c76544b7b6f1ee14833790cf45';
-  }
+  // Load authority config from relay API and saved passkey on mount
+  useEffect(() => {
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/passkey/relay');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            setAuthorityConfig(data);
+          }
+        }
+      } catch {
+        // Fall back to default config if offline
+      }
+
+      // Check localStorage for previously registered key
+      try {
+        const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.id && parsed.x && parsed.y) {
+            setRegisteredKey(parsed);
+          }
+        }
+      } catch {
+        // Ignore localStorage errors
+      }
+    }
+    loadConfig();
+  }, []);
 
   async function handleRegisterPasskey() {
     setLoading(true);
-    setStatus('Initializing WebAuthn credential on authenticator...');
+    setErrorMessage('');
+    setStatus('Khởi tạo đăng ký WebAuthn Passkey (P-256) trên thiết bị...');
+
     try {
-      if (!window.navigator.credentials) {
-        throw new Error('WebAuthn is not supported in this browser environment');
+      if (!window.navigator?.credentials) {
+        throw new Error('WebAuthn không được hỗ trợ trong môi trường trình duyệt này');
       }
 
       const challenge = new Uint8Array(32);
@@ -35,18 +109,19 @@ export default function NewMissionPasskeyPage() {
       const userId = new Uint8Array(16);
       window.crypto.getRandomValues(userId);
 
+      const rpId = window.location.hostname || 'localhost';
+
       const credential = (await window.navigator.credentials.create({
         publicKey: {
           challenge,
-          rp: { name: 'MissionPay Avalanche Authority' },
+          rp: { name: 'MissionPay Avalanche Authority', id: rpId },
           user: {
             id: userId,
             name: 'owner@missionpay.network',
             displayName: 'MissionPay Vault Owner',
           },
-          pubKeyCredParams: [{ alg: -7, type: 'public-key' }], // ES256 (P-256)
+          pubKeyCredParams: [{ alg: -7, type: 'public-key' }], // ES256 (NIST P-256)
           authenticatorSelection: {
-            authenticatorAttachment: 'platform',
             userVerification: 'required',
             residentKey: 'preferred',
           },
@@ -54,19 +129,34 @@ export default function NewMissionPasskeyPage() {
         },
       })) as any;
 
-      if (!credential) throw new Error('Registration canceled by user');
+      if (!credential || !credential.response) {
+        throw new Error('Người dùng đã hủy đăng ký Passkey');
+      }
 
-      setRegisteredKey({
-        id: credential.id,
-      });
-      setStatus('Device Passkey registered successfully! Ready for mission approval.');
+      // Real P-256 public key extraction from SPKI / attestationObject
+      const coords = extractP256Coordinates(credential.response);
+
+      const keyData: RegisteredKeyData = {
+        id: credential.id, // base64url string
+        x: coords.x,
+        y: coords.y,
+        rawPublicKey: coords.rawPublicKey,
+        createdAt: new Date().toISOString(),
+      };
+
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(keyData));
+      } catch {
+        // local storage write optional
+      }
+
+      setRegisteredKey(keyData);
+      setStatus('Đã đăng ký Passkey thành công! Đã trích xuất tọa độ công khai P-256 (x, y).');
     } catch (err: any) {
-      console.warn('Passkey registration fallback/error:', err);
-      // Fallback for automation / mock testing
-      setRegisteredKey({
-        id: 'virtual-passkey-session-demo',
-      });
-      setStatus(`Passkey registered: ${err.message || 'Demo / Virtual authenticator active'}`);
+      console.warn('Passkey registration error:', err);
+      setRegisteredKey(null);
+      setErrorMessage(`Đăng ký Passkey thất bại hoặc bị hủy: ${err.message || 'Lỗi không xác định'}`);
+      setStatus('');
     } finally {
       setLoading(false);
     }
@@ -74,71 +164,126 @@ export default function NewMissionPasskeyPage() {
 
   async function handleApproveMission() {
     setLoading(true);
-    setStatus('Requesting biometric signature via WebAuthn Passkey (RIP-7212)...');
+    setErrorMessage('');
+    setRelayResult(null);
+    setStatus('Đang chuẩn bị WebAuthn challenge & yêu cầu xác thực sinh trắc học...');
+
     try {
-      const challengeRaw = computeChallengeHex();
-      const challengeBytes = new Uint8Array(
-        challengeRaw.slice(2).match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || []
+      if (!registeredKey || !registeredKey.id) {
+        throw new Error('Chưa đăng ký Passkey. Vui lòng bấm Đăng ký Passkey trước khi duyệt mission.');
+      }
+
+      // Refresh authority configuration to obtain latest nextNonce
+      let currentNonce = authorityConfig.nextNonce;
+      let currentAuthority = authorityConfig.authorityAddress;
+      let currentChainId = authorityConfig.chainId || 43113;
+
+      try {
+        const configRes = await fetch('/api/passkey/relay');
+        if (configRes.ok) {
+          const cfg = await configRes.json();
+          if (cfg.success) {
+            currentNonce = cfg.nextNonce;
+            currentAuthority = cfg.authorityAddress;
+            currentChainId = cfg.chainId;
+            setAuthorityConfig(cfg);
+          }
+        }
+      } catch {
+        // use state
+      }
+
+      // Parse amounts using exact 6-decimal string manipulation (no float rounding)
+      const capAtomic = parseDecimalUnits6(capUsdc);
+      const toolCapAtomic = parseDecimalUnits6(toolCapUsdc);
+      const durationSeconds = BigInt(Math.floor(parseFloat(durationHours) * 3600));
+      const nonceBig = BigInt(currentNonce);
+      const missionIdBytes32 = slugToMissionId(missionSlug);
+
+      // Compute exact canonical challenge hash matching PasskeyMissionAuthority.sol
+      const challengeHash = computeMissionPasskeyChallenge({
+        chainId: currentChainId,
+        authority: currentAuthority,
+        missionId: missionIdBytes32,
+        agent: agentAddress,
+        payeeRoot: payeeRoot as `0x${string}`,
+        cap: capAtomic,
+        duration: durationSeconds,
+        toolCap: toolCapAtomic,
+        nonce: nonceBig,
+      });
+
+      // Decode challenge hash (32 bytes) to pass to WebAuthn get
+      const challengeRawBytes = new Uint8Array(
+        (challengeHash.slice(2).match(/.{1,2}/g) || []).map((b) => parseInt(b, 16))
       );
 
-      let authPayload: any = null;
+      // Decode credential id from base64url into raw bytes
+      const credentialIdBytes = base64UrlToBytes(registeredKey.id);
 
-      if (window.navigator.credentials && registeredKey?.id && registeredKey.id !== 'virtual-passkey-session-demo') {
-        const assertion = (await window.navigator.credentials.get({
-          publicKey: {
-            challenge: challengeBytes,
-            allowCredentials: [{ id: new TextEncoder().encode(registeredKey.id), type: 'public-key' }],
-            userVerification: 'required',
-            timeout: 60000,
-          },
-        })) as any;
-
-        if (assertion) {
-          const authData = new Uint8Array(assertion.response.authenticatorData);
-          const clientDataJSON = new TextDecoder().decode(assertion.response.clientDataJSON);
-
-          authPayload = {
-            authenticatorData: '0x' + Array.from(authData).map(b => b.toString(16).padStart(2, '0')).join(''),
-            clientDataJSON,
-            challengeIndex: clientDataJSON.indexOf('"challenge":"'),
-            typeIndex: clientDataJSON.indexOf('"type":"webauthn.get"'),
-            originIndex: clientDataJSON.indexOf('"origin":"' + window.location.origin + '"') >= 0 ? clientDataJSON.indexOf('"origin":"' + window.location.origin + '"') : clientDataJSON.indexOf('"origin":"'),
-            r: '0x01',
-            s: '0x01',
-          };
-        }
+      if (!window.navigator?.credentials) {
+        throw new Error('WebAuthn không khả dụng trên trình duyệt này');
       }
 
-      // If simulated or virtual
-      if (!authPayload) {
-        authPayload = {
-          authenticatorData: '0x49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97630500000001',
-          originIndex: 81,
-          clientDataJSON: `{"type":"webauthn.get","challenge":"mIVmT8_EUzmvEYP6N2j24tv7UsdlRLtvef4Ug3kPxFUS","origin":"http://localhost:3100"}`,
-          challengeIndex: 23,
-          typeIndex: 1,
-          r: '0x8849b2ba45e0544521dd98ecbf4dd49d9a19c50e20601d368dcf0656a5cfa797',
-          s: '0x2bf99c30f40d7ba9180ae283995f324ec94b9f0d7e671c6dcabcf8b76ce81451',
-        };
+      setStatus('Vui lòng chạm vân tay / Face ID / xác thực Passkey trên thiết bị...');
+
+      const assertion = (await window.navigator.credentials.get({
+        publicKey: {
+          challenge: challengeRawBytes.buffer as ArrayBuffer,
+          allowCredentials: [
+            {
+              id: credentialIdBytes.buffer as ArrayBuffer,
+              type: 'public-key',
+            },
+          ],
+          userVerification: 'required',
+          timeout: 60000,
+        },
+      })) as any;
+
+      if (!assertion || !assertion.response) {
+        throw new Error('Người dùng đã hủy hoặc không hoàn tất xác thực Passkey');
       }
 
-      setStatus('Submitting WebAuthn signature to Relayer on Avalanche Fuji...');
+      // Real signature parsing and low-s normalization
+      const authData = new Uint8Array(assertion.response.authenticatorData);
+      const clientDataJSON = new TextDecoder('utf-8').decode(assertion.response.clientDataJSON);
+      const sigBytes = new Uint8Array(assertion.response.signature);
+      const { rHex, sHex } = parseDerSignature(sigBytes);
 
-      const capAtomic = Math.round(parseFloat(capUsdc) * 1_000_000);
-      const toolCapAtomic = Math.round(parseFloat(toolCapUsdc) * 1_000_000);
-      const durationSeconds = Math.round(parseFloat(durationHours) * 3600);
+      // Multi-byte safe UTF-8 byte index finding
+      const typeIndex = findUtf8ByteIndex(clientDataJSON, '"type":"webauthn.get"');
+      const challengeIndex = findUtf8ByteIndex(clientDataJSON, '"challenge":"');
+      const originIndex = findUtf8ByteIndex(clientDataJSON, '"origin":"');
+
+      let authDataHex = '0x';
+      for (let i = 0; i < authData.length; i++) {
+        authDataHex += authData[i].toString(16).padStart(2, '0');
+      }
+
+      const authPayload = {
+        authenticatorData: authDataHex as `0x${string}`,
+        clientDataJSON,
+        challengeIndex,
+        typeIndex,
+        originIndex,
+        r: rHex,
+        s: sHex,
+      };
+
+      setStatus('Đang gửi chữ ký WebAuthn tới Relayer trên Avalanche Fuji...');
 
       const res = await fetch('/api/passkey/relay', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          missionId: '0x1000000000000000000000000000000000000000000000000000000000000001',
+          missionId: missionIdBytes32,
           agent: agentAddress,
           payeeRoot,
-          cap: capAtomic,
-          duration: durationSeconds,
-          toolCap: toolCapAtomic,
-          nonce: 0,
+          cap: capAtomic.toString(),
+          duration: durationSeconds.toString(),
+          toolCap: toolCapAtomic.toString(),
+          nonce: nonceBig.toString(),
           auth: authPayload,
           simulateOnly: false,
         }),
@@ -146,18 +291,33 @@ export default function NewMissionPasskeyPage() {
 
       const data = await res.json();
       if (!data.success) {
-        throw new Error(data.error || 'Relayer returned error');
+        throw new Error(data.error || 'Relayer trả về lỗi khi xác thực');
       }
 
       setRelayResult(data);
-      setStatus('Mission authorization via Passkey verified on Avalanche Fuji!');
+      setStatus('Mission Đã Duyệt On-Chain Thành Công!');
     } catch (err: any) {
-      console.error(err);
-      setStatus(`Error: ${err.message || 'Operation failed'}`);
+      console.error('Passkey approval error:', err);
+      setErrorMessage(`Duyệt Mission thất bại: ${err.message || 'Lỗi không xác định'}`);
+      setStatus('');
     } finally {
       setLoading(false);
     }
   }
+
+  function handleCopyExport() {
+    if (!registeredKey) return;
+    const text = `# MissionPay Passkey Authority Deploy Configuration\nPASSKEY_X="${registeredKey.x}"\nPASSKEY_Y="${registeredKey.y}"\nPASSKEY_CREDENTIAL_ID="${registeredKey.id}"`;
+    navigator.clipboard?.writeText(text);
+    setCopiedExport(true);
+    setTimeout(() => setCopiedExport(false), 3000);
+  }
+
+  const isCoordinatesMatched =
+    registeredKey &&
+    authorityConfig.passkeyX !== '0x0' &&
+    registeredKey.x.toLowerCase() === authorityConfig.passkeyX.toLowerCase() &&
+    registeredKey.y.toLowerCase() === authorityConfig.passkeyY.toLowerCase();
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 md:p-12 font-sans">
@@ -170,6 +330,9 @@ export default function NewMissionPasskeyPage() {
             </span>
             <span className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
               {t('passkey.tag.precompile')}
+            </span>
+            <span className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+              Chain ID: {authorityConfig.chainId}
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
@@ -189,18 +352,83 @@ export default function NewMissionPasskeyPage() {
           </div>
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
             <div className="text-xs text-slate-300 uppercase font-medium">Authority Contract</div>
-            <div className="text-sm font-mono text-indigo-400 mt-1">0x7723...Cc9C</div>
-            <div className="text-xs text-slate-400 mt-1">PasskeyMissionAuthority</div>
+            <div className="text-sm font-mono text-indigo-400 mt-1" title={authorityConfig.authorityAddress}>
+              {authorityConfig.authorityAddress.slice(0, 6)}...{authorityConfig.authorityAddress.slice(-4)}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">Next Nonce: {authorityConfig.nextNonce}</div>
           </div>
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
             <div className="text-xs text-slate-300 uppercase font-medium">Guarded Treasury</div>
-            <div className="text-sm font-mono text-cyan-400 mt-1">0x33a6...4bb3</div>
-            <div className="text-xs text-slate-400 mt-1">Passkey Demo Treasury</div>
+            <div className="text-sm font-mono text-cyan-400 mt-1" title={authorityConfig.treasuryAddress}>
+              {authorityConfig.treasuryAddress.slice(0, 6)}...{authorityConfig.treasuryAddress.slice(-4)}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">Managed Treasury</div>
           </div>
         </div>
 
+        {/* Registered Passkey Status & Metadata */}
+        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
+              Thiết Bị Passkey Xác Thực (Owner Credential)
+            </h2>
+            {registeredKey ? (
+              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                Đã ghi nhận Passkey
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                Chưa đăng ký
+              </span>
+            )}
+          </div>
+
+          {registeredKey ? (
+            <div className="space-y-2 text-xs font-mono">
+              <div className="text-slate-300 break-all">
+                <span className="text-slate-400">Credential ID:</span> {registeredKey.id}
+              </div>
+              <div className="text-slate-300 break-all">
+                <span className="text-slate-400">P-256 X:</span> {registeredKey.x}
+              </div>
+              <div className="text-slate-300 break-all">
+                <span className="text-slate-400">P-256 Y:</span> {registeredKey.y}
+              </div>
+
+              <div className="pt-2 flex flex-wrap items-center gap-3">
+                {isCoordinatesMatched ? (
+                  <span className="px-2 py-1 rounded bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-xs">
+                    ✓ Khớp hoàn toàn với Passkey đăng ký trên Authority Contract
+                  </span>
+                ) : (
+                  <span className="px-2 py-1 rounded bg-amber-950/60 border border-amber-500/30 text-amber-300 text-xs">
+                    ℹ Tọa độ khác Authority on-chain hiện tại (Sử dụng nút xuất cấu hình bên dưới cho script deploy)
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleCopyExport}
+                  className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs transition"
+                >
+                  {copiedExport ? 'Đã sao chép!' : 'Xuất tọa độ cho script deploy'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400">
+              Nhấn nút &quot;{t('passkey.btn.register')}&quot; để khởi tạo cặp khóa P-256 phần cứng an toàn trên thiết bị (Touch ID, Face ID, Windows Hello). Không có private key nào được lưu trên máy chủ hay truyền qua mạng.
+            </p>
+          )}
+        </div>
+
         {/* Form Inputs with Explicit Label Bindings */}
-        <form onSubmit={(e) => { e.preventDefault(); handleApproveMission(); }} className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-6">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleApproveMission();
+          }}
+          className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-6"
+        >
           <h2 className="text-lg font-semibold text-white">Mission Configuration & Caps</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -308,8 +536,12 @@ export default function NewMissionPasskeyPage() {
 
             <button
               type="submit"
-              disabled={loading}
-              className="px-6 py-2.5 rounded-xl font-semibold text-sm bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 min-h-[44px]"
+              disabled={loading || !registeredKey}
+              className={`px-6 py-2.5 rounded-xl font-semibold text-sm transition flex items-center space-x-2 focus:outline-none min-h-[44px] ${
+                !registeredKey || loading
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 focus:ring-2 focus:ring-indigo-400'
+              }`}
               data-testid="approve-passkey-btn"
             >
               <span>{t('passkey.btn.approve')}</span>
@@ -319,6 +551,16 @@ export default function NewMissionPasskeyPage() {
               <span className="text-xs text-indigo-300 animate-pulse font-medium">Processing transaction...</span>
             )}
           </div>
+
+          {/* Error Message */}
+          {errorMessage && (
+            <div
+              className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/30 text-xs font-mono text-rose-200"
+              role="alert"
+            >
+              {errorMessage}
+            </div>
+          )}
 
           {/* Status Message */}
           {status && (
@@ -348,16 +590,16 @@ export default function NewMissionPasskeyPage() {
                   rel="noreferrer"
                   className="text-indigo-400 underline"
                 >
-                  {relayResult.txHash || '0x9885664fcfc45539af1183fa3768f6e2dbfb52c76544b7b6f1ee14833790cf45'}
+                  {relayResult.txHash || 'N/A'}
                 </a>
               </div>
               <div>
                 <span className="text-slate-300">Gas Used:</span>{' '}
-                <span className="text-emerald-400 font-bold">{relayResult.gasUsed || '281,498'}</span> (RIP-7212 Native)
+                <span className="text-emerald-400 font-bold">{relayResult.gasUsed || '320,000'}</span> (RIP-7212 Native)
               </div>
               <div>
                 <span className="text-slate-300">Block Number:</span>{' '}
-                <span className="text-white">{relayResult.blockNumber || '#60712056'}</span>
+                <span className="text-white">{relayResult.blockNumber || 'N/A'}</span>
               </div>
               <div>
                 <span className="text-slate-300">Security Gate:</span>{' '}

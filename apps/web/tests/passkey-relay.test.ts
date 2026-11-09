@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { POST } from '../app/api/passkey/relay/route';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { POST, GET } from '../app/api/passkey/relay/route';
 import { NextRequest } from 'next/server';
+import { SECP256R1_N, SECP256R1_HALF_N } from '../lib/webauthn-p256';
 
-describe('WOW-W4: Passkey Relay API (/api/passkey/relay)', () => {
+describe('WOW-W4 / A2: Passkey Relay API (/api/passkey/relay)', () => {
   const originalMode = process.env.PAYMENT_MODE;
 
   beforeEach(() => {
@@ -17,7 +18,7 @@ describe('WOW-W4: Passkey Relay API (/api/passkey/relay)', () => {
     const req = new NextRequest('http://localhost/api/passkey/relay', {
       method: 'POST',
       body: JSON.stringify({
-        missionId: '0x123',
+        missionId: '0x1000000000000000000000000000000000000000000000000000000000000001',
       }),
     });
 
@@ -28,7 +29,37 @@ describe('WOW-W4: Passkey Relay API (/api/passkey/relay)', () => {
     expect(json.error).toContain('Thiếu tham số');
   });
 
-  it('successfully processes valid passkey assertion in simulation mode', async () => {
+  it('rejects invalid missionId or agent address with 400', async () => {
+    const req = new NextRequest('http://localhost/api/passkey/relay', {
+      method: 'POST',
+      body: JSON.stringify({
+        missionId: 'not-a-32-byte-hex',
+        agent: 'invalid-address',
+        payeeRoot: '0xa7409058b8f2c3bfbb2e9f0b5d56b0d9e8df34906a282f10b74108d8108a8a47',
+        cap: 2000000,
+        duration: 86400,
+        toolCap: 500000,
+        nonce: 0,
+        auth: {
+          authenticatorData: '0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f200100000001',
+          clientDataJSON: '{"type":"webauthn.get","challenge":"test","origin":"http://localhost:3100"}',
+          challengeIndex: 36,
+          typeIndex: 10,
+          originIndex: 50,
+          r: '0x01',
+          s: '0x01',
+        },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+  });
+
+  it('rejects high-s signature malleability with 400 and UNVERIFIED status', async () => {
+    const highS = (SECP256R1_N - 5n).toString();
     const req = new NextRequest('http://localhost/api/passkey/relay', {
       method: 'POST',
       body: JSON.stringify({
@@ -44,6 +75,38 @@ describe('WOW-W4: Passkey Relay API (/api/passkey/relay)', () => {
           clientDataJSON: '{"type":"webauthn.get","challenge":"test","origin":"http://localhost:3100"}',
           challengeIndex: 36,
           typeIndex: 10,
+          originIndex: 50,
+          r: '0x01',
+          s: highS,
+        },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+    expect(json.status).toBe('UNVERIFIED');
+    expect(json.error).toContain('low-s');
+  });
+
+  it('in simulateOnly mode, returns UNVERIFIED with honest error when simulation reverts (no fake gas)', async () => {
+    const req = new NextRequest('http://localhost/api/passkey/relay', {
+      method: 'POST',
+      body: JSON.stringify({
+        missionId: '0x1000000000000000000000000000000000000000000000000000000000000001',
+        agent: '0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c',
+        payeeRoot: '0xa7409058b8f2c3bfbb2e9f0b5d56b0d9e8df34906a282f10b74108d8108a8a47',
+        cap: 2000000,
+        duration: 86400,
+        toolCap: 500000,
+        nonce: 0,
+        auth: {
+          authenticatorData: '0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f200100000001',
+          clientDataJSON: '{"type":"webauthn.get","challenge":"test","origin":"http://localhost:3100"}',
+          challengeIndex: 36,
+          typeIndex: 10,
+          originIndex: 50,
           r: '0x01',
           s: '0x01',
         },
@@ -52,11 +115,27 @@ describe('WOW-W4: Passkey Relay API (/api/passkey/relay)', () => {
     });
 
     const res = await POST(req);
+    const json = await res.json();
+    // Simulation should either succeed if valid or fail with UNVERIFIED (never hardcoded 281498)
+    expect(json.simulated).toBe(true);
+    expect(json.gasEstimated).not.toBe('281498');
+    if (!json.success) {
+      expect(json.status).toBe('UNVERIFIED');
+      expect(res.status).toBe(422);
+    } else {
+      expect(json.status).toBe('SIMULATION_SUCCESS');
+    }
+  });
+
+  it('GET /api/passkey/relay returns authority config metadata', async () => {
+    const res = await GET();
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.success).toBe(true);
-    expect(json.simulated).toBe(true);
-    expect(json.gasEstimated).toBe('281498');
+    expect(json.authorityAddress).toBeDefined();
+    expect(json.treasuryAddress).toBeDefined();
+    expect(json.nextNonce).toBeDefined();
+    expect(json.expectedOrigin).toBeDefined();
   });
 
   it('W4-F1: returns 503 if RELAYER_PRIVATE_KEY is missing when not in simulation mode', async () => {
@@ -80,6 +159,7 @@ describe('WOW-W4: Passkey Relay API (/api/passkey/relay)', () => {
             clientDataJSON: '{"type":"webauthn.get","challenge":"test","origin":"http://localhost:3100"}',
             challengeIndex: 36,
             typeIndex: 10,
+            originIndex: 50,
             r: '0x01',
             s: '0x01',
           },
@@ -98,10 +178,7 @@ describe('WOW-W4: Passkey Relay API (/api/passkey/relay)', () => {
 
   it('W4-F1: refuses execution with 500 if relayer address matches OWNER_ADDRESS', async () => {
     delete process.env.PAYMENT_MODE;
-    // Private key corresponding to address 0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c or test key
-    // Let's use a known test key and set OWNER_ADDRESS to that account address
     const testPrivKey = '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d';
-    // Address for testPrivKey is 0x90F8bf6A479f320ead074411a4B0e7944Ea8c9C1
     process.env.RELAYER_PRIVATE_KEY = testPrivKey;
     const prevOwner = process.env.OWNER_ADDRESS;
     process.env.OWNER_ADDRESS = '0x90F8bf6A479f320ead074411a4B0e7944Ea8c9C1';
@@ -122,6 +199,7 @@ describe('WOW-W4: Passkey Relay API (/api/passkey/relay)', () => {
             clientDataJSON: '{"type":"webauthn.get","challenge":"test","origin":"http://localhost:3100"}',
             challengeIndex: 36,
             typeIndex: 10,
+            originIndex: 50,
             r: '0x01',
             s: '0x01',
           },
