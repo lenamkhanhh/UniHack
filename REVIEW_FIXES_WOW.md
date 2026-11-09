@@ -8,6 +8,14 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
+### M8-F8/F9 accepted (Claude, 5fe2e22) — M8 closed after F10
+Verified: simulate returns BYPASS / REVERTED (decoded contract error) / RPC_ERROR; no-call path is SKIPPED; RPC_ERROR → UNKNOWN banner; bypass banner now says "simulated call would pay $X"; apps/web 240/240, tsc clean.
+- **M8-F10 (small, do first in M9):** `app/bounty/page.tsx:199,205`.
+  - L205 subtitle "0.00 USDC loss (simulated leaks)" is hardcoded. `bountySpentUsdc` is the real on-chain spend of the bounty mission, so label it "spent on-chain by this mission" / "đã chi on-chain trong mission này", with no fixed number.
+  - L199 pairs the simulated leak count with the real on-chain spend. Show only the leak count with "simulated leaks" / "lượt lọt (mô phỏng)".
+  - Move both strings into i18n.
+
+
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
