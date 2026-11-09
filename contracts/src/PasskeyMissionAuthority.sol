@@ -2,6 +2,8 @@
 pragma solidity 0.8.24;
 
 interface IGuardedTreasuryAuthority {
+    function USDC() external view returns (address);
+
     function createMission(
         bytes32 missionId,
         address agent,
@@ -16,12 +18,18 @@ interface IGuardedTreasuryAuthority {
     function setMissionToolCap(bytes32 missionId, uint256 toolCap) external;
 }
 
+interface IERC20Token {
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address to, uint256 value) external returns (bool);
+}
+
 /**
  * @title PasskeyMissionAuthority
  * @notice WebAuthn P-256 passkey mission authority utilizing Avalanche RIP-7212 P-256 precompile (0x100).
- * Allows owners to create and authorize missions using biometric credentials (Face ID, Touch ID, Windows Hello)
- * without holding an EOA private key on their client device. Hardened with RP ID hash, strict origin validation,
- * User Verification enforcement, crossOrigin rejection, and high-S malleability protection.
+ * Allows owners to create and authorize missions and manage their owned GuardedTreasury using biometric
+ * credentials (Face ID, Touch ID, Windows Hello) without holding an EOA private key on their client device.
+ * Hardened with RP ID hash, strict origin validation, User Verification enforcement, crossOrigin rejection,
+ * high-S malleability protection, and strict allowlisted governance selectors on immutable treasury.
  */
 contract PasskeyMissionAuthority {
     // secp256r1 curve order n
@@ -33,6 +41,25 @@ contract PasskeyMissionAuthority {
 
     bytes internal constant TABLE_B64URL =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+    // Allowlisted GuardedTreasury selectors (A3 Specification)
+    bytes4 internal constant SELECTOR_SET_RECIPIENT = bytes4(keccak256("setRecipient(address,bool)"));
+    bytes4 internal constant SELECTOR_FUND_WALLET_AMOUNT = bytes4(keccak256("fundMissionWallet(bytes32,address,uint256)"));
+    bytes4 internal constant SELECTOR_FUND_WALLET_DEFAULT = bytes4(keccak256("fundMissionWallet(bytes32,address)"));
+    bytes4 internal constant SELECTOR_PAUSE = bytes4(keccak256("pause()"));
+    bytes4 internal constant SELECTOR_UNPAUSE = bytes4(keccak256("unpause()"));
+    bytes4 internal constant SELECTOR_APPROVE = bytes4(keccak256("approve(uint256)"));
+    bytes4 internal constant SELECTOR_EXECUTE = bytes4(keccak256("execute(uint256)"));
+    bytes4 internal constant SELECTOR_REJECT = bytes4(keccak256("reject(uint256,string)"));
+    bytes4 internal constant SELECTOR_CLOSE_MISSION = bytes4(keccak256("closeMission(bytes32)"));
+    bytes4 internal constant SELECTOR_SET_MISSION_CAP = bytes4(keccak256("setMissionCap(bytes32,uint256)"));
+    bytes4 internal constant SELECTOR_SET_MISSION_TOOL_CAP = bytes4(keccak256("setMissionToolCap(bytes32,uint256)"));
+    bytes4 internal constant SELECTOR_SET_CAPS = bytes4(keccak256("setCaps(uint256,uint256)"));
+    bytes4 internal constant SELECTOR_SET_MISSION_PAYEE_ROOT = bytes4(keccak256("setMissionPayeeRoot(bytes32,bytes32)"));
+    bytes4 internal constant SELECTOR_ANCHOR_MISSION_PROOF = bytes4(keccak256("anchorMissionProof(bytes32,bytes32)"));
+    bytes4 internal constant SELECTOR_EMERGENCY_WITHDRAW = bytes4(keccak256("emergencyWithdraw()"));
+    bytes4 internal constant SELECTOR_SWEEP_WALLET = bytes4(keccak256("sweepMissionWalletWithAuthorization(bytes32,uint256,uint256,uint256,bytes32,uint8,bytes32,bytes32)"));
+    bytes4 internal constant SELECTOR_CREATE_MISSION = bytes4(keccak256("createMission(bytes32,address,uint256,uint256)"));
 
     struct WebAuthnAuth {
         bytes authenticatorData;
@@ -64,6 +91,8 @@ contract PasskeyMissionAuthority {
     );
 
     event PasskeyRotated(uint256 oldX, uint256 oldY, uint256 newX, uint256 newY, uint256 nonce);
+    event OwnerActionExecuted(bytes4 indexed selector, bytes callData, uint256 nonce);
+    event TokensWithdrawnByPasskey(address indexed to, uint256 amount, uint256 nonce);
 
     constructor(
         address _treasury,
@@ -86,15 +115,30 @@ contract PasskeyMissionAuthority {
     }
 
     /**
+     * @notice Checks whether a given function selector is permitted for owner governance action.
+     */
+    function isAllowedTreasurySelector(bytes4 selector) public pure returns (bool) {
+        return selector == SELECTOR_SET_RECIPIENT ||
+               selector == SELECTOR_FUND_WALLET_AMOUNT ||
+               selector == SELECTOR_FUND_WALLET_DEFAULT ||
+               selector == SELECTOR_PAUSE ||
+               selector == SELECTOR_UNPAUSE ||
+               selector == SELECTOR_APPROVE ||
+               selector == SELECTOR_EXECUTE ||
+               selector == SELECTOR_REJECT ||
+               selector == SELECTOR_CLOSE_MISSION ||
+               selector == SELECTOR_SET_MISSION_CAP ||
+               selector == SELECTOR_SET_MISSION_TOOL_CAP ||
+               selector == SELECTOR_SET_CAPS ||
+               selector == SELECTOR_SET_MISSION_PAYEE_ROOT ||
+               selector == SELECTOR_ANCHOR_MISSION_PROOF ||
+               selector == SELECTOR_EMERGENCY_WITHDRAW ||
+               selector == SELECTOR_SWEEP_WALLET ||
+               selector == SELECTOR_CREATE_MISSION;
+    }
+
+    /**
      * @notice Approves and creates a mission on GuardedTreasury authenticated via WebAuthn passkey assertion.
-     * @param missionId Unique mission identifier
-     * @param agent Autonomous agent address assigned to the mission
-     * @param payeeRoot Merkle root of owner-authorized payee set
-     * @param cap Maximum payout cap for the mission in token atomic units
-     * @param duration Mission lifetime in seconds
-     * @param toolCap Maximum budget allocated for session wallet tool execution
-     * @param nonce Sequential nonce protecting against replay attacks
-     * @param auth WebAuthn assertion data signed by the owner's passkey
      */
     function approveMission(
         bytes32 missionId,
@@ -134,6 +178,94 @@ contract PasskeyMissionAuthority {
         }
 
         emit MissionApprovedByPasskey(missionId, agent, payeeRoot, cap, duration, toolCap, nonce);
+    }
+
+    function _computeOwnerActionChallenge(bytes calldata callData, uint256 nonce) internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                "MissionPay-passkey-owner-action-v1",
+                block.chainid,
+                address(this),
+                treasury,
+                keccak256(callData),
+                nonce
+            )
+        );
+    }
+
+    function _computeWithdrawChallenge(address usdcToken, address to, uint256 amount, uint256 nonce) internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                "MissionPay-passkey-withdraw-v1",
+                block.chainid,
+                address(this),
+                usdcToken,
+                to,
+                amount,
+                nonce
+            )
+        );
+    }
+
+    /**
+     * @notice Executes an owner governance action on the owned GuardedTreasury with WebAuthn passkey assertion (A3).
+     * @param callData Exact encoded calldata targeting GuardedTreasury
+     * @param nonce Sequential nonce protecting against replay attacks
+     * @param auth WebAuthn assertion data signed by the owner's passkey
+     */
+    function executeOwnerAction(
+        bytes calldata callData,
+        uint256 nonce,
+        WebAuthnAuth calldata auth
+    ) external {
+        require(nonce == nextNonce, "InvalidNonce");
+        require(callData.length >= 4, "InvalidCallDataLength");
+
+        bytes4 selector = bytes4(callData[:4]);
+        require(isAllowedTreasurySelector(selector), "SelectorNotAllowed");
+
+        nextNonce++;
+
+        _verifyWebAuthn(_computeOwnerActionChallenge(callData, nonce), auth, passkeyX, passkeyY);
+
+        _callTreasury(callData);
+
+        emit OwnerActionExecuted(selector, callData, nonce);
+    }
+
+    function _callTreasury(bytes calldata callData) internal {
+        (bool success, ) = treasury.call(callData);
+        require(success, "TreasuryActionFailed");
+    }
+
+    /**
+     * @notice Withdraws recovered tokens from this contract to an owner-specified address (A3).
+     * Used when emergencyWithdraw() sends tokens to this authority contract.
+     * @param to Destination address authorized by the owner
+     * @param amount Token amount to transfer
+     * @param nonce Sequential nonce
+     * @param auth WebAuthn assertion data signed by the owner's passkey
+     */
+    function withdrawTokens(
+        address to,
+        uint256 amount,
+        uint256 nonce,
+        WebAuthnAuth calldata auth
+    ) external {
+        require(nonce == nextNonce, "InvalidNonce");
+        require(to != address(0) && to != address(this), "InvalidRecipient");
+        require(amount > 0, "InvalidAmount");
+
+        nextNonce++;
+
+        address usdcToken = IGuardedTreasuryAuthority(treasury).USDC();
+        require(IERC20Token(usdcToken).balanceOf(address(this)) >= amount, "InsufficientBalance");
+
+        _verifyWebAuthn(_computeWithdrawChallenge(usdcToken, to, amount, nonce), auth, passkeyX, passkeyY);
+
+        _safeTransferToken(usdcToken, to, amount);
+
+        emit TokensWithdrawnByPasskey(to, amount, nonce);
     }
 
     /**
@@ -247,6 +379,13 @@ contract PasskeyMissionAuthority {
         bytes memory input = abi.encodePacked(messageHash, auth.r, auth.s, qx, qy);
         (bool success, bytes memory output) = PRECOMPILE_P256.staticcall(input);
         require(success && output.length == 32 && abi.decode(output, (uint256)) == 1, "P256VerificationFailed");
+    }
+
+    function _safeTransferToken(address token, address to, uint256 value) internal {
+        (bool success, bytes memory ret) = token.call(
+            abi.encodeWithSelector(IERC20Token.transfer.selector, to, value)
+        );
+        require(success && (ret.length == 0 || abi.decode(ret, (bool))), "TokenTransferFailed");
     }
 
     function _contains(bytes memory haystack, bytes memory needle) internal pure returns (bool) {

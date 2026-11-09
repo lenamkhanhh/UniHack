@@ -327,6 +327,74 @@ export function computeMissionPasskeyChallenge(params: {
 }
 
 /**
+ * Computes canonical owner action passkey challenge hash matching PasskeyMissionAuthority.sol:
+ * keccak256(abi.encode(
+ *   "MissionPay-passkey-owner-action-v1",
+ *   block.chainid,
+ *   address(this),
+ *   treasury,
+ *   keccak256(callData),
+ *   nonce
+ * ))
+ */
+export function computeOwnerActionPasskeyChallenge(params: {
+  chainId: number | bigint;
+  authority: string;
+  treasury: string;
+  callData: `0x${string}`;
+  nonce: bigint;
+}): `0x${string}` {
+  const callDataHash = keccak256(params.callData);
+  const encoded = encodeAbiParameters(
+    parseAbiParameters('string, uint256, address, address, bytes32, uint256'),
+    [
+      'MissionPay-passkey-owner-action-v1',
+      BigInt(params.chainId),
+      params.authority as `0x${string}`,
+      params.treasury as `0x${string}`,
+      callDataHash,
+      params.nonce,
+    ]
+  );
+  return keccak256(encoded);
+}
+
+/**
+ * Computes canonical withdraw tokens passkey challenge hash matching PasskeyMissionAuthority.sol:
+ * keccak256(abi.encode(
+ *   "MissionPay-passkey-withdraw-v1",
+ *   block.chainid,
+ *   address(this),
+ *   usdcToken,
+ *   to,
+ *   amount,
+ *   nonce
+ * ))
+ */
+export function computeWithdrawPasskeyChallenge(params: {
+  chainId: number | bigint;
+  authority: string;
+  usdcToken: string;
+  to: string;
+  amount: bigint;
+  nonce: bigint;
+}): `0x${string}` {
+  const encoded = encodeAbiParameters(
+    parseAbiParameters('string, uint256, address, address, address, uint256, uint256'),
+    [
+      'MissionPay-passkey-withdraw-v1',
+      BigInt(params.chainId),
+      params.authority as `0x${string}`,
+      params.usdcToken as `0x${string}`,
+      params.to as `0x${string}`,
+      params.amount,
+      params.nonce,
+    ]
+  );
+  return keccak256(encoded);
+}
+
+/**
  * Canonical missionId generator:
  * - If already a 32-byte hex string (0x + 64 hex chars), return normalized.
  * - Otherwise keccak256(toHex(slug)).

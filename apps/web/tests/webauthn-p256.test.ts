@@ -9,6 +9,8 @@ import {
   parseDerSignature,
   extractP256Coordinates,
   computeMissionPasskeyChallenge,
+  computeOwnerActionPasskeyChallenge,
+  computeWithdrawPasskeyChallenge,
   validateWebAuthnAuthLocally,
   SECP256R1_N,
   SECP256R1_HALF_N,
@@ -343,6 +345,34 @@ describe('WebAuthn P-256 Core Helper (A2)', () => {
       });
       expect(crossResult.valid).toBe(false);
       expect(crossResult.reason).toBe('CrossOriginNotAllowed');
+    });
+  });
+
+  describe('A3 governance challenge codecs', () => {
+    it('computes deterministic owner action challenge matching contract format', () => {
+      const callData = '0x025e353a' as `0x${string}`; // pause()
+      const challenge = computeOwnerActionPasskeyChallenge({
+        chainId: 43113,
+        authority: '0x1111111111111111111111111111111111111111',
+        treasury: '0x2222222222222222222222222222222222222222',
+        callData,
+        nonce: 0n,
+      });
+
+      expect(challenge).toMatch(/^0x[0-9a-f]{64}$/);
+    });
+
+    it('computes deterministic withdraw challenge matching contract format', () => {
+      const challenge = computeWithdrawPasskeyChallenge({
+        chainId: 43113,
+        authority: '0x1111111111111111111111111111111111111111',
+        usdcToken: '0x5425890298aed601595a70ab815c96711a31bc65',
+        to: '0x8888888888888888888888888888888888888888',
+        amount: 5_000_000n,
+        nonce: 1n,
+      });
+
+      expect(challenge).toMatch(/^0x[0-9a-f]{64}$/);
     });
   });
 });

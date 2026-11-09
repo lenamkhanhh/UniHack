@@ -84,7 +84,7 @@ contract MutantInvariantTest is Test {
     function invariant_payeeAlwaysInRoot() public view {
         uint256 count = handler.outflowCount();
         for (uint256 i = 0; i < count; i++) {
-            (address to, bytes32 mId, ) = handler.getOutflow(i);
+            (address to, bytes32 mId, , ) = handler.getOutflow(i);
             if (mId == missionWithRoot) {
                 assertTrue(handler.isLeafInRoot(mId, to));
             }
