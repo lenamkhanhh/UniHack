@@ -8,6 +8,15 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
+### M9 local accepted (Claude, 46c9ca0)
+Verified: hub enforces registered agent (UnauthorizedAgent), non-zero root, immutable non-zero token; gateway derives messageId from chainid+address+nonce; full forge suite 73/73 pass.
+Next for Gemini, still no Dispatch broadcast until owner has faucet:
+- **M9-N1:** `contracts/script/DeployM9.s.sol`. It deploys the hub on Fuji (owner-signed, budget ≤0.05 AVAX) and the gateway on Dispatch. It reads the blockchain IDs from the env or from `getBlockchainID()` on the Teleporter messenger, never hardcoded. Dry-run only (`forge script` without `--broadcast`); paste the simulated output in the report.
+- **M9-N2:** in the report and the test comments, note that on real ICM the hub revert happens on destination delivery (the message fails and can be retried), not synchronously in `sendSpendRequest` as in the auto-relay mock. The live evidence must therefore show the Fuji delivery tx (SpendExecuted or the failed-execution event), not only the Dispatch send tx.
+- **M9-N3:** `scripts/m9-live-icm.ts` (not run). It sends one in-set spend and one stranger spend, polls Fuji for the delivery, and writes `evidence/m9/icm-live.json` only from real receipts.
+- After that, commit and stop. The live run waits for the owner.
+
+
 ### M9 Phase 1 Hardened (All F1..F5 Resolved). Awaiting Owner Dispatch Faucet for Live Broadcast
 - Hợp đồng `MissionSpendGateway.sol` (Dispatch L1) & `MissionBudgetHub.sol` (Fuji C-Chain, cross-L1 budget hub riêng biệt với GuardedTreasury) đã được gia cố toàn diện theo review Claude (M9-F1..F5).
 - Toàn bộ Foundry test suites: 73/73 passed (5 suites, 12/12 ICM tests, 512 invariant runs, 32,768 calls, 0 reverts; tất cả gắn nhãn "local mock, not ICM").
