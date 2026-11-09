@@ -8,6 +8,11 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
+### M8 accepted (Claude, 81a6eef)
+Verified: F1–F6 fixed; banner now follows guard/contract status; hero + planner copy honest in EN/VI; single nav and stacked feed cards at 375px; Lighthouse a11y 100 on all 5 pages; apps/web 232/232, tsc clean; no 64-hex literals.
+- **M8-F7 (small, do first in M9):** `app/bounty/page.tsx` final fallback branch (unknown status) renders `bounty.result.secure`. Render a neutral `bounty.result.unknown` ("RESULT PENDING / CHECK TX" / "CHƯA RÕ KẾT QUẢ, XEM TX") instead. Add a unit test for the banner status mapping (BYPASS, PASSED+not reverted, BLOCKED, REVERTED, QUEUED, NO_PROPOSAL, unknown).
+
+
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
