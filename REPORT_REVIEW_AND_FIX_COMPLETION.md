@@ -1580,3 +1580,28 @@ Refer to OWNER_TODO.md for step-by-step faucet instructions.
 ### 3. Ràng Buộc An Toàn
 - Giữ vững trạng thái dừng chờ Owner nạp token faucet Dispatch, không tự ý broadcast mạng thật.
 - Không commit secret, private key, hay `.env`. Không push `main`.
+
+
+---
+
+## M4-L1: LOCAL OLLAMA BACKEND FOR AGENTDOJO BENCHMARK (CODE ONLY)
+
+**Thời điểm:** 2026-11-09 13:20 (Asia/Saigon) | **Nhánh:** `feat/s1-app`
+
+### 1. Bảng Nghiệm Thu Triển Khai M4-L1
+
+| ID | Mức | Trạng thái | File chính | Chi tiết thay đổi & Kết quả kiểm chứng |
+|---|---|:---:|---|---|
+| **M4-L1** | **P0** | **ĐẠT** | `eval/agentdojo/run_benchmark.py` | **Local Ollama Backend via OpenAI-Compatible Endpoint**: Bổ sung backend Ollama (`--backend ollama`, `--model qwen3:8b`, `--ollama-url http://127.0.0.1:11434`) tương thích ProvGuard Qwen3 8B setup.<br>• Sử dụng AgentDojo `OpenAILLM` trỏ tới `http://127.0.0.1:11434/v1` với `api_key="ollama"`.<br>• Lớp `HonestOllamaLLM(BasePipelineElement)` xử lý retry và fail fast ngay khi endpoint ngắt kết nối (`OLLAMA_SERVER_DOWN`). Tuyệt đối không fallback sang simulator.<br>• Hàm `fetch_ollama_metadata` truy vấn `/api/tags` và `/api/show` trích xuất `model_digest`, `quantization`, `family`, `parameter_size`; thoát non-zero (`sys.exit(1)`) nếu Ollama down hoặc model chưa kéo về máy.<br>• Giữ song song `HonestGoogleLLM` (`--backend google`). Đăng ký tên model `qwen3:8b`, `qwen3-8b`, `qwen2.5:7b`, `llama3.1:8b` vào `agentdojo.attacks.base_attacks.MODEL_NAMES`.<br>• Ghi nhận đầy đủ metadata `model_digest`, `quantization`, `temperature`, `seed`, `wall_time_seconds` trong JSON và Summary Markdown.<br>• Bổ sung flag `--limit N` phục vụ smoke test.<br>• Tuân thủ nghiêm ngặt: **chỉ viết code, không chạy benchmark, không cài đặt Ollama, không chạy simulator**.<br>• Cú pháp Python biên dịch 100% (`py_compile`), `--help` hoạt động hoàn hảo. |
+
+### 2. Kết Quả Kiểm Thử Toàn Bộ Hệ Thống
+- **Contracts (Foundry):** **74/74 passed** trên 5 test suites.
+- **Web App (`apps/web` Vitest):** **243/243 passed** trên 31 test files.
+- **Package Guard & MCP:** **18/18 passed** (12 guard + 6 mcp).
+- **Tổng số tests tự động:** **335 / 335 passed (100%)**.
+- **Python Syntax Check (`py_compile`):** Clean (**0 errors**).
+- **CLI Options (`--help`):** Đầy đủ `--backend`, `--model`, `--ollama-url`, `--defenses`, `--sample`, `--limit`, `--seed`, `--no-cache`.
+
+### 3. Ràng Buộc Tuân Thủ
+- Đã hoàn tất phần code backend Ollama. Dừng lại chờ Owner quyết định giữa (1) cài đặt Ollama local (`RTX 3050 Laptop 4GB + 24GB RAM`) hoặc (2) mở Gemini API billing.
+- Không tự ý tải model, không chạy benchmark giả lập, không commit secret, không push `main`.

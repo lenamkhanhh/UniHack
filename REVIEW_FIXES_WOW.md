@@ -8,27 +8,20 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-### M9 local ACCEPTED (Claude, 3e72175). Live ICM blocked on owner (faucet + relayer)
-Verified:
-- The root pin is reverted.
-- The oracle checks the payee against the root active at payout. For queued proposals it uses the root at proposal time, which is correct because `approve`/`execute` re-check only the allowlist.
-- The invariant suite passes on 3 random fuzz seeds; the full forge suite passes 74/74.
-- The timeout branch now reports NOT_DELIVERED; gas comes from the real receipt.
-
-Next for Gemini (code only, run nothing):
-- **M4-L1:** add a local-model backend to `eval/agentdojo/run_benchmark.py`: `--backend ollama --model qwen3:8b`, via the OpenAI-compatible endpoint `http://127.0.0.1:11434/v1`, using AgentDojo's existing OpenAI-compatible LLM class with base_url.
-  - Same 48 pairs (user tasks × injection 0..2) + 16 benign, configs C0 and C2-strict. This matches ProvGuard's Qwen3 8B setup.
-  - Keep `HonestGoogleLLM` as the second backend.
-  - Record in the results JSON: model digest from `/api/tags`, quantization, temperature, seed and wall time.
-  - Never fall back to a simulator. If the endpoint is down, exit non-zero.
-  - Add `--limit N` for a smoke test.
-- Commit `feat(m4): ollama backend` and stop. The owner decides between installing Ollama (machine: RTX 3050 Laptop 4GB + 24GB RAM, so 8B runs partly on CPU) and enabling Gemini billing.
-
-
-
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
+- Live ICM M9 chờ Owner nạp faucet Dispatch L1 (xem `OWNER_TODO.md` Mục 3).
 
 ## DONE
+
+- M4-L1 [Local Ollama Backend for AgentDojo Benchmark]:
+  - Đã thêm `--backend ollama` và `--model qwen3:8b` (hỗ trợ cả `--ollama-url http://127.0.0.1:11434`) vào `eval/agentdojo/run_benchmark.py`.
+  - Tích hợp lớp `HonestOllamaLLM` kế thừa `BasePipelineElement`, sử dụng `OpenAILLM` của AgentDojo trỏ tới OpenAI-compatible endpoint `http://127.0.0.1:11434/v1` với `api_key="ollama"`.
+  - Giữ nguyên backend `HonestGoogleLLM` làm backend thứ hai (`--backend google`).
+  - Đăng ký model names cho họ Qwen (`qwen3:8b`, `qwen3-8b`, `qwen2.5:7b`) và Llama (`llama3.1:8b`) trong `agentdojo.attacks.base_attacks.MODEL_NAMES`.
+  - Bổ sung hàm `fetch_ollama_metadata` truy vấn `/api/tags` và `/api/show` lấy `model_digest`, `quantization`, `family`, `parameter_size`. Nếu Ollama down hoặc model thiếu thì dừng ngay (`sys.exit(1)`), tuyệt đối không fallback simulator.
+  - Tách cache key theo backend (`get_cache_key(backend, model, ...)`), ghi nhận đầy đủ `model_digest`, `quantization`, `temperature`, `seed`, `wall_time_seconds` trong JSON kết quả và Markdown summary.
+  - Bổ sung cờ `--limit N` phục vụ smoke test nhanh.
+  - Kiểm tra cú pháp: `py_compile` pass 100%, `--help` CLI hiển thị đầy đủ options. Không chạy benchmark, không cài đặt Ollama theo đúng chỉ thị.
 
 - M9-F14..F16 [Calibrate Invariant Oracle for Owner Root Downgrade, Honest Runner Timeout Status & Real Delivery Gas Receipts]:
   - **M9-F14 (Revert Scope Creep & Calibrate Invariant Oracle):**

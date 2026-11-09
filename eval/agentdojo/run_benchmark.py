@@ -4,6 +4,10 @@ Evaluates C0 (Unprotected), C1 (Tool Filter), C2-Strict, and C2-File-Trusted
 on AgentDojo Banking Suite with 'important_instructions' prompt injection attacks.
 Grounds all evaluated transactions with on-chain EVM simulation on a local Anvil fork
 of Avalanche Fuji GuardedTreasury (0x20451c1e2dCD83F166B4f22868BAdECb5868d545).
+
+Supports dual backends:
+- Google Gemini API (`--backend google`, default model `gemini-3.1-flash-lite`)
+- Local Ollama OpenAI-compatible API (`--backend ollama`, default model `qwen3:8b`)
 """
 
 import os
@@ -13,8 +17,10 @@ import time
 import random
 import hashlib
 import argparse
+import urllib.request
+import urllib.error
 from pathlib import Path
-from typing import Dict, Any, List, Tuple, Optional, Sequence
+from typing import Dict, Any, List, Tuple, Optional, Sequence, Union
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -25,6 +31,9 @@ load_dotenv(Path(__file__).resolve().parents[2] / "apps/web/.env")
 from google import genai
 from google.genai import types as genai_types
 from google.genai.errors import ClientError
+
+import openai
+from agentdojo.agent_pipeline.llms.openai_llm import OpenAILLM
 
 from agentdojo.benchmark import get_suite
 from agentdojo.attacks import load_attack
@@ -80,6 +89,10 @@ gllm._parts_from_assistant_message = patched_parts_from_assistant
 import agentdojo.attacks.base_attacks as ba
 ba.MODEL_NAMES["gemini-3.1-flash-lite"] = "AI model developed by Google"
 ba.MODEL_NAMES["gemini-3.5-flash-lite"] = "AI model developed by Google"
+ba.MODEL_NAMES["qwen3:8b"] = "AI model developed by Alibaba Cloud"
+ba.MODEL_NAMES["qwen3-8b"] = "AI model developed by Alibaba Cloud"
+ba.MODEL_NAMES["qwen2.5:7b"] = "AI model developed by Alibaba Cloud"
+ba.MODEL_NAMES["llama3.1:8b"] = "AI model developed by Meta"
 
 from missionpay_defense import MissionPayDefense
 from tool_filter_defense import StandardToolFilterDefense
@@ -139,6 +152,108 @@ class HonestGoogleLLM(BasePipelineElement):
                 else:
                     raise
 
+class HonestOllamaLLM(BasePipelineElement):
+    """
+    Direct caller to OpenAILLM pointing to local Ollama OpenAI-compatible endpoint.
+    Zero synthetic fallback. If the endpoint fails or disconnects, raises RuntimeError and stops.
+    """
+    def __init__(self, model: str, base_url: str = "http://127.0.0.1:11434", temperature: float = 0.0):
+        super().__init__()
+        self.model = model
+        self.base_url = base_url
+        self.temperature = temperature
+        client = openai.OpenAI(
+            base_url=f"{base_url.rstrip('/')}/v1",
+            api_key="ollama",  # Ollama requires non-empty string for API key
+        )
+        self.underlying_llm = OpenAILLM(client=client, model=model, temperature=temperature)
+        self.api_calls_count = 0
+        self.api_errors_count = 0
+
+    def query(
+        self,
+        query: str,
+        runtime: FunctionsRuntime,
+        env: Any = EmptyEnv(),
+        messages: Sequence[ChatMessage] = [],
+        extra_args: dict = {},
+    ) -> Tuple[str, FunctionsRuntime, Any, Sequence[ChatMessage], dict]:
+        retries = 3
+        delay = 2
+        for attempt in range(retries):
+            try:
+                self.api_calls_count += 1
+                return self.underlying_llm.query(query, runtime, env, messages, extra_args)
+            except Exception as e:
+                self.api_errors_count += 1
+                err_str = str(e)
+                if "Connection refused" in err_str or "ConnectError" in err_str:
+                    raise RuntimeError(f"OLLAMA_SERVER_DOWN: Cannot connect to Ollama at {self.base_url}: {e}") from e
+                if attempt < retries - 1:
+                    time.sleep(delay)
+                    delay *= 2
+                else:
+                    raise
+
+def fetch_ollama_metadata(base_url: str, model: str) -> Dict[str, Any]:
+    """
+    Fetches model metadata from Ollama's local HTTP API (/api/tags and /api/show).
+    Exits with non-zero status if the endpoint is unreachable or model is missing (never simulates).
+    """
+    tags_url = f"{base_url.rstrip('/')}/api/tags"
+    req = urllib.request.Request(tags_url, headers={"User-Agent": "MissionPay-Bench/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        print(f"\n[FATAL ERROR] Cannot connect to local Ollama instance at {tags_url}: {e}")
+        print("M4-L1 requirement: Never fall back to simulator. Ollama service must be running locally.")
+        sys.exit(1)
+
+    models_list = data.get("models", [])
+    matched = None
+    for m in models_list:
+        name = m.get("name", "")
+        if name == model or name == f"{model}:latest" or model == name.split(":")[0]:
+            matched = m
+            break
+
+    if not matched:
+        # Check /api/show as secondary inspection
+        try:
+            show_url = f"{base_url.rstrip('/')}/api/show"
+            show_req = urllib.request.Request(
+                show_url,
+                data=json.dumps({"name": model}).encode("utf-8"),
+                headers={"Content-Type": "application/json", "User-Agent": "MissionPay-Bench/1.0"},
+                method="POST",
+            )
+            with urllib.request.urlopen(show_req, timeout=5) as resp:
+                show_data = json.loads(resp.read().decode("utf-8"))
+                details = show_data.get("details", {})
+                return {
+                    "digest": show_data.get("digest") or "unknown",
+                    "quantization": details.get("quantization_level") or "unknown",
+                    "family": details.get("family") or "unknown",
+                    "parameter_size": details.get("parameter_size") or "unknown",
+                }
+        except Exception:
+            pass
+
+        available = [m.get("name") for m in models_list]
+        print(f"\n[FATAL ERROR] Model '{model}' not found in local Ollama library.")
+        print(f"Available models in Ollama: {available}")
+        print(f"Please run `ollama pull {model}` before executing benchmark.")
+        sys.exit(1)
+
+    details = matched.get("details", {})
+    return {
+        "digest": matched.get("digest", "unknown"),
+        "quantization": details.get("quantization_level", "unknown"),
+        "family": details.get("family", "unknown"),
+        "parameter_size": details.get("parameter_size", "unknown"),
+    }
+
 def wilson_score_interval(successes: int, total: int, confidence: float = 0.95) -> Tuple[float, float]:
     if total == 0:
         return (0.0, 0.0)
@@ -149,14 +264,30 @@ def wilson_score_interval(successes: int, total: int, confidence: float = 0.95) 
     spread = (z * ((p_hat * (1 - p_hat) / total + z**2 / (4 * total**2)) ** 0.5)) / denominator
     return (round(max(0.0, centre - spread) * 100, 1), round(min(1.0, centre + spread) * 100, 1))
 
-def get_cache_key(model: str, user_task_id: str, inj_task_id: Optional[str], defense: str) -> str:
-    raw = f"{model}:{user_task_id}:{inj_task_id or 'none'}:{defense}"
+def get_cache_key(backend: str, model: str, user_task_id: str, inj_task_id: Optional[str], defense: str) -> str:
+    raw = f"{backend}:{model}:{user_task_id}:{inj_task_id or 'none'}:{defense}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
-def build_pipeline(defense: str, client: genai.Client, model: str) -> Tuple[AgentPipeline, Optional[MissionPayDefense], HonestGoogleLLM]:
+def build_pipeline(
+    defense: str,
+    backend: str = "google",
+    model: str = "gemini-3.1-flash-lite",
+    google_client: Optional[genai.Client] = None,
+    ollama_url: str = "http://127.0.0.1:11434",
+) -> Tuple[AgentPipeline, Optional[MissionPayDefense], BasePipelineElement]:
     system_msg = load_system_message("banking")
-    llm = HonestGoogleLLM(model=model, client=client, temperature=0.0)
     
+    if backend == "ollama":
+        llm = HonestOllamaLLM(model=model, base_url=ollama_url, temperature=0.0)
+        pipeline_name = f"ollama/{model}"
+    elif backend == "google":
+        if not google_client:
+            raise ValueError("google_client is required for google backend")
+        llm = HonestGoogleLLM(model=model, client=google_client, temperature=0.0)
+        pipeline_name = f"google/{model}"
+    else:
+        raise ValueError(f"Unknown backend: {backend}. Must be 'google' or 'ollama'.")
+
     mp_defense = None
     if defense == "c0":
         executor = ToolsExecutor()
@@ -180,28 +311,50 @@ def build_pipeline(defense: str, client: genai.Client, model: str) -> Tuple[Agen
             tools_loop,
         ]
     )
-    pipeline.name = f"google/{model}"
+    pipeline.name = pipeline_name
     return pipeline, mp_defense, llm
 
 def run_benchmark(
-    model: str = "gemini-3.1-flash-lite",
+    backend: str = "google",
+    model: Optional[str] = None,
+    ollama_url: str = "http://127.0.0.1:11434",
     defenses: Sequence[str] = ("c0", "c2_strict"),
-    sample_size: Optional[int] = 20,
+    sample_size: Optional[int] = 48,
+    limit: Optional[int] = None,
     seed: int = 42,
     use_cache: bool = True,
 ):
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        print("[ERROR] GEMINI_API_KEY environment variable is missing.")
+    start_wall_time = time.time()
+    
+    if model is None:
+        model = "qwen3:8b" if backend == "ollama" else "gemini-3.1-flash-lite"
+
+    google_client = None
+    ollama_meta = None
+    if backend == "ollama":
+        ollama_meta = fetch_ollama_metadata(ollama_url, model)
+    elif backend == "google":
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            print("[ERROR] GEMINI_API_KEY environment variable is missing.")
+            sys.exit(1)
+        google_client = genai.Client(api_key=api_key)
+    else:
+        print(f"[ERROR] Unsupported backend: {backend}")
         sys.exit(1)
 
-    client = genai.Client(api_key=api_key)
     suite = get_suite("v1", "banking")
     
     all_user_tasks = list(suite.user_tasks.keys())
     all_injection_tasks = list(suite.injection_tasks.keys())
     
-    dummy_pipe, _, _ = build_pipeline("c0", client, model)
+    dummy_pipe, _, _ = build_pipeline(
+        "c0",
+        backend=backend,
+        model=model,
+        google_client=google_client,
+        ollama_url=ollama_url,
+    )
     attack = load_attack("important_instructions", suite, dummy_pipe)
 
     # Enumerate all valid (user_task, injection_task) pairs
@@ -221,16 +374,25 @@ def run_benchmark(
     else:
         target_pairs = all_pairs
 
-    # Unique user tasks in the sampled pairs
+    # Apply limit for smoke testing if requested
+    if limit is not None and limit > 0:
+        target_pairs = target_pairs[:limit]
+
+    # Unique user tasks in the evaluated pairs (or full 16 benign tasks)
     target_user_tasks = sorted(list(set(ut for ut, _ in target_pairs)))
+    if not limit and len(target_user_tasks) < len(all_user_tasks):
+        target_user_tasks = sorted(all_user_tasks)
 
     run_timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    run_id = f"agentdojo-banking-{model}-{run_timestamp}"
+    clean_model_tag = model.replace(":", "-").replace("/", "-")
+    run_id = f"agentdojo-banking-{backend}-{clean_model_tag}-{run_timestamp}"
 
     print(f"============================================================")
-    print(f" AgentDojo Banking Defense Benchmark (Honest Live LLM)")
-    print(f" Model: {model} | Defenses: {defenses}")
-    print(f" Pairs to evaluate: {len(target_pairs)} (sample seed: {seed})")
+    print(f" AgentDojo Banking Defense Benchmark (Live LLM)")
+    print(f" Backend: {backend} | Model: {model} | Defenses: {defenses}")
+    if ollama_meta:
+        print(f" Digest: {ollama_meta['digest'][:16]}... | Quant: {ollama_meta['quantization']}")
+    print(f" Pairs to evaluate: {len(target_pairs)} (sample seed: {seed}, limit: {limit})")
     print(f" Benign Tasks: {len(target_user_tasks)}")
     print(f" Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"============================================================\n")
@@ -239,25 +401,38 @@ def run_benchmark(
         "metadata": {
             "run_id": run_id,
             "timestamp": datetime.now().isoformat(),
+            "backend": backend,
             "model": model,
+            "model_digest": ollama_meta["digest"] if ollama_meta else None,
+            "quantization": ollama_meta["quantization"] if ollama_meta else None,
+            "model_details": ollama_meta if ollama_meta else None,
+            "temperature": 0.0,
+            "seed": seed,
+            "limit": limit,
             "defenses": list(defenses),
             "total_pairs_in_suite": len(all_pairs),
             "sampled_pairs_count": len(target_pairs),
             "sample_seed": seed,
-            "sampling_method": "deterministic_random_sample" if sample_size else "full_suite",
+            "sampling_method": "smoke_limit" if limit else ("deterministic_random_sample" if sample_size else "full_suite"),
         },
         "defenses": {},
     }
 
     for defense_key in defenses:
         print(f"\n--- Evaluating Defense: {defense_key.upper()} ---")
-        pipeline, missionpay_instance, llm_wrapper = build_pipeline(defense_key, client, model)
+        pipeline, missionpay_instance, llm_wrapper = build_pipeline(
+            defense_key,
+            backend=backend,
+            model=model,
+            google_client=google_client,
+            ollama_url=ollama_url,
+        )
 
         # 1. Benign Utility
         benign_utility = {}
         benign_errors = {}
         for ut_id in target_user_tasks:
-            ck = get_cache_key(model, ut_id, None, defense_key)
+            ck = get_cache_key(backend, model, ut_id, None, defense_key)
             cf = CACHE_DIR / f"{ck}.json"
 
             if use_cache and cf.exists():
@@ -279,6 +454,7 @@ def run_benchmark(
                     with open(cf, "w", encoding="utf-8") as f:
                         json.dump({
                             "source": "live",
+                            "backend": backend,
                             "model": model,
                             "timestamp": datetime.now().isoformat(),
                             "utility": u,
@@ -288,7 +464,7 @@ def run_benchmark(
                 except Exception as e:
                     print(f"  [ERROR] Benign task {ut_id} failed: {e}")
                     benign_errors[ut_id] = str(e)
-                    if "QUOTA_EXHAUSTED" in str(e):
+                    if "QUOTA_EXHAUSTED" in str(e) or "OLLAMA_SERVER_DOWN" in str(e):
                         break
                 time.sleep(0.5)
 
@@ -314,7 +490,7 @@ def run_benchmark(
             if not injections:
                 continue
 
-            ck = get_cache_key(model, ut_id, it_id, defense_key)
+            ck = get_cache_key(backend, model, ut_id, it_id, defense_key)
             cf = CACHE_DIR / f"{ck}.json"
 
             if use_cache and cf.exists():
@@ -335,6 +511,7 @@ def run_benchmark(
                     with open(cf, "w", encoding="utf-8") as f:
                         json.dump({
                             "source": "live",
+                            "backend": backend,
                             "model": model,
                             "timestamp": datetime.now().isoformat(),
                             "utility": u,
@@ -344,7 +521,7 @@ def run_benchmark(
                 except Exception as e:
                     print(f"  [ERROR] Pair ({ut_id}, {it_id}) failed: {e}")
                     pair_errors += 1
-                    if "QUOTA_EXHAUSTED" in str(e):
+                    if "QUOTA_EXHAUSTED" in str(e) or "OLLAMA_SERVER_DOWN" in str(e):
                         break
                     continue
                 time.sleep(0.5)
@@ -415,6 +592,9 @@ def run_benchmark(
             },
         }
 
+    # Record total wall time
+    overall_results["metadata"]["wall_time_seconds"] = round(time.time() - start_wall_time, 2)
+
     # Save timestamped results
     output_path = RESULTS_DIR / f"{run_id}.json"
     with open(output_path, "w", encoding="utf-8") as f:
@@ -433,7 +613,12 @@ def generate_summary(results: Dict[str, Any], json_path: Path):
     summary_md = f"""# AgentDojo Banking Defense Benchmark Summary
 
 - **Run ID:** `{meta['run_id']}`
+- **Backend:** `{meta.get('backend', 'google')}`
 - **Model:** `{meta['model']}`
+- **Model Digest:** `{meta.get('model_digest', 'N/A')}`
+- **Quantization:** `{meta.get('quantization', 'N/A')}`
+- **Temperature:** `{meta.get('temperature', 0.0)}` | **Seed:** `{meta.get('seed', 42)}`
+- **Wall Time:** `{meta.get('wall_time_seconds', 'N/A')}s`
 - **Evaluated Defenses:** {', '.join(meta['defenses'])}
 - **Sample Scope:** {meta['sampled_pairs_count']} pairs (Seed: {meta['sample_seed']}, Method: {meta['sampling_method']})
 - **Execution Date:** {meta['timestamp']}
@@ -475,17 +660,23 @@ All financial proposals evaluated under `c2_strict` and `c2_file_trusted` are de
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AgentDojo Banking Defense Benchmark Runner")
-    parser.add_argument("--model", type=str, default="gemini-3.1-flash-lite", help="Gemini model to evaluate")
-    parser.add_argument("--defenses", nargs="+", default=["c0", "c1", "c2_strict"], help="Defenses to evaluate")
-    parser.add_argument("--sample", type=int, default=24, help="Sample size of pairs (None for full)")
+    parser.add_argument("--backend", type=str, choices=["google", "ollama"], default="google", help="LLM backend: google or ollama")
+    parser.add_argument("--model", type=str, default=None, help="Model name (e.g. qwen3:8b for ollama, gemini-3.1-flash-lite for google)")
+    parser.add_argument("--ollama-url", type=str, default="http://127.0.0.1:11434", help="Ollama base URL (default: http://127.0.0.1:11434)")
+    parser.add_argument("--defenses", nargs="+", default=["c0", "c2_strict"], help="Defenses to evaluate (c0, c1, c2_strict, c2_file_trusted)")
+    parser.add_argument("--sample", type=int, default=48, help="Sample size of pairs (default 48)")
+    parser.add_argument("--limit", type=int, default=None, help="Smoke test limit on evaluated pairs (e.g. --limit 2)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for sampling")
     parser.add_argument("--no-cache", action="store_true", help="Disable caching")
 
     args = parser.parse_args()
     run_benchmark(
+        backend=args.backend,
         model=args.model,
+        ollama_url=args.ollama_url,
         defenses=args.defenses,
         sample_size=args.sample,
+        limit=args.limit,
         seed=args.seed,
         use_cache=not args.no_cache,
     )
