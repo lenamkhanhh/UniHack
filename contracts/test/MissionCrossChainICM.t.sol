@@ -43,14 +43,20 @@ abstract contract TestHarness {
 
 /**
  * @title MissionCrossChainICMTest
- * @notice Acceptance test suite for M9: Avalanche Cross-L1 Mission Budgeting.
- * Strictly verifies 6 core security boundaries against cross-chain spend requests:
+ * @notice Acceptance test suite for M9: Avalanche Cross-L1 Mission Budgeting (Phase 1).
+ * Strictly verifies security boundaries for cross-L1 budget hub (separate from GuardedTreasury):
  * 1. valid message pays (local mock, not ICM)
  * 2. wrong source chain reverts (local mock, not ICM)
  * 3. wrong sender reverts (local mock, not ICM)
  * 4. payee not in set reverts (local mock, not ICM)
  * 5. replay reverts (local mock, not ICM)
  * 6. over cap reverts (local mock, not ICM)
+ * 7. unauthorized messenger reverts (local mock, not ICM)
+ * 8. stranger agent reverts UnauthorizedAgent (M9-F1) (local mock, not ICM)
+ * 9. zero payee root reverts InvalidPayeeRoot (M9-F2) (local mock, not ICM)
+ * 10. zero payment token reverts InvalidPaymentToken (M9-F3) (local mock, not ICM)
+ * 11. gateway deterministic nonce derivation (M9-F4) (local mock, not ICM)
+ * 12. end-to-end gateway to hub relay (local mock, not ICM)
  *
  * NOTE: All tests in this suite run against local mock contracts and are labeled
  * "local mock, not ICM" until live testnet broadcast occurs.
@@ -63,11 +69,12 @@ contract MissionCrossChainICMTest is TestHarness {
 
     address public owner = address(0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c);
     address public agent = address(0x374b8A126FDb9e5deEc8307da385076155Af3D72);
+    address public stranger = address(0x9999999999999999999999999999999999999999);
 
     // Verified standard test payees
     address public payee1 = address(0x1111111111111111111111111111111111111111);
     address public payee2 = address(0x2222222222222222222222222222222222222222);
-    address public attackerPayee = address(0x9999999999999999999999999999999999999999);
+    address public attackerPayee = address(0x8888888888888888888888888888888888888888);
 
     // Merkle tree constants matching OpenZeppelin StandardMerkleTree
     // Leaves: l1 = keccak(bytes.concat(keccak(abi.encode(payee1))))
@@ -93,7 +100,6 @@ contract MissionCrossChainICMTest is TestHarness {
         usdc = new MockERC20();
 
         // Predict and deploy Gateway on Dispatch
-        // We initialize with placeholder hub address, then link after hub deployment
         vm_prank(owner);
         gateway = new MissionSpendGateway(
             address(teleporter),
@@ -101,7 +107,7 @@ contract MissionCrossChainICMTest is TestHarness {
             address(0) // updated below
         );
 
-        // Deploy Hub on Fuji C-Chain
+        // Deploy Hub on Fuji C-Chain with paymentToken enforced
         vm_prank(owner);
         hub = new MissionBudgetHub(
             address(teleporter),
@@ -114,9 +120,9 @@ contract MissionCrossChainICMTest is TestHarness {
         vm_prank(owner);
         gateway.setDestination(FUJI_BLOCKCHAIN_ID, address(hub));
 
-        // Register mission on Hub
+        // Register mission on Hub with designated agent (M9-F1) and non-zero root (M9-F2)
         vm_prank(owner);
-        hub.registerMission(MISSION_ID, MERKLE_ROOT, MISSION_CAP);
+        hub.registerMission(MISSION_ID, agent, MERKLE_ROOT, MISSION_CAP);
 
         // Fund Hub with USDC for payments
         usdc.mint(address(hub), 500_000_000); // 500 USDC
@@ -130,13 +136,13 @@ contract MissionCrossChainICMTest is TestHarness {
         bytes32 messageId = keccak256("msg.valid.01");
         uint256 amount = 25_000_000; // 25 USDC
 
-        // Proof for payee1 is [L2_HASH]
         bytes32[] memory proof = new bytes32[](1);
         proof[0] = L2_HASH;
 
         bytes memory messageData = abi.encode(
             messageId,
             MISSION_ID,
+            agent, // designated agent
             payee1,
             amount,
             proof
@@ -154,7 +160,7 @@ contract MissionCrossChainICMTest is TestHarness {
 
         // Assert payout executed and state updated correctly
         assertTrue(hub.executedMessages(messageId));
-        ( , uint256 cap, uint256 spent, bool exists, ) = hub.missions(MISSION_ID);
+        ( , , uint256 cap, uint256 spent, bool exists, ) = hub.missions(MISSION_ID);
         assertTrue(exists);
         assertEq(cap, MISSION_CAP);
         assertEq(spent, amount);
@@ -175,6 +181,7 @@ contract MissionCrossChainICMTest is TestHarness {
         bytes memory messageData = abi.encode(
             messageId,
             MISSION_ID,
+            agent,
             payee1,
             amount,
             proof
@@ -205,6 +212,7 @@ contract MissionCrossChainICMTest is TestHarness {
         bytes memory messageData = abi.encode(
             messageId,
             MISSION_ID,
+            agent,
             payee1,
             amount,
             proof
@@ -231,13 +239,13 @@ contract MissionCrossChainICMTest is TestHarness {
         bytes32 messageId = keccak256("msg.attacker_payee.04");
         uint256 amount = 15_000_000;
 
-        // Attacker attempts to provide arbitrary or invalid proof
         bytes32[] memory proof = new bytes32[](1);
         proof[0] = L1_HASH;
 
         bytes memory messageData = abi.encode(
             messageId,
             MISSION_ID,
+            agent,
             attackerPayee, // Attacker is NOT in MERKLE_ROOT
             amount,
             proof
@@ -269,6 +277,7 @@ contract MissionCrossChainICMTest is TestHarness {
         bytes memory messageData = abi.encode(
             messageId,
             MISSION_ID,
+            agent,
             payee1,
             amount,
             proof
@@ -308,6 +317,7 @@ contract MissionCrossChainICMTest is TestHarness {
         bytes memory messageData = abi.encode(
             messageId,
             MISSION_ID,
+            agent,
             payee1,
             excessiveAmount,
             proof
@@ -325,7 +335,7 @@ contract MissionCrossChainICMTest is TestHarness {
     }
 
     /**
-     * @notice Test 7 (Supplementary): Direct caller who is not teleporterMessenger reverts.
+     * @notice Test 7: Direct caller who is not teleporterMessenger reverts.
      * Label: (local mock, not ICM)
      */
     function test_07_unauthorized_messenger_reverts_local_mock() public {
@@ -336,6 +346,7 @@ contract MissionCrossChainICMTest is TestHarness {
         bytes memory messageData = abi.encode(
             messageId,
             MISSION_ID,
+            agent,
             payee1,
             10_000_000,
             proof
@@ -352,11 +363,89 @@ contract MissionCrossChainICMTest is TestHarness {
     }
 
     /**
-     * @notice Test 8 (Supplementary): End-to-end Gateway -> Teleporter -> Hub execution.
+     * @notice Test 8 (M9-F1): Stranger calling Gateway fails with UnauthorizedAgent on Hub.
      * Label: (local mock, not ICM)
      */
-    function test_08_end_to_end_gateway_to_hub_relay_local_mock() public {
-        bytes32 messageId = keccak256("msg.e2e.08");
+    function test_08_stranger_agent_reverts_local_mock() public {
+        bytes32[] memory proof = new bytes32[](1);
+        proof[0] = L2_HASH;
+
+        // Enable auto-relay to test end-to-end rejection of stranger
+        teleporter.setAutoRelay(true);
+
+        // Stranger calls gateway
+        vm_prank(stranger);
+        vm_expectRevert(bytes("UnauthorizedAgent"));
+        gateway.sendSpendRequest(
+            MISSION_ID,
+            payee1,
+            10_000_000,
+            proof
+        );
+    }
+
+    /**
+     * @notice Test 9 (M9-F2): Registering mission with zero payee root reverts.
+     * Label: (local mock, not ICM)
+     */
+    function test_09_zero_payee_root_reverts_local_mock() public {
+        bytes32 newMissionId = keccak256("mission.zero_root");
+        vm_prank(owner);
+        vm_expectRevert(bytes("InvalidPayeeRoot"));
+        hub.registerMission(newMissionId, agent, bytes32(0), MISSION_CAP);
+    }
+
+    /**
+     * @notice Test 10 (M9-F3): Constructing Hub with address(0) payment token reverts.
+     * Label: (local mock, not ICM)
+     */
+    function test_10_zero_payment_token_reverts_local_mock() public {
+        vm_prank(owner);
+        vm_expectRevert(bytes("InvalidPaymentToken"));
+        new MissionBudgetHub(
+            address(teleporter),
+            DISPATCH_BLOCKCHAIN_ID,
+            address(gateway),
+            address(0) // Invalid zero payment token
+        );
+    }
+
+    /**
+     * @notice Test 11 (M9-F4): Gateway derives unique, deterministic message IDs using sequential nonce.
+     * Label: (local mock, not ICM)
+     */
+    function test_11_gateway_deterministic_nonce_derivation_local_mock() public {
+        teleporter.setAutoRelay(false);
+
+        bytes32[] memory proof = new bytes32[](1);
+        proof[0] = L2_HASH;
+
+        vm_prank(agent);
+        (bytes32 id1, ) = gateway.sendSpendRequest(
+            MISSION_ID,
+            payee1,
+            5_000_000,
+            proof
+        );
+
+        vm_prank(agent);
+        (bytes32 id2, ) = gateway.sendSpendRequest(
+            MISSION_ID,
+            payee1,
+            5_000_000,
+            proof
+        );
+
+        assertTrue(id1 != id2);
+        assertEq(id1, keccak256(abi.encode(block.chainid, address(gateway), uint256(1))));
+        assertEq(id2, keccak256(abi.encode(block.chainid, address(gateway), uint256(2))));
+    }
+
+    /**
+     * @notice Test 12: End-to-end Gateway -> Teleporter -> Hub execution by authorized agent.
+     * Label: (local mock, not ICM)
+     */
+    function test_12_end_to_end_gateway_to_hub_relay_local_mock() public {
         uint256 amount = 30_000_000; // 30 USDC
 
         bytes32[] memory proof = new bytes32[](1);
@@ -367,10 +456,9 @@ contract MissionCrossChainICMTest is TestHarness {
 
         uint256 preBalance = usdc.balanceOf(payee2);
 
-        // Agent calls Gateway on Dispatch
+        // Authorized Agent calls Gateway on Dispatch
         vm_prank(agent);
-        uint256 teleporterMsgId = gateway.sendSpendRequest(
-            messageId,
+        (bytes32 messageId, uint256 teleporterMsgId) = gateway.sendSpendRequest(
             MISSION_ID,
             payee2,
             amount,

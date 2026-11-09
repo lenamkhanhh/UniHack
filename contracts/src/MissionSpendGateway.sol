@@ -14,11 +14,13 @@ contract MissionSpendGateway {
     bytes32 public destinationBlockchainID;
     address public destinationBudgetHub;
     address public owner;
+    uint256 public nextNonce = 1;
 
     event SpendRequestSent(
         bytes32 indexed messageId,
         bytes32 indexed missionId,
-        address indexed payee,
+        address indexed agent,
+        address payee,
         uint256 amount,
         uint256 teleporterMessageID
     );
@@ -56,28 +58,34 @@ contract MissionSpendGateway {
 
     /**
      * @notice Sends a cross-chain spend proposal to the Fuji MissionBudgetHub.
-     * @param messageId Unique identifier for this spend message (used for replay protection).
      * @param missionId Target mission identifier.
      * @param payee Intended payment recipient address.
      * @param amount Payout amount (e.g. atomic USDC units).
      * @param proof Merkle proof confirming payee is in owner's mission root.
+     * @return messageId Deterministically derived unique message identifier (M9-F4).
+     * @return teleporterMessageID Teleporter receipt ID from messenger.
      */
     function sendSpendRequest(
-        bytes32 messageId,
         bytes32 missionId,
         address payee,
         uint256 amount,
         bytes32[] calldata proof
-    ) external returns (uint256 teleporterMessageID) {
-        require(messageId != bytes32(0), "InvalidMessageId");
+    ) external returns (bytes32 messageId, uint256 teleporterMessageID) {
         require(missionId != bytes32(0), "InvalidMissionId");
         require(payee != address(0), "InvalidPayee");
         require(amount > 0, "InvalidAmount");
         require(destinationBudgetHub != address(0), "DestinationNotSet");
 
+        // M9-F4: Derive deterministic unique message ID using chainid, contract, and sequential nonce
+        messageId = keccak256(
+            abi.encode(block.chainid, address(this), nextNonce++)
+        );
+
+        // M9-F1: Embed msg.sender (calling agent) into payload so Hub enforces agent authorization
         bytes memory messageData = abi.encode(
             messageId,
             missionId,
+            msg.sender,
             payee,
             amount,
             proof
@@ -101,9 +109,12 @@ contract MissionSpendGateway {
         emit SpendRequestSent(
             messageId,
             missionId,
+            msg.sender,
             payee,
             amount,
             teleporterMessageID
         );
+
+        return (messageId, teleporterMessageID);
     }
 }

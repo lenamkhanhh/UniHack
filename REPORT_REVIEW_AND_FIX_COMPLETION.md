@@ -1400,3 +1400,50 @@ Ran 5 test suites: 69 tests passed, 0 failed, 0 skipped (69 total tests)
 ### 3. Giới Hạn & Bước Kế Tiếp
 - Toàn bộ kết quả hiện tại là **local mock, not ICM**. Tuyệt đối không ghi file bằng chứng `FUJI_EVIDENCE` khi chưa có transaction cross-chain thật trên mạng Dispatch/Fuji.
 - Sau khi Owner nạp token gas Dispatch theo `OWNER_TODO.md`, sẽ tiến hành deploy và phát sóng 1 tx approve và 1 tx deny xuyên chuỗi thật.
+
+
+---
+
+## M9-F1..F5: GIA CỐ BẢO MẬT CROSS-L1 BUDGET HUB (SEPARATE FROM GUARDEDTREASURY)
+
+**Thời điểm:** 2026-11-09 11:46 (Asia/Saigon) | **Nhánh:** `feat/s1-app`
+
+### 1. Bảng Nghiệm Thu Các Điểm Sửa M9-F1..F5
+
+| ID | Mức | Trạng thái | File chính | Chi tiết thay đổi & Kiểm chứng |
+|---|:---:|:---:|---|---|
+| **M9-F1** | **P0** (Critical) | **ĐẠT** | `contracts/src/MissionBudgetHub.sol`<br>`contracts/src/MissionSpendGateway.sol` | **Kiểm soát quyền Agent (Access Control):** Thêm trường `address agent` vào struct `MissionBudget`. Trong `registerMission`, owner chỉ định agent được ủy quyền chi tiêu. Gateway tự động gắn `msg.sender` vào payload ICM. Hub xác thực `require(agent == mission.agent, "UnauthorizedAgent")`. Test `test_08_stranger_agent_reverts_local_mock` xác nhận người lạ gọi Gateway sẽ bị revert tại Hub. |
+| **M9-F2** | **P0** (Must) | **ĐẠT** | `contracts/src/MissionBudgetHub.sol` | **Bắt buộc Root khác 0:** Loại bỏ hoàn toàn nhánh bypass `if (root != bytes32(0))`. `registerMission` yêu cầu `require(payeeRoot != bytes32(0), "InvalidPayeeRoot")`. `receiveTeleporterMessage` luôn xác thực Merkle proof OpenZeppelin double-hash. Test `test_09_zero_payee_root_reverts_local_mock` xác nhận revert `InvalidPayeeRoot`. |
+| **M9-F3** | **P0** (Must) | **ĐẠT** | `contracts/src/MissionBudgetHub.sol` | **Bắt buộc Payment Token & Xóa Setter:** Constructor bắt buộc `require(_paymentToken != address(0), "InvalidPaymentToken")`, gán biến `immutable` và xóa bỏ hàm `setPaymentToken`. Hub chỉ emit `SpendExecuted` khi token transfer thành công (`require(paymentToken.transfer(...), "TransferFailed")`). Test `test_10_zero_payment_token_reverts_local_mock` xác nhận revert `InvalidPaymentToken`. |
+| **M9-F4** | **P1** (Should) | **ĐẠT** | `contracts/src/MissionSpendGateway.sol` | **Message ID Sinh Tự Động Deterministic:** Loại bỏ tham số `messageId` do caller tùy chọn. Gateway tự động sinh `messageId = keccak256(abi.encode(block.chainid, address(this), nextNonce++))` chống xung đột hoặc giả mạo. Test `test_11_gateway_deterministic_nonce_derivation_local_mock` xác nhận tính duy nhất và tăng tuần tự của nonce. |
+| **M9-F5** | **Doc** | **ĐẠT** | `contracts/src/MissionBudgetHub.sol`<br>`REPORT_REVIEW_AND_FIX_COMPLETION.md` | **Chuẩn hóa Định Danh:** Khẳng định rõ đây là "cross-L1 budget hub (separate from GuardedTreasury)", không tuyên bố GuardedTreasury là cross-chain. |
+
+### 2. Kết Quả Kiểm Thử Toàn Diện (Foundry Contracts Suite)
+
+```text
+Ran 5 test suites: 73 tests passed, 0 failed, 0 skipped (73 total tests)
+- ValidationRegistryTest: 7 passed
+- PasskeyMissionAuthorityTest: 16 passed
+- MissionCrossChainICMTest: 12 passed (100% security invariants + hardened access control)
+- GuardedTreasuryTest: 37 passed
+- GuardedTreasuryInvariantTest: 1 passed (512 invariant runs, 32,768 calls, 0 reverts)
+```
+
+#### Chi tiết 12 tests `MissionCrossChainICMTest` (tất cả gắn nhãn "local mock, not ICM"):
+```text
+[PASS] test_01_valid_message_pays_local_mock() (gas: 175499)
+[PASS] test_02_wrong_source_chain_reverts_local_mock() (gas: 50196)
+[PASS] test_03_wrong_sender_reverts_local_mock() (gas: 50276)
+[PASS] test_04_payee_not_in_set_reverts_local_mock() (gas: 76567)
+[PASS] test_05_replay_reverts_local_mock() (gas: 188350)
+[PASS] test_06_over_cap_reverts_local_mock() (gas: 64163)
+[PASS] test_07_unauthorized_messenger_reverts_local_mock() (gas: 42799)
+[PASS] test_08_stranger_agent_reverts_local_mock() (gas: 420921)
+[PASS] test_09_zero_payee_root_reverts_local_mock() (gas: 38707)
+[PASS] test_10_zero_payment_token_reverts_local_mock() (gas: 162238)
+[PASS] test_11_gateway_deterministic_nonce_derivation_local_mock() (gas: 713244)
+[PASS] test_12_end_to_end_gateway_to_hub_relay_local_mock() (gas: 530147)
+```
+
+### 3. Ràng Buộc An Toàn
+- Chưa deploy Dispatch, chưa phát sóng cross-chain thật. Dừng chờ Owner nạp token Dispatch faucet cho ví `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c` theo `OWNER_TODO.md`.

@@ -10,19 +10,20 @@ interface IERC20Hub {
 
 /**
  * @title MissionBudgetHub
- * @notice Central mission budgeting contract deployed on Avalanche Fuji C-Chain.
+ * @notice Cross-L1 budget hub deployed on Avalanche Fuji C-Chain (separate from GuardedTreasury).
  * Receives cross-chain spend requests from MissionSpendGateway (e.g. on Dispatch L1) via Teleporter/ICM.
- * Strictly verifies source chain ID, origin gateway address, message replay,
- * Merkle payee root proof, and remaining mission cap before releasing funds.
+ * Strictly verifies source chain ID, origin gateway address, caller agent authorization (M9-F1),
+ * message replay, Merkle payee root proof (M9-F2), and remaining mission cap before releasing funds (M9-F3).
  */
 contract MissionBudgetHub is ITeleporterReceiver {
     ITeleporterMessenger public immutable teleporterMessenger;
     bytes32 public allowedSourceBlockchainID;
     address public allowedOriginSender;
     address public owner;
-    IERC20Hub public paymentToken;
+    IERC20Hub public immutable paymentToken;
 
     struct MissionBudget {
+        address agent;
         bytes32 payeeRoot;
         uint256 cap;
         uint256 spent;
@@ -35,6 +36,7 @@ contract MissionBudgetHub is ITeleporterReceiver {
 
     event MissionRegistered(
         bytes32 indexed missionId,
+        address indexed agent,
         bytes32 payeeRoot,
         uint256 cap
     );
@@ -44,7 +46,8 @@ contract MissionBudgetHub is ITeleporterReceiver {
     event SpendExecuted(
         bytes32 indexed messageId,
         bytes32 indexed missionId,
-        address indexed payee,
+        address indexed agent,
+        address payee,
         uint256 amount
     );
 
@@ -65,6 +68,7 @@ contract MissionBudgetHub is ITeleporterReceiver {
         address _paymentToken
     ) {
         require(_teleporterMessenger != address(0), "InvalidMessenger");
+        require(_paymentToken != address(0), "InvalidPaymentToken"); // M9-F3
         teleporterMessenger = ITeleporterMessenger(_teleporterMessenger);
         allowedSourceBlockchainID = _allowedSourceBlockchainID;
         allowedOriginSender = _allowedOriginSender;
@@ -81,20 +85,20 @@ contract MissionBudgetHub is ITeleporterReceiver {
         emit AllowedOriginUpdated(_sourceBlockchainID, _originSender);
     }
 
-    function setPaymentToken(address _paymentToken) external onlyOwner {
-        paymentToken = IERC20Hub(_paymentToken);
-    }
-
     function registerMission(
         bytes32 missionId,
+        address agent,
         bytes32 payeeRoot,
         uint256 cap
     ) external onlyOwner {
         require(missionId != bytes32(0), "InvalidMissionId");
+        require(agent != address(0), "InvalidAgent"); // M9-F1
+        require(payeeRoot != bytes32(0), "InvalidPayeeRoot"); // M9-F2
         require(cap > 0, "InvalidCap");
         require(!missions[missionId].exists, "MissionAlreadyExists");
 
         missions[missionId] = MissionBudget({
+            agent: agent,
             payeeRoot: payeeRoot,
             cap: cap,
             spent: 0,
@@ -102,7 +106,7 @@ contract MissionBudgetHub is ITeleporterReceiver {
             closed: false
         });
 
-        emit MissionRegistered(missionId, payeeRoot, cap);
+        emit MissionRegistered(missionId, agent, payeeRoot, cap);
     }
 
     function closeMission(bytes32 missionId) external onlyOwner {
@@ -140,14 +144,18 @@ contract MissionBudgetHub is ITeleporterReceiver {
             "WrongOriginSender"
         );
 
-        // 4. Decode payload
+        // 4. Decode payload including agent address (M9-F1)
         (
             bytes32 messageId,
             bytes32 missionId,
+            address agent,
             address payee,
             uint256 amount,
             bytes32[] memory proof
-        ) = abi.decode(message, (bytes32, bytes32, address, uint256, bytes32[]));
+        ) = abi.decode(
+                message,
+                (bytes32, bytes32, address, address, uint256, bytes32[])
+            );
 
         // 5. Replay guard
         require(!executedMessages[messageId], "MessageAlreadyExecuted");
@@ -157,26 +165,24 @@ contract MissionBudgetHub is ITeleporterReceiver {
         require(mission.exists, "MissionNotFound");
         require(!mission.closed, "MissionClosed");
 
+        // M9-F1: Verify calling agent matches the registered mission agent
+        require(agent == mission.agent, "UnauthorizedAgent");
+
         // 7. Cap check
         require(mission.spent + amount <= mission.cap, "OverCap");
 
-        // 8. Merkle payee proof verification (Double-hash standard OpenZeppelin leaf)
-        bytes32 root = mission.payeeRoot;
-        if (root != bytes32(0)) {
-            bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(payee))));
-            require(_verifyMerkle(proof, root, leaf), "PayeeNotInMissionSet");
-        }
+        // M9-F2: Always verify Merkle payee proof against non-zero payeeRoot
+        bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(payee))));
+        require(_verifyMerkle(proof, mission.payeeRoot, leaf), "PayeeNotInMissionSet");
 
-        // 9. State updates (checks-effects)
+        // 8. State updates (checks-effects)
         executedMessages[messageId] = true;
         mission.spent += amount;
 
-        // 10. Release funds (if token configured and funded)
-        if (address(paymentToken) != address(0)) {
-            require(paymentToken.transfer(payee, amount), "TransferFailed");
-        }
+        // M9-F3: Strictly transfer payment token
+        require(paymentToken.transfer(payee, amount), "TransferFailed");
 
-        emit SpendExecuted(messageId, missionId, payee, amount);
+        emit SpendExecuted(messageId, missionId, agent, payee, amount);
     }
 
     /**

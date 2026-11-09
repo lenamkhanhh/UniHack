@@ -8,32 +8,22 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-### M9 review (Claude, b7ac119): FIX before any Dispatch deploy
-Verified: forge 8/8 pass (all labelled local mock). The `ITeleporterReceiver` signature and the `TeleporterMessageInput` fields match Teleporter v1. Source chain, origin sender, messenger, replay and cap checks are present.
-- **M9-F1 (critical):** `MissionSpendGateway.sendSpendRequest` has no access control. Anyone on Dispatch can call it, and the hub trusts every message from the gateway. So any stranger can spend any mission's cap to any in-set payee, and the agent/owner model is bypassed.
-  - Fix: register per mission on the hub: `missions[id].agent`. The gateway puts `msg.sender` into the payload.
-  - The hub requires `agent == mission.agent` and reverts with `UnauthorizedAgent`.
-  - Optionally also gate on the gateway side by an owner-set agent map. The hub check is the one that matters.
-  - Tests: a stranger calling the gateway → the hub reverts `UnauthorizedAgent`; the registered agent → pays.
-- **M9-F2 (must):** `if (root != bytes32(0))` skips the payee check, so a zero root means any payee. Require `payeeRoot != 0` in `registerMission` (`InvalidPayeeRoot`) and always verify. Test it.
-- **M9-F3 (must):** with `paymentToken == address(0)` the hub marks `spent` and emits `SpendExecuted` without moving funds, which is a misleading event. Require a token in the constructor and in `setPaymentToken` (non-zero). Also forbid `setPaymentToken` while any mission is open, or drop the setter.
-- **M9-F4 (should):** replay guard is keyed by caller-chosen `messageId`. Once F1 is fixed this is fine. Derive it on the gateway as `keccak256(abi.encode(block.chainid, address(this), nonce++))`, not as a caller input, so ids cannot collide across agents. Test it.
-- **M9-F5 (doc):** in the report, call this a "cross-L1 budget hub (separate from GuardedTreasury)". Do not claim GuardedTreasury itself is cross-chain.
-Then rerun `forge test` (whole suite, not only this file) and commit `fix(m9): ...`. Live ICM waits for the owner's Dispatch faucet.
-
-
-### M9 (Local Contracts & Mock ICM Complete, Awaiting Owner Dispatch Faucet for Live Broadcast)
-- Hoàn thành Phase 1 của M9 (không cần gas Dispatch):
-  - `MissionSpendGateway.sol` (Dispatch L1) & `MissionBudgetHub.sol` (Fuji C-Chain).
-  - Mock Teleporter Messenger (`MockTeleporterMessenger.sol`) & Mock ERC20 (`MockERC20.sol`).
-  - Foundry Test Suite (`MissionCrossChainICM.t.sol`): 8/8 tests pass (100%), bao phủ toàn bộ 6 kịch bản bảo mật: valid message pays, wrong source chain reverts, wrong sender reverts, payee not in set reverts, replay reverts, over cap reverts (tất cả được gắn nhãn minh bạch "local mock, not ICM").
-  - Toàn bộ Foundry test suites: 69/69 passed (512 invariant runs, 32,768 calls, 0 reverts).
-- Phase 2 (Live Testnet Broadcast): DỪNG chờ Owner xin faucet Dispatch cho ví `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c` (chi tiết tại `OWNER_TODO.md`). Không tự tạo ví mới, không vượt ngân sách Fuji.
+### M9 Phase 1 Hardened (All F1..F5 Resolved). Awaiting Owner Dispatch Faucet for Live Broadcast
+- Hợp đồng `MissionSpendGateway.sol` (Dispatch L1) & `MissionBudgetHub.sol` (Fuji C-Chain, cross-L1 budget hub riêng biệt với GuardedTreasury) đã được gia cố toàn diện theo review Claude (M9-F1..F5).
+- Toàn bộ Foundry test suites: 73/73 passed (5 suites, 12/12 ICM tests, 512 invariant runs, 32,768 calls, 0 reverts; tất cả gắn nhãn "local mock, not ICM").
+- Phase 2 (Live Testnet Broadcast): DỪNG chờ Owner xin faucet Dispatch cho ví `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c` (chi tiết tại `OWNER_TODO.md`). Tuyệt đối chưa deploy Dispatch, không tự tạo ví mới, không vượt ngân sách Fuji.
 
 
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
+
+- M9-F1..F5 [Cross-L1 Budget Hub Hardening, Access Control & Deterministic Nonce]:
+  - **M9-F1 (Agent Access Control):** `MissionBudgetHub` thêm trường `address agent` vào `MissionBudget`. Trong `registerMission`, owner chỉ định rõ agent được phép chi tiêu. `MissionSpendGateway` nhúng `msg.sender` vào payload ICM. `receiveTeleporterMessage` kiểm tra `require(agent == mission.agent, "UnauthorizedAgent")`, ngăn chặn triệt để người lạ chi tiêu ngân sách mission. Test `test_08_stranger_agent_reverts_local_mock` xác nhận stranger bị revert `UnauthorizedAgent`.
+  - **M9-F2 (Disallow Zero PayeeRoot):** `registerMission` yêu cầu bắt buộc `require(payeeRoot != bytes32(0), "InvalidPayeeRoot")`. `receiveTeleporterMessage` luôn xác thực Merkle proof OpenZeppelin double-hash, loại bỏ hoàn toàn khả năng bypass qua root rỗng. Test `test_09_zero_payee_root_reverts_local_mock` xác nhận revert `InvalidPayeeRoot`.
+  - **M9-F3 (Enforce Payment Token & Drop Setter):** Constructor `MissionBudgetHub` bắt buộc `paymentToken != address(0)` (`InvalidPaymentToken`), khai báo `immutable`, xóa bỏ setter `setPaymentToken` sau khi deploy. `receiveTeleporterMessage` chỉ emit `SpendExecuted` khi token transfer thành công thật sự (`require(paymentToken.transfer(...), "TransferFailed")`). Test `test_10_zero_payment_token_reverts_local_mock` xác nhận revert `InvalidPaymentToken`.
+  - **M9-F4 (Deterministic Nonce Message ID):** `MissionSpendGateway` loại bỏ tham số `messageId` do caller tùy chọn; tự động sinh deterministic ID: `keccak256(abi.encode(block.chainid, address(this), nextNonce++))`, chống xung đột và giả mạo ID giữa các agent. Test `test_11_gateway_deterministic_nonce_derivation_local_mock` xác nhận sinh ID tăng dần và duy nhất.
+  - **M9-F5 (Terminology Clarification):** Báo cáo và code định danh chuẩn xác kiến trúc là "cross-L1 budget hub (separate from GuardedTreasury)", không tuyên bố GuardedTreasury là cross-chain.
 
 - MAX-M9 [Avalanche ICM Cross-L1 Mission Budgeting — Gateway, BudgetHub & Mock Test Suite]:
   - **Hợp đồng `MissionSpendGateway.sol` (Dispatch L1):** Khởi tạo `sendSpendRequest(messageId, missionId, payee, amount, proof)` đóng gói payload chuẩn Avalanche Teleporter `ITeleporterMessenger.sendCrossChainMessage` gửi xuyên L1 tới C-Chain.
