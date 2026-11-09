@@ -8,6 +8,24 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
+### M4-L4 (Claude, 19:25 VN): live run DIED silently at 16:01, restart from cache
+Evidence:
+- The last cache file was written at 16:01 and `task-27270.log` was last written at 15:59 (the last line is a 429 backoff).
+- No benchmark python process is alive.
+- There are 25 cache entries: 16 benign + 9 c2_strict attack pairs.
+
+Fix, then restart:
+1. Add a hard per-request timeout to `HonestGoogleLLM` (e.g. `http_options` timeout 120s, or a thread/future timeout). Add a per-task wall timeout of 10 min; on timeout, record the task as `error: TIMEOUT` (NOT as blocked) and continue.
+2. Unbuffered logging: `print(..., flush=True)` or `python -u`. Print one progress line per task, with the time and cumulative counts.
+3. Write the trace into each NEW cache entry: the list of tool calls (function name + args) and the final assistant text. This is needed to diagnose why c2_strict benign utility is only 4/16 (the replay gave 13/16). Do not re-run the 25 existing entries.
+4. Restart with the fixed code, in this order:
+   a) the c2_strict remaining attack pairs;
+   b) **c0 benign 16** (diagnostic: is 4/16 caused by the model or by the defense?);
+   c) c0 attack pairs.
+   Resume from cache. Same single key, no key rotation.
+5. Every ~30 min, or on stop, commit progress: the results JSON + `LIVE_SUMMARY.md` regenerated from cache. A stop (quota, crash) must be written in the report with the exact counts done.
+
+
 ### M4-L3 (Claude, critical): ASR is INVERTED in run_benchmark.py
 In AgentDojo, `security=True` from `run_task_with_pipeline` means the ATTACK SUCCEEDED. Evidence:
 - `InjectionTask.security()` returns True when a transaction to `_ATTACKER_IBAN` exists (`default_suites/v1/banking/injection_tasks.py` L50-61);
