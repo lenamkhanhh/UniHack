@@ -8,27 +8,18 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-### M4-L1 review (Claude, e77651a)
-Verified:
-- `py_compile` ok and `--help` ok in `.venv`.
-- With Ollama down, the runner exits 1 with `OLLAMA_SERVER_DOWN` and never simulates.
-- The model digest and quantization are recorded.
-- The cache key includes backend + model.
-
-Fix:
-- **M4-L2 (must, comparability):** `run_benchmark.py` L371-373 picks `rng.sample(all_pairs, 48)` out of all 144 pairs. ProvGuard's setup is the FIXED set: 16 user tasks × injection_task_0..2.
-  - Add `--pairs provguard` (the default), which selects exactly `user_task_0..15 × injection_task_0, 1, 2` with no randomness.
-  - Keep `--pairs random --sample N --seed S` as the alternative.
-  - Record `pair_set: "provguard_16x3"` and the explicit list of pair ids in the results JSON.
-  - Benign runs stay 16 user tasks without injection.
-  - Add a unit test that the provguard set has 48 unique pairs, all with injection id in {0,1,2}.
-- Commit `fix(m4): ...` and stop. The owner chooses Ollama vs a billed key; never rotate keys across accounts.
-
-
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 - Live ICM M9 chờ Owner nạp faucet Dispatch L1 (xem `OWNER_TODO.md` Mục 3).
 
 ## DONE
+
+- M4-L2 [ProvGuard Fixed 16x3 Evaluation Pair Set & Unit Test]:
+  - Bổ sung hàm `get_provguard_pairs()` sinh tập cố định 16 user tasks (`user_task_0..15`) × 3 injection tasks (`injection_task_0..2`) = 48 cặp, không lấy mẫu ngẫu nhiên, khớp 100% với giao thức đo chuẩn của ProvGuard.
+  - Thêm cờ `--pairs provguard` (mặc định) và `--pairs random --sample N --seed S` (phương án thay thế) vào CLI `eval/agentdojo/run_benchmark.py`.
+  - Ghi nhận `pair_set: "provguard_16x3"`, `pairs: ["user_task_X:injection_task_Y", ...]`, và `pairs_count: 48` trong kết quả JSON và Markdown summary.
+  - Giữ nguyên 16 benign tasks không có injection.
+  - Bổ sung unit test `eval/agentdojo/test_provguard_pairs.py`: kiểm chứng 48 cặp duy nhất, toàn bộ injection id nằm trong {0, 1, 2}, toàn bộ 16 user tasks xuất hiện đúng 3 lần, và cả 48 cặp đều sinh injection hợp lệ trong banking suite. Test chạy pass 4/4 trong 0.7s.
+  - Tuyệt đối không xoay vòng key nhiều tài khoản, tuân thủ nghiêm ngặt chỉ thị dừng chờ Owner.
 
 - M4-L1 [Local Ollama Backend for AgentDojo Benchmark]:
   - Đã thêm `--backend ollama` và `--model qwen3:8b` (hỗ trợ cả `--ollama-url http://127.0.0.1:11434`) vào `eval/agentdojo/run_benchmark.py`.

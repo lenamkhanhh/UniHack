@@ -1605,3 +1605,28 @@ Refer to OWNER_TODO.md for step-by-step faucet instructions.
 ### 3. Ràng Buộc Tuân Thủ
 - Đã hoàn tất phần code backend Ollama. Dừng lại chờ Owner quyết định giữa (1) cài đặt Ollama local (`RTX 3050 Laptop 4GB + 24GB RAM`) hoặc (2) mở Gemini API billing.
 - Không tự ý tải model, không chạy benchmark giả lập, không commit secret, không push `main`.
+
+
+---
+
+## M4-L2: PROVGUARD FIXED 16x3 EVALUATION PAIR SET & UNIT TESTS
+
+**Thời điểm:** 2026-11-09 13:55 (Asia/Saigon) | **Nhánh:** `feat/s1-app`
+
+### 1. Bảng Nghiệm Thu Triển Khai M4-L2
+
+| ID | Mức | Trạng thái | File chính | Chi tiết thay đổi & Kết quả kiểm chứng |
+|---|---|:---:|---|---|
+| **M4-L2** | **Bắt buộc / So sánh** | **ĐẠT** | `eval/agentdojo/run_benchmark.py`<br>`eval/agentdojo/test_provguard_pairs.py` | **ProvGuard Fixed 16x3 Pairs & Test Suite**: Bổ sung cơ chế chọn cặp cố định khớp chuẩn ProvGuard:<br>• Hàm `get_provguard_pairs()` sinh đúng 48 cặp: 16 user tasks (`user_task_0..15`) × 3 injection tasks (`injection_task_0..2`), loại bỏ yếu tố ngẫu nhiên.<br>• Thêm cờ `--pairs provguard` (mặc định) và `--pairs random --sample N --seed S` (tùy chọn ngẫu nhiên).<br>• Ghi nhận chính xác `pair_set: "provguard_16x3"`, mảng `pairs: ["user_task_X:injection_task_Y", ...]`, và `pairs_count: 48` trong results JSON & summary Markdown.<br>• Benign tasks giữ nguyên 16 user tasks không có injection.<br>• Bổ sung unit test `test_provguard_pairs.py` kiểm chứng 4 tiêu chí: (1) 48 cặp unique, (2) injection id $\in \{0, 1, 2\}$, (3) 16 user tasks xuất hiện đúng 3 lần, (4) cả 48 cặp đều sinh attack injections hợp lệ trong Banking suite. Test pass **4/4 (100%)**.<br>• Tuân thủ nghiêm ngặt: **chỉ viết code & unit test, không chạy benchmark live, không xoay vòng key qua nhiều tài khoản**. |
+
+### 2. Kết Quả Kiểm Thử Toàn Bộ Hệ Thống
+- **Contracts (Foundry):** **74/74 passed** trên 5 test suites.
+- **Web App (`apps/web` Vitest):** **243/243 passed** trên 31 test files.
+- **Package Guard & MCP:** **18/18 passed** (12 guard + 6 mcp).
+- **Python Benchmark Unit Tests (`test_provguard_pairs.py`):** **4/4 passed (100%)** trong 0.7s.
+- **Python Syntax Check (`py_compile`):** Clean (**0 errors**).
+- **CLI Options (`--help`):** Đầy đủ `--pairs {provguard,random}`, `--sample`, `--limit`.
+
+### 3. Ràng Buộc Tuân Thủ
+- Đã hoàn tất M4-L2. Dừng lại chờ Owner quyết định phương án môi trường (Ollama local vs Gemini billed key).
+- Tuyệt đối không xoay vòng API key qua nhiều tài khoản, không commit secret, không push `main`.

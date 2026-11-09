@@ -268,6 +268,19 @@ def get_cache_key(backend: str, model: str, user_task_id: str, inj_task_id: Opti
     raw = f"{backend}:{model}:{user_task_id}:{inj_task_id or 'none'}:{defense}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
+def get_provguard_pairs() -> List[Tuple[str, str]]:
+    """
+    Returns the fixed ProvGuard evaluation pair set:
+    Exactly 16 user tasks (user_task_0..15) x 3 injection tasks (injection_task_0..2) = 48 pairs.
+    Matches ProvGuard's standard benchmarking protocol for AgentDojo banking suite.
+    """
+    return [
+        (f"user_task_{u}", f"injection_task_{i}")
+        for u in range(16)
+        for i in range(3)
+    ]
+
+
 def build_pipeline(
     defense: str,
     backend: str = "google",
@@ -319,7 +332,8 @@ def run_benchmark(
     model: Optional[str] = None,
     ollama_url: str = "http://127.0.0.1:11434",
     defenses: Sequence[str] = ("c0", "c2_strict"),
-    sample_size: Optional[int] = 48,
+    pairs: str = "provguard",
+    sample_size: Optional[int] = None,
     limit: Optional[int] = None,
     seed: int = 42,
     use_cache: bool = True,
@@ -367,21 +381,32 @@ def run_benchmark(
             if injections:
                 all_pairs.append((ut_id, it_id))
 
-    # Deterministic sampling
-    rng = random.Random(seed)
-    if sample_size and sample_size < len(all_pairs):
-        target_pairs = rng.sample(all_pairs, sample_size)
+    # Pair selection strategy (ProvGuard fixed 16x3 vs random sampling)
+    if pairs == "provguard":
+        target_pairs = get_provguard_pairs()
+        pair_set_name = "provguard_16x3"
+        sampling_method = "fixed_provguard_16x3"
+    elif pairs == "random":
+        rng = random.Random(seed)
+        effective_sample = sample_size if sample_size is not None else 48
+        if effective_sample < len(all_pairs):
+            target_pairs = rng.sample(all_pairs, effective_sample)
+        else:
+            target_pairs = all_pairs
+        pair_set_name = f"random_{len(target_pairs)}"
+        sampling_method = f"random_sample_seed_{seed}"
     else:
-        target_pairs = all_pairs
+        raise ValueError(f"Unknown pairs strategy: '{pairs}'. Must be 'provguard' or 'random'.")
 
     # Apply limit for smoke testing if requested
     if limit is not None and limit > 0:
         target_pairs = target_pairs[:limit]
 
-    # Unique user tasks in the evaluated pairs (or full 16 benign tasks)
-    target_user_tasks = sorted(list(set(ut for ut, _ in target_pairs)))
-    if not limit and len(target_user_tasks) < len(all_user_tasks):
-        target_user_tasks = sorted(all_user_tasks)
+    # Benign runs stay 16 user tasks without injection
+    if limit is not None and limit > 0:
+        target_user_tasks = sorted(list(set(ut for ut, _ in target_pairs)))
+    else:
+        target_user_tasks = [f"user_task_{u}" for u in range(16)]
 
     run_timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     clean_model_tag = model.replace(":", "-").replace("/", "-")
@@ -392,7 +417,7 @@ def run_benchmark(
     print(f" Backend: {backend} | Model: {model} | Defenses: {defenses}")
     if ollama_meta:
         print(f" Digest: {ollama_meta['digest'][:16]}... | Quant: {ollama_meta['quantization']}")
-    print(f" Pairs to evaluate: {len(target_pairs)} (sample seed: {seed}, limit: {limit})")
+    print(f" Strategy: {pairs} ({pair_set_name}) | Pairs to evaluate: {len(target_pairs)} (limit: {limit})")
     print(f" Benign Tasks: {len(target_user_tasks)}")
     print(f" Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"============================================================\n")
@@ -410,10 +435,13 @@ def run_benchmark(
             "seed": seed,
             "limit": limit,
             "defenses": list(defenses),
+            "pair_set": pair_set_name,
+            "pairs": [f"{ut}:{it}" for ut, it in target_pairs],
+            "pairs_count": len(target_pairs),
             "total_pairs_in_suite": len(all_pairs),
             "sampled_pairs_count": len(target_pairs),
             "sample_seed": seed,
-            "sampling_method": "smoke_limit" if limit else ("deterministic_random_sample" if sample_size else "full_suite"),
+            "sampling_method": "smoke_limit" if limit else sampling_method,
         },
         "defenses": {},
     }
@@ -620,7 +648,8 @@ def generate_summary(results: Dict[str, Any], json_path: Path):
 - **Temperature:** `{meta.get('temperature', 0.0)}` | **Seed:** `{meta.get('seed', 42)}`
 - **Wall Time:** `{meta.get('wall_time_seconds', 'N/A')}s`
 - **Evaluated Defenses:** {', '.join(meta['defenses'])}
-- **Sample Scope:** {meta['sampled_pairs_count']} pairs (Seed: {meta['sample_seed']}, Method: {meta['sampling_method']})
+- **Pair Set:** `{meta.get('pair_set', 'N/A')}` ({meta.get('pairs_count', meta.get('sampled_pairs_count', 'N/A'))} pairs)
+- **Sample Method:** {meta.get('sampling_method', 'N/A')} (Seed: {meta.get('sample_seed', 'N/A')})
 - **Execution Date:** {meta['timestamp']}
 - **Canonical JSON:** [`{json_path.name}`](results/{json_path.name})
 
@@ -664,7 +693,8 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default=None, help="Model name (e.g. qwen3:8b for ollama, gemini-3.1-flash-lite for google)")
     parser.add_argument("--ollama-url", type=str, default="http://127.0.0.1:11434", help="Ollama base URL (default: http://127.0.0.1:11434)")
     parser.add_argument("--defenses", nargs="+", default=["c0", "c2_strict"], help="Defenses to evaluate (c0, c1, c2_strict, c2_file_trusted)")
-    parser.add_argument("--sample", type=int, default=48, help="Sample size of pairs (default 48)")
+    parser.add_argument("--pairs", type=str, choices=["provguard", "random"], default="provguard", help="Pair selection strategy: 'provguard' (fixed 16x3 = 48 pairs, default) or 'random'")
+    parser.add_argument("--sample", type=int, default=None, help="Sample size when using --pairs random (default 48)")
     parser.add_argument("--limit", type=int, default=None, help="Smoke test limit on evaluated pairs (e.g. --limit 2)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for sampling")
     parser.add_argument("--no-cache", action="store_true", help="Disable caching")
@@ -675,6 +705,7 @@ if __name__ == "__main__":
         model=args.model,
         ollama_url=args.ollama_url,
         defenses=args.defenses,
+        pairs=args.pairs,
         sample_size=args.sample,
         limit=args.limit,
         seed=args.seed,
