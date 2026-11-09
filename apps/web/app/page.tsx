@@ -105,9 +105,9 @@ export default function LandingPage() {
           <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-xl">
             🧠
           </div>
-          <h2 className="text-base font-bold text-white">1. Autonomous Planner</h2>
+          <h2 className="text-base font-bold text-white">{t('landing.card.planner_title')}</h2>
           <p className="text-xs text-slate-300 leading-relaxed">
-            LLM deliberates and coordinates tool purchases via x402. Even if 100% compromised by indirect prompt injection, it holds zero signing authority over treasury funds.
+            {t('landing.card.planner_desc')}
           </p>
         </div>
 
@@ -115,9 +115,9 @@ export default function LandingPage() {
           <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-xl">
             🛡️
           </div>
-          <h2 className="text-base font-bold text-white">2. Dual-Layer Provenance Guard</h2>
+          <h2 className="text-base font-bold text-white">{t('landing.card.guard_title')}</h2>
           <p className="text-xs text-slate-300 leading-relaxed">
-            Tracks taint origins from untrusted web DOM, invoices, and tools. Compares every proposal against owner-signed Merkle payee roots before transactions can proceed.
+            {t('landing.card.guard_desc')}
           </p>
         </div>
 
@@ -125,9 +125,9 @@ export default function LandingPage() {
           <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-xl">
             ⛓️
           </div>
-          <h2 className="text-base font-bold text-white">3. Avalanche Smart Contracts</h2>
+          <h2 className="text-base font-bold text-white">{t('landing.card.chain_title')}</h2>
           <p className="text-xs text-slate-300 leading-relaxed">
-            GuardedTreasury enforces on-chain caps, session wallet isolation, and RIP-7212 P-256 Passkeys natively at 0x100. Any bypass attempt strictly reverts on-chain.
+            {t('landing.card.chain_desc')}
           </p>
         </div>
       </section>

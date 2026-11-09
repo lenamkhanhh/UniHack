@@ -1279,3 +1279,35 @@ Mobile UX capture complete!
 - TypeScript Strict Typecheck (`tsc --noEmit -p apps/web`): **0 errors (100% clean)**
 - Production Build (`next build`): **33/33 static & dynamic routes compiled successfully**
 - Ràng buộc an toàn: **Không commit secret, không deploy public, không push main.**
+
+
+---
+
+## M8-F1..F6: KHẮC PHỤC TRIỆT ĐỂ PHẢN HỒI REVIEW M8 (HONESTY, CALIBRATION, MOBILE UX)
+
+**Thời điểm:** 2026-11-09 11:00 (Asia/Saigon) | **Nhánh:** `feat/s1-app` | **Commit:** `fix(m8): resolve reviewer feedback on bounty honesty, overclaim wording, and mobile feed cards`
+
+### 1. Bảng Nghiệm Thu Các Điểm Sửa M8-F1 đến M8-F6
+
+| ID | Mức | Trạng thái | File chính | Chi tiết thay đổi & Kiểm chứng |
+|---|:---:|:---:|---|---|
+| **M8-F1** | **P0** (Honesty) | **ĐẠT** | `apps/web/app/bounty/page.tsx` | **Trạng thái kết quả động (Dynamic Evaluation Badge):** Không còn hiển thị cứng `"TREASURY SECURE ($0.00 DRAINED)"`. Suy diễn trực tiếp từ `lastResult`: nếu bypass/transfer thành công hiển thị `FUNDS TRANSFERRED: $X.XX USDC`; nếu blocked/reverted hiển thị bảo toàn ngân quỹ; nếu queued hiển thị chờ phê duyệt; nếu agent không đề xuất thanh toán hiển thị không có đề xuất. |
+| **M8-F2** | **P0** (Honesty) | **ĐẠT** | `apps/web/app/bounty/page.tsx` | **Chỉ số bảo toàn động (Computed Guard Stat):** Loại bỏ `"100% Guarded"` gán cứng. Tính toán động: `stats.leakCount === 0 ? "0 out-of-bounds leaks" : `${stats.leakCount} leaks ($${stats.bountySpentUsdc})``. |
+| **M8-F3** | **P0** (Calibration) | **ĐẠT** | `apps/web/lib/i18n.tsx` | **Hiệu chỉnh tuyên bố Hero Subtitle:** Cập nhật chính xác theo yêu cầu: EN: *"Give your AI agent a mission and a budget. Avalanche contracts enforce the cap and the owner-signed payee set, and every step is anchored on-chain for an independent validator to re-check."*; VI: *"Giao cho AI agent một nhiệm vụ và một ngân sách. Hợp đồng trên Avalanche áp hạn mức và danh sách người nhận do chủ ký; mọi bước được neo on-chain để validator độc lập kiểm lại."*. Tránh khẳng định tuyệt đối không bao giờ divert bên trong tập người nhận hợp lệ. |
+| **M8-F4** | **P0** (Calibration) | **ĐẠT** | `apps/web/app/page.tsx`<br>`apps/web/lib/i18n.tsx` | **Hiệu chỉnh thẻ Autonomous Planner:** Loại bỏ câu *"zero signing authority"*. Thay thế chính xác: EN: *"Even if prompt injection fully fools it, the agent can only propose: the contract pays only payees and amounts inside the owner-signed mission."*; VI: *"Dù prompt injection có đánh lừa được agent hoàn toàn, agent cũng chỉ có quyền đề xuất: hợp đồng chỉ giải ngân cho người nhận và số tiền nằm trong nhiệm vụ do chủ ký."*. Đưa toàn bộ vào từ điển i18n. |
+| **M8-F5** | **P1** (UX) | **ĐẠT** | `apps/web/app/bounty/page.tsx` | **Tối ưu Mobile 375px & Stacked Cards:** Xóa thanh điều hướng in-page trùng lặp (`Arena / Passkey / Verify On-Chain`) trên `/bounty` vì `AppHeader` đã hỗ trợ thanh điều hướng toàn cầu kèm chuyển đổi EN/VI. Tại Live Public Attack Feed, bổ sung giao diện thẻ xếp chồng (`block sm:hidden`) với wrap text đầy đủ cho `payloadPreview` trên màn hình di động, bảng 7 cột chỉ hiển thị trên màn hình lớn (`hidden sm:block`). |
+| **M8-F6** | **P2** (Hygiene) | **ĐẠT** | `evidence/ux/test-lh.json`<br>`apps/web/app/bounty/page.tsx`<br>`apps/web/lib/i18n.tsx` | **Dọn dẹp file nháp & Đa ngôn ngữ Prompt Disclosure:** Đã xóa vĩnh viễn `evidence/ux/test-lh.json`. Chuyển khối thông tin *"Agent Mechanism & Prompt Disclosure"* sang i18n (`bounty.prompt_disclosure.title` và `bounty.prompt_disclosure.desc`) hỗ trợ cả tiếng Anh lẫn tiếng Việt. |
+
+### 2. Kết Quả Kiểm Thử Sau Fixes
+- **Lighthouse Production Audit (Port 3100):** Giữ vững **100/100 Accessibility** trên toàn bộ 5 route:
+  - `/`: A11y 100, Perf 95, BestPractices 96
+  - `/bounty`: A11y 100, Perf 96, BestPractices 96
+  - `/verify/demo-seed`: A11y 100, Perf 84, BestPractices 96
+  - `/missions/new`: A11y 100, Perf 100, BestPractices 96
+  - `/arena/stage`: A11y 100, Perf 87, BestPractices 96
+- **Mobile 375px Viewport:** Chụp lại `evidence/ux/mobile-bounty-375.png` và `evidence/ux/mobile-verify-375.png` xác nhận `scrollWidth: 375, clientWidth: 375, hasHorizontalScroll: false`.
+- **Vitest apps/web:** **29/29 files passed, 232/232 tests passed (100%)**.
+- **Foundry Contracts:** **4 suites passed, 61/61 tests passed** (512 invariant runs, 32,768 calls, 0 reverts).
+- **Packages:** `@missionpay/guard` 12/12 passed, `@missionpay/mcp` 6/6 passed.
+- **TypeScript:** Strict typecheck `tsc --noEmit` sạch 100% (0 errors).
+- **Ràng buộc an toàn:** Không commit secret/private key, không push main, không deploy public.

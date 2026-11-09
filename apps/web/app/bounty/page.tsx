@@ -151,32 +151,6 @@ export default function BountyPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 md:p-12 font-sans">
       <div className="max-w-5xl mx-auto space-y-8">
-        {/* Header Navigation */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-4 gap-3">
-          <div className="flex items-center gap-3">
-            <span className="text-xl font-bold bg-gradient-to-r from-red-500 to-amber-400 bg-clip-text text-transparent">
-              MissionPay
-            </span>
-            <span className="px-2.5 py-0.5 text-xs font-semibold bg-red-900/60 text-red-300 border border-red-700/50 rounded-full">
-              {t('bounty.tag')}
-            </span>
-          </div>
-          <div className="flex items-center gap-3 text-xs sm:text-sm">
-            <Link href="/arena/stage" className="text-slate-300 hover:text-white transition">
-              Arena
-            </Link>
-            <Link href="/missions/new" className="text-slate-300 hover:text-white transition">
-              Passkey
-            </Link>
-            <Link
-              href="/verify/missionpay-bounty-v1"
-              className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-xs transition border border-slate-700"
-            >
-              Verify On-Chain
-            </Link>
-          </div>
-        </div>
-
         {/* Hero Section */}
         <div className="text-center space-y-3 py-2">
           <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white">
@@ -220,7 +194,9 @@ export default function BountyPage() {
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-center">
             <div className="text-xs text-slate-300 uppercase tracking-wider">{t('bounty.stat.blocked')}</div>
             <div className="text-xl sm:text-2xl font-bold font-mono text-emerald-400 mt-1">{stats.blockedCount}</div>
-            <div className="text-[10px] text-emerald-400 font-semibold">100% Guarded</div>
+            <div className="text-[10px] text-emerald-400 font-semibold">
+              {stats.leakCount === 0 ? '0 out-of-bounds leaks' : `${stats.leakCount} leaks ($${stats.bountySpentUsdc})`}
+            </div>
           </div>
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-center">
             <div className="text-xs text-slate-300 uppercase tracking-wider">{t('bounty.stat.leak')}</div>
@@ -328,10 +304,10 @@ export default function BountyPage() {
           {/* Prompt Disclosure Note */}
           <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 text-xs text-slate-300 space-y-1.5 font-sans">
             <div className="font-semibold text-white flex items-center gap-1.5">
-              <span>ℹ️</span> <span>Agent Mechanism & Prompt Disclosure:</span>
+              <span>ℹ️</span> <span>{t('bounty.prompt_disclosure.title')}</span>
             </div>
             <p className="leading-relaxed">
-              Agent uses standard enterprise accounting prompt with company vendor directory (including 0x1111..., 0x2222..., and 0x3333...). Even when LLM output is swayed, MissionPay's dual-layer guard strictly halts payout proposals off-chain and smart contract reverts on Avalanche Fuji.
+              {t('bounty.prompt_disclosure.desc')}
             </p>
           </div>
         </div>
@@ -343,9 +319,52 @@ export default function BountyPage() {
               <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
                 <span>🛡️</span> 3-Layer Defense Evaluation Result
               </h3>
-              <span className="text-xs font-mono text-emerald-300 bg-emerald-950/80 border border-emerald-800/80 px-2.5 py-1 rounded-md self-start sm:self-auto font-bold">
-                TREASURY SECURE ($0.00 DRAINED)
-              </span>
+              {(() => {
+                const isBypassed =
+                  lastResult.steps.step3_contract_fuji.status === 'BYPASS' ||
+                  (lastResult.steps.step2_offchain_guard.status === 'PASSED' &&
+                    lastResult.steps.step3_contract_fuji.status !== 'REVERTED');
+                const isBlocked =
+                  lastResult.steps.step2_offchain_guard.status === 'BLOCKED' ||
+                  lastResult.steps.step3_contract_fuji.status === 'REVERTED';
+                const isQueued = lastResult.steps.step2_offchain_guard.status === 'QUEUED';
+                const isNoProposal = lastResult.steps.step2_offchain_guard.status === 'NO_PROPOSAL';
+                const amountSpent = (Number(lastResult.steps.step1_llm.amountAtomic || 0) / 1e6).toFixed(2);
+
+                if (isBypassed) {
+                  return (
+                    <span className="text-xs font-mono text-red-300 bg-red-950/80 border border-red-800/80 px-2.5 py-1 rounded-md self-start sm:self-auto font-bold">
+                      {t('bounty.result.drained')}: ${amountSpent} USDC
+                    </span>
+                  );
+                }
+                if (isBlocked) {
+                  return (
+                    <span className="text-xs font-mono text-emerald-300 bg-emerald-950/80 border border-emerald-800/80 px-2.5 py-1 rounded-md self-start sm:self-auto font-bold">
+                      {t('bounty.result.secure')}
+                    </span>
+                  );
+                }
+                if (isQueued) {
+                  return (
+                    <span className="text-xs font-mono text-amber-300 bg-amber-950/80 border border-amber-800/80 px-2.5 py-1 rounded-md self-start sm:self-auto font-bold">
+                      {t('bounty.result.queued')}
+                    </span>
+                  );
+                }
+                if (isNoProposal) {
+                  return (
+                    <span className="text-xs font-mono text-slate-300 bg-slate-800/80 border border-slate-700/80 px-2.5 py-1 rounded-md self-start sm:self-auto font-bold">
+                      {t('bounty.result.no_proposal')}
+                    </span>
+                  );
+                }
+                return (
+                  <span className="text-xs font-mono text-emerald-300 bg-emerald-950/80 border border-emerald-800/80 px-2.5 py-1 rounded-md self-start sm:self-auto font-bold">
+                    {t('bounty.result.secure')}
+                  </span>
+                );
+              })()}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -429,52 +448,96 @@ export default function BountyPage() {
           {stats.recentAttempts.length === 0 ? (
             <p className="text-xs text-slate-300 py-4 text-center">{t('bounty.recent.empty')}</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-800 text-slate-300 uppercase tracking-wider text-[10px]">
-                    <th className="py-2.5">Time</th>
-                    <th className="py-2.5">Vector</th>
-                    <th className="py-2.5">Payload Preview</th>
-                    <th className="py-2.5">Attacker Address</th>
-                    <th className="py-2.5 text-center">LLM Result</th>
-                    <th className="py-2.5">Off-Chain Guard</th>
-                    <th className="py-2.5">Fuji On-Chain</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 font-mono">
-                  {stats.recentAttempts.map((att) => (
-                    <tr key={att.id} className="hover:bg-slate-800/30">
-                      <td className="py-2 text-slate-300 text-xs">
-                        {new Date(att.timestamp).toLocaleTimeString()}
-                      </td>
-                      <td className="py-2 text-slate-200 text-xs">{att.vector}</td>
-                      <td className="py-2 text-slate-300 text-xs max-w-[200px] truncate">
-                        {att.payloadPreview}
-                      </td>
-                      <td className="py-2 text-slate-200 text-xs truncate max-w-[120px]">
-                        {att.attackerAddress}
-                      </td>
-                      <td className="py-2 text-center">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            att.llmTricked
-                              ? 'bg-red-950 text-red-300 border border-red-800/60'
-                              : 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
-                          }`}
-                        >
-                          {att.llmTricked ? 'TRICKED' : 'RESILIENT'}
-                        </span>
-                      </td>
-                      <td className="py-2 text-amber-300 text-xs truncate max-w-[150px]">
-                        {att.offchainRule || 'NONE'}
-                      </td>
-                      <td className="py-2 text-emerald-300 text-xs">{att.onchainResult || '—'}</td>
+            <>
+              {/* Desktop / Tablet Table */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-slate-300 uppercase tracking-wider text-[10px]">
+                      <th className="py-2.5">Time</th>
+                      <th className="py-2.5">Vector</th>
+                      <th className="py-2.5">Payload Preview</th>
+                      <th className="py-2.5">Attacker Address</th>
+                      <th className="py-2.5 text-center">LLM Result</th>
+                      <th className="py-2.5">Off-Chain Guard</th>
+                      <th className="py-2.5">Fuji On-Chain</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-mono">
+                    {stats.recentAttempts.map((att) => (
+                      <tr key={att.id} className="hover:bg-slate-800/30">
+                        <td className="py-2 text-slate-300 text-xs">
+                          {new Date(att.timestamp).toLocaleTimeString()}
+                        </td>
+                        <td className="py-2 text-slate-200 text-xs">{att.vector}</td>
+                        <td className="py-2 text-slate-300 text-xs max-w-[200px] truncate">
+                          {att.payloadPreview}
+                        </td>
+                        <td className="py-2 text-slate-200 text-xs truncate max-w-[120px]">
+                          {att.attackerAddress}
+                        </td>
+                        <td className="py-2 text-center">
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              att.llmTricked
+                                ? 'bg-red-950 text-red-300 border border-red-800/60'
+                                : 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
+                            }`}
+                          >
+                            {att.llmTricked ? 'TRICKED' : 'RESILIENT'}
+                          </span>
+                        </td>
+                        <td className="py-2 text-amber-300 text-xs truncate max-w-[150px]">
+                          {att.offchainRule || 'NONE'}
+                        </td>
+                        <td className="py-2 text-emerald-300 text-xs">{att.onchainResult || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Stacked Cards (< sm) */}
+              <div className="block sm:hidden space-y-3">
+                {stats.recentAttempts.map((att) => (
+                  <div key={att.id} className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-slate-400 font-mono">
+                        {new Date(att.timestamp).toLocaleTimeString()}
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          att.llmTricked
+                            ? 'bg-red-950 text-red-300 border border-red-800/60'
+                            : 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
+                        }`}
+                      >
+                        {att.llmTricked ? 'TRICKED' : 'RESILIENT'}
+                      </span>
+                    </div>
+                    <div className="text-slate-200 font-mono text-[11px] break-words">
+                      <span className="text-slate-400">Vector:</span> {att.vector}
+                    </div>
+                    <div className="text-slate-300 text-xs bg-slate-900/60 p-2 rounded border border-slate-800/80 break-words whitespace-pre-wrap">
+                      {att.payloadPreview}
+                    </div>
+                    <div className="flex flex-col gap-1 text-[11px] font-mono text-slate-300 pt-1 border-t border-slate-800/60">
+                      <div className="truncate">
+                        <span className="text-slate-400">Attacker:</span> {att.attackerAddress}
+                      </div>
+                      <div>
+                        <span className="text-slate-400">Guard:</span>{' '}
+                        <span className="text-amber-300">{att.offchainRule || 'NONE'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">Fuji:</span>{' '}
+                        <span className="text-emerald-300">{att.onchainResult || '—'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>

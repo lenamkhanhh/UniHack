@@ -24,7 +24,7 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
 
     // Landing Page
     'landing.hero.title': 'Others stop strangers. We stop off-mission payees too.',
-    'landing.hero.subtitle': 'Give your AI agent a mission and a budget. Avalanche smart contracts guarantee it can never overspend or divert funds — and cryptographically prove every single transaction.',
+    'landing.hero.subtitle': 'Give your AI agent a mission and a budget. Avalanche contracts enforce the cap and the owner-signed payee set, and every step is anchored on-chain for an independent validator to re-check.',
     'landing.btn.bounty': 'Hack the treasury',
     'landing.btn.verify': 'Verify a mission',
     'landing.btn.passkey': 'Approve with passkey',
@@ -35,6 +35,12 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
     'landing.empty.desc': 'Start by trying the public bounty challenge or launching a demo mission.',
     'landing.btn.demo': 'Launch Demo Mission',
     'landing.btn.bounty_cta': 'Go to Bounty Arena',
+    'landing.card.planner_title': '1. Autonomous Planner',
+    'landing.card.planner_desc': 'Even if prompt injection fully fools it, the agent can only propose: the contract pays only payees and amounts inside the owner-signed mission.',
+    'landing.card.guard_title': '2. Dual-Layer Provenance Guard',
+    'landing.card.guard_desc': 'Tracks taint origins from untrusted web DOM, invoices, and tools. Compares every proposal against owner-signed Merkle payee roots before transactions can proceed.',
+    'landing.card.chain_title': '3. Avalanche Smart Contracts',
+    'landing.card.chain_desc': 'GuardedTreasury enforces on-chain caps, session wallet isolation, and RIP-7212 P-256 Passkeys natively at 0x100. Any bypass attempt strictly reverts on-chain.',
     'landing.card.tool_budget': 'Tool Budget (Session Wallet)',
     'landing.card.treasury_budget': 'Treasury Budget (On-Chain)',
     'landing.card.spent': 'Spent',
@@ -69,6 +75,12 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
     'bounty.recent.title': 'Live Public Attack Feed',
     'bounty.recent.empty': 'No public attack attempts recorded yet. Be the first to try!',
     'bounty.rpc_error': 'Notice: Avalanche Fuji RPC connectivity issue. Displaying cached contract state.',
+    'bounty.prompt_disclosure.title': 'Agent Mechanism & Prompt Disclosure:',
+    'bounty.prompt_disclosure.desc': 'Agent uses standard enterprise accounting prompt with company vendor directory (including 0x1111..., 0x2222..., and 0x3333...). Even when LLM output is swayed, MissionPay\'s dual-layer guard strictly halts payout proposals off-chain and smart contract reverts on Avalanche Fuji.',
+    'bounty.result.secure': 'TREASURY PRESERVED ($0.00 DRAINED)',
+    'bounty.result.drained': 'FUNDS TRANSFERRED',
+    'bounty.result.queued': 'PAYOUT QUEUED FOR OWNER APPROVAL ($0.00 DRAINED)',
+    'bounty.result.no_proposal': 'NO PAYOUT PROPOSED ($0.00 DRAINED)',
 
     // Verify Page
     'verify.tag': 'CLIENT-SIDE VERIFIER',
@@ -119,7 +131,7 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
 
     // Landing Page
     'landing.hero.title': 'Người khác chặn kẻ lạ. Chúng tôi chặn cả người nhận ngoài nhiệm vụ.',
-    'landing.hero.subtitle': 'Giao cho AI agent một nhiệm vụ và một ngân sách. Hợp đồng thông minh Avalanche bảo đảm không bao giờ chi vượt hạn mức hay chuyển lệch người nhận — và chứng minh bằng mật mã từng giao dịch.',
+    'landing.hero.subtitle': 'Giao cho AI agent một nhiệm vụ và một ngân sách. Hợp đồng trên Avalanche áp hạn mức và danh sách người nhận do chủ ký; mọi bước được neo on-chain để validator độc lập kiểm lại.',
     'landing.btn.bounty': 'Thử hack ngân quỹ',
     'landing.btn.verify': 'Tự kiểm chứng mission',
     'landing.btn.passkey': 'Duyệt bằng passkey',
@@ -130,6 +142,12 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
     'landing.empty.desc': 'Bắt đầu bằng cách thử thách ngân quỹ bounty hoặc chạy một mission demo.',
     'landing.btn.demo': 'Chạy Mission Demo',
     'landing.btn.bounty_cta': 'Tới Đấu Trường Bounty',
+    'landing.card.planner_title': '1. Autonomous Planner',
+    'landing.card.planner_desc': 'Dù prompt injection có đánh lừa được agent hoàn toàn, agent cũng chỉ có quyền đề xuất: hợp đồng chỉ giải ngân cho người nhận và số tiền nằm trong nhiệm vụ do chủ ký.',
+    'landing.card.guard_title': '2. Lớp bảo vệ Provenance Guard 2 tầng',
+    'landing.card.guard_desc': 'Truy vết taint từ web DOM, hóa đơn và tool không tin cậy. Đối soát mọi đề xuất với Merkle payee root do chủ ký trước khi giao dịch được thực hiện.',
+    'landing.card.chain_title': '3. Smart Contract trên Avalanche',
+    'landing.card.chain_desc': 'GuardedTreasury thực thi các hạn mức on-chain, cô lập ví phiên và xác thực Passkey WebAuthn RIP-7212 P-256 phần cứng tại 0x100. Mọi ý định vượt rào đều revert on-chain.',
     'landing.card.tool_budget': 'Ngân sách Tool (Ví phiên)',
     'landing.card.treasury_budget': 'Ngân sách Ngân quỹ (On-Chain)',
     'landing.card.spent': 'Đã chi',
@@ -164,6 +182,12 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
     'bounty.recent.title': 'Nhật ký đòn tấn công công khai',
     'bounty.recent.empty': 'Chưa có lượt tấn công công khai nào. Hãy là người đầu tiên thử thách!',
     'bounty.rpc_error': 'Lưu ý: Sự cố kết nối Avalanche Fuji RPC. Đang hiển thị trạng thái hợp đồng đã lưu.',
+    'bounty.prompt_disclosure.title': 'Cơ chế Agent & Công khai Prompt:',
+    'bounty.prompt_disclosure.desc': 'Agent dùng prompt của một agent kế toán thông thường có danh bạ vendor công ty (bao gồm 0x1111..., 0x2222..., và vendor thứ cấp 0x3333...). Ngay cả khi LLM bị thuyết phục, lớp bảo vệ 2 tầng của MissionPay chặn đứng đề xuất thanh toán off-chain và hợp đồng thông minh revert trên Avalanche Fuji.',
+    'bounty.result.secure': 'BẢO TOÀN NGÂN QUỸ (THẤT THOÁT $0.00)',
+    'bounty.result.drained': 'TIỀN ĐÃ CHUYỂN',
+    'bounty.result.queued': 'ĐỀ XUẤT ĐƯA VÀO HÀNG ĐỢI CHỦ DUYỆT (THẤT THOÁT $0.00)',
+    'bounty.result.no_proposal': 'AGENT KHÔNG ĐỀ XUẤT THANH TOÁN (THẤT THOÁT $0.00)',
 
     // Verify Page
     'verify.tag': 'XÁC THỰC MẬT MÃ CLIENT-SIDE',
