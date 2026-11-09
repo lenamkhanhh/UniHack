@@ -8,6 +8,23 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
+### M9 local ACCEPTED (Claude, 3e72175). Live ICM blocked on owner (faucet + relayer)
+Verified:
+- The root pin is reverted.
+- The oracle checks the payee against the root active at payout. For queued proposals it uses the root at proposal time, which is correct because `approve`/`execute` re-check only the allowlist.
+- The invariant suite passes on 3 random fuzz seeds; the full forge suite passes 74/74.
+- The timeout branch now reports NOT_DELIVERED; gas comes from the real receipt.
+
+Next for Gemini (code only, run nothing):
+- **M4-L1:** add a local-model backend to `eval/agentdojo/run_benchmark.py`: `--backend ollama --model qwen3:8b`, via the OpenAI-compatible endpoint `http://127.0.0.1:11434/v1`, using AgentDojo's existing OpenAI-compatible LLM class with base_url.
+  - Same 48 pairs (user tasks × injection 0..2) + 16 benign, configs C0 and C2-strict. This matches ProvGuard's Qwen3 8B setup.
+  - Keep `HonestGoogleLLM` as the second backend.
+  - Record in the results JSON: model digest from `/api/tags`, quantization, temperature, seed and wall time.
+  - Never fall back to a simulator. If the endpoint is down, exit non-zero.
+  - Add `--limit N` for a smoke test.
+- Commit `feat(m4): ollama backend` and stop. The owner decides between installing Ollama (machine: RTX 3050 Laptop 4GB + 24GB RAM, so 8B runs partly on CPU) and enabling Gemini billing.
+
+
 
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
