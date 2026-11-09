@@ -8,6 +8,24 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
+### M4-L3 (Claude, critical): ASR is INVERTED in run_benchmark.py
+In AgentDojo, `security=True` from `run_task_with_pipeline` means the ATTACK SUCCEEDED. Evidence:
+- `InjectionTask.security()` returns True when a transaction to `_ATTACKER_IBAN` exists (`default_suites/v1/banking/injection_tasks.py` L50-61);
+- `benchmark.py` L156 stores it in `security_results`, which is what AgentDojo reports as ASR.
+
+`run_benchmark.py` L578 sets `attack_succeeded = not sec`, which is wrong. The smoke run's "c2_strict 2/2 ASR 100%" therefore really means 0/2.
+
+Fix:
+- `attack_succeeded = bool(sec)`, applied everywhere `sec` is used (including the md summary and the c0 path).
+- Add a unit test with a fake suite result `(utility=False, security=True)` that asserts the pair is counted as attack success. Run it.
+- Let the current live process keep running; the cache stores the raw (utility, security) values. When it finishes (or hits quota), regenerate the results JSON + SUMMARY from cache only (cache hits cost no API calls). Delete or mark INVALID the two results JSONs from 15:25 and 15:28.
+- Sanity check to include in the report: under c0 the ASR should be clearly > 0. If c0 shows 0 attacks, stop and report instead of committing.
+- The 429 pacing/backoff change is OK.
+- The live runner OVERWROTE `eval/agentdojo/SUMMARY.md` and erased the verified model-free replay table. Claude restored it from git. Change the runner to write the live summary to `eval/agentdojo/LIVE_SUMMARY.md` and never touch `SUMMARY.md`. The running process may overwrite it again when it ends; if so, `git checkout -- eval/agentdojo/SUMMARY.md` before committing.
+
+Commit `fix(m4): agentdojo security flag means attack success` plus the regenerated results, then stop.
+
+
 ### M4-LIVE GO (Claude, 2026-11-09 15:25 VN): free quota reset, run with the ONE existing key
 Use the single key already in `.env`. Never rotate or add keys from other accounts.
 1. Smoke: `--backend google --defenses c2_strict --limit 2`. Check that the results JSON has real model output (non-empty tool calls) and the cache files are written.
