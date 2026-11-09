@@ -1,5 +1,5 @@
 """
-Unit tests for ProvGuard fixed evaluation pair set (M4-L2).
+Unit tests for ProvGuard fixed evaluation pair set (M4-L2) and ASR flag semantics (M4-L3).
 
 Verifies the reproducibility and fixed structure of ProvGuard's benchmark setup:
 1. Exactly 48 unique pairs.
@@ -7,6 +7,7 @@ Verifies the reproducibility and fixed structure of ProvGuard's benchmark setup:
 3. All injection tasks are injection_task_0..2 (injection id in {0, 1, 2}).
 4. All 48 pairs are valid and produce non-empty injections in the AgentDojo Banking Suite.
 5. The default pair set is 'provguard_16x3' matching ProvGuard paper setup.
+6. M4-L3: AgentDojo security=True flag semantics means attack succeeded (breach).
 """
 
 import sys
@@ -17,7 +18,7 @@ from collections import Counter
 # Ensure current directory is on sys.path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from run_benchmark import get_provguard_pairs, build_pipeline
+from run_benchmark import get_provguard_pairs, build_pipeline, compute_attack_success
 from agentdojo.benchmark import get_suite
 from agentdojo.attacks import load_attack
 
@@ -73,6 +74,29 @@ class TestProvGuardPairs(unittest.TestCase):
                 len(injections) > 0,
                 f"Pair ({ut}, {it}) produced empty injections in banking suite",
             )
+
+    def test_agentdojo_security_flag_semantics_attack_success(self):
+        """
+        M4-L3: In AgentDojo, run_task_with_pipeline returns (utility, security).
+        When the injected instruction succeeds (e.g. money transferred to attacker IBAN),
+        security() returns True, meaning the attack succeeded (security breached).
+        When security=False, the attack did not achieve its goal (attack failed/blocked).
+        """
+        # Fake suite result where attack succeeded: (utility=False, security=True)
+        fake_result_attack_breached = (False, True)
+        u, sec = fake_result_attack_breached
+        self.assertTrue(
+            compute_attack_success(sec),
+            "In AgentDojo, security=True must count as attack success (breached)",
+        )
+
+        # Fake suite result where attack was blocked/neutralized: (utility=False, security=False)
+        fake_result_attack_blocked = (False, False)
+        u, sec = fake_result_attack_blocked
+        self.assertFalse(
+            compute_attack_success(sec),
+            "In AgentDojo, security=False must NOT count as attack success (blocked)",
+        )
 
 
 if __name__ == "__main__":

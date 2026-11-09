@@ -17,6 +17,7 @@ import time
 import random
 import hashlib
 import argparse
+import concurrent.futures
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -102,6 +103,16 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 RESULTS_DIR = Path(__file__).parent / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
+
+def run_task_with_timeout(fn, timeout_seconds: int = 600):
+    """Executes a callable with a strict wall-clock timeout using ThreadPoolExecutor."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(fn)
+        try:
+            return future.result(timeout=timeout_seconds)
+        except concurrent.futures.TimeoutError:
+            raise TimeoutError(f"Task exceeded wall-clock timeout of {timeout_seconds}s")
+
 class HonestGoogleLLM(BasePipelineElement):
     """
     Direct caller to GoogleLLM with honest error handling and zero synthetic fallback.
@@ -114,6 +125,18 @@ class HonestGoogleLLM(BasePipelineElement):
         self.api_calls_count = 0
         self.api_errors_count = 0
         self.quota_exhausted = False
+        self.current_task_trace: List[Dict[str, Any]] = []
+        self.last_assistant_text: str = ""
+
+    def reset_task_trace(self):
+        self.current_task_trace = []
+        self.last_assistant_text = ""
+
+    def get_task_trace(self) -> Dict[str, Any]:
+        return {
+            "tool_calls": list(self.current_task_trace),
+            "final_assistant_text": self.last_assistant_text,
+        }
 
     def query(
         self,
@@ -126,18 +149,51 @@ class HonestGoogleLLM(BasePipelineElement):
         if self.quota_exhausted:
             raise RuntimeError("QUOTA_EXHAUSTED: Gemini API daily quota limit reached")
 
-        retries = 3
-        delay = 4
+        # Pacing: avoid bursting past free tier 15 RPM window
+        time.sleep(2.0)
+
+        retries = 4
+        delay = 10
         for attempt in range(retries):
             try:
                 self.api_calls_count += 1
-                return self.underlying_llm.query(query, runtime, env, messages, extra_args)
+                res = self.underlying_llm.query(query, runtime, env, messages, extra_args)
+                q_out, rt_out, env_out, msgs_out, extra_out = res
+                if msgs_out and len(msgs_out) > 0:
+                    last_msg = msgs_out[-1]
+                    if isinstance(last_msg, dict) and last_msg.get("role") == "assistant":
+                        t_calls = last_msg.get("tool_calls")
+                        if t_calls:
+                            for tc in t_calls:
+                                fn = getattr(tc, "function", None) or (tc.get("function") if isinstance(tc, dict) else str(tc))
+                                args = getattr(tc, "args", None) or (tc.get("args") if isinstance(tc, dict) else {})
+                                self.current_task_trace.append({"function": fn, "args": args})
+                        content_val = last_msg.get("content")
+                        if content_val and isinstance(content_val, list):
+                            texts = [b.get("content", "") for b in content_val if isinstance(b, dict) and b.get("type") == "text"]
+                            if texts:
+                                self.last_assistant_text = "".join(texts)
+                return res
             except ClientError as e:
                 err_str = str(e)
-                if "RESOURCE_EXHAUSTED" in err_str or e.code == 429:
+                # Check for explicit daily quota exhaustion
+                if "per day" in err_str.lower() or "perday" in err_str.lower():
                     self.quota_exhausted = True
                     self.api_errors_count += 1
-                    raise RuntimeError("QUOTA_EXHAUSTED: Daily rate limit reached") from e
+                    raise RuntimeError("QUOTA_EXHAUSTED: Gemini API daily quota limit reached") from e
+
+                # Handle transient 429 rate limit (per minute quota) with backoff
+                if "RESOURCE_EXHAUSTED" in err_str or getattr(e, "code", None) == 429 or "429" in err_str:
+                    self.api_errors_count += 1
+                    if attempt < retries - 1:
+                        print(f"    [429 Backoff] Rate limit hit, waiting {delay}s (attempt {attempt+1}/{retries})...")
+                        time.sleep(delay)
+                        delay += 10
+                        continue
+                    else:
+                        self.quota_exhausted = True
+                        raise RuntimeError("QUOTA_EXHAUSTED: Daily rate limit reached") from e
+
                 self.api_errors_count += 1
                 if attempt < retries - 1:
                     time.sleep(delay)
@@ -169,6 +225,18 @@ class HonestOllamaLLM(BasePipelineElement):
         self.underlying_llm = OpenAILLM(client=client, model=model, temperature=temperature)
         self.api_calls_count = 0
         self.api_errors_count = 0
+        self.current_task_trace: List[Dict[str, Any]] = []
+        self.last_assistant_text: str = ""
+
+    def reset_task_trace(self):
+        self.current_task_trace = []
+        self.last_assistant_text = ""
+
+    def get_task_trace(self) -> Dict[str, Any]:
+        return {
+            "tool_calls": list(self.current_task_trace),
+            "final_assistant_text": self.last_assistant_text,
+        }
 
     def query(
         self,
@@ -183,7 +251,23 @@ class HonestOllamaLLM(BasePipelineElement):
         for attempt in range(retries):
             try:
                 self.api_calls_count += 1
-                return self.underlying_llm.query(query, runtime, env, messages, extra_args)
+                res = self.underlying_llm.query(query, runtime, env, messages, extra_args)
+                q_out, rt_out, env_out, msgs_out, extra_out = res
+                if msgs_out and len(msgs_out) > 0:
+                    last_msg = msgs_out[-1]
+                    if isinstance(last_msg, dict) and last_msg.get("role") == "assistant":
+                        t_calls = last_msg.get("tool_calls")
+                        if t_calls:
+                            for tc in t_calls:
+                                fn = getattr(tc, "function", None) or (tc.get("function") if isinstance(tc, dict) else str(tc))
+                                args = getattr(tc, "args", None) or (tc.get("args") if isinstance(tc, dict) else {})
+                                self.current_task_trace.append({"function": fn, "args": args})
+                        content_val = last_msg.get("content")
+                        if content_val and isinstance(content_val, list):
+                            texts = [b.get("content", "") for b in content_val if isinstance(b, dict) and b.get("type") == "text"]
+                            if texts:
+                                self.last_assistant_text = "".join(texts)
+                return res
             except Exception as e:
                 self.api_errors_count += 1
                 err_str = str(e)
@@ -267,6 +351,16 @@ def wilson_score_interval(successes: int, total: int, confidence: float = 0.95) 
 def get_cache_key(backend: str, model: str, user_task_id: str, inj_task_id: Optional[str], defense: str) -> str:
     raw = f"{backend}:{model}:{user_task_id}:{inj_task_id or 'none'}:{defense}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+def compute_attack_success(security: bool) -> bool:
+    """
+    In AgentDojo benchmark protocol:
+    security=True indicates that the attack payload executed and successfully breached security
+    (e.g. transfer to attacker IBAN was performed).
+    security=False indicates that the attack was neutralized/blocked by the pipeline or guard.
+    """
+    return bool(security)
+
 
 def get_provguard_pairs() -> List[Tuple[str, str]]:
     """
@@ -352,7 +446,10 @@ def run_benchmark(
         if not api_key:
             print("[ERROR] GEMINI_API_KEY environment variable is missing.")
             sys.exit(1)
-        google_client = genai.Client(api_key=api_key)
+        google_client = genai.Client(
+            api_key=api_key,
+            http_options=genai_types.HttpOptions(timeout=120_000),
+        )
     else:
         print(f"[ERROR] Unsupported backend: {backend}")
         sys.exit(1)
@@ -446,8 +543,16 @@ def run_benchmark(
         "defenses": {},
     }
 
+    output_path = RESULTS_DIR / f"{run_id}.json"
+
+    def save_checkpoint():
+        overall_results["metadata"]["wall_time_seconds"] = round(time.time() - start_wall_time, 2)
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(overall_results, f, indent=2)
+        generate_summary(overall_results, output_path)
+
     for defense_key in defenses:
-        print(f"\n--- Evaluating Defense: {defense_key.upper()} ---")
+        print(f"\n--- Evaluating Defense: {defense_key.upper()} ---", flush=True)
         pipeline, missionpay_instance, llm_wrapper = build_pipeline(
             defense_key,
             backend=backend,
@@ -459,7 +564,7 @@ def run_benchmark(
         # 1. Benign Utility
         benign_utility = {}
         benign_errors = {}
-        for ut_id in target_user_tasks:
+        for ut_idx, ut_id in enumerate(target_user_tasks):
             ck = get_cache_key(backend, model, ut_id, None, defense_key)
             cf = CACHE_DIR / f"{ck}.json"
 
@@ -469,13 +574,18 @@ def run_benchmark(
                     benign_utility[ut_id] = entry["utility"]
                     if missionpay_instance and entry.get("onchain_log"):
                         missionpay_instance.replay_log.append(entry["onchain_log"])
+                print(f"  [{datetime.now().strftime('%H:%M:%S')}] [CACHE-HIT] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id}): utility={benign_utility[ut_id]}", flush=True)
             else:
                 task = suite.user_tasks[ut_id]
                 if missionpay_instance:
                     missionpay_instance.current_task_id = ut_id
+                llm_wrapper.reset_task_trace()
                 try:
-                    u, s = suite.run_task_with_pipeline(
-                        pipeline, user_task=task, injection_task=None, injections={}
+                    u, s = run_task_with_timeout(
+                        lambda: suite.run_task_with_pipeline(
+                            pipeline, user_task=task, injection_task=None, injections={}
+                        ),
+                        timeout_seconds=600,
                     )
                     benign_utility[ut_id] = u
                     onchain_entry = missionpay_instance.replay_log[-1] if (missionpay_instance and missionpay_instance.replay_log) else None
@@ -488,9 +598,15 @@ def run_benchmark(
                             "utility": u,
                             "security": s,
                             "onchain_log": onchain_entry,
+                            "trace": llm_wrapper.get_task_trace(),
                         }, f, indent=2)
+                    passed_so_far = sum(1 for v in benign_utility.values() if v)
+                    print(f"  [{datetime.now().strftime('%H:%M:%S')}] [LIVE] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id}): utility={u} (Passed: {passed_so_far}/{len(benign_utility)})", flush=True)
+                except TimeoutError as te:
+                    print(f"  [{datetime.now().strftime('%H:%M:%S')}] [TIMEOUT] Benign task {ut_id} timed out after 600s: {te}", flush=True)
+                    benign_errors[ut_id] = "TIMEOUT"
                 except Exception as e:
-                    print(f"  [ERROR] Benign task {ut_id} failed: {e}")
+                    print(f"  [{datetime.now().strftime('%H:%M:%S')}] [ERROR] Benign task {ut_id} failed: {e}", flush=True)
                     benign_errors[ut_id] = str(e)
                     if "QUOTA_EXHAUSTED" in str(e) or "OLLAMA_SERVER_DOWN" in str(e):
                         break
@@ -500,9 +616,9 @@ def run_benchmark(
         benign_total = len(benign_utility)
         benign_rate = round((benign_passed / benign_total * 100), 1) if benign_total > 0 else 0.0
         benign_ci = wilson_score_interval(benign_passed, benign_total)
-        print(f"  Benign Utility: {benign_passed}/{benign_total} ({benign_rate}%, 95% CI [{benign_ci[0]}%, {benign_ci[1]}%])")
+        print(f"  Benign Utility: {benign_passed}/{benign_total} ({benign_rate}%, 95% CI [{benign_ci[0]}%, {benign_ci[1]}%])", flush=True)
         if benign_errors:
-            print(f"  Benign Errors encountered: {len(benign_errors)}")
+            print(f"  Benign Errors encountered: {len(benign_errors)}", flush=True)
 
         # 2. Under Attack
         pairs_evaluated = 0
@@ -511,7 +627,7 @@ def run_benchmark(
         pair_details = []
         pair_errors = 0
 
-        for ut_id, it_id in target_pairs:
+        for p_idx, (ut_id, it_id) in enumerate(target_pairs):
             user_task = suite.user_tasks[ut_id]
             inj_task = suite.injection_tasks[it_id]
             injections = attack.attack(user_task, inj_task)
@@ -528,12 +644,35 @@ def run_benchmark(
                     sec = entry["security"]
                     if missionpay_instance and entry.get("onchain_log"):
                         missionpay_instance.replay_log.append(entry["onchain_log"])
+                pairs_evaluated += 1
+                if u:
+                    utility_under_attack_count += 1
+                attack_succeeded = compute_attack_success(sec)
+                if attack_succeeded:
+                    attack_success_count += 1
+                pair_details.append({
+                    "user_task": ut_id,
+                    "injection_task": it_id,
+                    "utility": u,
+                    "attack_succeeded": attack_succeeded,
+                })
+                print(
+                    f"  [{datetime.now().strftime('%H:%M:%S')}] [CACHE-HIT] [{defense_key.upper()}] "
+                    f"Pair {p_idx+1}/{len(target_pairs)} ({ut_id}, {it_id}): "
+                    f"utility={u}, attack_succeeded={attack_succeeded} "
+                    f"(Cumul: attack_succ={attack_success_count}/{pairs_evaluated}, util={utility_under_attack_count}/{pairs_evaluated})",
+                    flush=True,
+                )
             else:
                 if missionpay_instance:
                     missionpay_instance.current_task_id = ut_id
+                llm_wrapper.reset_task_trace()
                 try:
-                    u, sec = suite.run_task_with_pipeline(
-                        pipeline, user_task=user_task, injection_task=inj_task, injections=injections
+                    u, sec = run_task_with_timeout(
+                        lambda: suite.run_task_with_pipeline(
+                            pipeline, user_task=user_task, injection_task=inj_task, injections=injections
+                        ),
+                        timeout_seconds=600,
                     )
                     onchain_entry = missionpay_instance.replay_log[-1] if (missionpay_instance and missionpay_instance.replay_log) else None
                     with open(cf, "w", encoding="utf-8") as f:
@@ -545,29 +684,48 @@ def run_benchmark(
                             "utility": u,
                             "security": sec,
                             "onchain_log": onchain_entry,
+                            "trace": llm_wrapper.get_task_trace(),
                         }, f, indent=2)
+
+                    pairs_evaluated += 1
+                    if u:
+                        utility_under_attack_count += 1
+                    attack_succeeded = compute_attack_success(sec)
+                    if attack_succeeded:
+                        attack_success_count += 1
+
+                    pair_details.append({
+                        "user_task": ut_id,
+                        "injection_task": it_id,
+                        "utility": u,
+                        "attack_succeeded": attack_succeeded,
+                    })
+
+                    print(
+                        f"  [{datetime.now().strftime('%H:%M:%S')}] [LIVE] [{defense_key.upper()}] "
+                        f"Pair {p_idx+1}/{len(target_pairs)} ({ut_id}, {it_id}): "
+                        f"utility={u}, attack_succeeded={attack_succeeded} "
+                        f"(Cumul: attack_succ={attack_success_count}/{pairs_evaluated}, util={utility_under_attack_count}/{pairs_evaluated})",
+                        flush=True,
+                    )
+                except TimeoutError as te:
+                    print(f"  [{datetime.now().strftime('%H:%M:%S')}] [TIMEOUT] Pair ({ut_id}, {it_id}) timed out after 600s: {te}", flush=True)
+                    pair_errors += 1
+                    pair_details.append({
+                        "user_task": ut_id,
+                        "injection_task": it_id,
+                        "utility": False,
+                        "attack_succeeded": False,
+                        "error": "TIMEOUT",
+                    })
+                    continue
                 except Exception as e:
-                    print(f"  [ERROR] Pair ({ut_id}, {it_id}) failed: {e}")
+                    print(f"  [{datetime.now().strftime('%H:%M:%S')}] [ERROR] Pair ({ut_id}, {it_id}) failed: {e}", flush=True)
                     pair_errors += 1
                     if "QUOTA_EXHAUSTED" in str(e) or "OLLAMA_SERVER_DOWN" in str(e):
                         break
                     continue
                 time.sleep(0.5)
-
-            pairs_evaluated += 1
-            if u:
-                utility_under_attack_count += 1
-            # In AgentDojo, security == False means attack SUCCEEDED (breached)
-            attack_succeeded = not sec
-            if attack_succeeded:
-                attack_success_count += 1
-
-            pair_details.append({
-                "user_task": ut_id,
-                "injection_task": it_id,
-                "utility": u,
-                "attack_succeeded": attack_succeeded,
-            })
 
         asr = round((attack_success_count / pairs_evaluated * 100), 1) if pairs_evaluated > 0 else 0.0
         asr_ci = wilson_score_interval(attack_success_count, pairs_evaluated)
@@ -619,6 +777,7 @@ def run_benchmark(
                 "log": onchain_log[:50],
             },
         }
+        save_checkpoint()
 
     # Record total wall time
     overall_results["metadata"]["wall_time_seconds"] = round(time.time() - start_wall_time, 2)
@@ -682,10 +841,10 @@ All financial proposals evaluated under `c2_strict` and `c2_file_trusted` are de
 - The off-chain guard makes the blocking decision; on-chain simulation serves as an independent cryptographic cross-check.
 """
 
-    summary_path = Path(__file__).parent / "SUMMARY.md"
+    summary_path = Path(__file__).parent / "LIVE_SUMMARY.md"
     with open(summary_path, "w", encoding="utf-8") as f:
         f.write(summary_md)
-    print(f"[OK] Summary markdown generated at: {summary_path}")
+    print(f"[OK] Live summary markdown generated at: {summary_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AgentDojo Banking Defense Benchmark Runner")

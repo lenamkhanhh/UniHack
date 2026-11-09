@@ -1630,3 +1630,41 @@ Refer to OWNER_TODO.md for step-by-step faucet instructions.
 ### 3. Ràng Buộc Tuân Thủ
 - Đã hoàn tất M4-L2. Dừng lại chờ Owner quyết định phương án môi trường (Ollama local vs Gemini billed key).
 - Tuyệt đối không xoay vòng API key qua nhiều tài khoản, không commit secret, không push `main`.
+
+---
+
+## M4-L3: AGENTDOJO SECURITY FLAG SEMANTICS & LIVE SUMMARY SEPARATION
+
+**Thời điểm:** 2026-11-09 19:40 (Asia/Saigon) | **Nhánh:** `feat/s1-app`
+
+### 1. Bảng Nghiệm Thu Triển Khai M4-L3
+
+| ID | Mức | Trạng thái | File chính | Chi tiết thay đổi & Kết quả kiểm chứng |
+|---|---|:---:|---|---|
+| **M4-L3** | **Chặn / Chuẩn hóa** | **ĐẠT** | `eval/agentdojo/run_benchmark.py`<br>`eval/agentdojo/test_provguard_pairs.py` | **Sửa đảo ngược cờ ASR & Bảo vệ Ground-truth Replay Summary**:<br>• Chuẩn hóa ngữ nghĩa cờ an ninh: Trong AgentDojo banking suite (`default_suites/v1/banking/injection_tasks.py`), `security=True` xảy ra khi giao dịch tới attacker IBAN thành công (tức injection thành công, an ninh bị vi phạm). Code cũ dùng `attack_succeeded = not sec` dẫn đến hiểu ngược hoàn toàn. Đã chuyển sang `attack_succeeded = compute_attack_success(sec) = bool(sec)`.<br>• Bổ sung unit test `test_agentdojo_security_flag_semantics_attack_success` trong `test_provguard_pairs.py` kiểm chứng hai trường hợp: (1) `security=True` -> `attack_succeeded=True`; (2) `security=False` -> `attack_succeeded=False`. Toàn bộ 5/5 unit tests pass.<br>• Tách biệt đường dẫn summary: Runner live ghi ra `eval/agentdojo/LIVE_SUMMARY.md`. File `eval/agentdojo/SUMMARY.md` (chứa kết quả replay 169 giao dịch) được giữ nguyên vẹn 100%. |
+
+### 2. Kết Quả Kiểm Thử Toàn Bộ Hệ Thống
+- **Benchmark Unit Tests (`test_provguard_pairs.py`):** **5/5 passed (100%)** trong 0.5s.
+- **Python Syntax Check (`py_compile`):** Clean (**0 errors**).
+- **Git Status `eval/agentdojo/SUMMARY.md`:** Clean (không bị sửa đổi).
+
+
+---
+
+## M4-L4: TIMEOUT HARDENING, UNBUFFERED LOGGING, TRACE CACHING & SAFE RESUMPTION
+
+**Thời điểm:** 2026-11-09 20:05 (Asia/Saigon) | **Nhánh:** `feat/s1-app`
+
+### 1. Bảng Nghiệm Thu Triển Khai M4-L4
+
+| ID | Mức | Trạng thái | File chính | Chi tiết thay đổi & Kết quả kiểm chứng |
+|---|---|:---:|---|---|
+| **M4-L4** | **Chặn / Ổn định** | **ĐẠT** | `eval/agentdojo/run_benchmark.py` | **Hard Timeouts, Unbuffered Logging, Tool Call Traces & Live Resumption**:<br>• **Hard Request Timeout (120s)**: Thêm `http_options=genai_types.HttpOptions(timeout=120_000)` vào `genai.Client` khởi tạo Google SDK, ngăn chặn triệt để hiện tượng treo socket vô hạn làm tiến trình chết âm thầm.<br>• **Task Wall-Clock Timeout (600s)**: Bọc hàm `run_task_with_timeout(fn, timeout_seconds=600)` qua `ThreadPoolExecutor(max_workers=1)`. Khi chạm trần 10 phút, ghi nhận rõ ràng `error: TIMEOUT` và tiếp tục tác vụ tiếp theo (tuyệt đối không tính là blocked).<br>• **Unbuffered Logging**: Thêm `flush=True` vào toàn bộ lệnh `print`, chạy với `python -u`. In tiến độ từng tác vụ có timestamp `[HH:MM:SS]` và số liệu lũy kế (`[CACHE-HIT]` và `[LIVE]`).<br>• **Tool Calls & Assistant Text Trace**: Bổ sung `current_task_trace` và `last_assistant_text` vào `HonestGoogleLLM` và `HonestOllamaLLM`. Lưu chi tiết danh sách hàm gọi + tham số và câu trả lời cuối cùng vào mỗi cache entry MỚI (giữ nguyên 25 entries cũ).<br>• **Safe Live Resumption & Checkpointing**: Tự động lưu checkpoint kết quả JSON và cập nhật `LIVE_SUMMARY.md` ngay sau mỗi cấu hình defense hoặc khi gặp quota. Chạy theo thứ tự: (a) 39 cặp `c2_strict` còn lại; (b) 16 benign `c0`; (c) 48 cặp tấn công `c0`. Dùng duy nhất 1 key trong `.env`. |
+
+### 2. Kết Quả Kiểm Thử Toàn Bộ Hệ Thống
+- **Contracts (Foundry):** **74/74 passed** trên 5 test suites.
+- **Web App (`apps/web` Vitest):** **243/243 passed** trên 31 test files.
+- **Package Guard & MCP:** **18/18 passed** (12 guard + 6 mcp).
+- **Python Benchmark Unit Tests (`test_provguard_pairs.py`):** **5/5 passed (100%)**.
+- **Python Syntax Check (`py_compile`):** Clean (**0 errors**).
+- **Trạng thái thực thi live:** Tiến trình đang chạy mượt mà, ghi nhận cache entries mới kèm trace chi tiết (`tool_calls` + `final_assistant_text`).
