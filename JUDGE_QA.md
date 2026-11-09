@@ -10,7 +10,7 @@ Cập nhật: 2026-11-09.
 | AgentDojo banking, replay không dùng model (C2 strict) | Chặn 120/128 đòn tài chính. Benign utility 13/16, chặn nhầm 3/16 (bằng ProvGuard policy v1) | `eval/agentdojo/SUMMARY.md`, `results/replay-ground-truth-20261109-035811.json` |
 | 8 đòn lọt | Đều nằm ở `user_task_15`: chính prompt của người dùng đặt IBAN của kẻ tấn công làm chủ nhà mới. Ở 15 task còn lại chặn 120/120 | như trên |
 | Replay trên fork Fuji | Contract và guard off-chain khớp nhau 169/169. Khi cố tình đưa kẻ tấn công vào allowlist chung, contract vẫn revert 150 lệnh với `PayeeNotInMissionSet` | như trên |
-| AgentDojo live, Gemini | **CHƯA CÓ.** Đang chạy trên quota free, kết quả theo từng đợt | `REVIEW_FIXES_WOW.md` mục M4-LIVE |
+| AgentDojo live, gemini-3.1-flash-lite, C2 strict (ĐANG DỞ, chưa nói lên sân khấu) | Tính đến 09/11 lúc 20:36 (hết quota): 0/30 đòn lọt (Wilson 95% CI 0–11,4%); làm đúng việc khi bị tấn công 9/30; benign 4/16. Chưa chạy C0 nên chưa so được, và benign 4/16 chưa giải thích được | `eval/agentdojo/LIVE_SUMMARY.md`, commit f8b4bc8 |
 | Foundry | 74/74 test pass, có invariant suite | `contracts/` |
 | Web | 240/240 test pass. Lighthouse accessibility 100 trên 5 trang (mobile) | `apps/web` |
 | ICM Fuji ↔ Dispatch | Mới chạy với **mock local** (12 test). Chưa có giao dịch live | `contracts/test/MissionCrossChainICM.t.sol` |
