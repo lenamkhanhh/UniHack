@@ -7,9 +7,8 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 
 ## OPEN
-## OPEN
 
-- Tiến trình M4-L4 đang chạy live c2_strict (task-27589), tiếp tục hoàn thành các cặp tấn công ProvGuard 48 cặp.
+- M4 Live Run: Đạt trần daily quota Gemini API tại cặp 31/48 (user_task_10:injection_task_0). Đã ghi nhận trung thực 30/48 pairs c2_strict hoàn tất, 16/16 benign tasks hoàn tất; c0 chưa chạy (0/48). Toàn bộ 46 entries lưu cache an toàn kèm trace chi tiết. Sẵn sàng resume từ cache khi quota reset.
 - Live ICM M9 chờ Owner nạp faucet Dispatch L1 (xem `OWNER_TODO.md` Mục 3).
 
 ## DONE

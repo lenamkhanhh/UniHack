@@ -1668,3 +1668,27 @@ Refer to OWNER_TODO.md for step-by-step faucet instructions.
 - **Python Benchmark Unit Tests (`test_provguard_pairs.py`):** **5/5 passed (100%)**.
 - **Python Syntax Check (`py_compile`):** Clean (**0 errors**).
 - **Trạng thái thực thi live:** Tiến trình đang chạy mượt mà, ghi nhận cache entries mới kèm trace chi tiết (`tool_calls` + `final_assistant_text`).
+
+---
+
+## M4-LIVE: AGENTDOJO BANKING DEFENSE LIVE RUN PROGRESS (QUOTA-LIMITED PARTIAL RUN)
+
+**Thời điểm:** 2026-11-09 20:37 (Asia/Saigon) | **Nhánh:** `feat/s1-app`
+**Run ID:** `agentdojo-banking-google-gemini-3.1-flash-lite-20261109-200325`  
+**Model:** `gemini-3.1-flash-lite` | **Backend:** `google` (1 API key duy nhất trong `.env`)  
+**Canonical JSON:** `eval/agentdojo/results/agentdojo-banking-google-gemini-3.1-flash-lite-20261109-200325.json`  
+**Live Summary:** `eval/agentdojo/LIVE_SUMMARY.md`
+
+### 1. Bảng Số Liệu Đo Đạc Thực Tế (Không Ngoại Suy, Không Giả Lập)
+
+| Cấu hình | Benign Utility ($N=16$) | Hoàn tất đòn tấn công | Utility Under Attack | ASR Thực Tế (Injections Thành Công) | 95% Wilson CI (ASR) | Thời Gian Thực (Wall Time) | API Calls / Errors |
+|---|---|---|---|---|---|---|---|
+| **`c2_strict`** | **4/16 (25.0%)**<br>[10.2%, 49.5%] | **30 / 48 pairs** (62.5%) | **9/30 (30.0%)**<br>[16.7%, 47.9%] | **0 / 30 (0.0% ASR)** | **[0.0%, 11.4%]** | 2008.38s (~33.5 min) | 191 calls / 3 retries (429) |
+| **`c0`** | *Chưa chạy (0/16)* | *Chưa chạy (0/48)* | — | — | — | — | Dừng do cạn daily quota |
+
+*Ghi chú dừng quota:* Tiến trình dừng chính xác tại cặp thứ 31 (`user_task_10`, `injection_task_0`) do gặp lỗi `QUOTA_EXHAUSTED: Gemini API daily quota limit reached`. Tuân thủ 100% nguyên tắc trung thực: dừng và ghi nhận đúng $N=30$, không lấp khoảng trống, không xoay vòng key.
+
+### 2. Chi Tiết Trace & Cache Mới
+- Toàn bộ **46 cache entries** (16 benign + 30 attack pairs) đã được lưu bền vững tại `eval/agentdojo/cache/`.
+- Các cache entries từ cặp 10 trở đi đều chứa đầy đủ cấu trúc `"trace": {"tool_calls": [...], "final_assistant_text": "..."}` giúp giải trình rõ lý do model gọi công cụ và câu trả lời cuối cùng.
+- Khi quota reset hoặc khi có key mới, runner sẽ resume ngay lập tức từ cache, tiếp tục từ cặp 31/48 của `c2_strict`, sau đó chạy 16 benign `c0` và 48 cặp tấn công `c0`.
