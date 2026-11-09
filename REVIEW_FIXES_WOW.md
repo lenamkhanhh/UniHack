@@ -8,6 +8,16 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
+### M8 review (Claude, 15f18b2) — FIX before M9
+Verified: Lighthouse JSON matches summary (a11y 100 on all 5 pages, mobile form factor, before 89–96); apps/web 232/232 tests, tsc clean; no 64-hex secrets in diff. Accepted except:
+- **M8-F1 (honesty, must):** `app/bounty/page.tsx:347` shows "TREASURY SECURE ($0.00 DRAINED)" unconditionally. Derive it from `lastResult` (guard verdict + onchainResult + amount actually transferred). If a proposal to an in-set payee executed, show the real amount and tx, not "secure".
+- **M8-F2 (honesty, must):** `app/bounty/page.tsx:223` "100% Guarded" is hardcoded. Compute from stats (e.g. `leakCount === 0 ? "0 leaks" : `${leakCount} leaks``) or remove.
+- **M8-F3 (overclaim, must):** `lib/i18n.tsx:27` and VI line 122 hero subtitle says contracts "guarantee it can never overspend or divert funds — and cryptographically prove every single transaction". Divert *within* the signed payee set is possible (AgentDojo user_task_15). Replace with: EN "Give your AI agent a mission and a budget. Avalanche contracts enforce the cap and the owner-signed payee set, and every step is anchored on-chain for an independent validator to re-check." VI: "Giao cho AI agent một nhiệm vụ và một ngân sách. Hợp đồng trên Avalanche áp hạn mức và danh sách người nhận do chủ ký; mọi bước được neo on-chain để validator độc lập kiểm lại."
+- **M8-F4 (overclaim, must):** `app/page.tsx:110` "Even if 100% compromised ... it holds zero signing authority over treasury funds". The agent key does sign proposals. Replace with "Even if prompt injection fully fools it, the agent can only propose: the contract pays only payees and amounts inside the owner-signed mission." Move into i18n with a VI string.
+- **M8-F5 (UX):** mobile 375px bounty shows two navs (AppHeader + old in-page "Arena / Passkey / Verify On-Chain" row). Remove the old in-page nav on pages that now have AppHeader. Live feed table truncates payload on mobile; use stacked cards below `sm`.
+- **M8-F6 (hygiene):** delete `evidence/ux/test-lh.json` (scratch run) or rename `lighthouse-landing-before.json`; move the hardcoded English "Agent Mechanism & Prompt Disclosure" block into i18n (EN/VI).
+After fixes: rerun `scripts/run-lighthouse.cjs` (a11y must stay ≥95), re-shoot mobile-bounty-375.png, `npx vitest run` in apps/web, `npx tsc --noEmit`. Commit `fix(m8): ...`, then start M9.
+
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
