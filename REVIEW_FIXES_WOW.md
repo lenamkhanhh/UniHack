@@ -8,17 +8,19 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-### M8-F8/F9 accepted (Claude, 5fe2e22) — M8 closed after F10
-Verified: simulate returns BYPASS / REVERTED (decoded contract error) / RPC_ERROR; no-call path is SKIPPED; RPC_ERROR → UNKNOWN banner; bypass banner now says "simulated call would pay $X"; apps/web 240/240, tsc clean.
-- **M8-F10 (small, do first in M9):** `app/bounty/page.tsx:199,205`.
-  - L205 subtitle "0.00 USDC loss (simulated leaks)" is hardcoded. `bountySpentUsdc` is the real on-chain spend of the bounty mission, so label it "spent on-chain by this mission" / "đã chi on-chain trong mission này", with no fixed number.
-  - L199 pairs the simulated leak count with the real on-chain spend. Show only the leak count with "simulated leaks" / "lượt lọt (mô phỏng)".
-  - Move both strings into i18n.
+### M8 closed (M8-F1..F10 complete)
+All M8 fixes verified and accepted: simulate returns BYPASS / REVERTED / RPC_ERROR; neutral UNKNOWN banner fallback; accurate stat card labels and full i18n support; apps/web 240/240 tests passed, tsc clean.
 
 
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
+
+- M8-F10 [Bounty Stat Card Phrasing & i18n]:
+  - **M8-F10 (Stat Card Phrasing & Dynamic Labels):**
+    - L205 subtitle "0.00 USDC loss (simulated leaks)" đã được thay thế bằng nhãn chuẩn i18n `bounty.stat.mission_spent_desc` ("spent on-chain by this mission" / "đã chi on-chain trong mission này"), phản ánh đúng số tiền on-chain thật của mission thay vì chuỗi gán cứng.
+    - L199 tách riêng số lượt lọt mô phỏng hiển thị nhãn i18n `bounty.stat.zero_leaks` ("0 out-of-bounds leaks" / "0 lượt lọt ngoài phạm vi") hoặc `${stats.leakCount} ${t('bounty.stat.simulated_leaks')}` ("simulated leaks" / "lượt lọt (mô phỏng)"), không ghép lẫn lộn với số tiền on-chain.
+    - Đã chuyển toàn bộ chuỗi sang `apps/web/lib/i18n.tsx` (cả EN và VI).
 
 - M8-F8..F9 [Simulation Honesty, Accurate RPC/Skip Status & Potential Bypass Phrasing]:
   - **M8-F8 (Accurate Step 3 Contract Status):** Loại bỏ việc gán cứng status 'REVERTED' trong nhánh else của `lib/bounty.ts`. Phân định chính xác 4 trạng thái cho step 3: 'SKIPPED' (khi agent không đề xuất hoặc trả cho vendor hợp lệ trong allowlist); 'RPC_ERROR' (khi mạng hoặc transport RPC lỗi); 'REVERTED' (khi eth_call thực sự trả về lỗi contract như PayeeNotInMissionSet/MissionCapExceeded); 'BYPASS' (khi eth_call thành công). `deriveBountyBannerResult` tự động ánh xạ RPC_ERROR thành banner trung tính UNKNOWN.

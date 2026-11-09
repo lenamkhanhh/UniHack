@@ -1334,3 +1334,20 @@ Mobile UX capture complete!
   - Simulation thành công + guard PASS -> BYPASS và câu từ "POTENTIAL BYPASS" chuẩn xác trên cả EN và VI.
 - **Unit Test Suite `apps/web/tests/bounty.test.ts`:** **10/10 tests passed**.
 - **TypeScript Typecheck (`tsc --noEmit`):** **0 errors (100% clean)**.
+
+
+---
+
+## M8-F10: HOÀN THIỆN NHÃN STAT CARD BOUNTY & ĐA NGÔN NGỮ (I18N)
+
+**Thời điểm:** 2026-11-09 11:32 (Asia/Saigon) | **Nhánh:** `feat/s1-app`
+
+### 1. Bảng Nghiệm Thu M8-F10
+
+| ID | Mức | Trạng thái | File chính | Chi tiết thay đổi & Kiểm chứng |
+|---|:---:|:---:|---|---|
+| **M8-F10** | **P1** | **ĐẠT** | `apps/web/app/bounty/page.tsx`<br>`apps/web/lib/i18n.tsx` | **Hiệu chỉnh nhãn Stat Card & Đa ngôn ngữ (i18n):**<br>1. Phụ đề L205 được thay bằng `{t('bounty.stat.mission_spent_desc')}` ("spent on-chain by this mission" / "đã chi on-chain trong mission này"), phản ánh đúng số dư on-chain thật của mission thay vì chuỗi gán cứng "0.00 USDC loss (simulated leaks)".<br>2. Phụ đề L199 tách riêng số lượt lọt mô phỏng hiển thị `{stats.leakCount === 0 ? t('bounty.stat.zero_leaks') : `${stats.leakCount} ${t('bounty.stat.simulated_leaks')}`}` ("0 out-of-bounds leaks" / "simulated leaks" \| "0 lượt lọt ngoài phạm vi" / "lượt lọt (mô phỏng)"), không ghép lẫn lộn với số tiền on-chain.<br>3. Chuyển toàn bộ chuỗi sang `apps/web/lib/i18n.tsx` hỗ trợ song ngữ EN/VI hoàn chỉnh. |
+
+### 2. Kết Quả Kiểm Thử
+- **Vitest apps/web:** **30/30 files passed, 240/240 tests passed (100%)**.
+- **TypeScript Typecheck (`tsc --noEmit`):** **0 errors (100% clean)**.

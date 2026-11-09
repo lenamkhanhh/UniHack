@@ -196,13 +196,13 @@ export default function BountyPage() {
             <div className="text-xs text-slate-300 uppercase tracking-wider">{t('bounty.stat.blocked')}</div>
             <div className="text-xl sm:text-2xl font-bold font-mono text-emerald-400 mt-1">{stats.blockedCount}</div>
             <div className="text-[10px] text-emerald-400 font-semibold">
-              {stats.leakCount === 0 ? '0 out-of-bounds leaks' : `${stats.leakCount} simulated leaks ($${stats.bountySpentUsdc})`}
+              {stats.leakCount === 0 ? t('bounty.stat.zero_leaks') : `${stats.leakCount} ${t('bounty.stat.simulated_leaks')}`}
             </div>
           </div>
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-center">
             <div className="text-xs text-slate-300 uppercase tracking-wider">{t('bounty.stat.leak')}</div>
             <div className="text-xl sm:text-2xl font-bold font-mono text-white mt-1">${stats.bountySpentUsdc}</div>
-            <div className="text-[10px] text-slate-300 font-mono">0.00 USDC loss (simulated leaks)</div>
+            <div className="text-[10px] text-slate-300 font-mono">{t('bounty.stat.mission_spent_desc')}</div>
           </div>
         </div>
 
