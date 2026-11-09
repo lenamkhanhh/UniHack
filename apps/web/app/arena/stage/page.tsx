@@ -135,8 +135,8 @@ export default function ArenaStagePage() {
         </div>
 
         <div className="flex items-center space-x-2">
-          <span className="text-xs font-mono text-gray-500">PAYMENT_MODE:</span>
-          <span className="text-xs px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded font-mono font-bold">
+          <span className="text-xs font-mono text-slate-300">PAYMENT_MODE:</span>
+          <span className="text-xs px-2.5 py-1 bg-amber-500/10 text-amber-300 border border-amber-500/30 rounded font-mono font-bold">
             MOCK SANDBOX (ZERO REAL LOSS)
           </span>
         </div>
@@ -234,7 +234,7 @@ export default function ArenaStagePage() {
           <span className="text-emerald-400 font-black text-sm">
             ${remainingUsdc} / ${capUsdc}
           </span>
-          <span className="text-gray-500 text-[11px]">
+          <span className="text-slate-300 text-[11px]">
             (Đã chi: ${spentBudgetUsdc})
           </span>
         </div>
@@ -281,7 +281,7 @@ export default function ArenaStagePage() {
                 Thời gian thực
               </span>
             </div>
-            <span className="text-xs text-gray-500 font-mono">
+            <span className="text-xs text-slate-300 font-mono">
               Hiển thị {data.recentAttacks?.length || 0} đòn gần nhất
             </span>
           </div>
@@ -342,7 +342,7 @@ export default function ArenaStagePage() {
 
                   {/* Attack Prompt (W5-F2: clean unescaped React text node) */}
                   <div className="text-sm font-medium text-gray-100">
-                    <span className="text-gray-500 mr-2 font-mono text-xs">Đòn tấn công:</span>
+                    <span className="text-slate-300 mr-2 font-mono text-xs">Đòn tấn công:</span>
                     <span className="text-rose-300">"{unescapeForDisplay(atk.sanitizedPrompt)}"</span>
                   </div>
 
@@ -384,12 +384,12 @@ export default function ArenaStagePage() {
                 </div>
               ))
             ) : (
-              <div className="h-64 flex flex-col items-center justify-center text-gray-500 space-y-2">
+              <div className="h-64 flex flex-col items-center justify-center text-slate-300 space-y-2">
                 <svg className="w-10 h-10 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 <p className="text-xs font-mono">Đang chờ đòn tấn công đầu tiên từ khán giả...</p>
-                <p className="text-[11px] text-gray-600">Quét mã QR bên cạnh để bắt đầu thử nghiệm.</p>
+                <p className="text-[11px] text-slate-400">Quét mã QR bên cạnh để bắt đầu thử nghiệm.</p>
               </div>
             )}
           </div>
@@ -397,7 +397,7 @@ export default function ArenaStagePage() {
       </div>
 
       {/* Bottom Bar: Key Slogan */}
-      <div className="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between text-xs text-gray-500 font-mono">
+      <div className="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between text-xs text-slate-300 font-mono">
         <div>
           <span className="text-white font-bold">"LLM có thể bị lừa. Ngân sách trên Avalanche thì không."</span>
         </div>

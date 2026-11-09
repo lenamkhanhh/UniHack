@@ -1,0 +1,27 @@
+{
+  "landing": {
+    "accessibility": 100,
+    "performance": 96,
+    "bestPractices": 96
+  },
+  "bounty": {
+    "accessibility": 100,
+    "performance": 99,
+    "bestPractices": 96
+  },
+  "verify": {
+    "accessibility": 100,
+    "performance": 85,
+    "bestPractices": 96
+  },
+  "missions-new": {
+    "accessibility": 100,
+    "performance": 100,
+    "bestPractices": 96
+  },
+  "arena-stage": {
+    "accessibility": 100,
+    "performance": 84,
+    "bestPractices": 96
+  }
+}

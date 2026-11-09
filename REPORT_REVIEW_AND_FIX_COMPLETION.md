@@ -1231,3 +1231,51 @@ ightarrow$ Attack Blocked (ASR = 0, thất thoát 0 USDC).
 - `contracts` (Foundry): **4 suites passed, 61/61 tests passed** (gồm 512 invariant runs, 32,768 calls, 0 reverts)
 - TypeScript Typecheck (`tsc --noEmit -p apps/web`): **0 errors (100% clean)**
 - Production Build (`next build`): **33/33 static & dynamic routes compiled successfully**
+
+
+---
+
+## MAX-M8: UI/UX PASS, LIGHTHOUSE ACCESSIBILITY 100/100, MOBILE 375PX & EN/VI SUPPORT
+
+**Thời điểm:** 2026-11-09 (Asia/Saigon) | **Nhánh:** `feat/s1-app`
+
+### 1. Bảng Nghiệm Thu Milestone MAX-M8
+
+| ID | Yêu cầu kỹ thuật | Trạng thái | Chi tiết thực hiện & Kiểm chứng |
+|---|---|---|---|
+| **M8-01** | Production Build Lighthouse Audits | **ĐẠT** | Khởi chạy Next.js production server trên cổng 3100 (`next start -p 3100`), thực thi Lighthouse tự động qua Chrome DevTools/Lighthouse trên cả 5 trang: `/`, `/bounty`, `/verify/demo-seed`, `/missions/new`, `/arena/stage`. Lưu báo cáo chi tiết vào `evidence/ux/lighthouse-*.json`. |
+| **M8-02** | Accessibility $\ge 95$ (Đạt 100/100 Toàn Diện) | **ĐẠT** | Khắc phục triệt để mọi lỗi tương phản màu (thay thế `text-slate-500` / `text-gray-500` bằng `text-slate-300` / `text-slate-400`), bổ sung đầy đủ `<label htmlFor="...">` và `id="..."` cho 100% input forms, focus rings và touch targets $\ge 44 \times 44\text{px}$. Toàn bộ 5 trang đều đạt **100/100** điểm Accessibility. |
+| **M8-03** | Mobile 375px Responsive Check | **ĐẠT** | Thực thi Playwright script tự động `scripts/capture-mobile-ux.cjs` tại viewport 375×812 (iPhone SE/Mini standard) cho `/bounty` và `/verify/demo-seed`: xác nhận `scrollWidth: 375, clientWidth: 375, hasHorizontalScroll: false` (0 vỡ layout, 0 tràn ngang). Lưu ảnh minh chứng tại `evidence/ux/mobile-bounty-375.png` và `evidence/ux/mobile-verify-375.png`. |
+| **M8-04** | Chuyển đổi Ngôn ngữ EN/VI (Mặc định EN) | **ĐẠT** | Xây dựng hệ thống i18n chuẩn React context (`apps/web/lib/i18n.tsx`) và component điều hướng `apps/web/components/AppHeader.tsx`. Mặc định tiếng Anh (`EN`) cho ban giám khảo quốc tế, chuyển đổi sang tiếng Việt (`VI`) cho giám khảo nội địa tại `/`, `/bounty`, `/verify`, `/missions/new`. |
+| **M8-05** | Trạng thái Lỗi / Đang Tải / Dữ Liệu Trống | **ĐẠT** | Tích hợp loading spinners, cảnh báo RPC Fuji khi ngắt kết nối (`bounty.rpc_error`), thông báo rỗng kèm nút hành động (Empty missions CTA, empty bounty feed), và fallback rõ ràng. |
+| **M8-06** | Landing Page `/` Redesign | **ĐẠT** | Thiết kế lại trang `/`: bổ sung hero section với câu định vị chuẩn xác *"Others stop strangers. We stop off-mission payees too"* (VI: *"Người khác chặn kẻ lạ. Chúng tôi chặn cả người nhận ngoài nhiệm vụ"*), 3 thẻ kiến trúc bảo mật 3 tầng, và 3 nút CTA chính: "Hack the treasury" (`/bounty`), "Verify a mission" (`/verify/demo-seed`), "Approve with passkey" (`/missions/new`). |
+
+### 2. Bảng Đối Soát Điểm Số Lighthouse (Trước vs Sau Fix)
+
+| Trang (Route) | Accessibility Trước | Accessibility Sau | Performance Sau | Best Practices Sau | Trạng thái |
+|---|:---:|:---:|:---:|:---:|:---:|
+| `/` (Landing Page) | 95 | **100** (+5) | 96 | 96 | **ĐẠT** |
+| `/bounty` (Bounty Arena) | 96 | **100** (+4) | 99 | 96 | **ĐẠT** |
+| `/verify/demo-seed` (Client Verifier) | 95 | **100** (+5) | 85 | 96 | **ĐẠT** |
+| `/missions/new` (Passkey Approval) | 89 | **100** (+11) | 100 | 96 | **ĐẠT** |
+| `/arena/stage` (Audience Arena Stage) | 95 | **100** (+5) | 84 | 96 | **ĐẠT** |
+
+### 3. Minh Chứng Kiểm Thử Mobile 375px (Playwright Device Emulation)
+```
+Navigating to http://localhost:3100/bounty at 375px...
+[mobile-bounty-375.png] scrollWidth: 375, clientWidth: 375, hasHorizontalScroll: false
+Saved screenshot to UniHack/evidence/ux/mobile-bounty-375.png
+Navigating to http://localhost:3100/verify/demo-seed at 375px...
+[mobile-verify-375.png] scrollWidth: 375, clientWidth: 375, hasHorizontalScroll: false
+Saved screenshot to UniHack/evidence/ux/mobile-verify-375.png
+Mobile UX capture complete!
+```
+
+### 4. Tổng Hợp Kiểm Thử Toàn Diện Hệ Thống
+- `apps/web` (Vitest): **29/29 files passed, 232/232 tests passed (100%)**
+- `packages/guard` (Vitest): **2/2 files passed, 12/12 tests passed** (gồm 180-case differential parity)
+- `packages/mcp` (Vitest): **1/1 file passed, 6/6 tests passed**
+- `contracts` (Foundry): **4 suites passed, 61/61 tests passed** (gồm 512 invariant runs, 32,768 calls, 0 reverts)
+- TypeScript Strict Typecheck (`tsc --noEmit -p apps/web`): **0 errors (100% clean)**
+- Production Build (`next build`): **33/33 static & dynamic routes compiled successfully**
+- Ràng buộc an toàn: **Không commit secret, không deploy public, không push main.**
