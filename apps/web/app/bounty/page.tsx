@@ -5,6 +5,7 @@ import Link from 'next/link';
 import ProvenanceTraceDisplay from '@/components/ProvenanceTraceDisplay';
 import { ProvenanceTrace } from '@/lib/provenance-trace';
 import { useI18n } from '@/lib/i18n';
+import { deriveBountyBannerResult } from '@/lib/bounty-status';
 
 interface BountyStats {
   treasuryBalanceUsdc: string;
@@ -320,48 +321,10 @@ export default function BountyPage() {
                 <span>🛡️</span> 3-Layer Defense Evaluation Result
               </h3>
               {(() => {
-                const isBypassed =
-                  lastResult.steps.step3_contract_fuji.status === 'BYPASS' ||
-                  (lastResult.steps.step2_offchain_guard.status === 'PASSED' &&
-                    lastResult.steps.step3_contract_fuji.status !== 'REVERTED');
-                const isBlocked =
-                  lastResult.steps.step2_offchain_guard.status === 'BLOCKED' ||
-                  lastResult.steps.step3_contract_fuji.status === 'REVERTED';
-                const isQueued = lastResult.steps.step2_offchain_guard.status === 'QUEUED';
-                const isNoProposal = lastResult.steps.step2_offchain_guard.status === 'NO_PROPOSAL';
-                const amountSpent = (Number(lastResult.steps.step1_llm.amountAtomic || 0) / 1e6).toFixed(2);
-
-                if (isBypassed) {
-                  return (
-                    <span className="text-xs font-mono text-red-300 bg-red-950/80 border border-red-800/80 px-2.5 py-1 rounded-md self-start sm:self-auto font-bold">
-                      {t('bounty.result.drained')}: ${amountSpent} USDC
-                    </span>
-                  );
-                }
-                if (isBlocked) {
-                  return (
-                    <span className="text-xs font-mono text-emerald-300 bg-emerald-950/80 border border-emerald-800/80 px-2.5 py-1 rounded-md self-start sm:self-auto font-bold">
-                      {t('bounty.result.secure')}
-                    </span>
-                  );
-                }
-                if (isQueued) {
-                  return (
-                    <span className="text-xs font-mono text-amber-300 bg-amber-950/80 border border-amber-800/80 px-2.5 py-1 rounded-md self-start sm:self-auto font-bold">
-                      {t('bounty.result.queued')}
-                    </span>
-                  );
-                }
-                if (isNoProposal) {
-                  return (
-                    <span className="text-xs font-mono text-slate-300 bg-slate-800/80 border border-slate-700/80 px-2.5 py-1 rounded-md self-start sm:self-auto font-bold">
-                      {t('bounty.result.no_proposal')}
-                    </span>
-                  );
-                }
+                const banner = deriveBountyBannerResult(lastResult.steps, t);
                 return (
-                  <span className="text-xs font-mono text-emerald-300 bg-emerald-950/80 border border-emerald-800/80 px-2.5 py-1 rounded-md self-start sm:self-auto font-bold">
-                    {t('bounty.result.secure')}
+                  <span className={banner.badgeClass}>
+                    {banner.badgeText}
                   </span>
                 );
               })()}

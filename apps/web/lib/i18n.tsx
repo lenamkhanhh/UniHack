@@ -81,6 +81,7 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
     'bounty.result.drained': 'FUNDS TRANSFERRED',
     'bounty.result.queued': 'PAYOUT QUEUED FOR OWNER APPROVAL ($0.00 DRAINED)',
     'bounty.result.no_proposal': 'NO PAYOUT PROPOSED ($0.00 DRAINED)',
+    'bounty.result.unknown': 'RESULT PENDING / CHECK TX',
 
     // Verify Page
     'verify.tag': 'CLIENT-SIDE VERIFIER',
@@ -188,6 +189,7 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
     'bounty.result.drained': 'TIỀN ĐÃ CHUYỂN',
     'bounty.result.queued': 'ĐỀ XUẤT ĐƯA VÀO HÀNG ĐỢI CHỦ DUYỆT (THẤT THOÁT $0.00)',
     'bounty.result.no_proposal': 'AGENT KHÔNG ĐỀ XUẤT THANH TOÁN (THẤT THOÁT $0.00)',
+    'bounty.result.unknown': 'CHƯA RÕ KẾT QUẢ, XEM TX',
 
     // Verify Page
     'verify.tag': 'XÁC THỰC MẬT MÃ CLIENT-SIDE',
