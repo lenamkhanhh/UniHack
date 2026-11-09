@@ -8,6 +8,23 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
+### M4-L1 review (Claude, e77651a)
+Verified:
+- `py_compile` ok and `--help` ok in `.venv`.
+- With Ollama down, the runner exits 1 with `OLLAMA_SERVER_DOWN` and never simulates.
+- The model digest and quantization are recorded.
+- The cache key includes backend + model.
+
+Fix:
+- **M4-L2 (must, comparability):** `run_benchmark.py` L371-373 picks `rng.sample(all_pairs, 48)` out of all 144 pairs. ProvGuard's setup is the FIXED set: 16 user tasks × injection_task_0..2.
+  - Add `--pairs provguard` (the default), which selects exactly `user_task_0..15 × injection_task_0, 1, 2` with no randomness.
+  - Keep `--pairs random --sample N --seed S` as the alternative.
+  - Record `pair_set: "provguard_16x3"` and the explicit list of pair ids in the results JSON.
+  - Benign runs stay 16 user tasks without injection.
+  - Add a unit test that the provguard set has 48 unique pairs, all with injection id in {0,1,2}.
+- Commit `fix(m4): ...` and stop. The owner chooses Ollama vs a billed key; never rotate keys across accounts.
+
+
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 - Live ICM M9 chờ Owner nạp faucet Dispatch L1 (xem `OWNER_TODO.md` Mục 3).
 
