@@ -8,14 +8,13 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-### M8 accepted (Claude, 81a6eef)
-Verified: F1–F6 fixed; banner now follows guard/contract status; hero + planner copy honest in EN/VI; single nav and stacked feed cards at 375px; Lighthouse a11y 100 on all 5 pages; apps/web 232/232, tsc clean; no 64-hex literals.
-- **M8-F7 (small, do first in M9):** `app/bounty/page.tsx` final fallback branch (unknown status) renders `bounty.result.secure`. Render a neutral `bounty.result.unknown` ("RESULT PENDING / CHECK TX" / "CHƯA RÕ KẾT QUẢ, XEM TX") instead. Add a unit test for the banner status mapping (BYPASS, PASSED+not reverted, BLOCKED, REVERTED, QUEUED, NO_PROPOSAL, unknown).
-
-
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
+
+- M8-F7 [Neutral Banner Fallback & Status Mapping Test Suite]:
+  - **Neutral Fallback Status (M8-F7):** Tạo module chuyên trách `apps/web/lib/bounty-status.ts` với hàm `deriveBountyBannerResult`. Khi gặp trạng thái chưa rõ / không xác định, hiển thị banner trung tính `bounty.result.unknown` ("RESULT PENDING / CHECK TX" / "CHƯA RÕ KẾT QUẢ, XEM TX") kèm class `text-amber-200 bg-slate-800/90 border-amber-700/60`, tuyệt đối không khẳng định an toàn sai sự thật.
+  - **Bộ Unit Test Toàn Diện (bounty-banner.test.ts):** Bổ sung 7 test case trong `apps/web/tests/bounty-banner.test.ts` kiểm thử toàn bộ các nhánh: BYPASS, PASSED + SKIPPED, BLOCKED, REVERTED, QUEUED, NO_PROPOSAL, và UNKNOWN fallback. 7/7 tests passed trong 3ms.
 
 - M8-F1..F6 [Bounty Honesty, Claim Calibration, Mobile Feed Stacked Cards & i18n Hygiene]:
   - **M8-F1 (Dynamic Evaluation Result Banner):** Thay thế chuỗi cố định "TREASURY SECURE ($0.00 DRAINED)" bằng badge động suy ra từ lastResult: nếu bypassed/transferred hiển thị số tiền và tx thật (FUNDS TRANSFERRED: $X.XX USDC); nếu blocked/reverted hiển thị bảo toàn ngân quỹ; nếu queued hiển thị chờ duyệt; nếu không có proposal hiển thị không có đề xuất.
