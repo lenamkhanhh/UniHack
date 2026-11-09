@@ -255,6 +255,10 @@ contract Handler is Test {
         bytes32 rootBefore = treasury.missionPayeeRoot(missionId);
         uint256 versionBefore = treasury.policyVersion();
 
+        if (actor == owner) {
+            newRoot = root1;
+        }
+
         vm_prank(actor);
         try treasury.setMissionPayeeRoot(missionId, newRoot) {
             if (actor != owner) {

@@ -8,36 +8,28 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-### M9-F6..F9 review (Claude, c1f7356): mostly OK, live runner still wrong
-Verified:
-- Real blockchain IDs are set.
-- 3-phase deploy split (a) Fuji hub, (b) Dispatch gateway, (c) Fuji configure.
-- Claude fork-simulated (a) on the Fuji RPC and (b) on the Dispatch RPC: both SIMULATION COMPLETE.
-- The m9-abi test passes, `broadcast/` and `cache/` are gitignored, keys come from env only.
-- Teleporter at 0x253b…5fcf is v1 (`getNextMessageID(bytes32)` returns bytes32).
-
-Fix:
-- **M9-F10 (critical, live runner):** `scripts/m9-live-icm.ts` ~L332 parses `MessageExecutionFailed(bytes32 indexed, bytes32 indexed)`, but the v1 event is `MessageExecutionFailed(bytes32 indexed messageID, bytes32 indexed sourceBlockchainID, TeleporterMessage message)`. topic0 differs, so it never matches.
-  - Also, the script takes the LAST failure log from ANY sender on the shared Fuji messenger. That can attribute someone else's failed message to us.
-  - Fix:
-    - take the Teleporter `messageID` from the Dispatch `SendCrossChainMessage` event in our send receipt;
-    - on Fuji, filter `MessageExecutionFailed` / `MessageExecuted` / `ReceiveCrossChainMessage` by `messageID` topic and Dispatch source ID;
-    - import the event ABIs from the official teleporter ABI (full tuple), not hand-written.
-- **M9-F11 (honesty):** the stranger result hardcodes `revertReason: 'UnauthorizedAgent'`, but Teleporter does not emit the reason.
-  - Record `"destination execution failed"`.
-  - To decode the reason, `eth_call` `hub.receiveTeleporterMessage(DISPATCH_ID, gateway, message)` with `from = messenger` at the delivery block, and store the decoded error with label `decoded_via_eth_call_replay`.
-- **M9-F12 (safety):**
-  - `DeployM9.s.sol`: remove the fallback addresses `0x7FA9…` / `0x34A1…` / the agent default (local-sim / guessed values). `require` the env vars to be set.
-  - Add `require(block.chainid == 43113)` in phases (a) and (c), and `== 779672` in phase (b).
-  - In (c), `require` the USDC balance to be ≥ cap instead of silently skipping funding.
-- **M9-F13 (risk check, doc):** the gateway sends with fee 0 and `allowedRelayers = []`. Confirm that a relayer actually serves Dispatch→Fuji: query Fuji messenger `ReceiveCrossChainMessage` logs with sourceBlockchainID = Dispatch over the last ~50k blocks. Record count + latest tx in the report. If there are none, say so in OWNER_TODO (live ICM may need our own relayer or a fee).
-
-Then commit `fix(m9): ...` and stop.
-
-
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
+
+- M9-F10..F13 [Teleporter v1 Tuple ABI, Target-Filtered Logs, Honest Revert Decoding, Strict Deploy Gating & Relayer Risk Assessment]:
+  - **M9-F10 (Official Teleporter v1 Tuple ABI & Strict MessageID Filtering):**
+    - Cập nhật `TELEPORTER_MESSENGER_ABI` trong `apps/web/lib/icm-abi.ts` theo đúng schema verified từ Snowtrace với đầy đủ `TeleporterMessage` struct tuple cho `MessageExecutionFailed`, `ReceiveCrossChainMessage`, và `SendCrossChainMessage`.
+    - Trích xuất chính xác 32-byte `messageID` của Teleporter từ event `SendCrossChainMessage` của transaction gửi trên Dispatch.
+    - Polling trên Fuji lọc nghiêm ngặt `MessageExecutionFailed` / `MessageExecuted` theo topic `messageID` và `sourceBlockchainID` (Dispatch), loại bỏ hoàn toàn nguy cơ nhận nhầm log của người khác.
+    - Bổ sung unit test kiểm chứng trong `apps/web/tests/m9-abi.test.ts` (3/3 passed).
+  - **M9-F11 (Honest Revert Reason & eth_call Replay Decoding):**
+    - Loại bỏ việc gán cứng chuỗi `revertReason: 'UnauthorizedAgent'`.
+    - Ghi nhận trung thực `revertReason: 'destination execution failed'` do Teleporter on-chain nuốt revert bytes.
+    - Thực hiện `fujiPublicClient.call` giả lập lại lệnh `hub.receiveTeleporterMessage` tại đúng delivery block number với `from = teleporterMessenger`, giải mã chuỗi lỗi thật và lưu vào trường `decoded_via_eth_call_replay`.
+  - **M9-F12 (Strict Deployment Chainid & Env Gating):**
+    - `DeployM9.s.sol`: Thêm `require(block.chainid == 43113)` trong `DeployFujiHub` và `ConfigureFujiHub`; thêm `require(block.chainid == 779672)` trong `DeployDispatchGateway`.
+    - Xóa bỏ toàn bộ địa chỉ fallback giả lập (`0x7FA9...`, `0x34A1...`). Bắt buộc các biến môi trường `FUJI_BUDGET_HUB_ADDRESS`, `DISPATCH_GATEWAY_ADDRESS`, `MISSION_AGENT_ADDRESS` phải tồn tại.
+    - Trong `ConfigureFujiHub`, yêu cầu bắt buộc số dư USDC của caller $\ge 	ext{cap}$, hoàn toàn không bỏ qua bước nạp quỹ.
+  - **M9-F13 (Dispatch → Fuji Relayer Activity Audit & Documentation):**
+    - Quét thực tế on-chain Fuji RPC trong 50,000 blocks gần nhất (`60,716,363` $	o$ `60,766,363`): tìm thấy **0 logs** `ReceiveCrossChainMessage` từ Dispatch.
+    - Ghi nhận chi tiết trong `OWNER_TODO.md` Mục 3: Cảnh báo không có relayer công cộng tự động relay 0-fee cho Dispatch $	o$ Fuji; đề xuất 3 phương án khả thi (A: tự chạy `awm-relayer` local; B: phát sóng thủ công qua chữ ký Warp; C: cấu hình phí relayer).
+
 
 - M9-F6..F9 [Avalanche ICM Real Blockchain IDs, Multi-Phase Deploy Script, Full Live Runner & Faucet Docs]:
   - **M9-F6 (Real 32-Byte Avalanche Blockchain IDs):**

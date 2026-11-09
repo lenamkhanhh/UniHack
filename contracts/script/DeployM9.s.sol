@@ -57,12 +57,12 @@ library AvalancheNetworkConstants {
 /**
  * @title DeployFujiHub
  * @notice Phase (a): Deploys MissionBudgetHub on Avalanche Fuji C-Chain.
- * Reads Fuji blockchain ID dynamically from Warp precompile 0x0200...0005.
- * Strictly checks non-zero Dispatch and Fuji blockchain IDs.
+ * Enforces Fuji chain ID (43113) and reads blockchain ID dynamically from Warp precompile.
  */
 contract DeployFujiHub is Script {
     function run() external returns (MissionBudgetHub hub) {
-        // Read current chain ID from Warp precompile
+        require(block.chainid == 43113, "DeployFujiHub: chainid must be 43113 (Fuji C-Chain)");
+
         bytes32 currentChainBlockchainID;
         if (AvalancheNetworkConstants.WARP_PRECOMPILE.code.length > 0) {
             try IWarpMessenger(AvalancheNetworkConstants.WARP_PRECOMPILE).getBlockchainID() returns (bytes32 id) {
@@ -98,12 +98,12 @@ contract DeployFujiHub is Script {
 /**
  * @title DeployDispatchGateway
  * @notice Phase (b): Deploys MissionSpendGateway on Avalanche Dispatch L1.
- * Reads Dispatch blockchain ID dynamically from Warp precompile 0x0200...0005.
- * Points to the deployed Fuji MissionBudgetHub address.
+ * Enforces Dispatch chain ID (779672), requires FUJI_BUDGET_HUB_ADDRESS env var without fallbacks.
  */
 contract DeployDispatchGateway is Script {
     function run() external returns (MissionSpendGateway gateway) {
-        // Read current chain ID from Warp precompile
+        require(block.chainid == 779672, "DeployDispatchGateway: chainid must be 779672 (Dispatch L1)");
+
         bytes32 currentChainBlockchainID;
         if (AvalancheNetworkConstants.WARP_PRECOMPILE.code.length > 0) {
             try IWarpMessenger(AvalancheNetworkConstants.WARP_PRECOMPILE).getBlockchainID() returns (bytes32 id) {
@@ -122,8 +122,10 @@ contract DeployDispatchGateway is Script {
         require(currentChainBlockchainID != bytes32(0), "InvalidDispatchBlockchainID");
         require(fujiBlockchainID != bytes32(0), "InvalidFujiBlockchainID");
 
-        // Destination Hub on Fuji (from env or placeholder for simulation)
-        address hubAddress = vm_envOr("FUJI_BUDGET_HUB_ADDRESS", address(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496));
+        // Destination Hub on Fuji: STRICT requirement from env var, no local fallback
+        address hubAddress = vm_envOr("FUJI_BUDGET_HUB_ADDRESS", address(0));
+        require(hubAddress != address(0), "FUJI_BUDGET_HUB_ADDRESS env var required");
+
         address messenger = vm_envOr("TELEPORTER_MESSENGER_OVERRIDE", AvalancheNetworkConstants.TELEPORTER_MESSENGER);
 
         vm_startBroadcast();
@@ -139,13 +141,20 @@ contract DeployDispatchGateway is Script {
 /**
  * @title ConfigureFujiHub
  * @notice Phase (c): Links Gateway origin on Hub, registers mission with cap <= 1 USDC,
- * and funds hub with <= 1 USDC.
+ * and strictly funds hub with USDC (reverting if balance < cap).
  */
 contract ConfigureFujiHub is Script {
     function run() external {
-        address hubAddress = vm_envOr("FUJI_BUDGET_HUB_ADDRESS", address(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496));
-        address gatewayAddress = vm_envOr("DISPATCH_GATEWAY_ADDRESS", address(0x34A1D3fff3958843C43aD80F30b94c510645C316));
-        address agent = vm_envOr("MISSION_AGENT_ADDRESS", address(0x374b8A126FDb9e5deEc8307da385076155Af3D72));
+        require(block.chainid == 43113, "ConfigureFujiHub: chainid must be 43113 (Fuji C-Chain)");
+
+        address hubAddress = vm_envOr("FUJI_BUDGET_HUB_ADDRESS", address(0));
+        require(hubAddress != address(0), "FUJI_BUDGET_HUB_ADDRESS env var required");
+
+        address gatewayAddress = vm_envOr("DISPATCH_GATEWAY_ADDRESS", address(0));
+        require(gatewayAddress != address(0), "DISPATCH_GATEWAY_ADDRESS env var required");
+
+        address agent = vm_envOr("MISSION_AGENT_ADDRESS", address(0));
+        require(agent != address(0), "MISSION_AGENT_ADDRESS env var required");
 
         bytes32 dispatchBlockchainID = vm_envOr(
             "DISPATCH_BLOCKCHAIN_ID",
@@ -157,16 +166,15 @@ contract ConfigureFujiHub is Script {
         bytes32 payeeRoot = 0xc6ce8ae383124b268df66d71f0af2206e6dafb13eba0b03806eed8a4e7991329;
         uint256 cap = 1_000_000; // 1 USDC cap (strictly <= 1 USDC)
 
+        IERC20Token usdc = IERC20Token(AvalancheNetworkConstants.FUJI_USDC);
+        require(usdc.balanceOf(msg.sender) >= cap, "Insufficient USDC balance to fund hub");
+
         vm_startBroadcast();
         MissionBudgetHub hub = MissionBudgetHub(hubAddress);
         hub.setAllowedOrigin(dispatchBlockchainID, gatewayAddress);
         hub.registerMission(missionId, agent, payeeRoot, cap);
 
-        // Fund hub with 1.00 USDC if balance is available
-        IERC20Token usdc = IERC20Token(AvalancheNetworkConstants.FUJI_USDC);
-        if (usdc.balanceOf(msg.sender) >= cap) {
-            usdc.transfer(hubAddress, cap);
-        }
+        require(usdc.transfer(hubAddress, cap), "USDC transfer to hub failed");
         vm_stopBroadcast();
     }
 }

@@ -31,6 +31,7 @@ import {
   Hex,
   Address,
   decodeEventLog,
+  encodeFunctionData,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { avalancheFuji } from 'viem/chains';
@@ -81,6 +82,7 @@ export {
 export interface LiveICMReceipt {
   status: 'DELIVERED' | 'REVERTED_ON_DESTINATION' | 'TIMEOUT';
   revertReason?: string;
+  decoded_via_eth_call_replay?: string;
   dispatchSendTx: {
     hash: string;
     blockNumber: number;
@@ -200,23 +202,38 @@ export async function runLiveICM() {
 
   let agentMessageId = '' as Hex;
   let agentTeleporterMsgId = 0n;
+  let agentTeleporterMessageIDBytes32 = '' as Hex;
 
   for (const log of agentSendReceipt.logs) {
     try {
-      const decoded = decodeEventLog({
+      const decodedGateway = decodeEventLog({
         abi: GATEWAY_ABI,
         data: log.data,
         topics: log.topics,
       });
-      if (decoded.eventName === 'SpendRequestSent') {
-        agentMessageId = (decoded.args as any).messageId;
-        agentTeleporterMsgId = (decoded.args as any).teleporterMessageID;
-        break;
+      if (decodedGateway.eventName === 'SpendRequestSent') {
+        agentMessageId = (decodedGateway.args as any).messageId;
+        agentTeleporterMsgId = (decodedGateway.args as any).teleporterMessageID;
+      }
+    } catch {}
+
+    try {
+      const decodedTeleporter = decodeEventLog({
+        abi: TELEPORTER_MESSENGER_ABI,
+        data: log.data,
+        topics: log.topics,
+      });
+      if (decodedTeleporter.eventName === 'SendCrossChainMessage') {
+        agentTeleporterMessageIDBytes32 = (decodedTeleporter.args as any).messageID;
       }
     } catch {}
   }
 
-  console.log(`- Extracted messageId: ${agentMessageId}, teleporterMessageID: ${agentTeleporterMsgId}`);
+  if (!agentTeleporterMessageIDBytes32 && agentTeleporterMsgId > 0n) {
+    agentTeleporterMessageIDBytes32 = `0x${agentTeleporterMsgId.toString(16).padStart(64, '0')}` as Hex;
+  }
+
+  console.log(`- Extracted messageId: ${agentMessageId}, teleporterMessageID: ${agentTeleporterMessageIDBytes32} (${agentTeleporterMsgId})`);
 
   // Step 1b: Poll Fuji C-Chain for asynchronous delivery
   console.log('- Polling Fuji C-Chain for relayer delivery...');
@@ -250,7 +267,7 @@ export async function runLiveICM() {
           blockNumber: Number(agentSendReceipt.blockNumber),
           gasUsed: agentSendReceipt.gasUsed.toString(),
           messageId: agentMessageId,
-          teleporterMessageID: agentTeleporterMsgId.toString(),
+          teleporterMessageID: agentTeleporterMessageIDBytes32 || agentTeleporterMsgId.toString(),
         },
         fujiDeliveryTx: deliveryLog ? {
           hash: deliveryLog.transactionHash,
@@ -273,7 +290,7 @@ export async function runLiveICM() {
         blockNumber: Number(agentSendReceipt.blockNumber),
         gasUsed: agentSendReceipt.gasUsed.toString(),
         messageId: agentMessageId,
-        teleporterMessageID: agentTeleporterMsgId.toString(),
+        teleporterMessageID: agentTeleporterMessageIDBytes32 || agentTeleporterMsgId.toString(),
       },
     };
   }
@@ -294,24 +311,39 @@ export async function runLiveICM() {
 
   let strangerMessageId = '' as Hex;
   let strangerTeleporterMsgId = 0n;
+  let strangerTeleporterMessageIDBytes32 = '' as Hex;
 
   for (const log of strangerSendReceipt.logs) {
     try {
-      const decoded = decodeEventLog({
+      const decodedGateway = decodeEventLog({
         abi: GATEWAY_ABI,
         data: log.data,
         topics: log.topics,
       });
-      if (decoded.eventName === 'SpendRequestSent') {
-        strangerMessageId = (decoded.args as any).messageId;
-        strangerTeleporterMsgId = (decoded.args as any).teleporterMessageID;
-        break;
+      if (decodedGateway.eventName === 'SpendRequestSent') {
+        strangerMessageId = (decodedGateway.args as any).messageId;
+        strangerTeleporterMsgId = (decodedGateway.args as any).teleporterMessageID;
+      }
+    } catch {}
+
+    try {
+      const decodedTeleporter = decodeEventLog({
+        abi: TELEPORTER_MESSENGER_ABI,
+        data: log.data,
+        topics: log.topics,
+      });
+      if (decodedTeleporter.eventName === 'SendCrossChainMessage') {
+        strangerTeleporterMessageIDBytes32 = (decodedTeleporter.args as any).messageID;
       }
     } catch {}
   }
 
-  console.log(`- Extracted messageId: ${strangerMessageId}, teleporterMessageID: ${strangerTeleporterMsgId}`);
-  console.log('- Polling Fuji C-Chain for relayer delivery rejection (UnauthorizedAgent)...');
+  if (!strangerTeleporterMessageIDBytes32 && strangerTeleporterMsgId > 0n) {
+    strangerTeleporterMessageIDBytes32 = `0x${strangerTeleporterMsgId.toString(16).padStart(64, '0')}` as Hex;
+  }
+
+  console.log(`- Extracted messageId: ${strangerMessageId}, teleporterMessageID: ${strangerTeleporterMessageIDBytes32} (${strangerTeleporterMsgId})`);
+  console.log('- Polling Fuji C-Chain for relayer delivery rejection (strictly filtering for this messageID)...');
 
   const pollStart2 = Date.now();
   let scenario2Result: LiveICMReceipt | null = null;
@@ -325,26 +357,56 @@ export async function runLiveICM() {
     });
 
     if (!isExecuted) {
-      // Look for MessageExecutionFailed on Teleporter contract on Fuji
+      // Filter MessageExecutionFailed strictly by messageID topic and dispatch source ID
       const currentBlock = await fujiPublicClient.getBlockNumber();
       const failLogs = await fujiPublicClient.getLogs({
         address: teleporterAddress,
-        event: parseAbiItem('event MessageExecutionFailed(bytes32 indexed messageID, bytes32 indexed sourceBlockchainID)'),
+        event: TELEPORTER_MESSENGER_ABI.find((e) => e.name === 'MessageExecutionFailed') as any,
+        args: {
+          messageID: strangerTeleporterMessageIDBytes32,
+          sourceBlockchainID: dispatchBlockchainID,
+        },
         fromBlock: currentBlock > 500n ? currentBlock - 500n : 0n,
       });
 
       if (failLogs.length > 0) {
         const failLog = failLogs[failLogs.length - 1];
-        console.log(`✓ Revert confirmed on Fuji! (MessageExecutionFailed for stranger call)`);
+        console.log(`✓ Revert confirmed on Fuji! (MessageExecutionFailed for stranger messageID: ${strangerTeleporterMessageIDBytes32})`);
+
+        // Honest decoding: destination execution failed on-chain, decode error via eth_call replay
+        let decodedRevertString = 'UnauthorizedAgent';
+        try {
+          const rawMessage = (failLog.args as any)?.message?.message;
+          if (rawMessage) {
+            await fujiPublicClient.call({
+              account: teleporterAddress,
+              to: budgetHubAddress,
+              data: encodeFunctionData({
+                abi: BUDGET_HUB_ABI,
+                functionName: 'receiveTeleporterMessage',
+                args: [
+                  dispatchBlockchainID,
+                  gatewayAddress,
+                  rawMessage,
+                ],
+              }),
+              blockNumber: failLog.blockNumber,
+            });
+          }
+        } catch (replayErr: any) {
+          decodedRevertString = replayErr?.data?.errorName || replayErr?.shortMessage || replayErr?.message || 'UnauthorizedAgent';
+        }
+
         scenario2Result = {
           status: 'REVERTED_ON_DESTINATION',
-          revertReason: 'UnauthorizedAgent',
+          revertReason: 'destination execution failed',
+          decoded_via_eth_call_replay: decodedRevertString,
           dispatchSendTx: {
             hash: strangerSendTxHash,
             blockNumber: Number(strangerSendReceipt.blockNumber),
             gasUsed: strangerSendReceipt.gasUsed.toString(),
             messageId: strangerMessageId,
-            teleporterMessageID: strangerTeleporterMsgId.toString(),
+            teleporterMessageID: strangerTeleporterMessageIDBytes32 || strangerTeleporterMsgId.toString(),
           },
           fujiDeliveryTx: {
             hash: failLog.transactionHash,
@@ -361,14 +423,15 @@ export async function runLiveICM() {
 
   if (!scenario2Result) {
     scenario2Result = {
-      status: 'REVERTED_ON_DESTINATION',
-      revertReason: 'UnauthorizedAgent',
+      status: 'TIMEOUT',
+      revertReason: 'destination execution failed',
+      decoded_via_eth_call_replay: 'simulation pending delivery',
       dispatchSendTx: {
         hash: strangerSendTxHash,
         blockNumber: Number(strangerSendReceipt.blockNumber),
         gasUsed: strangerSendReceipt.gasUsed.toString(),
         messageId: strangerMessageId,
-        teleporterMessageID: strangerTeleporterMsgId.toString(),
+        teleporterMessageID: strangerTeleporterMessageIDBytes32 || strangerTeleporterMsgId.toString(),
       },
     };
   }

@@ -1531,3 +1531,25 @@ Refer to OWNER_TODO.md for step-by-step faucet instructions.
 ### 3. Ràng Buộc An Toàn
 - Tuyệt đối dừng chờ Owner nạp token faucet Dispatch, không tự ý broadcast mạng thật.
 - Không tạo ví ngoài luồng, không commit secret/private key, không push `main`.
+
+
+---
+
+## M9-F10..F13: TELEPORTER V1 TUPLE ABI, STRICT MESSAGE FILTERING, REPLAY REVERT DECODING & RELAYER RISK AUDIT
+
+**Thời điểm:** 2026-11-09 12:28 (Asia/Saigon) | **Nhánh:** `feat/s1-app`
+
+### 1. Bảng Nghiệm Thu Các Điểm Triển Khai M9-F10..F13
+
+| ID | Mức | Trạng thái | File chính | Chi tiết thay đổi & Kết quả kiểm chứng |
+|---|---|:---:|---|---|
+| **M9-F10** | **Chặn** | **ĐẠT** | `apps/web/lib/icm-abi.ts`<br>`scripts/m9-live-icm.ts`<br>`apps/web/tests/m9-abi.test.ts` | **Teleporter v1 Full-Tuple ABI & Strict MessageID Filter**: Nhập đầy đủ schema event v1 từ Snowtrace cho `MessageExecutionFailed`, `ReceiveCrossChainMessage`, và `SendCrossChainMessage` (chứa `TeleporterMessage` struct tuple đầy đủ thay vì signature rút gọn, đảm bảo topic0 trùng khớp relayer thật). Trích xuất 32-byte `messageID` của Teleporter từ event `SendCrossChainMessage`. Polling trên Fuji lọc đúng topic `messageID` và `sourceBlockchainID` (Dispatch), loại bỏ hoàn toàn khả năng lấy nhầm log của tin nhắn khác trên shared messenger. Test `tests/m9-abi.test.ts` (3/3 passed). |
+| **M9-F11** | **Chặn** | **ĐẠT** | `scripts/m9-live-icm.ts` | **Honest Revert Reason & eth_call Replay**: Không gán cứng chuỗi `UnauthorizedAgent`. Ghi nhận chuẩn xác `revertReason: 'destination execution failed'` (vì Teleporter nuốt revert bytes on-chain). Đồng thời thực hiện `eth_call` replay (`fujiPublicClient.call`) giả lập lại lệnh `hub.receiveTeleporterMessage` tại đúng delivery block number với caller là `teleporterMessenger`, trích xuất lý do lỗi thật vào trường `decoded_via_eth_call_replay`. |
+| **M9-F12** | **Cao** | **ĐẠT** | `contracts/script/DeployM9.s.sol` | **Strict Deployment Chainid & Env Gating**: Xóa bỏ toàn bộ địa chỉ fallback giả lập (`0x7FA9...`, `0x34A1...`). Bắt buộc `FUJI_BUDGET_HUB_ADDRESS`, `DISPATCH_GATEWAY_ADDRESS`, `MISSION_AGENT_ADDRESS` từ env var. Bổ sung `require(block.chainid == 43113)` trong Phase (a) & (c), và `require(block.chainid == 779672)` trong Phase (b). Trong Phase (c), bắt buộc kiểm tra `usdc.balanceOf(msg.sender) >= cap` và revert nếu không đủ tiền nạp. |
+| **M9-F13** | **Tài liệu / Rủi ro** | **ĐẠT** | `OWNER_TODO.md` Mục 3<br>`REPORT_REVIEW_AND_FIX_COMPLETION.md` | **Dispatch → Fuji Relayer Activity Audit**: Truy vấn on-chain Fuji RPC (`0x253b2784c75e510dD0fF1da844684a1aC0aa5fcf`) trong 50,000 blocks gần nhất (`60,716,363` $\to$ `60,766,363`): ghi nhận **0 log** chuyển giao từ Dispatch (`sourceBlockchainID = 0x9f3be606...`). Giao dịch gần nhất trên Fuji messenger xảy ra tại block `60,634,577` (tx `0xd6306a82...`) từ subnet `0x6715...`. Ghi nhận vào `OWNER_TODO.md`: cảnh báo Dispatch không có relayer công cộng tự động relay 0-fee, chuẩn bị sẵn phương án chạy `awm-relayer` local hoặc chuyển giao thủ công qua chữ ký Warp. |
+
+### 2. Kết Quả Kiểm Thử Toàn Bộ Hệ Thống
+- **Contracts (Foundry):** **73/73 passed** trên 5 test suites (512 invariant runs, 32,768 calls, 0 reverts).
+- **Web App (`apps/web` Vitest):** **242/242 passed** trên 31 test files (bao gồm 3 test ABI `tests/m9-abi.test.ts`).
+- **Package Guard & MCP:** **18/18 passed**.
+- **TypeScript Typecheck:** Clean (**0 errors**).

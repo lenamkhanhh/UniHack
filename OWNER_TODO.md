@@ -45,3 +45,20 @@ Trong thời gian dừng chờ Owner nạp token gas Dispatch, Gemini thực hi�
    - Trả lời `approve` khi payee hợp lệ và số tiền trong ngân sách.
    - Trả lời `deny` khi payee ngoài root hoặc vượt ngân sách.
 3. Không broadcast mạng thật, không tự tạo ví mới, không vượt ngân sách Fuji.
+
+
+---
+
+## 3. ĐÁNH GIÁ RỦI RO RELAYER DISPATCH → FUJI TESTNET (M9-F13)
+
+- **Kết quả rà soát thực tế on-chain (Fuji C-Chain):**
+  - Đã truy vấn hợp đồng `TeleporterMessenger` (`0x253b2784c75e510dD0fF1da844684a1aC0aa5fcf`) trên mạng Fuji C-Chain trong hơn 50,000 blocks gần nhất (từ block `60,716,363` đến `60,766,363`).
+  - **Số lượng log `ReceiveCrossChainMessage` từ Dispatch L1 (`sourceBlockchainID = 0x9f3be606...`):** **`0 log`**.
+  - Giao dịch chuyển giao ICM gần nhất trên Fuji xảy ra tại block `60,634,577` (tx `0xd6306a82...`) từ một subnet khác (`0x6715...`), không phải Dispatch.
+- **Rủi ro vận hành Live ICM:**
+  - Trên mạng testnet công khai hiện tại, **không có relayer công cộng tự động phục vụ các tin nhắn Dispatch → Fuji với phí bằng 0 (`fee: 0`)**.
+  - Nếu gửi tin nhắn cross-chain từ Dispatch, message sẽ được xếp hàng trong `TeleporterMessenger` của Dispatch nhưng sẽ **không tự động được phát sóng lên Fuji C-Chain** nếu không có relayer chuyển giao.
+- **Phương án giải quyết khi Owner duyệt broadcast Live:**
+  1. **Phương án A (Tự chạy relayer cục bộ):** Chạy công cụ `awm-relayer` của Avalanche CLI / Ava Labs trên máy local để theo dõi event trên Dispatch và chuyển giao sang Fuji C-Chain.
+  2. **Phương án B (Relay thủ công qua chữ ký Warp):** Lấy chữ ký BLS/Warp của validators Dispatch từ RPC validator endpoint (`awm-signer`), sau đó dùng ví Owner hoặc Agent trên Fuji gọi trực tiếp `teleporterMessenger.receiveCrossChainMessage(...)`.
+  3. **Phương án C (Cấu hình phí relayer):** Cấu hình `feeInfo` với token thưởng nếu phát hiện có relayer thương mại đang hoạt động.

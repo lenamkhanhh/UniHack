@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { BUDGET_HUB_ABI, GATEWAY_ABI } from '@/lib/icm-abi';
+import { BUDGET_HUB_ABI, GATEWAY_ABI, TELEPORTER_MESSENGER_ABI } from '@/lib/icm-abi';
 
-describe('M9 Live ICM ABI Verification (M9-F8)', () => {
+describe('M9 Live ICM ABI Verification (M9-F8 & M9-F10)', () => {
   it('verifies BUDGET_HUB_ABI missions() tuple exactly matches compiled contract struct outputs', () => {
     const hubArtifactPath = path.resolve(__dirname, '../../../contracts/out/MissionBudgetHub.sol/MissionBudgetHub.json');
     expect(fs.existsSync(hubArtifactPath)).toBe(true);
@@ -68,5 +68,30 @@ describe('M9 Live ICM ABI Verification (M9-F8)', () => {
     expect(sendAbi.outputs[0].type).toBe('bytes32');
     expect(sendAbi.outputs[1].name).toBe('teleporterMessageID');
     expect(sendAbi.outputs[1].type).toBe('uint256');
+  });
+
+  it('verifies TELEPORTER_MESSENGER_ABI contains official full-tuple event signatures (M9-F10)', () => {
+    const failedEvent = TELEPORTER_MESSENGER_ABI.find((e: any) => e.name === 'MessageExecutionFailed') as any;
+    expect(failedEvent).toBeDefined();
+    expect(failedEvent.inputs).toHaveLength(3);
+    expect(failedEvent.inputs[0].indexed).toBe(true);
+    expect(failedEvent.inputs[0].type).toBe('bytes32');
+    expect(failedEvent.inputs[1].indexed).toBe(true);
+    expect(failedEvent.inputs[1].type).toBe('bytes32');
+    expect(failedEvent.inputs[2].type).toBe('tuple'); // Full TeleporterMessage tuple
+
+    const sendEvent = TELEPORTER_MESSENGER_ABI.find((e: any) => e.name === 'SendCrossChainMessage') as any;
+    expect(sendEvent).toBeDefined();
+    expect(sendEvent.inputs).toHaveLength(4);
+    expect(sendEvent.inputs[0].indexed).toBe(true);
+    expect(sendEvent.inputs[0].name).toBe('messageID');
+    expect(sendEvent.inputs[1].indexed).toBe(true);
+    expect(sendEvent.inputs[1].name).toBe('destinationBlockchainID');
+
+    const executedEvent = TELEPORTER_MESSENGER_ABI.find((e: any) => e.name === 'MessageExecuted') as any;
+    expect(executedEvent).toBeDefined();
+    expect(executedEvent.inputs).toHaveLength(2);
+    expect(executedEvent.inputs[0].indexed).toBe(true);
+    expect(executedEvent.inputs[1].indexed).toBe(true);
   });
 });
