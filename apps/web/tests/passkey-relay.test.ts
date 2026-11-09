@@ -127,15 +127,34 @@ describe('WOW-W4 / A2: Passkey Relay API (/api/passkey/relay)', () => {
     }
   });
 
-  it('GET /api/passkey/relay returns authority config metadata', async () => {
+  it('A2-R1: GET /api/passkey/relay returns 503 NOT_CONFIGURED when PASSKEY_AUTHORITY_ADDRESS is not set', async () => {
+    const prevAuth = process.env.PASSKEY_AUTHORITY_ADDRESS;
+    const prevPubAuth = process.env.NEXT_PUBLIC_PASSKEY_AUTHORITY_ADDRESS;
+    delete process.env.PASSKEY_AUTHORITY_ADDRESS;
+    delete process.env.NEXT_PUBLIC_PASSKEY_AUTHORITY_ADDRESS;
+
+    try {
+      const res = await GET();
+      expect(res.status).toBe(503);
+      const json = await res.json();
+      expect(json.success).toBe(false);
+      expect(json.status).toBe('NOT_CONFIGURED');
+    } finally {
+      if (prevAuth) process.env.PASSKEY_AUTHORITY_ADDRESS = prevAuth;
+      if (prevPubAuth) process.env.NEXT_PUBLIC_PASSKEY_AUTHORITY_ADDRESS = prevPubAuth;
+    }
+  });
+
+  it('A2-R1: GET /api/passkey/relay returns 503 UNAVAILABLE when RPC/contract read fails (no fake fallback)', async () => {
+    process.env.PASSKEY_AUTHORITY_ADDRESS = '0x1111111111111111111111111111111111111111';
+    process.env.AVALANCHE_FUJI_RPC_URL = 'http://127.0.0.1:54321/offline-rpc';
+
     const res = await GET();
-    expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.success).toBe(true);
-    expect(json.authorityAddress).toBeDefined();
-    expect(json.treasuryAddress).toBeDefined();
-    expect(json.nextNonce).toBeDefined();
-    expect(json.expectedOrigin).toBeDefined();
+    expect(res.status).toBe(503);
+    expect(json.success).toBe(false);
+    expect(json.status).toBe('UNAVAILABLE');
+    expect(json.error).toContain('Failed reading on-chain authority configuration');
   });
 
   it('W4-F1: returns 503 if RELAYER_PRIVATE_KEY is missing when not in simulation mode', async () => {

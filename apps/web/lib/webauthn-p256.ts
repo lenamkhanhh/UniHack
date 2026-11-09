@@ -200,11 +200,15 @@ function scanForCoseCoordinates(slice: Uint8Array): P256Coordinates {
 }
 
 /**
- * Parses ASN.1 DER signature into (r, s) and normalizes high-s for secp256r1.
- * DER signature layout:
- * 0x30 <totalLen>
- *   0x02 <rLen> <rBytes>
- *   0x02 <sLen> <sBytes>
+ * Parses ASN.1 DER signature into (r, s) enforcing strict canonical DER encoding:
+ * - 0x30 <seqLen>
+ *     0x02 <rLen> <rBytes>
+ *     0x02 <sLen> <sBytes>
+ * Enforces:
+ * - Exact total sequence length matching buffer length (no trailing or truncated bytes)
+ * - Strict non-negative canonical integers (no leading 0x00 unless highest bit of next byte is set)
+ * - Strict bounds 0 < r < N and 0 < s < N BEFORE high-s normalization
+ * - Low-s normalization for secp256r1 (s = N - s if s > N/2)
  */
 export function parseDerSignature(signatureBytes: Uint8Array): {
   r: bigint;
@@ -212,39 +216,90 @@ export function parseDerSignature(signatureBytes: Uint8Array): {
   rHex: `0x${string}`;
   sHex: `0x${string}`;
 } {
-  if (signatureBytes.length < 8 || signatureBytes[0] !== 0x30) {
+  if (!signatureBytes || signatureBytes.length < 8) {
+    throw new Error('Invalid ASN.1 DER signature: buffer too short (< 8 bytes)');
+  }
+  if (signatureBytes[0] !== 0x30) {
     throw new Error('Invalid ASN.1 DER signature: missing 0x30 sequence tag');
   }
 
-  let offset = 2; // skip tag 0x30 and sequence length byte
-  // Handle multi-byte length if highest bit is set
+  let offset = 1;
+  let seqLen = 0;
   if (signatureBytes[1] & 0x80) {
-    const lenBytes = signatureBytes[1] & 0x7f;
-    offset = 2 + lenBytes;
+    const numLenBytes = signatureBytes[1] & 0x7f;
+    if (numLenBytes === 0 || numLenBytes > 4 || 2 + numLenBytes > signatureBytes.length) {
+      throw new Error('Invalid ASN.1 DER signature: invalid multibyte sequence length');
+    }
+    offset = 2;
+    for (let i = 0; i < numLenBytes; i++) {
+      seqLen = (seqLen << 8) | signatureBytes[offset++];
+    }
+  } else {
+    seqLen = signatureBytes[1];
+    offset = 2;
+  }
+
+  // Enforce exact total length (no trailing bytes, no truncation)
+  if (offset + seqLen !== signatureBytes.length) {
+    throw new Error(
+      `Invalid ASN.1 DER signature: sequence length ${seqLen} does not match remaining bytes ${signatureBytes.length - offset}`
+    );
   }
 
   // Parse r (tag 0x02)
-  if (signatureBytes[offset] !== 0x02) {
-    throw new Error('Invalid ASN.1 DER signature: expected 0x02 tag for r');
+  if (offset >= signatureBytes.length || signatureBytes[offset] !== 0x02) {
+    throw new Error('Invalid ASN.1 DER signature: expected 0x02 integer tag for r');
   }
-  const rLen = signatureBytes[offset + 1];
-  offset += 2;
+  offset++;
+  const rLen = signatureBytes[offset++];
+  if (rLen === 0 || offset + rLen > signatureBytes.length) {
+    throw new Error('Invalid ASN.1 DER signature: invalid r length');
+  }
   const rBytes = signatureBytes.slice(offset, offset + rLen);
   offset += rLen;
 
-  // Parse s (tag 0x02)
-  if (signatureBytes[offset] !== 0x02) {
-    throw new Error('Invalid ASN.1 DER signature: expected 0x02 tag for s');
+  // Canonical DER integer validation for r
+  if (rBytes[0] & 0x80) {
+    throw new Error('Invalid ASN.1 DER signature: negative r integer');
   }
-  const sLen = signatureBytes[offset + 1];
-  offset += 2;
+  if (rBytes.length > 1 && rBytes[0] === 0x00 && !(rBytes[1] & 0x80)) {
+    throw new Error('Invalid ASN.1 DER signature: non-canonical leading zero in r');
+  }
+
+  // Parse s (tag 0x02)
+  if (offset >= signatureBytes.length || signatureBytes[offset] !== 0x02) {
+    throw new Error('Invalid ASN.1 DER signature: expected 0x02 integer tag for s');
+  }
+  offset++;
+  const sLen = signatureBytes[offset++];
+  if (sLen === 0 || offset + sLen > signatureBytes.length) {
+    throw new Error('Invalid ASN.1 DER signature: invalid s length');
+  }
   const sBytes = signatureBytes.slice(offset, offset + sLen);
+  offset += sLen;
+
+  // Canonical DER integer validation for s
+  if (sBytes[0] & 0x80) {
+    throw new Error('Invalid ASN.1 DER signature: negative s integer');
+  }
+  if (sBytes.length > 1 && sBytes[0] === 0x00 && !(sBytes[1] & 0x80)) {
+    throw new Error('Invalid ASN.1 DER signature: non-canonical leading zero in s');
+  }
+
+  // Must have consumed all bytes in sequence exactly
+  if (offset !== signatureBytes.length) {
+    throw new Error('Invalid ASN.1 DER signature: trailing bytes after s integer');
+  }
 
   const rBig = bytesToBigInt(rBytes);
   let sBig = bytesToBigInt(sBytes);
 
+  // Strict range check BEFORE normalization: 0 < r < N and 0 < s < N
   if (rBig === 0n || rBig >= SECP256R1_N) {
-    throw new Error(`Invalid signature r: out of secp256r1 bounds (r = ${rBig})`);
+    throw new Error(`Invalid signature r: out of secp256r1 curve order bounds (0 < r < N)`);
+  }
+  if (sBig === 0n || sBig >= SECP256R1_N) {
+    throw new Error(`Invalid signature s: out of secp256r1 curve order bounds (0 < s < N)`);
   }
 
   // Low-s normalization for secp256r1 (protects against signature malleability)
@@ -253,7 +308,7 @@ export function parseDerSignature(signatureBytes: Uint8Array): {
   }
 
   if (sBig === 0n || sBig > SECP256R1_HALF_N) {
-    throw new Error(`Invalid signature s: out of secp256r1 bounds (s = ${sBig})`);
+    throw new Error(`Invalid signature s: normalized s out of low-s bounds`);
   }
 
   const rHex = (`0x${rBig.toString(16).padStart(64, '0')}`) as `0x${string}`;

@@ -173,25 +173,40 @@ export default function NewMissionPasskeyPage() {
         throw new Error('Chưa đăng ký Passkey. Vui lòng bấm Đăng ký Passkey trước khi duyệt mission.');
       }
 
-      // Refresh authority configuration to obtain latest nextNonce
-      let currentNonce = authorityConfig.nextNonce;
-      let currentAuthority = authorityConfig.authorityAddress;
-      let currentChainId = authorityConfig.chainId || 43113;
-
-      try {
-        const configRes = await fetch('/api/passkey/relay');
-        if (configRes.ok) {
-          const cfg = await configRes.json();
-          if (cfg.success) {
-            currentNonce = cfg.nextNonce;
-            currentAuthority = cfg.authorityAddress;
-            currentChainId = cfg.chainId;
-            setAuthorityConfig(cfg);
-          }
-        }
-      } catch {
-        // use state
+      // A2-R1: Always fetch fresh on-chain authority configuration before requesting assertion
+      const configRes = await fetch('/api/passkey/relay');
+      if (!configRes.ok) {
+        throw new Error('Không thể kết nối đến Relay API hoặc Passkey Authority chưa được cấu hình.');
       }
+      const freshConfig = await configRes.json();
+      if (!freshConfig.success || freshConfig.status !== 'CONFIGURED') {
+        throw new Error(freshConfig.error || 'Cấu hình Passkey Authority on-chain không khả dụng.');
+      }
+      setAuthorityConfig(freshConfig);
+
+      // A2-R2: Refuse approval before credentials.get when registered key coordinates differ from fresh on-chain key
+      const keyMatches =
+        freshConfig.passkeyX !== '0x0' &&
+        registeredKey.x.toLowerCase() === freshConfig.passkeyX.toLowerCase() &&
+        registeredKey.y.toLowerCase() === freshConfig.passkeyY.toLowerCase();
+
+      if (!keyMatches) {
+        throw new Error(
+          `Tọa độ Passkey trên thiết bị không khớp với khóa công khai on-chain!\nThiết bị: (${registeredKey.x.slice(0, 10)}..., ${registeredKey.y.slice(0, 10)}...)\nOn-chain: (${freshConfig.passkeyX.slice(0, 10)}..., ${freshConfig.passkeyY.slice(0, 10)}...)\nVui lòng cập nhật khóa hợp đồng hoặc đăng ký đúng passkey.`
+        );
+      }
+
+      // A2-R2: Validate expected origin against browser context
+      const browserOrigin = window.location.origin;
+      if (freshConfig.expectedOrigin && freshConfig.expectedOrigin.toLowerCase() !== browserOrigin.toLowerCase()) {
+        throw new Error(
+          `Origin không khớp! Hợp đồng yêu cầu "${freshConfig.expectedOrigin}" nhưng trình duyệt đang mở tại "${browserOrigin}".`
+        );
+      }
+
+      const currentNonce = freshConfig.nextNonce;
+      const currentAuthority = freshConfig.authorityAddress;
+      const currentChainId = freshConfig.chainId;
 
       // Parse amounts using exact 6-decimal string manipulation (no float rounding)
       const capAtomic = parseDecimalUnits6(capUsdc);
@@ -295,7 +310,13 @@ export default function NewMissionPasskeyPage() {
       }
 
       setRelayResult(data);
-      setStatus('Mission Đã Duyệt On-Chain Thành Công!');
+      if (data.status === 'CONFIRMED' && data.txHash) {
+        setStatus('Mission Đã Duyệt On-Chain Thành Công!');
+      } else if (data.status === 'SIMULATION_SUCCESS') {
+        setStatus('Mô Phỏng Thực Thi Thành Công (Chưa broadcast on-chain)');
+      } else {
+        setStatus(`Trạng thái: ${data.status || 'Đã xử lý'}`);
+      }
     } catch (err: any) {
       console.error('Passkey approval error:', err);
       setErrorMessage(`Duyệt Mission thất bại: ${err.message || 'Lỗi không xác định'}`);
@@ -335,7 +356,10 @@ export default function NewMissionPasskeyPage() {
               Chain ID: {authorityConfig.chainId}
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+          <h1
+            className="text-2xl sm:text-3xl font-bold tracking-tight text-white"
+            data-testid="passkey-page-header"
+          >
             {t('passkey.hero.title')}
           </h1>
           <p className="text-slate-300 text-xs sm:text-sm mt-1 leading-relaxed">
@@ -557,6 +581,7 @@ export default function NewMissionPasskeyPage() {
             <div
               className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/30 text-xs font-mono text-rose-200"
               role="alert"
+              data-testid="passkey-error-alert"
             >
               {errorMessage}
             </div>
@@ -575,8 +600,11 @@ export default function NewMissionPasskeyPage() {
         </form>
 
         {/* Live Relay Results Card */}
-        {relayResult && (
-          <div className="p-6 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 space-y-4">
+        {relayResult && relayResult.status === 'CONFIRMED' && (
+          <div
+            className="p-6 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 space-y-4"
+            data-testid="passkey-confirmed-card"
+          >
             <div className="flex items-center space-x-2 text-emerald-300 font-semibold text-sm">
               <span>{t('passkey.success.title')}</span>
             </div>
@@ -595,7 +623,7 @@ export default function NewMissionPasskeyPage() {
               </div>
               <div>
                 <span className="text-slate-300">Gas Used:</span>{' '}
-                <span className="text-emerald-400 font-bold">{relayResult.gasUsed || '320,000'}</span> (RIP-7212 Native)
+                <span className="text-emerald-400 font-bold">{relayResult.gasUsed || 'N/A'}</span> (RIP-7212 Native)
               </div>
               <div>
                 <span className="text-slate-300">Block Number:</span>{' '}
@@ -604,6 +632,35 @@ export default function NewMissionPasskeyPage() {
               <div>
                 <span className="text-slate-300">Security Gate:</span>{' '}
                 <span className="text-white">Relayer Gasless · Zero Key on Device</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {relayResult && relayResult.status === 'SIMULATION_SUCCESS' && (
+          <div
+            className="p-6 rounded-2xl bg-cyan-950/20 border border-cyan-500/30 space-y-4"
+            data-testid="passkey-simulation-card"
+          >
+            <div className="flex items-center space-x-2 text-cyan-300 font-semibold text-sm">
+              <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-xs font-bold uppercase">
+                Simulation Success
+              </span>
+              <span>Xác thực mô phỏng thành công (Chưa broadcast on-chain)</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
+              <div>
+                <span className="text-slate-300">Contract:</span>{' '}
+                <span className="text-indigo-300 break-all">{relayResult.authorityAddress}</span>
+              </div>
+              <div>
+                <span className="text-slate-300">Gas Estimated:</span>{' '}
+                <span className="text-cyan-400 font-bold">{relayResult.gasEstimated || 'N/A'}</span>
+              </div>
+              <div className="sm:col-span-2">
+                <span className="text-slate-300">Evidence Note:</span>{' '}
+                <span className="text-slate-400">{relayResult.message || 'Mô phỏng RPC đã xác minh chữ ký passkey thành công.'}</span>
               </div>
             </div>
           </div>

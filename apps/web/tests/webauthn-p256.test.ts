@@ -103,27 +103,46 @@ describe('WebAuthn P-256 Core Helper (A2)', () => {
     });
   });
 
-  describe('parseDerSignature & low-s normalization', () => {
-    it('parses standard 32-byte r and s', () => {
-      const r = 0x1122334455667788n;
-      const s = 0x99aabbccddeeff00n;
+  describe('parseDerSignature & low-s normalization (A2-R5)', () => {
+    function encodeDerInteger(val: bigint): Uint8Array {
+      if (val === 0n) return new Uint8Array([0]);
+      let hex = val.toString(16);
+      if (hex.length % 2 !== 0) hex = '0' + hex;
+      const raw = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < raw.length; i++) {
+        raw[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+      }
+      if (raw[0] & 0x80) {
+        const withZero = new Uint8Array(raw.length + 1);
+        withZero[0] = 0x00;
+        withZero.set(raw, 1);
+        return withZero;
+      }
+      return raw;
+    }
 
-      const rBytes = new Uint8Array(32);
-      const sBytes = new Uint8Array(32);
-      new DataView(rBytes.buffer).setBigUint64(24, r);
-      new DataView(sBytes.buffer).setBigUint64(24, s);
-
-      // Construct DER: 0x30 [len] 0x02 32 [rBytes] 0x02 32 [sBytes]
-      const der = new Uint8Array(2 + 2 + 32 + 2 + 32);
+    function buildDerSignature(rVal: bigint, sVal: bigint): Uint8Array {
+      const rBytes = encodeDerInteger(rVal);
+      const sBytes = encodeDerInteger(sVal);
+      const seqLen = 2 + rBytes.length + 2 + sBytes.length;
+      const der = new Uint8Array(2 + seqLen);
       der[0] = 0x30;
-      der[1] = 68;
+      der[1] = seqLen;
       der[2] = 0x02;
-      der[3] = 32;
+      der[3] = rBytes.length;
       der.set(rBytes, 4);
-      der[36] = 0x02;
-      der[37] = 32;
-      der.set(sBytes, 38);
+      const sOffset = 4 + rBytes.length;
+      der[sOffset] = 0x02;
+      der[sOffset + 1] = sBytes.length;
+      der.set(sBytes, sOffset + 2);
+      return der;
+    }
 
+    it('parses valid canonical 32-byte r and s', () => {
+      const r = 0x1122334455667788990011223344556677889900112233445566778899001122n;
+      const s = 0x2233445566778899001122334455667788990011223344556677889900112233n;
+
+      const der = buildDerSignature(r, s);
       const parsed = parseDerSignature(der);
       expect(parsed.r).toBe(r);
       expect(parsed.s).toBe(s);
@@ -131,38 +150,66 @@ describe('WebAuthn P-256 Core Helper (A2)', () => {
 
     it('normalizes high-s to low-s (s <= n / 2) when s > n / 2', () => {
       const r = 0x12345n;
-      // High-s: SECP256R1_N - 100n
       const highS = SECP256R1_N - 100n;
       expect(highS).toBeGreaterThan(SECP256R1_HALF_N);
 
-      const highSHex = highS.toString(16).padStart(64, '0');
-      const sBytes = new Uint8Array(32);
-      for (let i = 0; i < 32; i++) {
-        sBytes[i] = parseInt(highSHex.slice(i * 2, i * 2 + 2), 16);
-      }
-
-      const rBytes = new Uint8Array(32);
-      rBytes[31] = 5;
-
-      const der = new Uint8Array(70);
-      der[0] = 0x30;
-      der[1] = 68;
-      der[2] = 0x02;
-      der[3] = 32;
-      der.set(rBytes, 4);
-      der[36] = 0x02;
-      der[37] = 32;
-      der.set(sBytes, 38);
-
+      const der = buildDerSignature(r, highS);
       const parsed = parseDerSignature(der);
-      expect(parsed.r).toBe(5n);
-      // Normalized s must equal SECP256R1_N - highS = 100n!
+      expect(parsed.r).toBe(r);
       expect(parsed.s).toBe(100n);
-      expect(parsed.s).toBeLessThanOrEqual(SECP256R1_HALF_N);
+    });
+
+    it('A2-R5 adversarial: rejects trailing bytes after sequence', () => {
+      const validDer = buildDerSignature(0x123n, 0x456n);
+      const withTrailing = new Uint8Array(validDer.length + 2);
+      withTrailing.set(validDer, 0);
+      withTrailing[validDer.length] = 0xaa;
+      withTrailing[validDer.length + 1] = 0xbb;
+
+      expect(() => parseDerSignature(withTrailing)).toThrow(/sequence length|trailing bytes/);
+    });
+
+    it('A2-R5 adversarial: rejects truncated buffer', () => {
+      const validDer = buildDerSignature(0x123n, 0x456n);
+      const truncated = validDer.slice(0, validDer.length - 3);
+
+      expect(() => parseDerSignature(truncated)).toThrow(/does not match remaining bytes|buffer too short/);
+    });
+
+    it('A2-R5 adversarial: rejects non-canonical redundant leading zeros', () => {
+      const der = new Uint8Array([
+        0x30, 8,
+        0x02, 2, 0x00, 0x15, // 0x0015 has leading zero but 0x15 does NOT have high bit set -> invalid!
+        0x02, 2, 0x00, 0x25,
+      ]);
+      expect(() => parseDerSignature(der)).toThrow(/non-canonical leading zero/);
+    });
+
+    it('A2-R5 adversarial: rejects negative integers (high bit without leading zero)', () => {
+      const der = new Uint8Array([
+        0x30, 6,
+        0x02, 1, 0x85, // 0x85 has high bit set without 0x00 prefix -> negative integer
+        0x02, 1, 0x25,
+      ]);
+      expect(() => parseDerSignature(der)).toThrow(/negative r integer/);
+    });
+
+    it('A2-R5 adversarial: rejects s >= N before normalization (cannot normalize out-of-order)', () => {
+      const r = 0x123n;
+      const invalidS = SECP256R1_N + 50n;
+      const der = buildDerSignature(r, invalidS);
+
+      expect(() => parseDerSignature(der)).toThrow(/out of secp256r1 curve order bounds/);
+    });
+
+    it('A2-R5 adversarial: rejects r == 0 or s == 0', () => {
+      const derZeroR = new Uint8Array([0x30, 6, 0x02, 1, 0x00, 0x02, 1, 0x01]);
+      expect(() => parseDerSignature(derZeroR)).toThrow();
     });
 
     it('rejects invalid DER signature missing 0x30 or with zero r/s', () => {
-      expect(() => parseDerSignature(new Uint8Array([0x31, 0x00]))).toThrow('missing 0x30');
+      expect(() => parseDerSignature(new Uint8Array([0x31, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x01]))).toThrow('missing 0x30');
+      expect(() => parseDerSignature(new Uint8Array([0x30, 0x01]))).toThrow('buffer too short');
     });
   });
 

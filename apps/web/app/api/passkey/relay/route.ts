@@ -7,6 +7,7 @@ import {
   Hex,
   isHex,
   isAddress,
+  getAddress,
   keccak256,
   toHex,
 } from 'viem';
@@ -35,27 +36,25 @@ const PASSKEY_AUTHORITY_ABI = parseAbi([
 /**
  * GET: Reads current authority configuration from Avalanche Fuji / local fork.
  * Provides nextNonce, authority coordinates, expected origin, and RP ID hash to frontend.
+ * Fails with 503 if unconfigured or on RPC read failure (A2-R1: no fake success/fallback).
  */
 export async function GET() {
   try {
-    const authorityAddress = (process.env.PASSKEY_AUTHORITY_ADDRESS ||
-      process.env.NEXT_PUBLIC_PASSKEY_AUTHORITY_ADDRESS ||
-      '0x77235386fe59A934645C5F273e411b0Bea8cCc9C') as `0x${string}`;
+    const configuredAuthority = process.env.PASSKEY_AUTHORITY_ADDRESS || process.env.NEXT_PUBLIC_PASSKEY_AUTHORITY_ADDRESS;
+    if (!configuredAuthority || !isAddress(configuredAuthority.trim())) {
+      return NextResponse.json({
+        success: false,
+        status: 'NOT_CONFIGURED',
+        error: 'PASSKEY_AUTHORITY_ADDRESS is not configured. Biometric approvals are unavailable.',
+      }, { status: 503 });
+    }
+    const authorityAddress = getAddress(configuredAuthority.trim()) as `0x${string}`;
 
-    const rpcUrl = process.env.AVALANCHE_FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
+    const rpcUrl = process.env.AVALANCHE_FUJI_RPC_URL || process.env.NEXT_PUBLIC_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
     const publicClient = createPublicClient({
       chain: avalancheFuji,
       transport: http(rpcUrl),
     });
-
-    let passkeyX = '0x0';
-    let passkeyY = '0x0';
-    let nextNonce = '0';
-    let treasury = '0x20451c1e2dCD83F166B4f22868BAdECb5868d545';
-    let rpIdHash = '0x0000000000000000000000000000000000000000000000000000000000000000';
-    let expectedOrigin = 'http://localhost:3100';
-    let requireUserVerification = true;
-    let chainId = 43113;
 
     try {
       const [pX, pY, nNonce, tr, rpHash, expOrigin, reqUV, cId] = await Promise.all([
@@ -66,35 +65,31 @@ export async function GET() {
         publicClient.readContract({ address: authorityAddress, abi: PASSKEY_AUTHORITY_ABI, functionName: 'rpIdHash' }),
         publicClient.readContract({ address: authorityAddress, abi: PASSKEY_AUTHORITY_ABI, functionName: 'expectedOrigin' }),
         publicClient.readContract({ address: authorityAddress, abi: PASSKEY_AUTHORITY_ABI, functionName: 'requireUserVerification' }),
-        publicClient.getChainId().catch(() => 43113),
+        publicClient.getChainId(),
       ]);
-      passkeyX = `0x${pX.toString(16).padStart(64, '0')}`;
-      passkeyY = `0x${pY.toString(16).padStart(64, '0')}`;
-      nextNonce = nNonce.toString();
-      treasury = tr;
-      rpIdHash = rpHash;
-      expectedOrigin = expOrigin;
-      requireUserVerification = reqUV;
-      chainId = cId;
-    } catch {
-      // Fallback defaults for offline / dev mode
-      expectedOrigin = process.env.NEXT_PUBLIC_EXPECTED_ORIGIN || 'http://localhost:3100';
-    }
 
-    return NextResponse.json({
-      success: true,
-      authorityAddress,
-      treasuryAddress: treasury,
-      passkeyX,
-      passkeyY,
-      nextNonce,
-      rpIdHash,
-      expectedOrigin,
-      requireUserVerification,
-      chainId,
-    });
+      return NextResponse.json({
+        success: true,
+        status: 'CONFIGURED',
+        authorityAddress,
+        treasuryAddress: tr,
+        passkeyX: `0x${pX.toString(16).padStart(64, '0')}`,
+        passkeyY: `0x${pY.toString(16).padStart(64, '0')}`,
+        nextNonce: nNonce.toString(),
+        rpIdHash: rpHash,
+        expectedOrigin: expOrigin,
+        requireUserVerification: reqUV,
+        chainId: cId,
+      });
+    } catch (rpcErr: any) {
+      return NextResponse.json({
+        success: false,
+        status: 'UNAVAILABLE',
+        error: `Failed reading on-chain authority configuration: ${rpcErr?.message || rpcErr}`,
+      }, { status: 503 });
+    }
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, status: 'ERROR', error: error.message }, { status: 500 });
   }
 }
 
@@ -247,7 +242,7 @@ export async function POST(req: NextRequest) {
           ],
         });
 
-        const gasEstimated = sim.request.gas ? sim.request.gas.toString() : '320000';
+        const gasEstimated = sim.request.gas ? sim.request.gas.toString() : null;
 
         return NextResponse.json({
           success: true,
