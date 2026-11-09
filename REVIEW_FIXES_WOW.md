@@ -8,6 +8,33 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
+### M9-F6..F9 review (Claude, c1f7356): mostly OK, live runner still wrong
+Verified:
+- Real blockchain IDs are set.
+- 3-phase deploy split (a) Fuji hub, (b) Dispatch gateway, (c) Fuji configure.
+- Claude fork-simulated (a) on the Fuji RPC and (b) on the Dispatch RPC: both SIMULATION COMPLETE.
+- The m9-abi test passes, `broadcast/` and `cache/` are gitignored, keys come from env only.
+- Teleporter at 0x253b…5fcf is v1 (`getNextMessageID(bytes32)` returns bytes32).
+
+Fix:
+- **M9-F10 (critical, live runner):** `scripts/m9-live-icm.ts` ~L332 parses `MessageExecutionFailed(bytes32 indexed, bytes32 indexed)`, but the v1 event is `MessageExecutionFailed(bytes32 indexed messageID, bytes32 indexed sourceBlockchainID, TeleporterMessage message)`. topic0 differs, so it never matches.
+  - Also, the script takes the LAST failure log from ANY sender on the shared Fuji messenger. That can attribute someone else's failed message to us.
+  - Fix:
+    - take the Teleporter `messageID` from the Dispatch `SendCrossChainMessage` event in our send receipt;
+    - on Fuji, filter `MessageExecutionFailed` / `MessageExecuted` / `ReceiveCrossChainMessage` by `messageID` topic and Dispatch source ID;
+    - import the event ABIs from the official teleporter ABI (full tuple), not hand-written.
+- **M9-F11 (honesty):** the stranger result hardcodes `revertReason: 'UnauthorizedAgent'`, but Teleporter does not emit the reason.
+  - Record `"destination execution failed"`.
+  - To decode the reason, `eth_call` `hub.receiveTeleporterMessage(DISPATCH_ID, gateway, message)` with `from = messenger` at the delivery block, and store the decoded error with label `decoded_via_eth_call_replay`.
+- **M9-F12 (safety):**
+  - `DeployM9.s.sol`: remove the fallback addresses `0x7FA9…` / `0x34A1…` / the agent default (local-sim / guessed values). `require` the env vars to be set.
+  - Add `require(block.chainid == 43113)` in phases (a) and (c), and `== 779672` in phase (b).
+  - In (c), `require` the USDC balance to be ≥ cap instead of silently skipping funding.
+- **M9-F13 (risk check, doc):** the gateway sends with fee 0 and `allowedRelayers = []`. Confirm that a relayer actually serves Dispatch→Fuji: query Fuji messenger `ReceiveCrossChainMessage` logs with sourceBlockchainID = Dispatch over the last ~50k blocks. Record count + latest tx in the report. If there are none, say so in OWNER_TODO (live ICM may need our own relayer or a fee).
+
+Then commit `fix(m9): ...` and stop.
+
+
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
