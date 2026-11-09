@@ -86,13 +86,19 @@ contract GuardedTreasuryInvariantTest is Test {
         targets[0] = address(handler);
     }
 
-    /// @notice Invariant 1: Any payout from a mission with root != 0 must strictly go to a leaf in that root
+    /// @notice Invariant 1: Any payout from a mission must strictly obey the root active at payout time
     function invariant_payeeAlwaysInRoot() public view {
         uint256 count = handler.outflowCount();
         for (uint256 i = 0; i < count; i++) {
-            (address to, bytes32 mId, ) = handler.getOutflow(i);
+            (address to, bytes32 mId, , bytes32 rootAtPayout) = handler.getOutflow(i);
             if (mId == missionWithRoot) {
-                assertTrue(handler.isLeafInRoot(mId, to));
+                if (rootAtPayout == handler.root1()) {
+                    assertTrue(to == handler.payeeA() || to == handler.payeeB());
+                } else if (rootAtPayout == bytes32(0)) {
+                    assertTrue(treasury.recipientAllowlist(to));
+                } else {
+                    revert("Unexpected outflow for unproven root");
+                }
             }
         }
     }

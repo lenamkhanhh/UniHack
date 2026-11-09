@@ -921,4 +921,37 @@ contract GuardedTreasuryTest is Test {
         assertEq(treasury.getProposal(pId).status, 3); // Executed
         assertEq(usdc.balanceOf(payeeB), 2_000_000);
     }
+
+    // Regression test for M9-F14: owner reset root to 0 legitimately switches back to global allowlist mode
+    function test_PV1_owner_reset_root_zero_allows_allowlist_payee() public {
+        address payeeA = 0x2222222222222222222222222222222222222222;
+        bytes32 root = 0xc76421b7db26fc58390a222ae87eb47677faa580fa2d97459166a1125d031320;
+
+        vm_prank(owner);
+        treasury.setRecipient(payeeA, true);
+        vm_prank(owner);
+        treasury.setRecipient(recipient, true); // non-member in global allowlist
+
+        // 1. Owner sets root
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, root);
+        assertEq(treasury.missionPayeeRoot(missionId), root);
+
+        // recipient is NOT in root, so propose reverts with PayeeProofRequired
+        vm_expectRevert(bytes("PayeeProofRequired"));
+        vm_prank(agent);
+        treasury.propose(keccak256("op-pv1-revert-with-root"), recipient, 1_000_000, missionId, "Root active");
+
+        // 2. Owner resets root to bytes32(0) (downgrade to global allowlist)
+        uint256 pvBefore = treasury.policyVersion();
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, bytes32(0));
+        assertEq(treasury.missionPayeeRoot(missionId), bytes32(0));
+        assertEq(treasury.policyVersion(), pvBefore + 1);
+
+        // 3. Now propose to allowlisted recipient without proof succeeds
+        vm_prank(agent);
+        uint256 pid = treasury.propose(keccak256("op-pv1-succeed-after-reset"), recipient, 1_000_000, missionId, "Root reset to 0");
+        assertEq(treasury.getProposal(pid).status, 3); // Executed
+    }
 }

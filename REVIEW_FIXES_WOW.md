@@ -8,33 +8,24 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-### M9-F10..F13 review (Claude, d45f392)
-Verified:
-- The 4 Teleporter v1 event selectors in `lib/icm-abi.ts` equal the canonical signatures. ReceiveCrossChainMessage `0x292e…3e34` and MessageExecuted `0x3479…188c` also match real Fuji logs (block 60634577).
-- The runner filters by our Teleporter messageID.
-- The reason is reported as "destination execution failed" plus `decoded_via_eth_call_replay`.
-- Deploy requires env addresses, chainid gating and a USDC balance check.
-- The relayer audit (0 Dispatch→Fuji deliveries in 50k blocks) is a useful finding.
-
-Fix:
-- **M9-F14 (must, revert scope creep):** `contracts/test/invariant/Handler.sol` `actionSetMissionPayeeRoot` now forces the owner's root to `root1`. That weakens the GuardedTreasury fuzz, which is outside M9 and was not requested.
-  - Claude reproduced the cause: with the old handler, `invariant_payeeAlwaysInRoot` fails. The owner can legitimately set `missionWithRoot`'s root to 0 (or to another value). The contract then uses the global-allowlist path (root==0 → no proof), while the oracle `isLeafInRoot` still assumes the root is always {A,B}. This is an oracle bug, not a contract bug.
-  - Fix the oracle, not the fuzz input:
-    - revert the `newRoot = root1` pin;
-    - record the root at payout time in the handler (`outflowRoots[i] = treasury.missionPayeeRoot(mId)` before the call);
-    - assert: if `rootAtPayout == root1` then the payee is A or B; if `rootAtPayout == 0` then the payee is on the treasury allowlist; any other root means no outflow is possible (no valid proof exists).
-  - Add a regression test: the owner sets root 0 and then an allowlisted non-member is paid. This documents the owner downgrade path.
-  - Run the invariant suite with `--fuzz-runs` ≥ default, 3 times.
-- **M9-F15 (honesty):** the runner's TIMEOUT branch (~L424) writes `revertReason: 'destination execution failed'` and `'simulation pending delivery'`. Nothing was delivered, so set `revertReason: null` and `delivery: 'NOT_DELIVERED_WITHIN_TIMEOUT'`. Do not claim a failure.
-- **M9-F16 (small):** `gasUsed: 'relayed'` should come from `getTransactionReceipt(failLog.transactionHash)` on Fuji.
-- **Doc (Q&A):** note in the report that the owner can switch a mission back to allowlist mode by setting root 0. That is owner authority, and it is visible on-chain via `MissionPayeeRootSet` + `policyVersion`.
-
-Then run `forge test` (full suite) and commit `fix(m9): ...`. M9 live stays blocked: owner faucet + a relayer (OWNER_TODO option A/B), both owner decisions.
-
 
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
+
+- M9-F14..F16 [Calibrate Invariant Oracle for Owner Root Downgrade, Honest Runner Timeout Status & Real Delivery Gas Receipts]:
+  - **M9-F14 (Revert Scope Creep & Calibrate Invariant Oracle):**
+    - Hoàn trả `actionSetMissionPayeeRoot` trong `contracts/test/invariant/Handler.sol`: loại bỏ gán cứng `newRoot = root1`, cho phép fuzzer tự do chọn `newRoot` (kể cả root = 0).
+    - Hiệu chỉnh oracle kiểm thử: thêm mảng theo dõi `bytes32[] public outflowRoots;` và `mapping(uint256 => bytes32) public proposalRoots;` để ghi nhận chính xác Merkle root tương ứng tại thời điểm phê duyệt proposal.
+    - Cập nhật hàm bất biến `invariant_payeeAlwaysInRoot`: nếu `rootAtPayout == root1`, khẳng định payee phải là `payeeA` hoặc `payeeB`; nếu `rootAtPayout == 0` (owner hạ cấp về chế độ allowlist toàn cục), khẳng định `treasury.recipientAllowlist(to)`; nếu là root ngẫu nhiên khác thì không thể có outflow.
+    - Bổ sung unit test hồi quy `test_PV1_owner_reset_root_zero_allows_allowlist_payee` trong `contracts/test/GuardedTreasury.t.sol`: chứng minh Owner hạ root về 0 thì emit `MissionPayeeRootSet`, tăng `policyVersion`, và cho phép giải ngân tới người nhận allowlist mà không cần proof.
+    - Chạy bộ invariant test 3 lần liên tiếp với 512 fuzz runs (32,768 calls/lần, tổng cộng 98,304 calls): **100% PASS, 0 reverts, 0 broken invariants**.
+  - **M9-F15 (Honest Runner Timeout Status):**
+    - Trong `scripts/m9-live-icm.ts` tại nhánh timeout polling (~L424): cập nhật trung thực `revertReason: null`, `decoded_via_eth_call_replay: null`, và `delivery: 'NOT_DELIVERED_WITHIN_TIMEOUT'`. Không nhận vơ lỗi delivery khi transaction chưa được chuyển giao.
+  - **M9-F16 (Real Fuji Delivery Gas Receipts):**
+    - Trong `scripts/m9-live-icm.ts`: thay thế giá trị hardcode `'relayed'` bằng việc truy vấn receipt thực tế qua `fujiPublicClient.getTransactionReceipt({ hash: failLog.transactionHash })`, ghi nhận chính xác `receipt.gasUsed.toString()` cho cả 2 kịch bản Scenario 1 và Scenario 2.
+  - **Doc (Q&A On-Chain Authority):**
+    - Ghi nhận trong tài liệu & báo cáo: Owner có toàn quyền hạ cấp mission về chế độ allowlist toàn cục bằng cách đặt root về 0; hành động này để lại vết minh bạch on-chain qua event `MissionPayeeRootSet(missionId, 0, policyVersion)` và tăng `policyVersion`.
 
 - M9-F10..F13 [Teleporter v1 Tuple ABI, Target-Filtered Logs, Honest Revert Decoding, Strict Deploy Gating & Relayer Risk Assessment]:
   - **M9-F10 (Official Teleporter v1 Tuple ABI & Strict MessageID Filtering):**

@@ -1553,3 +1553,30 @@ Refer to OWNER_TODO.md for step-by-step faucet instructions.
 - **Web App (`apps/web` Vitest):** **242/242 passed** trên 31 test files (bao gồm 3 test ABI `tests/m9-abi.test.ts`).
 - **Package Guard & MCP:** **18/18 passed**.
 - **TypeScript Typecheck:** Clean (**0 errors**).
+
+
+---
+
+## M9-F14..F16: CALIBRATE INVARIANT ORACLE FOR OWNER ROOT RESETS, HONEST RUNNER TIMEOUT STATUS & REAL DELIVERY GAS RECEIPTS
+
+**Thời điểm:** 2026-11-09 12:55 (Asia/Saigon) | **Nhánh:** `feat/s1-app`
+
+### 1. Bảng Nghiệm Thu Các Điểm Triển Khai M9-F14..M9-F16
+
+| ID | Mức | Trạng thái | File chính | Chi tiết thay đổi & Kết quả kiểm chứng |
+|---|---|:---:|---|---|
+| **M9-F14** | **Chặn** | **ĐẠT** | `contracts/test/invariant/Handler.sol`<br>`contracts/test/invariant/GuardedTreasury.invariant.t.sol`<br>`contracts/test/GuardedTreasury.t.sol` | **Calibrate Invariant Oracle for Owner Root Reset**: Revert việc pin `newRoot = root1;` trong Handler; fuzzer tự do fuzzed roots. Bổ sung `outflowRoots[]` và `proposalRoots[pid]` để ghi nhận Merkle root tương ứng tại thời điểm phê duyệt proposal. Hiệu chỉnh assertion `invariant_payeeAlwaysInRoot`: nếu `rootAtPayout == root1` khẳng định payee là `payeeA`/`payeeB`; nếu `rootAtPayout == 0` (hạ cấp về global allowlist), khẳng định `treasury.recipientAllowlist(to)`. Bổ sung test hồi quy `test_PV1_owner_reset_root_zero_allows_allowlist_payee` kiểm chứng luồng hạ cấp root về 0 thành công. Chạy invariant test 3 lần liên tiếp với 512 fuzz runs (98,304 calls): 100% PASS, 0 reverts. |
+| **M9-F15** | **Cao** | **ĐẠT** | `scripts/m9-live-icm.ts` | **Honest Runner Timeout Status**: Tại nhánh polling timeout (~L424), cập nhật chính xác `revertReason: null`, `decoded_via_eth_call_replay: null`, và `delivery: 'NOT_DELIVERED_WITHIN_TIMEOUT'`. Tuyệt đối không ghi nhận lý do revert hay simulation pending khi giao dịch chưa được delivery trên chain đích. |
+| **M9-F16** | **Thấp** | **ĐẠT** | `scripts/m9-live-icm.ts` | **Real Fuji Delivery Gas Receipts**: Thay thế chuỗi hardcode `'relayed'` bằng việc truy vấn receipt on-chain thực tế `const failReceipt = await fujiPublicClient.getTransactionReceipt({ hash: failLog.transactionHash })`, ghi nhận `receipt.gasUsed.toString()` cho cả Scenario 1 và Scenario 2. |
+| **Doc (Q&A)** | **Tài liệu** | **ĐẠT** | `REPORT_REVIEW_AND_FIX_COMPLETION.md` | **Owner Authority On-Chain Transparency**: Ghi nhận cơ chế hạ cấp: Owner có toàn quyền chuyển đổi mission từ Merkle root mode về allowlist mode bằng việc đặt `root = bytes32(0)`. Hành động này được minh bạch on-chain qua event `MissionPayeeRootSet(missionId, 0, policyVersion)` và tăng `policyVersion`, cho phép mọi người tham gia kiểm tra audit trail. |
+
+### 2. Kết Quả Kiểm Thử Toàn Bộ Hệ Thống
+- **Contracts (Foundry):** **74/74 passed** trên 5 test suites (bao gồm regression test `test_PV1_owner_reset_root_zero_allows_allowlist_payee` và 512-run invariant test với 32,768 calls/lần, 0 reverts).
+- **Web App (`apps/web` Vitest):** **243/243 passed** trên 31 test files.
+- **Package Guard & MCP:** **18/18 passed** (12 guard + 6 mcp).
+- **Tổng số tests tự động:** **335 / 335 passed (100%)**.
+- **TypeScript Typecheck:** Clean (**0 errors**).
+
+### 3. Ràng Buộc An Toàn
+- Giữ vững trạng thái dừng chờ Owner nạp token faucet Dispatch, không tự ý broadcast mạng thật.
+- Không commit secret, private key, hay `.env`. Không push `main`.

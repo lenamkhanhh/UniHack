@@ -35,6 +35,7 @@ contract Handler is Test {
     address[] public outflowRecipients;
     bytes32[] public outflowMissions;
     uint256[] public outflowAmounts;
+    bytes32[] public outflowRoots;
 
     uint256 public totalDeposited;
     uint256 public totalOutflow;
@@ -43,6 +44,7 @@ contract Handler is Test {
     uint256 public opNonce;
 
     uint256[] public queuedProposalIds;
+    mapping(uint256 => bytes32) public proposalRoots;
 
     constructor(
         GuardedTreasury _treasury,
@@ -62,10 +64,11 @@ contract Handler is Test {
         totalDeposited = usdc.balanceOf(address(treasury));
     }
 
-    function recordOutflow(address to, bytes32 missionId, uint256 amount) internal {
+    function recordOutflow(address to, bytes32 missionId, uint256 amount, bytes32 rootAtPayout) internal {
         outflowRecipients.push(to);
         outflowMissions.push(missionId);
         outflowAmounts.push(amount);
+        outflowRoots.push(rootAtPayout);
         totalOutflow += amount;
         if (missionId != bytes32(0)) {
             missionSpendGhost[missionId] += amount;
@@ -84,8 +87,8 @@ contract Handler is Test {
         return outflowRecipients.length;
     }
 
-    function getOutflow(uint256 index) external view returns (address, bytes32, uint256) {
-        return (outflowRecipients[index], outflowMissions[index], outflowAmounts[index]);
+    function getOutflow(uint256 index) external view returns (address, bytes32, uint256, bytes32) {
+        return (outflowRecipients[index], outflowMissions[index], outflowAmounts[index], outflowRoots[index]);
     }
 
     // --- Action: Propose with Proof ---
@@ -129,14 +132,16 @@ contract Handler is Test {
         bytes32 opId = keccak256(abi.encodePacked("opWithProof", opNonce++));
 
         uint256 balBefore = usdc.balanceOf(address(treasury));
+        bytes32 rootAtPayout = treasury.missionPayeeRoot(missionId);
         vm_prank(actor);
         try treasury.proposeWithProof(opId, payee, amount, missionId, "proofProposal", proof) returns (uint256 pid) {
             uint256 balAfter = usdc.balanceOf(address(treasury));
             if (balAfter < balBefore) {
                 // Auto executed
-                recordOutflow(payee, missionId, balBefore - balAfter);
+                recordOutflow(payee, missionId, balBefore - balAfter, rootAtPayout);
             } else {
                 // Queued
+                proposalRoots[pid] = rootAtPayout;
                 queuedProposalIds.push(pid);
             }
         } catch {
@@ -159,12 +164,14 @@ contract Handler is Test {
         bytes32 opId = keccak256(abi.encodePacked("opLegacy", opNonce++));
 
         uint256 balBefore = usdc.balanceOf(address(treasury));
+        bytes32 rootAtPayout = treasury.missionPayeeRoot(missionId);
         vm_prank(actor);
         try treasury.propose(opId, payee, amount, missionId, "legacyProposal") returns (uint256 pid) {
             uint256 balAfter = usdc.balanceOf(address(treasury));
             if (balAfter < balBefore) {
-                recordOutflow(payee, missionId, balBefore - balAfter);
+                recordOutflow(payee, missionId, balBefore - balAfter, rootAtPayout);
             } else {
+                proposalRoots[pid] = rootAtPayout;
                 queuedProposalIds.push(pid);
             }
         } catch {
@@ -197,11 +204,12 @@ contract Handler is Test {
             vm_prank(owner);
             try treasury.approve(pid) {
                 uint256 balBefore = usdc.balanceOf(address(treasury));
+                bytes32 rootAtPayout = proposalRoots[pid];
                 vm_prank(owner);
                 try treasury.execute(pid) {
                     uint256 balAfter = usdc.balanceOf(address(treasury));
                     if (balAfter < balBefore) {
-                        recordOutflow(p.to, p.missionId, balBefore - balAfter);
+                        recordOutflow(p.to, p.missionId, balBefore - balAfter, rootAtPayout);
                     }
                 } catch {}
             } catch {}
@@ -254,10 +262,6 @@ contract Handler is Test {
 
         bytes32 rootBefore = treasury.missionPayeeRoot(missionId);
         uint256 versionBefore = treasury.policyVersion();
-
-        if (actor == owner) {
-            newRoot = root1;
-        }
 
         vm_prank(actor);
         try treasury.setMissionPayeeRoot(missionId, newRoot) {

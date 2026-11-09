@@ -81,8 +81,9 @@ export {
 
 export interface LiveICMReceipt {
   status: 'DELIVERED' | 'REVERTED_ON_DESTINATION' | 'TIMEOUT';
-  revertReason?: string;
-  decoded_via_eth_call_replay?: string;
+  delivery?: string;
+  revertReason?: string | null;
+  decoded_via_eth_call_replay?: string | null;
   dispatchSendTx: {
     hash: string;
     blockNumber: number;
@@ -260,8 +261,16 @@ export async function runLiveICM() {
       });
 
       const deliveryLog = logs[0];
+      let deliveryGasUsed = 'relayed';
+      if (deliveryLog) {
+        try {
+          const deliveryReceipt = await fujiPublicClient.getTransactionReceipt({ hash: deliveryLog.transactionHash });
+          deliveryGasUsed = deliveryReceipt.gasUsed.toString();
+        } catch {}
+      }
       scenario1Result = {
         status: 'DELIVERED',
+        delivery: 'DELIVERED_ON_DESTINATION',
         dispatchSendTx: {
           hash: agentSendTxHash,
           blockNumber: Number(agentSendReceipt.blockNumber),
@@ -272,7 +281,7 @@ export async function runLiveICM() {
         fujiDeliveryTx: deliveryLog ? {
           hash: deliveryLog.transactionHash,
           blockNumber: Number(deliveryLog.blockNumber),
-          gasUsed: 'relayed',
+          gasUsed: deliveryGasUsed,
           event: 'SpendExecuted',
         } : undefined,
       };
@@ -285,6 +294,9 @@ export async function runLiveICM() {
     console.log('⚠ Polling timed out waiting for Fuji delivery.');
     scenario1Result = {
       status: 'TIMEOUT',
+      delivery: 'NOT_DELIVERED_WITHIN_TIMEOUT',
+      revertReason: null,
+      decoded_via_eth_call_replay: null,
       dispatchSendTx: {
         hash: agentSendTxHash,
         blockNumber: Number(agentSendReceipt.blockNumber),
@@ -397,8 +409,15 @@ export async function runLiveICM() {
           decodedRevertString = replayErr?.data?.errorName || replayErr?.shortMessage || replayErr?.message || 'UnauthorizedAgent';
         }
 
+        let failGasUsed = 'relayed';
+        try {
+          const failReceipt = await fujiPublicClient.getTransactionReceipt({ hash: failLog.transactionHash });
+          failGasUsed = failReceipt.gasUsed.toString();
+        } catch {}
+
         scenario2Result = {
           status: 'REVERTED_ON_DESTINATION',
+          delivery: 'DELIVERED_ON_DESTINATION',
           revertReason: 'destination execution failed',
           decoded_via_eth_call_replay: decodedRevertString,
           dispatchSendTx: {
@@ -411,7 +430,7 @@ export async function runLiveICM() {
           fujiDeliveryTx: {
             hash: failLog.transactionHash,
             blockNumber: Number(failLog.blockNumber),
-            gasUsed: 'relayed',
+            gasUsed: failGasUsed,
             event: 'MessageExecutionFailed',
           },
         };
@@ -424,8 +443,9 @@ export async function runLiveICM() {
   if (!scenario2Result) {
     scenario2Result = {
       status: 'TIMEOUT',
-      revertReason: 'destination execution failed',
-      decoded_via_eth_call_replay: 'simulation pending delivery',
+      delivery: 'NOT_DELIVERED_WITHIN_TIMEOUT',
+      revertReason: null,
+      decoded_via_eth_call_replay: null,
       dispatchSendTx: {
         hash: strangerSendTxHash,
         blockNumber: Number(strangerSendReceipt.blockNumber),
