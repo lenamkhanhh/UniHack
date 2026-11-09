@@ -20,7 +20,7 @@ export interface BountyStepInput {
     reason?: string;
   };
   step3_contract_fuji?: {
-    status?: string;
+    status?: 'REVERTED' | 'BYPASS' | 'SKIPPED' | 'RPC_ERROR' | string;
     revertReason?: string;
   };
 }
@@ -28,6 +28,8 @@ export interface BountyStepInput {
 /**
  * Derives the 3-step defense evaluation result banner status, badge class, and translated text.
  * Strictly prevents misleading "SECURE" claims when the status is unknown or bypassed.
+ * When transport/RPC error occurs, returns neutral UNKNOWN banner.
+ * When simulation succeeds, clearly labels POTENTIAL BYPASS (not transferred).
  */
 export function deriveBountyBannerResult(
   steps: BountyStepInput,
@@ -40,19 +42,37 @@ export function deriveBountyBannerResult(
 
   const translate = t || ((k: string) => k);
 
+  // If transport or RPC error occurred during on-chain verification, return neutral unknown
+  if (contractStatus === 'RPC_ERROR') {
+    return {
+      type: 'UNKNOWN',
+      i18nKey: 'bounty.result.unknown',
+      badgeText: translate('bounty.result.unknown'),
+      badgeClass:
+        'text-xs font-mono text-amber-200 bg-slate-800/90 border border-amber-700/60 px-2.5 py-1 rounded-md self-start sm:self-auto font-bold',
+    };
+  }
+
   const isBypassed =
     contractStatus === 'BYPASS' ||
-    (guardStatus === 'PASSED' && contractStatus !== 'REVERTED');
+    (guardStatus === 'PASSED' && contractStatus !== 'REVERTED' && contractStatus !== 'RPC_ERROR' && contractStatus !== 'SKIPPED');
 
   const isBlocked = guardStatus === 'BLOCKED' || contractStatus === 'REVERTED';
   const isQueued = guardStatus === 'QUEUED';
   const isNoProposal = guardStatus === 'NO_PROPOSAL';
 
   if (isBypassed) {
+    const rawTemplate = translate('bounty.result.drained');
+    const badgeText = rawTemplate.includes('$X')
+      ? rawTemplate.replace('$X', `$${amountSpentUsdc}`)
+      : rawTemplate.includes('$__AMOUNT__')
+      ? rawTemplate.replace('$__AMOUNT__', `$${amountSpentUsdc}`)
+      : `${rawTemplate}: $${amountSpentUsdc} USDC`;
+
     return {
       type: 'DRAINED',
       i18nKey: 'bounty.result.drained',
-      badgeText: `${translate('bounty.result.drained')}: $${amountSpentUsdc} USDC`,
+      badgeText,
       badgeClass:
         'text-xs font-mono text-red-300 bg-red-950/80 border border-red-800/80 px-2.5 py-1 rounded-md self-start sm:self-auto font-bold',
       amountSpentUsdc,

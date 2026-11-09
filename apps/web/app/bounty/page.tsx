@@ -48,7 +48,7 @@ interface StepResult {
     reason: string;
   };
   step3_contract_fuji: {
-    status: 'REVERTED' | 'BYPASS' | 'SKIPPED';
+    status: 'REVERTED' | 'BYPASS' | 'SKIPPED' | 'RPC_ERROR';
     revertReason: string;
     contractAddress: string;
     snowtraceUrl: string;
@@ -196,13 +196,13 @@ export default function BountyPage() {
             <div className="text-xs text-slate-300 uppercase tracking-wider">{t('bounty.stat.blocked')}</div>
             <div className="text-xl sm:text-2xl font-bold font-mono text-emerald-400 mt-1">{stats.blockedCount}</div>
             <div className="text-[10px] text-emerald-400 font-semibold">
-              {stats.leakCount === 0 ? '0 out-of-bounds leaks' : `${stats.leakCount} leaks ($${stats.bountySpentUsdc})`}
+              {stats.leakCount === 0 ? '0 out-of-bounds leaks' : `${stats.leakCount} simulated leaks ($${stats.bountySpentUsdc})`}
             </div>
           </div>
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-center">
             <div className="text-xs text-slate-300 uppercase tracking-wider">{t('bounty.stat.leak')}</div>
             <div className="text-xl sm:text-2xl font-bold font-mono text-white mt-1">${stats.bountySpentUsdc}</div>
-            <div className="text-[10px] text-slate-300 font-mono">0.00 USDC loss</div>
+            <div className="text-[10px] text-slate-300 font-mono">0.00 USDC loss (simulated leaks)</div>
           </div>
         </div>
 
@@ -372,12 +372,28 @@ export default function BountyPage() {
               <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-300 uppercase">{t('bounty.step3.title')}</span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-200 border border-emerald-700/50">
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                      lastResult.steps.step3_contract_fuji.status === 'REVERTED'
+                        ? 'bg-emerald-900/60 text-emerald-200 border border-emerald-700/50'
+                        : lastResult.steps.step3_contract_fuji.status === 'BYPASS'
+                        ? 'bg-red-900/60 text-red-200 border border-red-700/50'
+                        : lastResult.steps.step3_contract_fuji.status === 'RPC_ERROR'
+                        ? 'bg-amber-900/60 text-amber-200 border border-amber-700/50'
+                        : 'bg-slate-800 text-slate-300 border border-slate-700/50'
+                    }`}
+                  >
                     {lastResult.steps.step3_contract_fuji.status}
                   </span>
                 </div>
-                <div className="text-xs font-mono text-emerald-300 font-bold">
-                  Revert: {lastResult.steps.step3_contract_fuji.revertReason}
+                <div className="text-xs font-mono text-slate-300 font-bold truncate">
+                  {lastResult.steps.step3_contract_fuji.status === 'REVERTED'
+                    ? `Revert: ${lastResult.steps.step3_contract_fuji.revertReason}`
+                    : lastResult.steps.step3_contract_fuji.status === 'BYPASS'
+                    ? 'Simulation: Potential Bypass'
+                    : lastResult.steps.step3_contract_fuji.status === 'RPC_ERROR'
+                    ? 'RPC Error: Simulation Failed'
+                    : `Simulation: ${lastResult.steps.step3_contract_fuji.revertReason}`}
                 </div>
                 <a
                   href={lastResult.steps.step3_contract_fuji.snowtraceUrl}
@@ -453,7 +469,15 @@ export default function BountyPage() {
                         <td className="py-2 text-amber-300 text-xs truncate max-w-[150px]">
                           {att.offchainRule || 'NONE'}
                         </td>
-                        <td className="py-2 text-emerald-300 text-xs">{att.onchainResult || '—'}</td>
+                        <td className="py-2 text-xs truncate max-w-[150px]">
+                          {att.onchainResult?.startsWith('RPC_ERROR') ? (
+                            <span className="text-amber-400 font-mono" title={att.onchainResult}>
+                              RPC_ERROR
+                            </span>
+                          ) : (
+                            <span className="text-emerald-300 font-mono">{att.onchainResult || '—'}</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -494,7 +518,11 @@ export default function BountyPage() {
                       </div>
                       <div>
                         <span className="text-slate-400">Fuji:</span>{' '}
-                        <span className="text-emerald-300">{att.onchainResult || '—'}</span>
+                        {att.onchainResult?.startsWith('RPC_ERROR') ? (
+                          <span className="text-amber-400 font-mono">RPC_ERROR</span>
+                        ) : (
+                          <span className="text-emerald-300 font-mono">{att.onchainResult || '—'}</span>
+                        )}
                       </div>
                     </div>
                   </div>

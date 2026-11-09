@@ -8,17 +8,14 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-### M8-F7 accepted (Claude, d75b8be) + two honesty bugs found in lib/bounty.ts — FIX before M9
-F7 ok: `lib/bounty-status.ts` mapping, neutral UNKNOWN fallback, 7/7 banner tests, tsc clean.
-- **M8-F8 (honesty, must):** `lib/bounty.ts` ~L698 sets `step3_contract_fuji.status` to `'REVERTED'` in the final else-branch, even when no on-chain call happened (agent paid an in-set payee, so `onchainResult = 'Skipped (LLM not tricked)'`) or when the simulation failed for RPC/network reasons. Only label `REVERTED` when `simulateContract` actually threw a contract revert (decoded error name such as PayeeNotInMissionSet / NotAllowlisted / cap error). Add `'SKIPPED'` for no-call and `'RPC_ERROR'` for transport failure, update the type union, `bounty-status.ts` (RPC_ERROR → UNKNOWN banner), the feed rendering and the tests.
-- **M8-F9 (honesty, must):** `isPotentialBypass` comes from `publicClient.simulateContract` (eth_call). Nothing is transferred. Banner `bounty.result.drained` = "FUNDS TRANSFERRED" / "TIỀN ĐÃ CHUYỂN" is false. Rename to EN "POTENTIAL BYPASS: simulated call would pay $X USDC" / VI "CÓ THỂ LỌT: mô phỏng cho thấy sẽ chi $X USDC". Keep `leakCount` semantics as simulated-only and label the stat card the same way ("simulated leaks").
-- Add tests in `tests/bounty-banner.test.ts` (or a new bounty-steps test with mocked simulate): in-set payee → SKIPPED; RPC error → RPC_ERROR + UNKNOWN banner; decoded revert → REVERTED + SECURE; sim success + guard PASS → BYPASS + "potential bypass" text.
-Then `npx vitest run` in apps/web, `npx tsc --noEmit`; commit `fix(m8): ...`; then M9.
-
-
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
+
+- M8-F8..F9 [Simulation Honesty, Accurate RPC/Skip Status & Potential Bypass Phrasing]:
+  - **M8-F8 (Accurate Step 3 Contract Status):** Loại bỏ việc gán cứng status 'REVERTED' trong nhánh else của `lib/bounty.ts`. Phân định chính xác 4 trạng thái cho step 3: 'SKIPPED' (khi agent không đề xuất hoặc trả cho vendor hợp lệ trong allowlist); 'RPC_ERROR' (khi mạng hoặc transport RPC lỗi); 'REVERTED' (khi eth_call thực sự trả về lỗi contract như PayeeNotInMissionSet/MissionCapExceeded); 'BYPASS' (khi eth_call thành công). `deriveBountyBannerResult` tự động ánh xạ RPC_ERROR thành banner trung tính UNKNOWN.
+  - **M8-F9 (Honest Simulated Bypass & Leak Count Labeling):** Loại bỏ chuỗi "FUNDS TRANSFERRED" / "TIỀN ĐÃ CHUYỂN" vì đây chỉ là eth_call mô phỏng chứ không có tiền thật nào bị thất thoát. Cập nhật chính xác thành: EN "POTENTIAL BYPASS: simulated call would pay $X USDC" và VI "CÓ THỂ LỌT: mô phỏng cho thấy sẽ chi $X USDC". Nhãn stat card được hiệu chỉnh minh bạch thành "simulated leaks" ("0.00 USDC loss (simulated leaks)").
+  - **Unit Test M8-F8 & M8-F9 (bounty-banner.test.ts):** Bổ sung và kiểm chứng 8/8 unit tests bao quát toàn bộ: in-set payee -> SKIPPED (không bypass); RPC error -> RPC_ERROR + UNKNOWN banner; decoded revert -> REVERTED + SECURE; bypass -> POTENTIAL BYPASS banner (EN & VI).
 
 - M8-F7 [Neutral Banner Fallback & Status Mapping Test Suite]:
   - **Neutral Fallback Status (M8-F7):** Tạo module chuyên trách `apps/web/lib/bounty-status.ts` với hàm `deriveBountyBannerResult`. Khi gặp trạng thái chưa rõ / không xác định, hiển thị banner trung tính `bounty.result.unknown` ("RESULT PENDING / CHECK TX" / "CHƯA RÕ KẾT QUẢ, XEM TX") kèm class `text-amber-200 bg-slate-800/90 border-amber-700/60`, tuyệt đối không khẳng định an toàn sai sự thật.

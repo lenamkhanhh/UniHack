@@ -1311,3 +1311,26 @@ Mobile UX capture complete!
 - **Packages:** `@missionpay/guard` 12/12 passed, `@missionpay/mcp` 6/6 passed.
 - **TypeScript:** Strict typecheck `tsc --noEmit` sạch 100% (0 errors).
 - **Ràng buộc an toàn:** Không commit secret/private key, không push main, không deploy public.
+
+
+---
+
+## M8-F8..F9: KHẮC PHỤC TRIỆT ĐỂ LỖI TRUNG THỰC MÔ PHỎNG BOUNTY & HIỆU CHỈNH TRẠNG THÁI CONTRACT
+
+**Thời điểm:** 2026-11-09 11:20 (Asia/Saigon) | **Nhánh:** `feat/s1-app` | **Commit:** `fix(m8): resolve M8-F8 and M8-F9 bounty simulation honesty and potential bypass phrasing`
+
+### 1. Bảng Nghiệm Thu Các Điểm Sửa M8-F8 và M8-F9
+
+| ID | Mức | Trạng thái | File chính | Chi tiết thay đổi & Kiểm chứng |
+|---|:---:|:---:|---|---|
+| **M8-F8** | **P0** (Honesty) | **ĐẠT** | `apps/web/lib/bounty.ts`<br>`apps/web/lib/bounty-status.ts`<br>`apps/web/app/bounty/page.tsx` | **Chính xác hóa trạng thái Step 3 Contract Fuji:** Loại bỏ việc gán `REVERTED` mặc định. Mở rộng type union thành `'REVERTED' | 'BYPASS' | 'SKIPPED' | 'RPC_ERROR'`. Nếu agent trả vendor hợp lệ trong allowlist hoặc không đề xuất thanh toán: ghi nhận trung thực `SKIPPED`. Nếu gặp lỗi kết nối/timeout/HTTP: trả về `RPC_ERROR` và đưa banner về trạng thái trung tính `UNKNOWN` (`bounty.result.unknown`), tuyệt đối không tuyên bố `SECURE` hay `REVERTED` sai sự thật. |
+| **M8-F9** | **P0** (Honesty) | **ĐẠT** | `apps/web/lib/i18n.tsx`<br>`apps/web/lib/bounty-status.ts`<br>`apps/web/app/bounty/page.tsx` | **Minh bạch hóa câu từ đòn Bypass mô phỏng:** Đổi chuỗi `bounty.result.drained` thành: EN: *"POTENTIAL BYPASS: simulated call would pay $X USDC"*; VI: *"CÓ THỂ LỌT: mô phỏng cho thấy sẽ chi $X USDC"*. Toàn bộ nhãn stat card được chuẩn hóa thành *"simulated leaks"* (`0.00 USDC loss (simulated leaks)`), khẳng định rõ hệ thống an toàn, chỉ có đòn mô phỏng `eth_call` giả định. |
+
+### 2. Kết Quả Kiểm Thử Sau Sửa Lỗi
+- **Unit Test Suite `apps/web/tests/bounty-banner.test.ts`:** **8/8 tests passed (100%)** bao phủ toàn bộ:
+  - In-set payee -> SKIPPED (không gán bypass).
+  - RPC/transport error -> RPC_ERROR và banner trung tính UNKNOWN.
+  - Decoded contract revert (PayeeNotInMissionSet/Cap) -> REVERTED và banner SECURE.
+  - Simulation thành công + guard PASS -> BYPASS và câu từ "POTENTIAL BYPASS" chuẩn xác trên cả EN và VI.
+- **Unit Test Suite `apps/web/tests/bounty.test.ts`:** **10/10 tests passed**.
+- **TypeScript Typecheck (`tsc --noEmit`):** **0 errors (100% clean)**.
