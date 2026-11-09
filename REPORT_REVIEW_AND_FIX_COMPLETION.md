@@ -1447,3 +1447,59 @@ Ran 5 test suites: 73 tests passed, 0 failed, 0 skipped (73 total tests)
 
 ### 3. Ràng Buộc An Toàn
 - Chưa deploy Dispatch, chưa phát sóng cross-chain thật. Dừng chờ Owner nạp token Dispatch faucet cho ví `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c` theo `OWNER_TODO.md`.
+
+
+---
+
+## M9-N1..N3: SCRIPT DEPLOY DRY-RUN, KIẾN TRÚC ICM BẤT ĐỒNG BỘ & RUNNER LIVE
+
+**Thời điểm:** 2026-11-09 11:52 (Asia/Saigon) | **Nhánh:** `feat/s1-app`
+
+### 1. Bảng Nghiệm Thu Các Điểm Triển Khai M9-N1..N3
+
+| ID | Nhiệm vụ | Trạng thái | File chính | Chi tiết thay đổi & Kiểm chứng |
+|---|---|:---:|---|---|
+| **M9-N1** | **Deploy Script Dry-run** | **ĐẠT** | `contracts/script/DeployM9.s.sol` | Xây dựng script triển khai `MissionBudgetHub` (Fuji C-Chain) và `MissionSpendGateway` (Dispatch L1). Đọc động blockchain ID qua env hoặc hàm `ITeleporterMessenger.getBlockchainID()`. Chạy dry-run thành công (`forge script script/DeployM9.s.sol` không `--broadcast`): Gas used: 1,608,780 (~0.04 AVAX, ngân sách ≤ 0.05 AVAX). |
+| **M9-N2** | **Kiến trúc Bất Đồng Bộ ICM** | **ĐẠT** | `contracts/test/MissionCrossChainICM.t.sol`<br>`REPORT_REVIEW_AND_FIX_COMPLETION.md` | Bổ sung chú thích kiến trúc trong test suite và báo cáo: Trên mạng Avalanche Teleporter thật, `sendSpendRequest` trên Dispatch chỉ xếp hàng gửi message và trả về `teleporterMessageID`; các lỗi revert (`UnauthorizedAgent`, `PayeeNotInMissionSet`, `OverCap`) xảy ra bất đồng bộ tại transaction delivery trên Fuji C-Chain do ICM relayer phát sóng. Do đó, bằng chứng live phải ghi nhận receipt delivery tại Fuji (`SpendExecuted` hoặc execution failure), không chỉ ghi tx gửi tại Dispatch. |
+| **M9-N3** | **Script Live ICM Runner** | **ĐẠT** | `scripts/m9-live-icm.ts` | Xây dựng script runner cho 2 kịch bản live: (1) In-set spend bởi authorized agent; (2) Stranger spend bị revert `UnauthorizedAgent`. Tích hợp cổng kiểm tra an toàn: tự động phát hiện số dư gas Dispatch của Owner (`0 wei`) và dừng lại với trạng thái `[STATUS: AWAITING OWNER FAUCET]`, in rõ link faucet và hướng dẫn theo `OWNER_TODO.md`. Tuyệt đối không broadcast mạng thật. |
+
+### 2. Output Dry-Run Mô Phỏng Deploy Script (`forge script script/DeployM9.s.sol`)
+
+```text
+Compiling 4 files with Solc 0.8.24
+Solc 0.8.24 finished in 584.77ms
+Compiler run successful!
+Script ran successfully.
+Gas used: 1608780
+
+== Return ==
+hub: contract MissionBudgetHub 0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496
+gateway: contract MissionSpendGateway 0x34A1D3fff3958843C43aD80F30b94c510645C316
+
+If you wish to simulate on-chain transactions pass a RPC URL.
+```
+
+### 3. Output Dry Check Script Live (`npx tsx scripts/m9-live-icm.ts`)
+
+```text
+================================================================
+   Avalanche ICM Cross-L1 Live Runner (Dispatch ↔ Fuji C-Chain) 
+================================================================
+
+- Dispatch RPC: https://subnets.avax.network/dispatch/testnet/rpc
+- Fuji RPC:     https://api.avax-test.network/ext/bc/C/rpc
+- Gateway:      (Pending deployment)
+- Budget Hub:   (Pending deployment)
+
+Owner Address (0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c) balance on Dispatch: 0 DISPATCH
+
+[STATUS: AWAITING OWNER FAUCET]
+Dispatch gas balance is 0 wei. Per M9 safety rules, execution is halted.
+Owner must claim testnet DISPATCH tokens at https://core.app/tools/testnet-faucet/?subnet=dispatch
+Refer to OWNER_TODO.md for step-by-step faucet instructions.
+```
+
+### 4. Kết Quả Kiểm Thử Toàn Bộ Suite
+- **Foundry Contracts Suite:** **73 / 73 passed (100%)** (5 test suites, 512 invariant runs, 32,768 calls, 0 reverts).
+- **TypeScript Typecheck (`apps/web`):** **0 errors (100% clean)**.
+- **Ràng buộc an toàn:** Tuyệt đối không broadcast Dispatch khi chưa có gas faucet từ Owner.

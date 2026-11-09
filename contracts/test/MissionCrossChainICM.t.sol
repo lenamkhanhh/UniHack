@@ -58,6 +58,16 @@ abstract contract TestHarness {
  * 11. gateway deterministic nonce derivation (M9-F4) (local mock, not ICM)
  * 12. end-to-end gateway to hub relay (local mock, not ICM)
  *
+ * NOTE (M9-N2 Async ICM Delivery Architecture):
+ * In live Avalanche ICM (Teleporter), cross-chain messaging is asynchronous:
+ * 1. sendSpendRequest on Dispatch L1 immediately returns a teleporterMessageID after queuing.
+ * 2. Off-chain ICM relayers relay the message to Fuji C-Chain.
+ * 3. Contract reverts (e.g. UnauthorizedAgent, PayeeNotInMissionSet, OverCap) occur during
+ *    the destination delivery transaction on Fuji C-Chain, NOT synchronously on Dispatch L1.
+ * 4. The local mock harness simulates autoRelay synchronously for testing ergonomics.
+ * 5. Live verification evidence must capture both the Dispatch send tx AND the Fuji delivery
+ *    receipt (SpendExecuted or Teleporter execution failure).
+ *
  * NOTE: All tests in this suite run against local mock contracts and are labeled
  * "local mock, not ICM" until live testnet broadcast occurs.
  */

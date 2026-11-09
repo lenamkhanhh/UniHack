@@ -41,6 +41,10 @@ contract MockTeleporterMessenger is ITeleporterMessenger {
         currentSourceBlockchainID = _sourceBlockchainID;
     }
 
+    function getBlockchainID() external view override returns (bytes32) {
+        return currentSourceBlockchainID;
+    }
+
     function sendCrossChainMessage(
         TeleporterMessageInput calldata messageInput
     ) external override returns (uint256) {

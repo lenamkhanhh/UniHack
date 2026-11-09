@@ -8,24 +8,22 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-### M9 local accepted (Claude, 46c9ca0)
-Verified: hub enforces registered agent (UnauthorizedAgent), non-zero root, immutable non-zero token; gateway derives messageId from chainid+address+nonce; full forge suite 73/73 pass.
-Next for Gemini, still no Dispatch broadcast until owner has faucet:
-- **M9-N1:** `contracts/script/DeployM9.s.sol`. It deploys the hub on Fuji (owner-signed, budget ≤0.05 AVAX) and the gateway on Dispatch. It reads the blockchain IDs from the env or from `getBlockchainID()` on the Teleporter messenger, never hardcoded. Dry-run only (`forge script` without `--broadcast`); paste the simulated output in the report.
-- **M9-N2:** in the report and the test comments, note that on real ICM the hub revert happens on destination delivery (the message fails and can be retried), not synchronously in `sendSpendRequest` as in the auto-relay mock. The live evidence must therefore show the Fuji delivery tx (SpendExecuted or the failed-execution event), not only the Dispatch send tx.
-- **M9-N3:** `scripts/m9-live-icm.ts` (not run). It sends one in-set spend and one stranger spend, polls Fuji for the delivery, and writes `evidence/m9/icm-live.json` only from real receipts.
-- After that, commit and stop. The live run waits for the owner.
-
-
-### M9 Phase 1 Hardened (All F1..F5 Resolved). Awaiting Owner Dispatch Faucet for Live Broadcast
-- Hợp đồng `MissionSpendGateway.sol` (Dispatch L1) & `MissionBudgetHub.sol` (Fuji C-Chain, cross-L1 budget hub riêng biệt với GuardedTreasury) đã được gia cố toàn diện theo review Claude (M9-F1..F5).
-- Toàn bộ Foundry test suites: 73/73 passed (5 suites, 12/12 ICM tests, 512 invariant runs, 32,768 calls, 0 reverts; tất cả gắn nhãn "local mock, not ICM").
-- Phase 2 (Live Testnet Broadcast): DỪNG chờ Owner xin faucet Dispatch cho ví `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c` (chi tiết tại `OWNER_TODO.md`). Tuyệt đối chưa deploy Dispatch, không tự tạo ví mới, không vượt ngân sách Fuji.
+### M9 Preparation Complete (Local Contracts, Dry-run Script & Live Runner Ready). Awaiting Owner Dispatch Faucet
+- Hoàn thành đầy đủ M9-N1, M9-N2, M9-N3:
+  - `contracts/script/DeployM9.s.sol`: Script deploy Hub (Fuji) và Gateway (Dispatch) với blockchain ID động từ env/teleporter messenger; dry-run thành công (`Gas used: 1,608,780` ~ 0.04 AVAX, ngân sách ≤ 0.05 AVAX).
+  - Kiến trúc bất đồng bộ ICM (M9-N2) đã được chú thích chi tiết trong test comments và báo cáo nghiệm thu: revert diễn ra trên Fuji delivery tx chứ không phải đồng bộ ở `sendSpendRequest`.
+  - `scripts/m9-live-icm.ts`: Script sẵn sàng chạy live cho 2 kịch bản (in-set spend vs stranger spend), tự động kiểm tra số dư gas Dispatch của Owner và dừng an toàn nếu balance = 0.
+- Phase 2 (Live Testnet Broadcast): DỪNG chờ Owner xin faucet Dispatch cho ví `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c` (chi tiết tại `OWNER_TODO.md`). Tuyệt đối chưa deploy Dispatch, không broadcast mạng thật khi chưa có faucet.
 
 
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
+
+- M9-N1..N3 [Deploy Script Dry-run, Asynchronous ICM Delivery Documentation & Live Runner]:
+  - **M9-N1 (Deploy Script Dry-run):** Xây dựng `contracts/script/DeployM9.s.sol`. Đọc động blockchain ID qua env (`DISPATCH_BLOCKCHAIN_ID`, `FUJI_BLOCKCHAIN_ID`) hoặc truy vấn trực tiếp `ITeleporterMessenger.getBlockchainID()`. Chạy dry-run thành công (`forge script script/DeployM9.s.sol` không `--broadcast`): Gas used 1,608,780 (~0.04 AVAX, ngân sách ≤0.05 AVAX).
+  - **M9-N2 (Asynchronous ICM Revert Architecture Note):** Bổ sung chú thích kiến trúc trong `contracts/test/MissionCrossChainICM.t.sol` và báo cáo nghiệm thu: Trên mạng Avalanche ICM thật, hàm `sendSpendRequest` trên Dispatch chỉ xếp hàng gửi message và trả về `teleporterMessageID`; các lỗi revert (`UnauthorizedAgent`, `PayeeNotInMissionSet`, `OverCap`) xảy ra bất đồng bộ tại transaction delivery trên Fuji C-Chain do ICM relayer phát sóng. Do đó, bằng chứng live phải ghi nhận receipt delivery tại Fuji (`SpendExecuted` hoặc execution failure), không chỉ ghi tx gửi tại Dispatch.
+  - **M9-N3 (Live Runner Ready & Safety Gated):** Xây dựng `scripts/m9-live-icm.ts` chuẩn bị sẵn sàng cho 2 kịch bản: (1) In-set spend bởi authorized agent; (2) Stranger spend bị revert `UnauthorizedAgent`. Script tích hợp cổng kiểm tra gas Dispatch của Owner: nếu balance = 0 wei, script dừng ngay và in hướng dẫn faucet ra màn hình, tuyệt đối không broadcast mạng thật.
 
 - M9-F1..F5 [Cross-L1 Budget Hub Hardening, Access Control & Deterministic Nonce]:
   - **M9-F1 (Agent Access Control):** `MissionBudgetHub` thêm trường `address agent` vào `MissionBudget`. Trong `registerMission`, owner chỉ định rõ agent được phép chi tiêu. `MissionSpendGateway` nhúng `msg.sender` vào payload ICM. `receiveTeleporterMessage` kiểm tra `require(agent == mission.agent, "UnauthorizedAgent")`, ngăn chặn triệt để người lạ chi tiêu ngân sách mission. Test `test_08_stranger_agent_reverts_local_mock` xác nhận stranger bị revert `UnauthorizedAgent`.
