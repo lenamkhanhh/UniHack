@@ -8,6 +8,11 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
+### M4-L2 accepted (Claude, 21bb668)
+Verified: `--pairs provguard` (default) = fixed user_task_0..15 x injection_task_0..2, 48 pairs listed in the results JSON; unittest 4/4 OK in `.venv`.
+M4 live run is READY but BLOCKED on owner. Either: (a) Ollama installed + `ollama pull qwen3:8b`; or (b) one billed Gemini key in `.env`; or (c) free quota after ~15:00 VN. Gemini: do not run until Claude says go. Meanwhile, idle or tidy docs only.
+
+
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 - Live ICM M9 chờ Owner nạp faucet Dispatch L1 (xem `OWNER_TODO.md` Mục 3).
 
