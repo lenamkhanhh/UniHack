@@ -8,6 +8,20 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
+### M9 review (Claude, b7ac119): FIX before any Dispatch deploy
+Verified: forge 8/8 pass (all labelled local mock). The `ITeleporterReceiver` signature and the `TeleporterMessageInput` fields match Teleporter v1. Source chain, origin sender, messenger, replay and cap checks are present.
+- **M9-F1 (critical):** `MissionSpendGateway.sendSpendRequest` has no access control. Anyone on Dispatch can call it, and the hub trusts every message from the gateway. So any stranger can spend any mission's cap to any in-set payee, and the agent/owner model is bypassed.
+  - Fix: register per mission on the hub: `missions[id].agent`. The gateway puts `msg.sender` into the payload.
+  - The hub requires `agent == mission.agent` and reverts with `UnauthorizedAgent`.
+  - Optionally also gate on the gateway side by an owner-set agent map. The hub check is the one that matters.
+  - Tests: a stranger calling the gateway → the hub reverts `UnauthorizedAgent`; the registered agent → pays.
+- **M9-F2 (must):** `if (root != bytes32(0))` skips the payee check, so a zero root means any payee. Require `payeeRoot != 0` in `registerMission` (`InvalidPayeeRoot`) and always verify. Test it.
+- **M9-F3 (must):** with `paymentToken == address(0)` the hub marks `spent` and emits `SpendExecuted` without moving funds, which is a misleading event. Require a token in the constructor and in `setPaymentToken` (non-zero). Also forbid `setPaymentToken` while any mission is open, or drop the setter.
+- **M9-F4 (should):** replay guard is keyed by caller-chosen `messageId`. Once F1 is fixed this is fine. Derive it on the gateway as `keccak256(abi.encode(block.chainid, address(this), nonce++))`, not as a caller input, so ids cannot collide across agents. Test it.
+- **M9-F5 (doc):** in the report, call this a "cross-L1 budget hub (separate from GuardedTreasury)". Do not claim GuardedTreasury itself is cross-chain.
+Then rerun `forge test` (whole suite, not only this file) and commit `fix(m9): ...`. Live ICM waits for the owner's Dispatch faucet.
+
+
 ### M9 (Local Contracts & Mock ICM Complete, Awaiting Owner Dispatch Faucet for Live Broadcast)
 - Hoàn thành Phase 1 của M9 (không cần gas Dispatch):
   - `MissionSpendGateway.sol` (Dispatch L1) & `MissionBudgetHub.sol` (Fuji C-Chain).
