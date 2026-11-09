@@ -3,7 +3,7 @@ pragma solidity 0.8.24;
 
 /**
  * @title ITeleporterMessenger
- * @notice Standard interface for the Avalanche Teleporter (ICM) Messenger contract.
+ * @notice Standard interface for Avalanche Teleporter (ICM) Messenger contract.
  * Reference: https://github.com/ava-labs/teleporter
  */
 interface ITeleporterMessenger {
@@ -25,6 +25,14 @@ interface ITeleporterMessenger {
         TeleporterMessageInput calldata messageInput
     ) external returns (uint256);
 
+    function blockchainID() external view returns (bytes32);
+}
+
+/**
+ * @title IWarpMessenger
+ * @notice Standard Avalanche Warp Messaging precompile interface at 0x0200000000000000000000000000000000000005.
+ */
+interface IWarpMessenger {
     function getBlockchainID() external view returns (bytes32);
 }
 

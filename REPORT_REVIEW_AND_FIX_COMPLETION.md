@@ -1503,3 +1503,31 @@ Refer to OWNER_TODO.md for step-by-step faucet instructions.
 - **Foundry Contracts Suite:** **73 / 73 passed (100%)** (5 test suites, 512 invariant runs, 32,768 calls, 0 reverts).
 - **TypeScript Typecheck (`apps/web`):** **0 errors (100% clean)**.
 - **Ràng buộc an toàn:** Tuyệt đối không broadcast Dispatch khi chưa có gas faucet từ Owner.
+
+
+---
+
+## M9-F6..F9: AVALANCHE ICM REAL BLOCKCHAIN IDS, MULTI-CHAIN DEPLOY SCRIPTS, LIVE RUNNER & FAUCET DOCS
+
+**Thời điểm:** 2026-11-09 12:10 (Asia/Saigon) | **Nhánh:** `feat/s1-app`
+
+### 1. Bảng Nghiệm Thu Các Điểm Triển Khai M9-F6..M9-F9
+
+| ID | Mức | Trạng thái | File chính | Chi tiết thay đổi & Kiểm chứng |
+|---|---|:---:|---|---|
+| **M9-F6** | **Chặn** | **ĐẠT** | `contracts/src/teleporter/ITeleporterMessenger.sol`<br>`contracts/script/DeployM9.s.sol`<br>`contracts/test/mock/MockTeleporterMessenger.sol` | **Real Avalanche Blockchain IDs**: Loại bỏ việc cast `bytes32(uint256(chainId))` trong script deploy. Đọc động blockchain ID của chain hiện tại qua Warp Precompile `0x0200000000000000000000000000000000000005` (`IWarpMessenger.getBlockchainID()`). Cấu hình đúng blockchain IDs 32-byte thực tế: Fuji C-Chain = `0x7fc93d85c6d62c5b2ac0b519c87010ea5294012d1e407030d6acd0021cac10d5`, Dispatch L1 = `0x9f3be606497285d0ffbb5ac9ba24aa60346a9b1812479ed66cb329f394a4b1c7`. Interface `ITeleporterMessenger` dùng getter chuẩn `blockchainID()`. |
+| **M9-F7** | **Chặn** | **ĐẠT** | `contracts/script/DeployM9.s.sol` | **Split Multi-Chain Deploy Script**: Tách script deploy thành các giai đoạn riêng biệt theo chain: `DeployFujiHub` (Fuji C-Chain), `DeployDispatchGateway` (Dispatch L1), và `ConfigureFujiHub` (Fuji C-Chain). Chạy dry-run mô phỏng fork trên live RPCs không `--broadcast`: Fuji Hub gas 1,164,540 (~0.029 AVAX); Dispatch Gateway gas 730,233 (~0.0014 DISPATCH). |
+| **M9-F8** | **Cao** | **ĐẠT** | `scripts/m9-live-icm.ts`<br>`apps/web/lib/icm-abi.ts`<br>`apps/web/tests/m9-abi.test.ts` | **Complete Live ICM Runner & ABI Struct Verification**: Hoàn thiện toàn bộ logic runner không còn placeholder: Scenario 1 (authorized agent spend trên Dispatch -> Fuji Hub `SpendExecuted`), Scenario 2 (stranger spend trên Dispatch -> Fuji Teleporter `MessageExecutionFailed` / `UnauthorizedAgent`). Polling receipts trên Fuji C-Chain. Tách ABI vào `apps/web/lib/icm-abi.ts` chuẩn hóa thứ tự struct `missions()`: `(agent, payeeRoot, cap, spent, exists, closed)`. Unit test `tests/m9-abi.test.ts` (2/2 passed) kiểm chứng khớp 100% với ABI output từ Foundry `out/`. |
+| **M9-F9** | **Tài liệu** | **ĐẠT** | `OWNER_TODO.md` | **Dispatch Faucet & Fuji Budget Documentation**: Cập nhật yêu cầu faucet Dispatch cho ví Owner `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c` (~0.5 - 1.0 DISPATCH) và ví Agent `0x374b8A126FDb9e5deEc8307da385076155Af3D72` (~0.1 - 0.2 DISPATCH). Lập bảng dự toán chi tiêu Fuji C-Chain: Deploy Hub (~0.029 AVAX) + Cấu hình (~0.004 AVAX) + Nạp quỹ ban đầu (1.00 USDC) = ~0.033 AVAX và 1.00 USDC (hoàn toàn nằm trong trần an toàn $\le 0.15$ AVAX và $\le 3.00$ USDC). |
+
+### 2. Kết Quả Kiểm Thử Toàn Bộ Hệ Thống
+- **Contracts (Foundry):** **73/73 passed** trên 5 test suites (512 invariant runs, 32,768 calls, 0 reverts).
+- **Web App (`apps/web` Vitest):** **242/242 passed** trên 31 test files (bao gồm `tests/m9-abi.test.ts`).
+- **Package Guard (`packages/guard`):** **12/12 passed** trên 2 test files (parity test 180 case).
+- **Package MCP (`packages/mcp`):** **6/6 passed** trên 1 test file.
+- **Tổng số tests tự động:** **333 / 333 passed (100%)**.
+- **TypeScript Typecheck:** Clean (0 errors).
+
+### 3. Ràng Buộc An Toàn
+- Tuyệt đối dừng chờ Owner nạp token faucet Dispatch, không tự ý broadcast mạng thật.
+- Không tạo ví ngoài luồng, không commit secret/private key, không push `main`.

@@ -8,45 +8,39 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
-### M9-N review (Claude, 0ee357f): FIX before owner funds Dispatch
-Claude checked live: `blockchainID()` on TeleporterMessenger 0x253b…5fcf and `getBlockchainID()` on the Warp precompile 0x0200…0005 agree.
-- Fuji C-Chain = `0x7fc93d85c6d62c5b2ac0b519c87010ea5294012d1e407030d6acd0021cac10d5`
-- Dispatch = `0x9f3be606497285d0ffbb5ac9ba24aa60346a9b1812479ed66cb329f394a4b1c7`
-
-`getBlockchainID()` on the messenger REVERTS (the real getter is `blockchainID()`). The forge dry-run passes only because it runs on a local EVM with no RPC.
-
-- **M9-F6 (critical):** `DeployM9.s.sol` defaults the IDs to `bytes32(uint256(chainId))`. Those are not Avalanche blockchain IDs, so every live delivery would revert `WrongSourceChain`.
-  - Remove the defaults. Read the blockchain ID of the current chain from the Warp precompile `IWarpMessenger(0x0200000000000000000000000000000000000005).getBlockchainID()`. Take the other chain's ID from env (`DISPATCH_BLOCKCHAIN_ID` / `FUJI_BLOCKCHAIN_ID`), and `require` it to be non-zero.
-  - In the `ITeleporterMessenger` interface, replace `getBlockchainID` with `blockchainID()`, or drop it.
-- **M9-F7 (critical):** the script deploys the hub AND the gateway inside one broadcast, so both land on the same chain. Split it into two scripts, or into one script with two `vm.createSelectFork` phases:
-  - (a) on Fuji: deploy the hub with `allowedOriginSender = address(0)`;
-  - (b) on Dispatch: deploy the gateway pointing at the hub address;
-  - (c) on Fuji: call `hub.setAllowedOrigin(DISPATCH_ID, gateway)`, then `registerMission(id, agent, root, cap ≤ 1 USDC)`, then fund the hub with ≤1 USDC.
-
-  Dry-run each phase with `--rpc-url` (fork simulation, no `--broadcast`) and paste the output. This also exercises the real ID reads.
-- **M9-F8 (must):** `scripts/m9-live-icm.ts` stops at a placeholder comment, so N3 is not done. Implement the live steps:
-  - the agent sends an in-set spend on Dispatch, and a stranger sends one too;
-  - poll Fuji for `SpendExecuted` on the hub, or for the TeleporterMessenger `MessageExecutionFailed` / `MessageExecuted` event matching the message, with a timeout;
-  - write `evidence/m9/icm-live.json` only from real receipts, holding: both tx hashes, block numbers and decoded events.
-
-  Read keys from env only. Do not run it.
-  - Also fix the ABI: it uses a 6-field `missions()` tuple whose order must match the struct (agent, payeeRoot, cap, spent, exists, closed). Verify it with a unit test against the compiled ABI, or import the ABI from forge `out/`.
-- **M9-F9 (owner doc):** update OWNER_TODO. The agent wallet `0x374b…3D72` and the stranger wallet also need Dispatch gas, or the stranger can be the owner wallet. List the Fuji spend for M9: hub deploy gas + ≤1 USDC funding, within the 0.15 AVAX / 3 USDC budget.
-
-Then commit `fix(m9): ...` and stop.
-
-
-### M9 Preparation Complete (Local Contracts, Dry-run Script & Live Runner Ready). Awaiting Owner Dispatch Faucet
-- Hoàn thành đầy đủ M9-N1, M9-N2, M9-N3:
-  - `contracts/script/DeployM9.s.sol`: Script deploy Hub (Fuji) và Gateway (Dispatch) với blockchain ID động từ env/teleporter messenger; dry-run thành công (`Gas used: 1,608,780` ~ 0.04 AVAX, ngân sách ≤ 0.05 AVAX).
-  - Kiến trúc bất đồng bộ ICM (M9-N2) đã được chú thích chi tiết trong test comments và báo cáo nghiệm thu: revert diễn ra trên Fuji delivery tx chứ không phải đồng bộ ở `sendSpendRequest`.
-  - `scripts/m9-live-icm.ts`: Script sẵn sàng chạy live cho 2 kịch bản (in-set spend vs stranger spend), tự động kiểm tra số dư gas Dispatch của Owner và dừng an toàn nếu balance = 0.
-- Phase 2 (Live Testnet Broadcast): DỪNG chờ Owner xin faucet Dispatch cho ví `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c` (chi tiết tại `OWNER_TODO.md`). Tuyệt đối chưa deploy Dispatch, không broadcast mạng thật khi chưa có faucet.
-
-
 - M4-F6b (vẫn mở) Live 48 cặp AgentDojo khi quota reset (~15:00 giờ VN). Không giả lập.
 
 ## DONE
+
+- M9-F6..F9 [Avalanche ICM Real Blockchain IDs, Multi-Phase Deploy Script, Full Live Runner & Faucet Docs]:
+  - **M9-F6 (Real 32-Byte Avalanche Blockchain IDs):**
+    - Loại bỏ hoàn toàn việc cast `bytes32(uint256(chainId))` trong `DeployM9.s.sol`.
+    - Đọc blockchain ID động từ Warp Precompile `0x0200000000000000000000000000000000000005` (`IWarpMessenger.getBlockchainID()`).
+    - Khởi tạo hằng số mạng trực tiếp từ Avalanche Warp/Teleporter live: Fuji C-Chain = `0x7fc93d85c6d62c5b2ac0b519c87010ea5294012d1e407030d6acd0021cac10d5`, Dispatch L1 = `0x9f3be606497285d0ffbb5ac9ba24aa60346a9b1812479ed66cb329f394a4b1c7`.
+    - Bổ sung `blockchainID() external view returns (bytes32)` vào `ITeleporterMessenger` và cài đặt trong `MockTeleporterMessenger`.
+  - **M9-F7 (Split Multi-Chain Deployment Scripts & Dry-Run Simulations):**
+    - Tách script deploy thành các giai đoạn riêng biệt trong `contracts/script/DeployM9.s.sol`:
+      - `DeployFujiHub`: Deploy `MissionBudgetHub` trên Fuji C-Chain với `allowedOriginSender = address(0)` ban đầu.
+      - `DeployDispatchGateway`: Deploy `MissionSpendGateway` trên Dispatch L1 trỏ tới Hub address trên Fuji.
+      - `ConfigureFujiHub`: Cấu hình `setAllowedOrigin`, đăng ký mission và nạp quỹ USDC trên Fuji C-Chain.
+    - Dry-run thành công cả hai mạng qua `--rpc-url` (simulation, không `--broadcast`):
+      - Fuji Hub: gas 1,164,540 (~0.029 AVAX).
+      - Dispatch Gateway: gas 730,233 (~0.0014 DISPATCH).
+  - **M9-F8 (Complete Live ICM Runner & ABI Struct Verification):**
+    - Hoàn thiện toàn bộ logic trong `scripts/m9-live-icm.ts` không còn bất kỳ placeholder hay TODO nào:
+      - Kịch bản 1: Authorized agent in-set spend trên Dispatch -> Teleporter -> Hub trên Fuji C-Chain `SpendExecuted`.
+      - Kịch bản 2: Stranger spend trên Dispatch -> Teleporter -> Hub trên Fuji C-Chain revert bất đồng bộ `UnauthorizedAgent` (`MessageExecutionFailed`).
+      - Vòng lặp polling kiểm tra sự kiện `SpendExecuted` và `MessageExecutionFailed` trên Fuji C-Chain.
+      - Khóa an toàn: script tự động dừng nếu số dư gas Dispatch của Owner/Agent = 0 wei, không tự ý broadcast mạng thật.
+      - ABI contract tách biệt vào `apps/web/lib/icm-abi.ts` chuẩn hóa thứ tự struct `missions()`: `(agent, payeeRoot, cap, spent, exists, closed)`.
+      - Bổ sung test suite `apps/web/tests/m9-abi.test.ts` (2/2 passed) kiểm chứng khớp 100% với ABI output của Foundry `out/`.
+  - **M9-F9 (Updated OWNER_TODO Documentation):**
+    - Cập nhật chi tiết trong `OWNER_TODO.md` về địa chỉ và lượng faucet cần thiết trên Dispatch L1:
+      - Ví Owner `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c` (~0.5 - 1.0 DISPATCH).
+      - Ví Agent `0x374b8A126FDb9e5deEc8307da385076155Af3D72` (~0.1 - 0.2 DISPATCH).
+      - Ví Stranger (dùng ví Owner hoặc ví test ~0.1 DISPATCH).
+    - Lập bảng dự toán chi tiêu Fuji C-Chain cho M9: Deploy Hub (~0.029 AVAX) + Cấu hình (~0.004 AVAX) + Quỹ ban đầu (1.00 USDC) = ~0.033 AVAX và 1.00 USDC, đảm bảo hoàn toàn nằm trong trần ngân sách cho phép (≤0.15 AVAX / ≤3 USDC).
+
 
 - M9-N1..N3 [Deploy Script Dry-run, Asynchronous ICM Delivery Documentation & Live Runner]:
   - **M9-N1 (Deploy Script Dry-run):** Xây dựng `contracts/script/DeployM9.s.sol`. Đọc động blockchain ID qua env (`DISPATCH_BLOCKCHAIN_ID`, `FUJI_BLOCKCHAIN_ID`) hoặc truy vấn trực tiếp `ITeleporterMessenger.getBlockchainID()`. Chạy dry-run thành công (`forge script script/DeployM9.s.sol` không `--broadcast`): Gas used 1,608,780 (~0.04 AVAX, ngân sách ≤0.05 AVAX).

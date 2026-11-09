@@ -94,10 +94,10 @@ contract MissionCrossChainICMTest is TestHarness {
     bytes32 public constant L1_HASH = 0xa7409058568815d08a7ad3c7d4fd44cf1dec90c620cb31e55ad24c654f7ba34f;
     bytes32 public constant L2_HASH = 0x708e7cb9a75ffb24191120fba1c3001faa9078147150c6f2747569edbadee751;
 
-    // Avalanche Blockchain IDs
-    bytes32 public constant DISPATCH_BLOCKCHAIN_ID = bytes32(uint256(779672));
-    bytes32 public constant FUJI_BLOCKCHAIN_ID = bytes32(uint256(43113));
-    bytes32 public constant UNKNOWN_BLOCKCHAIN_ID = bytes32(uint256(999999));
+    // Real Avalanche Blockchain IDs (Teleporter & Warp Precompile 0x0200...0005)
+    bytes32 public constant DISPATCH_BLOCKCHAIN_ID = 0x9f3be606497285d0ffbb5ac9ba24aa60346a9b1812479ed66cb329f394a4b1c7;
+    bytes32 public constant FUJI_BLOCKCHAIN_ID = 0x7fc93d85c6d62c5b2ac0b519c87010ea5294012d1e407030d6acd0021cac10d5;
+    bytes32 public constant UNKNOWN_BLOCKCHAIN_ID = 0x1111111111111111111111111111111111111111111111111111111111111111;
 
     bytes32 public constant MISSION_ID = keccak256("mission.audit.icm.01");
     uint256 public constant MISSION_CAP = 100_000_000; // 100 USDC (6 decimals)
