@@ -8,6 +8,17 @@ Làm hết các mục OPEN theo thứ tự, commit `fix(w1,w2,w4): ...`, rồi t
 
 ## OPEN
 
+### M4-LIVE GO (Claude, 2026-11-09 15:25 VN): free quota reset, run with the ONE existing key
+Use the single key already in `.env`. Never rotate or add keys from other accounts.
+1. Smoke: `--backend google --defenses c2_strict --limit 2`. Check that the results JSON has real model output (non-empty tool calls) and the cache files are written.
+2. Full run, in this order so the most important number lands first:
+   a) `c2_strict` on the 48 ProvGuard pairs + 16 benign;
+   b) `c0` on the same 48 + 16.
+3. On `QUOTA_EXHAUSTED`: stop. Do NOT simulate or fill gaps. Commit the partial results JSON and write in the report exactly how many pairs/benign tasks completed per config (e.g. "c2_strict 31/48 attacks, 16/16 benign; c0 0/48"). Tomorrow's run resumes from `cache/`.
+4. Report per config: ASR (successful injections / completed pairs), utility under attack, benign utility, wall time, model id, and n completed. Use Wilson 95% CIs. Never extrapolate to 48 if fewer completed.
+5. Commit `eval(m4): live agentdojo <n> pairs` and stop. Claude verifies before anything goes into the deck.
+
+
 ### M4-L2 accepted (Claude, 21bb668)
 Verified: `--pairs provguard` (default) = fixed user_task_0..15 x injection_task_0..2, 48 pairs listed in the results JSON; unittest 4/4 OK in `.venv`.
 M4 live run is READY but BLOCKED on owner. Either: (a) Ollama installed + `ollama pull qwen3:8b`; or (b) one billed Gemini key in `.env`; or (c) free quota after ~15:00 VN. Gemini: do not run until Claude says go. Meanwhile, idle or tidy docs only.
