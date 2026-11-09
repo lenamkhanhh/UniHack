@@ -135,6 +135,7 @@ contract GuardedTreasury {
     mapping(bytes32 => address) public missionSessionWallet; // missionId -> funded session wallet
     mapping(bytes32 => bytes32) public anchoredMissionProofs; // missionId -> anchored audit headHash
     mapping(bytes32 => bytes32) public missionPayeeRoot; // missionId -> Merkle root of authorized payees (PV-1)
+    mapping(uint256 => bytes32) public proposalPayeeRootSnapshot; // proposalId -> Merkle root snapshot at propose time (A1)
 
     struct Mission {
         bytes32 id; // keccak256(UTF8(slug))
@@ -498,6 +499,7 @@ contract GuardedTreasury {
 
         proposalId = nextProposalId++;
         proposalIdPlusOneByOperation[missionId][operationId] = proposalId + 1;
+        proposalPayeeRootSnapshot[proposalId] = missionPayeeRoot[missionId];
 
         if (bytes(queueReason).length > 0) {
             // QUEUE branch
@@ -559,6 +561,7 @@ contract GuardedTreasury {
         require(m.exists && !m.closed && block.timestamp < m.expiresAt, "MissionInvalidOrExpired");
         require(recipientAllowlist[p.to], "RecipientNotAllowlisted");
         require(p.to != m.agent, "CannotPayAgent");
+        require(missionPayeeRoot[p.missionId] == proposalPayeeRootSnapshot[proposalId], "ProposalPayeePolicyChanged");
 
         p.status = 2; // Approved
         emit Approved(proposalId);
@@ -574,6 +577,7 @@ contract GuardedTreasury {
         require(m.exists && !m.closed && block.timestamp < m.expiresAt, "MissionInvalidOrExpired");
         require(recipientAllowlist[p.to], "RecipientNotAllowlisted");
         require(p.to != m.agent, "CannotPayAgent");
+        require(missionPayeeRoot[p.missionId] == proposalPayeeRootSnapshot[proposalId], "ProposalPayeePolicyChanged");
 
         // Soft caps are deliberate owner override; do not re-check soft caps
         p.status = 3; // Executed

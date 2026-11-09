@@ -954,4 +954,190 @@ contract GuardedTreasuryTest is Test {
         uint256 pid = treasury.propose(keccak256("op-pv1-succeed-after-reset"), recipient, 1_000_000, missionId, "Root reset to 0");
         assertEq(treasury.getProposal(pid).status, 3); // Executed
     }
+
+    // ==========================================
+    // A1: Queue Must Obey Active Payee Policy
+    // ==========================================
+
+    function test_A1_root_changed_before_approve_reverts() public {
+        address payeeA = 0x2222222222222222222222222222222222222222;
+        bytes32 root1 = 0xc76421b7db26fc58390a222ae87eb47677faa580fa2d97459166a1125d031320;
+        bytes32[] memory proofA = new bytes32[](1);
+        proofA[0] = 0xbd164a4590db938a0b098da1b25cf37b155f857b38c37c016ad5b8f8fce80192;
+
+        vm_prank(owner);
+        treasury.setRecipient(payeeA, true);
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, root1);
+
+        // Propose over perTxCap (6 USDC > 5 USDC perTxCap) -> Queued
+        vm_prank(agent);
+        uint256 pid = treasury.proposeWithProof(
+            keccak256("op-a1-queue-1"),
+            payeeA,
+            6_000_000,
+            missionId,
+            "Queued payout to payeeA",
+            proofA
+        );
+        assertEq(treasury.getProposal(pid).status, 1); // Queued
+        assertEq(treasury.proposalPayeeRootSnapshot(pid), root1);
+
+        // Owner changes root to a new root (where payeeA is removed)
+        bytes32 root2 = keccak256("new-root-without-payeeA");
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, root2);
+
+        // Attempting to approve must revert with ProposalPayeePolicyChanged
+        vm_expectRevert(bytes("ProposalPayeePolicyChanged"));
+        vm_prank(owner);
+        treasury.approve(pid);
+    }
+
+    function test_A1_root_changed_after_approve_before_execute_reverts() public {
+        address payeeA = 0x2222222222222222222222222222222222222222;
+        bytes32 root1 = 0xc76421b7db26fc58390a222ae87eb47677faa580fa2d97459166a1125d031320;
+        bytes32[] memory proofA = new bytes32[](1);
+        proofA[0] = 0xbd164a4590db938a0b098da1b25cf37b155f857b38c37c016ad5b8f8fce80192;
+
+        vm_prank(owner);
+        treasury.setRecipient(payeeA, true);
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, root1);
+
+        // Propose 6 USDC -> Queued
+        vm_prank(agent);
+        uint256 pid = treasury.proposeWithProof(
+            keccak256("op-a1-queue-2"),
+            payeeA,
+            6_000_000,
+            missionId,
+            "Queued payout",
+            proofA
+        );
+
+        // Owner approves while root1 is still active
+        vm_prank(owner);
+        treasury.approve(pid);
+        assertEq(treasury.getProposal(pid).status, 2); // Approved
+
+        // Owner then updates root to root2 before execution
+        bytes32 root2 = keccak256("new-root-payeeA-removed");
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, root2);
+
+        // Execution must be rejected because root changed
+        vm_expectRevert(bytes("ProposalPayeePolicyChanged"));
+        vm_prank(owner);
+        treasury.execute(pid);
+
+        // Verify payeeA received 0 USDC
+        assertEq(usdc.balanceOf(payeeA), 0);
+    }
+
+    function test_A1_root_zero_to_nonzero_reverts() public {
+        // Mission starts without root (missionPayeeRoot == 0)
+        vm_prank(owner);
+        treasury.setRecipient(recipient, true);
+
+        // Propose 6 USDC over perTxCap -> Queued under root 0
+        vm_prank(agent);
+        uint256 pid = treasury.propose(
+            keccak256("op-a1-root0"),
+            recipient,
+            6_000_000,
+            missionId,
+            "Root 0 proposal"
+        );
+        assertEq(treasury.proposalPayeeRootSnapshot(pid), bytes32(0));
+
+        // Owner then sets a nonzero Merkle root
+        bytes32 newRoot = keccak256("some-merkle-root");
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, newRoot);
+
+        // Approve must revert because root transitioned from 0 to nonzero
+        vm_expectRevert(bytes("ProposalPayeePolicyChanged"));
+        vm_prank(owner);
+        treasury.approve(pid);
+    }
+
+    function test_A1_unchanged_root_executes_once_successfully() public {
+        address payeeA = 0x2222222222222222222222222222222222222222;
+        bytes32 root1 = 0xc76421b7db26fc58390a222ae87eb47677faa580fa2d97459166a1125d031320;
+        bytes32[] memory proofA = new bytes32[](1);
+        proofA[0] = 0xbd164a4590db938a0b098da1b25cf37b155f857b38c37c016ad5b8f8fce80192;
+
+        vm_prank(owner);
+        treasury.setRecipient(payeeA, true);
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, root1);
+
+        vm_prank(agent);
+        uint256 pid = treasury.proposeWithProof(
+            keccak256("op-a1-unchanged"),
+            payeeA,
+            6_000_000,
+            missionId,
+            "Valid queued payout",
+            proofA
+        );
+
+        // Approve with unchanged root
+        vm_prank(owner);
+        treasury.approve(pid);
+        assertEq(treasury.getProposal(pid).status, 2);
+
+        // Execute with unchanged root
+        vm_prank(owner);
+        treasury.execute(pid);
+        assertEq(treasury.getProposal(pid).status, 3);
+        assertEq(usdc.balanceOf(payeeA), 6_000_000);
+
+        // Cannot re-execute
+        vm_expectRevert(bytes("NotApproved"));
+        vm_prank(owner);
+        treasury.execute(pid);
+    }
+
+    function test_A1_removed_payee_does_not_receive_funds() public {
+        address payeeA = 0x2222222222222222222222222222222222222222;
+        address payeeB = 0x3333333333333333333333333333333333333333;
+        bytes32 root1 = 0xc76421b7db26fc58390a222ae87eb47677faa580fa2d97459166a1125d031320;
+        bytes32[] memory proofA = new bytes32[](1);
+        proofA[0] = 0xbd164a4590db938a0b098da1b25cf37b155f857b38c37c016ad5b8f8fce80192;
+
+        vm_prank(owner);
+        treasury.setRecipient(payeeA, true);
+        vm_prank(owner);
+        treasury.setRecipient(payeeB, true);
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, root1);
+
+        // Proposal for payeeA
+        vm_prank(agent);
+        uint256 pid = treasury.proposeWithProof(
+            keccak256("op-a1-payee-removal"),
+            payeeA,
+            6_000_000,
+            missionId,
+            "Payout to payeeA",
+            proofA
+        );
+
+        // Owner decides to remove payeeA from mission set: new root only authorizes payeeB
+        bytes32 leafB = keccak256(bytes.concat(keccak256(abi.encode(payeeB))));
+        bytes32 rootBOnly = leafB; // single-leaf root
+        vm_prank(owner);
+        treasury.setMissionPayeeRoot(missionId, rootBOnly);
+
+        // Sequence regression: in old code, owner could approve & execute, giving funds to payeeA under rootBOnly!
+        // In new code, approve fails:
+        vm_expectRevert(bytes("ProposalPayeePolicyChanged"));
+        vm_prank(owner);
+        treasury.approve(pid);
+
+        // payeeA balance remains 0
+        assertEq(usdc.balanceOf(payeeA), 0);
+    }
 }

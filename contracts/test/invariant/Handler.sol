@@ -204,7 +204,7 @@ contract Handler is Test {
             vm_prank(owner);
             try treasury.approve(pid) {
                 uint256 balBefore = usdc.balanceOf(address(treasury));
-                bytes32 rootAtPayout = proposalRoots[pid];
+                bytes32 rootAtPayout = treasury.missionPayeeRoot(p.missionId);
                 vm_prank(owner);
                 try treasury.execute(pid) {
                     uint256 balAfter = usdc.balanceOf(address(treasury));
