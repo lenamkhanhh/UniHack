@@ -4,6 +4,22 @@ pragma solidity 0.8.24;
 import "./PasskeyMissionAuthority.t.sol";
 
 contract PasskeyGovernanceTest is PasskeyMissionAuthorityTest {
+    function vm_sign(uint256 privateKey, bytes32 digest) internal returns (uint8 v, bytes32 r, bytes32 s) {
+        (bool success, bytes memory ret) = VM_ADDRESS.call(
+            abi.encodeWithSignature("sign(uint256,bytes32)", privateKey, digest)
+        );
+        require(success, "vm.sign failed");
+        return abi.decode(ret, (uint8, bytes32, bytes32));
+    }
+
+    function vm_addr(uint256 privateKey) internal returns (address) {
+        (bool success, bytes memory ret) = VM_ADDRESS.call(
+            abi.encodeWithSignature("addr(uint256)", privateKey)
+        );
+        require(success, "vm.addr failed");
+        return abi.decode(ret, (address));
+    }
+
     function _buildOwnerActionAuth(
         bytes memory callData,
         uint256 nonce,
@@ -207,6 +223,135 @@ contract PasskeyGovernanceTest is PasskeyMissionAuthorityTest {
 
         vm_expectRevertString("InvalidSignatureR");
         authority.executeOwnerAction(callData, nonce, auth);
+    }
+
+    function test_A3_negative_wrong_private_key_reverts() public {
+        bytes memory callData = abi.encodeWithSelector(treasury.pause.selector);
+        uint256 nonce = authority.nextNonce();
+        uint256 attackerPrivKey = 0x9999999999999999999999999999999999999999999999999999999999999999;
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildOwnerActionAuth(callData, nonce, attackerPrivKey);
+
+        vm_expectRevertString("P256VerificationFailed");
+        authority.executeOwnerAction(callData, nonce, auth);
+    }
+
+    function test_A3_negative_mutated_in_range_signature_reverts() public {
+        bytes memory callData = abi.encodeWithSelector(treasury.pause.selector);
+        uint256 nonce = authority.nextNonce();
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildOwnerActionAuth(callData, nonce, passkeyPrivKey);
+
+        // Mutate s while keeping it strictly within low-s bound
+        auth.s = auth.s ^ 2;
+        uint256 secp256r1HalfN = 0x7FFFFFFF800000007FFFFFFFFFFFFFFFDE737D56D38BCF4279DCE5617E3192A8;
+        require(auth.s > 0 && auth.s <= secp256r1HalfN, "s out of range");
+
+        vm_expectRevertString("P256VerificationFailed");
+        authority.executeOwnerAction(callData, nonce, auth);
+    }
+
+    function test_A3_negative_altered_withdraw_recipient_or_amount_reverts() public {
+        usdc.mint(address(authority), 5_000_000);
+        uint256 nonce = authority.nextNonce();
+        address signedRecipient = address(0x8888);
+        uint256 signedAmount = 2_000_000;
+
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWithdrawAuth(signedRecipient, signedAmount, nonce, passkeyPrivKey);
+
+        // Attacker relayer attempts to redirect funds to an unauthorized address
+        address attackerRecipient = address(0x6666);
+        vm_expectRevertString("ChallengeMismatch");
+        authority.withdrawTokens(attackerRecipient, signedAmount, nonce, auth);
+
+        // Attacker relayer attempts to increase withdrawal amount
+        vm_expectRevertString("ChallengeMismatch");
+        authority.withdrawTokens(signedRecipient, signedAmount + 1_000_000, nonce, auth);
+    }
+
+    function test_A3_negative_shared_nonce_replay_reverts() public {
+        bytes memory pauseData = abi.encodeWithSelector(treasury.pause.selector);
+        uint256 nonce = authority.nextNonce();
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildOwnerActionAuth(pauseData, nonce, passkeyPrivKey);
+
+        // First execution succeeds
+        authority.executeOwnerAction(pauseData, nonce, auth);
+        assertTrue(treasury.paused());
+
+        // Replay of same nonce reverts
+        vm_expectRevertString("InvalidNonce");
+        authority.executeOwnerAction(pauseData, nonce, auth);
+    }
+
+    function test_A3_ownerAction_sweepMissionWalletWithAuthorization() public {
+        _approveMission(missionId, payeeRoot, cap);
+        usdc.mint(address(treasury), 10_000_000);
+
+        uint256 sessionKey = 0x5555555555555555555555555555555555555555555555555555555555555555;
+        address sessionWallet = vm_addr(sessionKey);
+        uint256 fundAmount = 500_000;
+
+        // Fund session wallet via owner action
+        _executeOwnerAction(
+            abi.encodeWithSelector(
+                bytes4(keccak256("fundMissionWallet(bytes32,address,uint256)")),
+                missionId,
+                sessionWallet,
+                fundAmount
+            )
+        );
+        assertEq(usdc.balanceOf(sessionWallet), fundAmount);
+
+        // Session wallet EIP-3009 authorization parameters to sweep 300_000 USDC back to treasury
+        uint256 sweepAmount = 300_000;
+        uint256 validAfter = 0;
+        uint256 validBefore = block.timestamp + 3600;
+        bytes32 sweepNonce = keccak256("sweep_nonce_1");
+        uint8 v = 27;
+        bytes32 r = keccak256("mock-r");
+        bytes32 s = keccak256("mock-s");
+
+        bytes memory sweepCallData = abi.encodeWithSelector(
+            treasury.sweepMissionWalletWithAuthorization.selector,
+            missionId,
+            sweepAmount,
+            validAfter,
+            validBefore,
+            sweepNonce,
+            v,
+            r,
+            s
+        );
+
+        _executeOwnerAction(sweepCallData);
+
+        assertEq(usdc.balanceOf(sessionWallet), fundAmount - sweepAmount);
+    }
+
+    function test_A3_recoveryFunds_reach_signed_recipient_and_relayer_cannot_redirect() public {
+        uint256 recoveryAmount = 3_000_000;
+        usdc.mint(address(treasury), recoveryAmount);
+
+        _executeOwnerAction(abi.encodeWithSelector(treasury.pause.selector));
+        _executeOwnerAction(abi.encodeWithSelector(treasury.emergencyWithdraw.selector));
+        assertEq(usdc.balanceOf(address(authority)), recoveryAmount);
+
+        address ownerChosenVault = address(0x7777);
+        address attackerRelayer = address(0x9999);
+
+        uint256 nonce = authority.nextNonce();
+        PasskeyMissionAuthority.WebAuthnAuth memory auth = _buildWithdrawAuth(ownerChosenVault, recoveryAmount, nonce, passkeyPrivKey);
+
+        // If relayer tries to relay with attacker's destination address, reverts
+        vm_prank(attackerRelayer);
+        vm_expectRevertString("ChallengeMismatch");
+        authority.withdrawTokens(attackerRelayer, recoveryAmount, nonce, auth);
+
+        // Legitimate relay sends tokens strictly to ownerChosenVault
+        vm_prank(attackerRelayer);
+        authority.withdrawTokens(ownerChosenVault, recoveryAmount, nonce, auth);
+
+        assertEq(usdc.balanceOf(ownerChosenVault), recoveryAmount);
+        assertEq(usdc.balanceOf(attackerRelayer), 0);
+        assertEq(usdc.balanceOf(address(authority)), 0);
     }
 
     function test_A3_negative_withdrawTokens_validations_revert() public {

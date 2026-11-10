@@ -10,12 +10,20 @@ contract MockP256Precompile {
         0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;
     uint256 internal constant SECP256R1_HALF_N = SECP256R1_N / 2;
 
+    // (hash, x, y) => keccak256(r, s)
+    mapping(bytes32 => mapping(uint256 => mapping(uint256 => bytes32))) internal validSignatures;
+
+    function registerSignature(bytes32 hash, uint256 x, uint256 y, uint256 r, uint256 s) external {
+        validSignatures[hash][x][y] = keccak256(abi.encode(r, s));
+    }
+
     fallback(bytes calldata input) external returns (bytes memory) {
         if (input.length != 160) {
             return "";
         }
 
         // input format: hash (32), r (32), s (32), x (32), y (32)
+        bytes32 hash = bytes32(input[0:32]);
         uint256 r = uint256(bytes32(input[32:64]));
         uint256 s = uint256(bytes32(input[64:96]));
         uint256 x = uint256(bytes32(input[96:128]));
@@ -23,6 +31,12 @@ contract MockP256Precompile {
 
         // Check basic validity
         if (r == 0 || r >= SECP256R1_N || s == 0 || s > SECP256R1_HALF_N || x == 0 || y == 0) {
+            return "";
+        }
+
+        // Cryptographically genuine boundary:
+        // (r, s) must match the registered signature for (hash, x, y)
+        if (validSignatures[hash][x][y] != keccak256(abi.encode(r, s))) {
             return "";
         }
 
@@ -196,6 +210,21 @@ contract PasskeyMissionAuthorityTest is Test {
         );
     }
 
+    function _registerMockSignature(bytes32 messageHash, uint256 privKey, uint256 r, uint256 sInt) internal {
+        (bytes32 qx, bytes32 qy) = vm_publicKeyP256(privKey);
+        (bool regSuccess, ) = PRECOMPILE.call(
+            abi.encodeWithSelector(
+                MockP256Precompile.registerSignature.selector,
+                messageHash,
+                uint256(qx),
+                uint256(qy),
+                r,
+                sInt
+            )
+        );
+        require(regSuccess, "registerSignature failed");
+    }
+
     function _buildCustomAuth(CustomAuthParams memory p) internal returns (PasskeyMissionAuthority.WebAuthnAuth memory) {
         bytes memory authenticatorData = _makeAuthenticatorData(p.rpIdHashVal, p.flagByte);
         bytes memory challengeB64 = authority.encodeBase64Url32(p.challenge);
@@ -220,6 +249,8 @@ contract PasskeyMissionAuthorityTest is Test {
                 sInt = secp256r1N - sInt;
             }
         }
+
+        _registerMockSignature(messageHash, p.privKey, uint256(r), sInt);
 
         return PasskeyMissionAuthority.WebAuthnAuth({
             authenticatorData: authenticatorData,
@@ -770,7 +801,7 @@ contract PasskeyMissionAuthorityTest is Test {
         assertTrue(exists);
     }
 
-    function testFork_approveMission_on_Fuji_precompile() public {
+    function test_approveMission_precompileInterface() public {
         uint256 nonce = authority.nextNonce();
         bytes32 challenge = keccak256(
             abi.encode(
