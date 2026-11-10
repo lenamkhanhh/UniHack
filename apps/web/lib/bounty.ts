@@ -908,7 +908,7 @@ export async function processBountyAttempt(
         step2_offchain_guard: {
           status: offchainVerdict.outcome === 'BLOCK' ? 'BLOCKED' : offchainVerdict.outcome === 'QUEUE' ? 'QUEUED' : 'PASSED',
           rule: offchainVerdict.rule || 'None',
-          reason: offchainVerdict.reason,
+          reason: offchainVerdict.reason || '',
         },
         step3_contract_fuji: {
           status: step3Status,
