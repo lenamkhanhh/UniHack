@@ -323,12 +323,12 @@ export default function NewMissionPasskeyPage() {
       }
 
       setRelayResult(data);
-      if (data.status === 'CONFIRMED' && data.txHash) {
+      if (data.status === 'CONFIRMED' && data.txHash && data.blockNumber) {
         setStatus('Mission Đã Duyệt On-Chain Thành Công!');
       } else if (data.status === 'SIMULATION_SUCCESS') {
         setStatus('Mô Phỏng Thực Thi Thành Công (Chưa broadcast on-chain)');
       } else {
-        setStatus(`Trạng thái: ${data.status || 'Đã xử lý'}`);
+        setStatus(`Trạng thái: ${data.status || 'Đã xử lý'}${data.status === 'CONFIRMED' ? ' (Thiếu xác nhận block)' : ''}`);
       }
     } catch (err: any) {
       console.error('Passkey approval error:', err);

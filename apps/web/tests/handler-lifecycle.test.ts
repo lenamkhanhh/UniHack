@@ -109,6 +109,7 @@ describe('Handler Lifecycle Smoke & Boundary Suite (Mocked DB & Services)', () =
   const origAuditHead = (prisma as any).auditHead;
   const origAuditEntry = (prisma as any).auditEntry;
   const origToolSession = (prisma as any).toolSession;
+  const origValidationJob = (prisma as any).validationJob;
   const origTx = prisma.$transaction;
   const origQueryRaw = prisma.$queryRaw;
 
@@ -117,6 +118,26 @@ describe('Handler Lifecycle Smoke & Boundary Suite (Mocked DB & Services)', () =
     inMemoryOperations.clear();
     inMemorySessions.clear();
     inMemoryAuditEntries.length = 0;
+
+    const inMemoryValidationJobs = new Map<string, any>();
+    (prisma as any).validationJob = {
+      upsert: async ({ where, create, update }: any) => {
+        const existing = inMemoryValidationJobs.get(where.missionSlug);
+        const job = existing
+          ? { ...existing, ...update, updatedAt: new Date() }
+          : { ...create, createdAt: new Date(), updatedAt: new Date() };
+        inMemoryValidationJobs.set(where.missionSlug, job);
+        return job;
+      },
+      findUnique: async ({ where }: any) => inMemoryValidationJobs.get(where.missionSlug) || null,
+      update: async ({ where, data }: any) => {
+        const existing = inMemoryValidationJobs.get(where.missionSlug);
+        if (!existing) return null;
+        const job = { ...existing, ...data, updatedAt: new Date() };
+        inMemoryValidationJobs.set(where.missionSlug, job);
+        return job;
+      },
+    };
 
     inMemoryMission = {
       slug: missionSlug,
@@ -384,6 +405,7 @@ describe('Handler Lifecycle Smoke & Boundary Suite (Mocked DB & Services)', () =
     (prisma as any).auditHead = origAuditHead;
     (prisma as any).auditEntry = origAuditEntry;
     (prisma as any).toolSession = origToolSession;
+    (prisma as any).validationJob = origValidationJob;
     (prisma as any).$transaction = origTx;
     (prisma as any).$queryRaw = origQueryRaw;
   });
