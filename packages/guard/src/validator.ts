@@ -5,7 +5,7 @@ import {
   ValidationResult,
   Provenance,
 } from './types.js';
-import { isValidAddress, normalizeAddress } from './merkle.js';
+import { isValidAddress, normalizeAddress, isMissionIdMatch, computePayeeMerkleTree } from './merkle.js';
 import { TaintRegistry, isPolicyChangeAttempt } from './taint.js';
 
 export function validateTreasuryProposal(
@@ -23,7 +23,58 @@ export function validateTreasuryProposal(
     return { outcome: 'BLOCK', rule: 'INVALID_ARGUMENTS', reason: "Invalid kind: must be 'tool_purchase' or 'treasury_payout'" };
   }
 
-  // 2. Policy change tamper attempt check (PV-2) - evaluated with highest priority
+  if (!config || typeof config !== 'object') {
+    return { outcome: 'BLOCK', rule: 'CONFIG_MALFORMED', reason: 'Config must be an object' };
+  }
+
+  // Config validation: if payeeRoot is provided, must be a 32-byte hex string
+  if (config.payeeRoot && (!config.payeeRoot.startsWith('0x') || config.payeeRoot.length !== 66)) {
+    return { outcome: 'BLOCK', rule: 'CONFIG_MALFORMED', reason: 'payeeRoot must be a 32-byte hex string' };
+  }
+
+  // 2. Canonical Mission ID / Cross-mission isolation check
+  if (!proposal.mission_id) {
+    return {
+      outcome: 'BLOCK',
+      rule: 'PROPOSAL_MISSION_MISMATCH',
+      reason: 'Proposal missing mission_id',
+    };
+  }
+
+  if ((config.missionId || config.missionSlug) && !isMissionIdMatch(proposal.mission_id, config.missionId, config.missionSlug)) {
+    return {
+      outcome: 'BLOCK',
+      rule: 'PROPOSAL_MISSION_MISMATCH',
+      reason: `Proposal mission_id '${proposal.mission_id}' does not match configured canonical mission '${config.missionSlug || config.missionId}'`,
+    };
+  }
+
+  // 3. System paused & Mission paused / expired checks
+  if (config.isSystemPaused) {
+    return {
+      outcome: 'BLOCK',
+      rule: 'SYSTEM_PAUSED',
+      reason: 'System is paused',
+    };
+  }
+
+  if (config.isMissionPaused) {
+    return {
+      outcome: 'BLOCK',
+      rule: 'MISSION_PAUSED',
+      reason: 'Mission is paused on-chain',
+    };
+  }
+
+  if (config.isMissionExpired) {
+    return {
+      outcome: 'BLOCK',
+      rule: 'MISSION_EXPIRED',
+      reason: 'Mission has expired',
+    };
+  }
+
+  // 4. Policy change tamper attempt check (PV-2) - evaluated with highest priority
   if (!config.disableProvenance && isPolicyChangeAttempt(proposal)) {
     return {
       outcome: 'BLOCK',
@@ -65,15 +116,6 @@ export function validateTreasuryProposal(
     return { outcome: 'BLOCK', rule: 'INVALID_ARGUMENTS', reason: 'Invalid amount_atomic integer' };
   }
 
-  // 3. System paused check
-  if (config.isSystemPaused) {
-    return {
-      outcome: 'BLOCK',
-      rule: 'SYSTEM_PAUSED',
-      reason: 'System is paused',
-    };
-  }
-
   // Tool purchase handling if called on tool_purchase
   if (proposal.kind === 'tool_purchase') {
     const toolCap = config.caps?.toolCapAtomic ? BigInt(config.caps.toolCapAtomic.toString()) : 5_000_000n;
@@ -87,7 +129,7 @@ export function validateTreasuryProposal(
     return { outcome: 'PASS', rule: 'VALIDATION_PASSED' };
   }
 
-  // 4. Treasury Payout specific validations
+  // 5. Treasury Payout specific validations
   const payout = proposal as TreasuryPayoutProposal;
   if (!payout.to || typeof payout.to !== 'string' || !isValidAddress(payout.to)) {
     return {
@@ -114,7 +156,7 @@ export function validateTreasuryProposal(
     };
   }
 
-  // 5. Compute Provenance
+  // 6. Compute Provenance
   let toProvenance: Provenance = 'LLM';
   let amountProvenance: Provenance = 'LLM';
 
@@ -161,28 +203,42 @@ export function validateTreasuryProposal(
     amountProvenance = 'OWNER_MISSION';
   }
 
-  // 6. Cryptographic Payee Root & Provenance checks
-  if (!config.disableProvenance) {
-    const hasPayeeRoot = config.hasPayeeRoot !== undefined
-      ? config.hasPayeeRoot
-      : Boolean(
-          config.payeeRoot &&
-          config.payeeRoot !== '0x0000000000000000000000000000000000000000000000000000000000000000'
-        );
+  // 7. Cryptographic Payee Root Verification (Fail-Closed)
+  const isPayeeRootConfigured = Boolean(
+    config.payeeRoot &&
+    config.payeeRoot !== '0x0000000000000000000000000000000000000000000000000000000000000000'
+  );
+  const hasPayeeRoot = config.hasPayeeRoot !== undefined ? config.hasPayeeRoot : isPayeeRootConfigured;
 
-    if (hasPayeeRoot) {
-      const isPayeeInSet = ownerPayeeEntries.some((p) => p.address === normTo);
-      if (!isPayeeInSet) {
+  if (hasPayeeRoot) {
+    if (isPayeeRootConfigured) {
+      // Recalculate root from supplied payees to verify integrity
+      const computedTree = computePayeeMerkleTree(config.payees || []);
+      if (computedTree.root.toLowerCase() !== config.payeeRoot!.toLowerCase()) {
         return {
           outcome: 'BLOCK',
           rule: 'PAYEE_NOT_IN_MISSION_SET',
-          reason: `Recipient ${normTo} is not in the owner-signed payee set for this mission (payee root active)`,
+          reason: `Supplied payees do not match configured on-chain Merkle root (computed: ${computedTree.root}, expected: ${config.payeeRoot}) (fail-closed)`,
           toProvenance,
           amountProvenance,
         };
       }
     }
 
+    const isPayeeInSet = ownerPayeeEntries.some((p) => p.address === normTo);
+    if (!isPayeeInSet) {
+      return {
+        outcome: 'BLOCK',
+        rule: 'PAYEE_NOT_IN_MISSION_SET',
+        reason: `Recipient ${normTo} is not in the owner-signed payee set for this mission (payee root active)`,
+        toProvenance,
+        amountProvenance,
+      };
+    }
+  }
+
+  // 8. Untrusted Provenance Hard BLOCKs
+  if (!config.disableProvenance) {
     if (toProvenance === 'TOOL_OUTPUT' || toProvenance === 'WEB') {
       return {
         outcome: 'BLOCK',
@@ -192,7 +248,38 @@ export function validateTreasuryProposal(
         amountProvenance,
       };
     }
+  }
 
+  // 9. Hard BLOCK checks: Global Organization Allowlist (Intersection condition)
+  // Evaluated before soft QUEUE so untrusted/LLM outputs cannot bypass allowlist!
+  if (config.globalAllowlist && config.globalAllowlist.length > 0) {
+    const normalizedGlobal = config.globalAllowlist.map(normalizeAddress);
+    if (!normalizedGlobal.includes(normTo)) {
+      return {
+        outcome: 'BLOCK',
+        rule: 'RECIPIENT_NOT_ALLOWLISTED',
+        reason: 'Recipient is not on the treasury allowlist',
+        toProvenance,
+        amountProvenance,
+      };
+    }
+  }
+
+  // 10. Hard BLOCK checks: Mission Budget Cap Exhaustion
+  // Evaluated before soft QUEUE so exceeding mission cap is strictly BLOCKED!
+  const missionCap = config.caps?.missionCapAtomic ? BigInt(config.caps.missionCapAtomic.toString()) : 10_000_000n;
+  if (spentTreasuryAtomic + amount > missionCap) {
+    return {
+      outcome: 'BLOCK',
+      rule: 'MISSION_CAP_EXHAUSTED',
+      reason: `Proposal exceeds total mission budget cap (${missionCap})`,
+      toProvenance,
+      amountProvenance,
+    };
+  }
+
+  // 11. Soft QUEUE: Provenance and Per-tx Cap
+  if (!config.disableProvenance) {
     if (toProvenance === 'LLM') {
       return {
         outcome: 'QUEUE',
@@ -214,24 +301,7 @@ export function validateTreasuryProposal(
     }
   }
 
-  // 7. Global Organization Allowlist (Intersection condition)
-  if (config.globalAllowlist && config.globalAllowlist.length > 0) {
-    const normalizedGlobal = config.globalAllowlist.map(normalizeAddress);
-    if (!normalizedGlobal.includes(normTo)) {
-      return {
-        outcome: 'BLOCK',
-        rule: 'RECIPIENT_NOT_ALLOWLISTED',
-        reason: 'Recipient is not on the treasury allowlist',
-        toProvenance,
-        amountProvenance,
-      };
-    }
-  }
-
-  // 8. Caps evaluation
   const perTxCap = config.caps?.perTxCapAtomic ? BigInt(config.caps.perTxCapAtomic.toString()) : 5_000_000n;
-  const missionCap = config.caps?.missionCapAtomic ? BigInt(config.caps.missionCapAtomic.toString()) : 10_000_000n;
-
   if (amount > perTxCap) {
     return {
       outcome: 'QUEUE',
@@ -242,21 +312,13 @@ export function validateTreasuryProposal(
     };
   }
 
-  if (spentTreasuryAtomic + amount > missionCap) {
-    return {
-      outcome: 'BLOCK',
-      rule: 'MISSION_CAP_EXHAUSTED',
-      reason: `Proposal exceeds total mission budget cap (${missionCap})`,
-      toProvenance,
-      amountProvenance,
-    };
-  }
-
-  // 9. All rules passed
+  // 12. All rules passed: honest distinction between on-chain root and configured policy
   return {
     outcome: 'PASS',
     rule: 'VALIDATION_PASSED',
-    reason: 'Cryptographic payee proof verified and spending within mission policy limits',
+    reason: isPayeeRootConfigured
+      ? 'Cryptographic payee proof verified against on-chain Merkle root and spending within mission policy limits'
+      : 'Configured policy check passed (no on-chain Merkle root configured) and spending within mission policy limits',
     toProvenance,
     amountProvenance,
   };

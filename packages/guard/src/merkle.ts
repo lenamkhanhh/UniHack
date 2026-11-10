@@ -1,5 +1,5 @@
 import { StandardMerkleTree } from '@openzeppelin/merkle-tree';
-import { getAddress } from 'viem';
+import { getAddress, keccak256, stringToBytes } from 'viem';
 import { PayeeDefinition } from './types.js';
 
 export function normalizeAddress(addr: string): string {
@@ -75,4 +75,30 @@ export function computePayeeMerkleTree(payees: PayeeDefinition[]): PayeeMerkleTr
 export function getMerkleProof(payees: PayeeDefinition[], address: string): `0x${string}`[] | null {
   const treeRes = computePayeeMerkleTree(payees);
   return treeRes.getProof(address);
+}
+
+export function canonicalizeMissionId(id: string): { slug: string; bytes32: `0x${string}` } {
+  if (typeof id === 'string' && id.startsWith('0x') && id.length === 66) {
+    return { slug: id.toLowerCase(), bytes32: id.toLowerCase() as `0x${string}` };
+  }
+  const trimmed = String(id || '').trim();
+  return {
+    slug: trimmed.toLowerCase(),
+    bytes32: keccak256(stringToBytes(trimmed)).toLowerCase() as `0x${string}`,
+  };
+}
+
+export function isMissionIdMatch(
+  proposalMissionId: string,
+  configMissionId: string | `0x${string}`,
+  configMissionSlug?: string
+): boolean {
+  if (!proposalMissionId) return false;
+  if (configMissionSlug && proposalMissionId.trim().toLowerCase() === configMissionSlug.trim().toLowerCase()) {
+    return true;
+  }
+  if (!configMissionId) return false;
+  const p = canonicalizeMissionId(proposalMissionId);
+  const c = canonicalizeMissionId(configMissionId);
+  return p.slug === c.slug || p.bytes32 === c.bytes32;
 }

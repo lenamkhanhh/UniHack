@@ -39,6 +39,8 @@ export type ValidationRuleId =
   | 'CANNOT_PAY_AGENT'
   | 'RECIPIENT_UNTRUSTED_PROVENANCE'
   | 'PAYEE_NOT_IN_MISSION_SET'
+  | 'PAYEE_ROOT_MISMATCH'
+  | 'CONFIG_MALFORMED'
   | 'RECIPIENT_NEEDS_OWNER_APPROVAL'
   | 'RECIPIENT_NOT_ALLOWLISTED'
   | 'AMOUNT_FROM_UNTRUSTED_SOURCE'
@@ -78,6 +80,7 @@ export interface MissionCaps {
 
 export interface MissionGuardConfig {
   missionId: string | `0x${string}`;
+  missionSlug?: string;
   payees?: PayeeDefinition[];
   payeeRoot?: string;
   hasPayeeRoot?: boolean;
@@ -87,6 +90,8 @@ export interface MissionGuardConfig {
   treasuryAddress?: `0x${string}`;
   agentAddress?: string;
   isSystemPaused?: boolean;
+  isMissionPaused?: boolean;
+  isMissionExpired?: boolean;
   disableProvenance?: boolean;
 }
 

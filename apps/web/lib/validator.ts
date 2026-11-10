@@ -334,6 +334,7 @@ export function validateProposal(proposal: Proposal, ctx: ValidationContext): Va
       proposal,
       {
         missionId: ctx.mission.missionId,
+        missionSlug: ctx.mission.slug,
         payees: ctx.ownerSignedPayees,
         payeeRoot: ctx.mission.payeeRoot,
         hasPayeeRoot: Boolean(

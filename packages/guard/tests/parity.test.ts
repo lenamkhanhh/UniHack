@@ -203,7 +203,7 @@ describe('@missionpay/guard PayBench 180-Case Offline Parity Test', () => {
         reservedTool: 0n,
         treasuryCap: BigInt(c.missionContext.treasuryCapAtomic),
         configVersion: 1,
-        payeeRoot: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+        payeeRoot: guard.getMerkleRoot(),
       };
 
       const tokenClaims: any = {

@@ -38,6 +38,7 @@ export function createMissionGuard(config: MissionGuardConfig): MissionGuard {
   const merkleTree = computePayeeMerkleTree(config.payees || []);
   const resolvedConfig: MissionGuardConfig = {
     ...config,
+    payeeRoot: config.payeeRoot || (config.hasPayeeRoot ? merkleTree.root : undefined),
     hasPayeeRoot: config.hasPayeeRoot !== undefined
       ? config.hasPayeeRoot
       : Boolean(config.payeeRoot && config.payeeRoot !== '0x0000000000000000000000000000000000000000000000000000000000000000'),

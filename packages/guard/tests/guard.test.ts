@@ -228,4 +228,163 @@ describe('@missionpay/guard SDK', () => {
     expect(simRes.success).toBe(false);
     expect(['PayeeNotInMissionSet', 'NotAllowlisted', 'REVERT']).toContain(simRes.resultOrError);
   });
+
+  describe('A7 Security Boundary Acceptance Cases', () => {
+    it('blocks cross-mission proposal (PROPOSAL_MISSION_MISMATCH)', () => {
+      const guard = createMissionGuard({
+        missionId: 'canonical-mission-s1',
+        payees: [legitPayee1],
+      });
+
+      const crossMissionProposal: Proposal = {
+        kind: 'treasury_payout',
+        mission_id: 'diverted-mission-attacker',
+        to: legitPayee1,
+        amount_atomic: '1000000',
+        reason: 'Payment to correct payee but spoofed cross-mission ID',
+      };
+
+      const res = guard.checkPayment(crossMissionProposal);
+      expect(res.outcome).toBe('BLOCK');
+      expect(res.rule).toBe('PROPOSAL_MISSION_MISMATCH');
+    });
+
+    it('fails closed when supplied payees do not match configured on-chain payeeRoot', () => {
+      const guard = createMissionGuard({
+        missionId: 'test-mission-01',
+        payees: [legitPayee1], // Root of [legitPayee1]
+        // Tampered / spoofed expected on-chain payee root:
+        payeeRoot: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      });
+
+      const proposal: Proposal = {
+        kind: 'treasury_payout',
+        mission_id: 'test-mission-01',
+        to: legitPayee1,
+        amount_atomic: '1000000',
+        reason: 'Payment where payees do not produce expected root',
+      };
+
+      const res = guard.checkPayment(proposal);
+      expect(res.outcome).toBe('BLOCK');
+      expect(res.rule).toBe('PAYEE_NOT_IN_MISSION_SET');
+      expect(res.reason).toContain('fail-closed');
+    });
+
+    it('blocks when mission is paused on-chain (MISSION_PAUSED)', () => {
+      const guard = createMissionGuard({
+        missionId: 'test-mission-01',
+        payees: [legitPayee1],
+        isMissionPaused: true,
+      });
+
+      const proposal: Proposal = {
+        kind: 'treasury_payout',
+        mission_id: 'test-mission-01',
+        to: legitPayee1,
+        amount_atomic: '1000000',
+        reason: 'Attempted payment while mission is paused',
+      };
+
+      const res = guard.checkPayment(proposal);
+      expect(res.outcome).toBe('BLOCK');
+      expect(res.rule).toBe('MISSION_PAUSED');
+    });
+
+    it('blocks when mission has expired (MISSION_EXPIRED)', () => {
+      const guard = createMissionGuard({
+        missionId: 'test-mission-01',
+        payees: [legitPayee1],
+        isMissionExpired: true,
+      });
+
+      const proposal: Proposal = {
+        kind: 'treasury_payout',
+        mission_id: 'test-mission-01',
+        to: legitPayee1,
+        amount_atomic: '1000000',
+        reason: 'Attempted payment after mission expired',
+      };
+
+      const res = guard.checkPayment(proposal);
+      expect(res.outcome).toBe('BLOCK');
+      expect(res.rule).toBe('MISSION_EXPIRED');
+    });
+
+    it('blocks malformed config with invalid payeeRoot (CONFIG_MALFORMED)', () => {
+      const guard = createMissionGuard({
+        missionId: 'test-mission-01',
+        payees: [legitPayee1],
+        payeeRoot: '0xinvalid_length_root',
+      });
+
+      const proposal: Proposal = {
+        kind: 'treasury_payout',
+        mission_id: 'test-mission-01',
+        to: legitPayee1,
+        amount_atomic: '1000000',
+        reason: 'Payment with malformed config',
+      };
+
+      const res = guard.checkPayment(proposal);
+      expect(res.outcome).toBe('BLOCK');
+      expect(res.rule).toBe('CONFIG_MALFORMED');
+    });
+
+    it('enforces hard BLOCK over soft QUEUE: unallowlisted address is BLOCKED, not queued', () => {
+      const unallowlistedUnknownAddr = '0x9999999999999999999999999999999999999999';
+      const guard = createMissionGuard({
+        missionId: 'test-mission-01',
+        payees: [legitPayee1],
+        hasPayeeRoot: false,
+        globalAllowlist: [legitPayee1, legitPayee2],
+      });
+
+      // Recipient is not in allowlist and from LLM
+      const proposal: Proposal = {
+        kind: 'treasury_payout',
+        mission_id: 'test-mission-01',
+        to: unallowlistedUnknownAddr,
+        amount_atomic: '500000',
+        reason: 'LLM generated payout to unallowlisted address',
+      };
+
+      const res = guard.checkPayment(proposal);
+      // MUST NOT be 'QUEUE' (RECIPIENT_NEEDS_OWNER_APPROVAL) — must be hard BLOCK
+      expect(res.outcome).toBe('BLOCK');
+      expect(res.rule).toBe('RECIPIENT_NOT_ALLOWLISTED');
+    });
+
+    it('honestly distinguishes on-chain Merkle root verification from configured policy', () => {
+      const tree = computePayeeMerkleTree([legitPayee1]);
+      const guardWithRoot = createMissionGuard({
+        missionId: 'test-mission-01',
+        payees: [legitPayee1],
+        payeeRoot: tree.root,
+        hasPayeeRoot: true,
+      });
+
+      const prop: Proposal = {
+        kind: 'treasury_payout',
+        mission_id: 'test-mission-01',
+        to: legitPayee1,
+        amount_atomic: '1000000',
+        reason: 'Valid payout',
+      };
+
+      const resWithRoot = guardWithRoot.checkPayment(prop);
+      expect(resWithRoot.outcome).toBe('PASS');
+      expect(resWithRoot.reason).toContain('against on-chain Merkle root');
+
+      const guardNoRoot = createMissionGuard({
+        missionId: 'test-mission-01',
+        payees: [legitPayee1],
+        hasPayeeRoot: false,
+      });
+
+      const resNoRoot = guardNoRoot.checkPayment(prop);
+      expect(resNoRoot.outcome).toBe('PASS');
+      expect(resNoRoot.reason).toContain('no on-chain Merkle root configured');
+    });
+  });
 });
