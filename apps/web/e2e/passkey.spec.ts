@@ -71,6 +71,8 @@ test.describe('A2: Passkey Mission Authority (RIP-7212 Precompile 0x100 & Real W
       const origin = new URL(request.url()).origin;
 
       if (request.method() === 'GET') {
+        const hostname = new URL(request.url()).hostname;
+        const realRpIdHash = '0x' + crypto.createHash('sha256').update(hostname).digest('hex');
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -82,7 +84,7 @@ test.describe('A2: Passkey Mission Authority (RIP-7212 Precompile 0x100 & Real W
             passkeyX: activePasskeyX,
             passkeyY: activePasskeyY,
             nextNonce: currentContractNonce.toString(),
-            rpIdHash: '0x0000000000000000000000000000000000000000000000000000000000000000',
+            rpIdHash: realRpIdHash,
             expectedOrigin: origin,
             requireUserVerification: true,
             chainId: 43113,
@@ -133,6 +135,14 @@ test.describe('A2: Passkey Mission Authority (RIP-7212 Precompile 0x100 & Real W
 
         // 3. Verify AuthenticatorData (RP ID hash, UP, UV)
         const authDataBuf = Buffer.from(payload.auth.authenticatorData.slice(2), 'hex');
+        if (authDataBuf.length < 37) {
+          return route.fulfill({ status: 400, body: JSON.stringify({ success: false, error: 'AuthenticatorDataTooShort' }) });
+        }
+        const rpIdHashInAuth = authDataBuf.subarray(0, 32);
+        const expectedRpIdBuf = crypto.createHash('sha256').update(new URL(request.url()).hostname).digest();
+        if (!rpIdHashInAuth.equals(expectedRpIdBuf)) {
+          return route.fulfill({ status: 400, body: JSON.stringify({ success: false, error: 'RpIdHashMismatch' }) });
+        }
         const flags = authDataBuf[32];
         const up = (flags & 0x01) !== 0;
         const uv = (flags & 0x04) !== 0;

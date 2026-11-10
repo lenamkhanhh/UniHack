@@ -204,6 +204,19 @@ export default function NewMissionPasskeyPage() {
         );
       }
 
+      // A2-R2: Validate expected RP ID against browser hostname
+      if (freshConfig.rpIdHash && freshConfig.rpIdHash !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
+        const currentRpId = window.location.hostname || 'localhost';
+        const rpIdBuffer = new TextEncoder().encode(currentRpId);
+        const rpIdDigest = await window.crypto.subtle.digest('SHA-256', rpIdBuffer);
+        const rpIdHashHex = '0x' + Array.from(new Uint8Array(rpIdDigest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+        if (rpIdHashHex.toLowerCase() !== freshConfig.rpIdHash.toLowerCase()) {
+          throw new Error(
+            `RP ID không khớp! Hợp đồng yêu cầu rpIdHash "${freshConfig.rpIdHash}" nhưng trình duyệt tạo ra "${rpIdHashHex}" (RP ID: "${currentRpId}").`
+          );
+        }
+      }
+
       const currentNonce = freshConfig.nextNonce;
       const currentAuthority = freshConfig.authorityAddress;
       const currentChainId = freshConfig.chainId;
@@ -600,7 +613,7 @@ export default function NewMissionPasskeyPage() {
         </form>
 
         {/* Live Relay Results Card */}
-        {relayResult && relayResult.status === 'CONFIRMED' && (
+        {relayResult && relayResult.status === 'CONFIRMED' && relayResult.txHash && relayResult.blockNumber && (
           <div
             className="p-6 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 space-y-4"
             data-testid="passkey-confirmed-card"

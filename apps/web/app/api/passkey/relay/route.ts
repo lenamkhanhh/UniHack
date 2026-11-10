@@ -179,18 +179,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const authorityAddress = (process.env.PASSKEY_AUTHORITY_ADDRESS ||
-      process.env.NEXT_PUBLIC_PASSKEY_AUTHORITY_ADDRESS ||
-      '0x77235386fe59A934645C5F273e411b0Bea8cCc9C') as `0x${string}`;
+    // A2-R1: Fail-closed configuration check in POST (no fallback to demo authority)
+    const configuredAuthority = process.env.PASSKEY_AUTHORITY_ADDRESS || process.env.NEXT_PUBLIC_PASSKEY_AUTHORITY_ADDRESS;
+    if (!configuredAuthority || !isAddress(configuredAuthority.trim())) {
+      return NextResponse.json({
+        success: false,
+        status: 'NOT_CONFIGURED',
+        error: 'PASSKEY_AUTHORITY_ADDRESS is not configured. Biometric approvals are unavailable.',
+      }, { status: 503 });
+    }
+    const authorityAddress = getAddress(configuredAuthority.trim()) as `0x${string}`;
 
-    const rpcUrl = process.env.AVALANCHE_FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
+    const rpcUrl = process.env.AVALANCHE_FUJI_RPC_URL || process.env.NEXT_PUBLIC_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
     const publicClient = createPublicClient({
       chain: avalancheFuji,
       transport: http(rpcUrl),
     });
 
-    // Local validation check against expected challenge
-    const chainId = await publicClient.getChainId().catch(() => 43113);
+    // A2-R1: Fail-closed chainId read (no silent fallback to chainId 43113)
+    let chainId: number;
+    try {
+      chainId = await publicClient.getChainId();
+    } catch (chainErr: any) {
+      return NextResponse.json({
+        success: false,
+        status: 'UNAVAILABLE',
+        error: `Failed reading chainId from RPC endpoint: ${chainErr?.message || chainErr}`,
+      }, { status: 503 });
+    }
+
     const expectedChallenge = computeMissionPasskeyChallenge({
       chainId,
       authority: authorityAddress,
@@ -340,10 +357,10 @@ export async function POST(req: NextRequest) {
     const hash = await walletClient.writeContract(request);
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
-    // Ensure transaction was confirmed successfully
-    if (receipt.status !== 'success') {
+    // Ensure transaction was confirmed successfully with complete block receipt metadata
+    if (!receipt || receipt.status !== 'success' || receipt.blockNumber === undefined || receipt.blockNumber === null) {
       return NextResponse.json(
-        { success: false, error: 'Transaction reverted on-chain', txHash: hash },
+        { success: false, error: 'Transaction unconfirmed or missing receipt metadata', txHash: hash },
         { status: 500 }
       );
     }
