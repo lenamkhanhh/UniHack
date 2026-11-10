@@ -35,31 +35,82 @@ export default function VerifyMissionProofPage() {
         throw new Error('No Web3 wallet (MetaMask) detected in browser.');
       }
       const ethereum = (window as any).ethereum;
+
+      // 1. Verify and switch chain to Avalanche Fuji (43113 / 0xa869)
+      const expectedChainIdHex = '0xa869';
+      const currentChainId = await ethereum.request({ method: 'eth_chainId' }).catch(() => null);
+      if (currentChainId && currentChainId.toLowerCase() !== expectedChainIdHex) {
+        try {
+          await ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: expectedChainIdHex }],
+          });
+        } catch (switchErr: any) {
+          throw new Error(`Please switch wallet network to Avalanche Fuji Testnet (43113). Current: ${currentChainId}`);
+        }
+      }
+
       const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
       const currentAccount = accounts[0];
       const req = ercValidation.unsignedRequest;
       if (req.ownerAddress && currentAccount.toLowerCase() !== req.ownerAddress.toLowerCase()) {
         throw new Error(`Connected wallet (${currentAccount}) is not the mission owner (${req.ownerAddress})`);
       }
-      const txHash = await ethereum.request({
-        method: 'eth_sendTransaction',
-        params: [
-          {
-            from: currentAccount,
-            to: req.to,
-            data: req.data,
-            value: req.value || '0x0',
-          },
-        ],
-      });
+
+      // 2. Check for saved pending tx to resume without sending a second transaction
+      const pendingKey = `pending_validation_tx_${missionId}`;
+      let txHash = typeof window !== 'undefined' ? localStorage.getItem(pendingKey) : null;
+
+      if (!txHash) {
+        txHash = await ethereum.request({
+          method: 'eth_sendTransaction',
+          params: [
+            {
+              from: currentAccount,
+              to: req.to,
+              data: req.data,
+              value: '0x0', // Strictly valid hex JSON-RPC quantity
+            },
+          ],
+        });
+        if (txHash && typeof window !== 'undefined') {
+          localStorage.setItem(pendingKey, txHash);
+        }
+      }
+
+      // 3. Authenticate POST reconciliation via stored owner Bearer token OR fresh owner personal_sign
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const storedToken = typeof window !== 'undefined'
+        ? (localStorage.getItem(`missionpay_owner_token_${missionId}`) ||
+           localStorage.getItem('missionpay_owner_token') ||
+           localStorage.getItem('token'))
+        : null;
+
+      if (storedToken) {
+        headers['Authorization'] = `Bearer ${storedToken}`;
+      } else {
+        const authMessage = `Authorize validation request reconciliation for ${missionId}: ${txHash}`;
+        const signature = await ethereum.request({
+          method: 'personal_sign',
+          params: [authMessage, currentAccount],
+        });
+        headers['x-owner-signature'] = signature;
+        headers['x-owner-signer'] = currentAccount;
+        headers['x-auth-message'] = authMessage;
+      }
+
       const res = await fetch(`/api/verify/${missionId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ txHash }),
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'Reconciliation failed');
+      }
+
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(pendingKey);
       }
       setReconcileSuccess(`Request submitted on-chain! Tx: ${txHash}`);
       setTimeout(() => { window.location.reload(); }, 1500);

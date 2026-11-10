@@ -162,11 +162,10 @@ export async function validateBundleOnChain(
     };
   }
 
-  const targetEndBlock = snapshotBlock;
-  const targetStartBlock = fromBlock ?? bundle.creationBlock;
+  const rawStart = fromBlock ?? bundle.creationBlock;
 
   // Strict scan start integrity: missing start cannot guess or truncate history
-  if (targetStartBlock === undefined || targetStartBlock === null) {
+  if (rawStart === undefined || rawStart === null) {
     return {
       valid: false,
       score: 0,
@@ -192,6 +191,9 @@ export async function validateBundleOnChain(
       },
     };
   }
+
+  const targetStartBlock = BigInt(rawStart);
+  const targetEndBlock = toBlock ? BigInt(toBlock) : snapshotBlock;
 
   // Range validation: inverted range is invalid
   if (targetStartBlock > targetEndBlock) {

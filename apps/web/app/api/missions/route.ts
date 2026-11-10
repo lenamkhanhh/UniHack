@@ -120,6 +120,8 @@ export async function POST(req: NextRequest) {
     const policyHash = hashUtf8(`policy:1:${treasuryCap}:${toolCap}:${payeeRoot || ''}`);
 
     let creationBlock: bigint | null = null;
+    let creationTxHash: string | null = null;
+    let creationProvenance: string | null = null;
     const receiptTxHash = payload.receiptTxHash || payload.creationReceiptTxHash;
     if (receiptTxHash) {
       const verifyRes = await verifyMissionCreationReceipt({
@@ -133,10 +135,13 @@ export async function POST(req: NextRequest) {
         );
       }
       creationBlock = verifyRes.creationBlock ?? null;
+      creationTxHash = receiptTxHash;
+      creationProvenance = verifyRes.provenance ?? 'RECEIPT_EVENT_VERIFIED';
     } else if (payload.creationBlock !== undefined && payload.creationBlock !== null && process.env.TEST_ALLOW_UNVERIFIED_CREATION_BLOCK === '1') {
       // Test harness only: explicit flag to test legacy/unverified block paths
       try {
         creationBlock = BigInt(payload.creationBlock);
+        creationProvenance = 'TEST_UNVERIFIED_BLOCK';
       } catch {}
     }
     // Note: without verified on-chain receipt, creationBlock remains null (UNVERIFIED_PENDING_RECEIPT)
@@ -166,6 +171,8 @@ export async function POST(req: NextRequest) {
           payeesJson,
           payeeRoot,
           creationBlock,
+          creationTxHash,
+          creationProvenance,
           configVersion: 1,
           policyHash,
         },

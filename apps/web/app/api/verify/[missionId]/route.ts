@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { INITIAL_PREV_HASH } from '@/lib/audit';
-import { keccak256, stringToBytes, createPublicClient, http, parseAbiItem } from 'viem';
+import { keccak256, stringToBytes, createPublicClient, http, parseAbiItem, verifyMessage } from 'viem';
 import { avalancheFuji } from 'viem/chains';
 import { verifyToken } from '@/lib/auth';
+import { normalizeAddress } from '@/lib/chain';
 import { getPaymentMode, getGuardedTreasuryAddress, getAnchorFetcherForTesting } from '@/lib/config';
 import { computeValidationRequestHash, ValidationBundle } from '@/lib/validation-bundle';
 import { computePayeeMerkleTree } from '@/lib/merkle';
@@ -262,10 +263,18 @@ export async function GET(req: NextRequest, context: any) {
       failureReason: null as string | null,
     };
 
-    // First check persistent database state (ValidationJob)
-    const dbJob = await prisma.validationJob.findUnique({
-      where: { missionSlug: mission.slug },
-    }).catch(() => null);
+    // First check persistent database state (ValidationJob). Never swallow DB errors into memory fallback.
+    let dbJob = null;
+    try {
+      dbJob = await prisma.validationJob.findUnique({
+        where: { missionSlug: mission.slug },
+      });
+    } catch (dbErr: any) {
+      return NextResponse.json(
+        { error: 'DATABASE_UNAVAILABLE', message: 'Persistent database storage is currently unavailable' },
+        { status: 503 }
+      );
+    }
 
     // Compute dynamic requestHash from CURRENT bundle context (A4.4)
     let targetRequestHash: `0x${string}` | null = null;
@@ -309,12 +318,14 @@ export async function GET(req: NextRequest, context: any) {
     } catch {}
 
     if (dbJob) {
-      // Round 3 §A4.4: Compare persisted requestHash/context to current bundle before showing completed job
+      // Compare persisted requestHash/context to current bundle before showing completed job
       if (targetRequestHash && dbJob.requestHash.toLowerCase() !== targetRequestHash.toLowerCase()) {
         erc8004Validation = {
           isComplete: false,
           status: 'STALE_CONTEXT',
           score: null,
+          chainScore: null,
+          localScore: dbJob.score,
           validatorAddress: dbJob.validatorAddress,
           tag: 'stale-context-mismatch',
           requestHash: targetRequestHash,
@@ -335,9 +346,14 @@ export async function GET(req: NextRequest, context: any) {
         erc8004Validation = {
           isComplete: dbJob.status === 'RESPONSE_CONFIRMED',
           status: dbJob.status,
-          score: dbJob.score,
+          score: dbJob.chainScore ?? dbJob.score,
+          chainScore: dbJob.chainScore,
+          localScore: dbJob.score,
           validatorAddress: dbJob.validatorAddress,
-          tag: dbJob.tag,
+          tag: dbJob.chainTag ?? dbJob.tag,
+          chainTag: dbJob.chainTag,
+          localTag: dbJob.tag,
+          responseHash: dbJob.responseHash,
           requestHash: dbJob.requestHash,
           requestTxHash: dbJob.requestTxHash,
           responseTxHash: dbJob.responseTxHash,
@@ -362,7 +378,7 @@ export async function GET(req: NextRequest, context: any) {
           ...customVal,
         };
       }
-    } else if (!dbJob && targetRequestHash) {
+    } else if (!dbJob && targetRequestHash && (mode === 'MOCK' || isSandbox)) {
       const memoryRecord = getMemoryValidationRecord(targetRequestHash);
       if (memoryRecord) {
         erc8004Validation = {
@@ -451,7 +467,7 @@ export async function GET(req: NextRequest, context: any) {
       entries: formatted,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: 'Internal verify lookup error' }, { status: 500 });
+    return NextResponse.json({ error: 'DATABASE_UNAVAILABLE', details: err?.message }, { status: 503 });
   }
 }
 
@@ -473,25 +489,32 @@ export async function POST(req: NextRequest, context: any) {
       return NextResponse.json({ error: 'Mission not found' }, { status: 404 });
     }
 
-    // Round 3 §A4.5: POST verify must require owner authorization for actions that may consume validator funds
+    // Owner authorization: Bearer token OR fresh owner-signed challenge
     const authHeader = req.headers.get('authorization') || '';
     const token = authHeader.replace(/^Bearer\s+/i, '');
 
-    if (process.env.TEST_AUTH_BYPASS !== '1') {
-      if (!token) {
-        return NextResponse.json(
-          { error: 'Authorization bearer token is required' },
-          { status: 401 }
-        );
-      }
+    const signature = req.headers.get('x-owner-signature') || body.authSignature || body.signature;
+    const signer = req.headers.get('x-owner-signer') || body.authSigner || body.signer;
+    let message = req.headers.get('x-auth-message') || body.authMessage || body.message;
+    if (message && typeof message === 'string') {
+      try {
+        message = decodeURIComponent(message);
+      } catch {}
+    }
+
+    let isAuthorized = false;
+
+    if (token) {
       try {
         const claims = await verifyToken(token);
         const ownerLower = mission.ownerAddress.toLowerCase();
         const callerOwnerLower = claims.owner?.toLowerCase();
         const claimsSlug = claims.missionSlug;
-        if (callerOwnerLower !== ownerLower && claimsSlug !== mission.slug) {
+        if (callerOwnerLower === ownerLower && (!claimsSlug || claimsSlug === mission.slug)) {
+          isAuthorized = true;
+        } else {
           return NextResponse.json(
-            { error: 'Unauthorized: caller is not the mission owner' },
+            { error: 'Unauthorized: token owner or mission slug mismatch' },
             { status: 403 }
           );
         }
@@ -501,6 +524,34 @@ export async function POST(req: NextRequest, context: any) {
           { status: 401 }
         );
       }
+    } else if (signature && signer && message) {
+      const normalizedSigner = normalizeAddress(signer);
+      const normalizedOwner = normalizeAddress(mission.ownerAddress);
+      if (normalizedSigner !== normalizedOwner) {
+        return NextResponse.json(
+          { error: 'Unauthorized: signature signer does not match mission owner' },
+          { status: 403 }
+        );
+      }
+      const isValid = await verifyMessage({
+        address: signer as `0x${string}`,
+        message,
+        signature: signature as `0x${string}`,
+      });
+      if (!isValid) {
+        return NextResponse.json(
+          { error: 'Unauthorized: invalid owner signature' },
+          { status: 401 }
+        );
+      }
+      isAuthorized = true;
+    }
+
+    if (!isAuthorized) {
+      return NextResponse.json(
+        { error: 'Authorization required: valid Bearer token or owner signature is required' },
+        { status: 401 }
+      );
     }
 
     const result = await reconcileOwnerValidationRequestReceipt(mission.slug, txHash);

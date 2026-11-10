@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, withLockOrder } from '@/lib/db';
 import { verifyAndConsumeChallenge, ChallengeError } from '@/lib/challenges';
-import { buildMissionValidationBundle } from '@/lib/validator-job';
+import { buildMissionValidationBundle, serializeWithBigInt } from '@/lib/validator-job';
 import { computeValidationRequestHash } from '@/lib/validation-bundle';
 import { getPaymentMode } from '@/lib/config';
 
@@ -65,12 +65,15 @@ export async function POST(
               status: 'QUEUED',
               mode: getPaymentMode(),
               fromBlock: mission.creationBlock ?? undefined,
+              frozenContext: serializeWithBigInt(bundle),
               retryCount: 0,
             },
             update: {
               requestHash,
               status: 'QUEUED',
               mode: getPaymentMode(),
+              fromBlock: mission.creationBlock ?? undefined,
+              frozenContext: serializeWithBigInt(bundle),
               retryCount: 0,
             },
           });

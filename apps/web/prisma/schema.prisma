@@ -36,6 +36,8 @@ model Mission {
   payeesJson      String?
   payeeRoot       String?
   creationBlock   BigInt?
+  creationTxHash  String?
+  creationProvenance String?
   configVersion  Int      @default(1)
   policyHash     String
   auditHeadHash  String   @default("0x0000000000000000000000000000000000000000000000000000000000000000")
@@ -223,14 +225,18 @@ model ValidationJob {
   mission             Mission  @relation(fields: [missionSlug], references: [slug], onDelete: Restrict)
   missionId           String
   requestHash         String   @unique
-  status              String   // LOCAL_EVALUATED, REQUEST_PENDING, RESPONSE_PENDING, RESPONSE_CONFIRMED, FAILED
+  status              String   // QUEUED, LOCAL_EVALUATED, REQUEST_PENDING, RESPONSE_PENDING, RESPONSE_CONFIRMED, FAILED
   mode                String   @default("LIVE_FUJI") // MOCK or LIVE_FUJI
   fromBlock           BigInt?
   toBlock             BigInt?
   snapshotBlock       BigInt?
+  frozenContext       String?  // JSON string of canonical bundle and evaluation context
   evaluationResult    String?  // JSON stringified ValidationCheckResult
-  score               Int?
-  tag                 String?
+  score               Int?     // Local evaluation score
+  tag                 String?  // Local evaluation tag
+  chainScore          Int?     // Verified on-chain score from registry
+  chainTag            String?  // Verified on-chain tag from registry
+  responseHash        String?  // On-chain response hash
   validatorAddress    String?
   agentId             String?
   unsignedRequest     String?  // JSON of unsigned request params for owner
@@ -240,11 +246,13 @@ model ValidationJob {
   retryCount          Int      @default(0)
   workerLeaseUntil    DateTime?
   workerLeaseOwner    String?
+  leaseToken          String?  // Fencing token for active lease holder
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   @@index([status])
   @@index([status, workerLeaseUntil])
   @@index([missionSlug])
+  @@index([leaseToken])
 }
 

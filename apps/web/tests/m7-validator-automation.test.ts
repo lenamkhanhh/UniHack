@@ -25,11 +25,16 @@ import {
   processQueuedValidationJobs,
   claimNextValidationJob,
   reconcileOwnerValidationRequestReceipt,
+  reconcileMissionCreationReceipt,
   buildUnsignedValidationRequest,
   verifyMissionCreationReceipt,
+  setMemoryValidationRecord,
+  serializeWithBigInt,
   MISSION_CREATED_EVENT_ABI,
   DEFAULT_VALIDATION_REGISTRY,
 } from '@/lib/validator-job';
+import { POST as creationReceiptPOST } from '@/app/api/missions/[slug]/creation-receipt/route';
+import { getPasskeyAuthorityAddress } from '@/lib/config';
 import { computeValidationRequestHash, validateBundleOnChain } from '@/lib/validation-bundle';
 import { computePayeeMerkleTree } from '@/lib/merkle';
 import { POST as missionCreatePOST } from '@/app/api/missions/route';
@@ -79,6 +84,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
         ];
 
     return {
+      getChainId: vi.fn().mockResolvedValue(43113),
       getBlockNumber: vi.fn().mockResolvedValue(60689770n),
       readContract: vi.fn().mockImplementation(async ({ functionName }) => {
         if (functionName === 'anchoredMissionProofs') return head;
@@ -723,7 +729,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     });
 
     expect(unsignedTx.to).toBe(DEFAULT_VALIDATION_REGISTRY);
-    expect(unsignedTx.value).toBe('0');
+    expect(unsignedTx.value).toBe('0x0');
     expect(unsignedTx.chainId).toBe(43113);
     expect(unsignedTx.data).toMatch(/^0x[0-9a-fA-F]+/);
     expect(unsignedTx.functionName).toBe('validationRequest');
@@ -827,6 +833,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     };
 
     const mockClient = {
+      getChainId: vi.fn().mockResolvedValue(43113),
       getTransactionReceipt: vi.fn().mockResolvedValue(mockReceipt),
       readContract: vi.fn().mockResolvedValue(true),
       waitForTransactionReceipt: vi.fn().mockResolvedValue({ status: 'success' }),
@@ -906,6 +913,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       logs: [{ address: treasury, topics, data: '0x' }],
     };
     const mockClient = {
+      getChainId: vi.fn().mockResolvedValue(43113),
       getTransactionReceipt: vi.fn().mockResolvedValue(mockReceipt),
     } as any;
 
@@ -924,6 +932,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       logs: [],
     };
     const mockRevertedClient = {
+      getChainId: vi.fn().mockResolvedValue(43113),
       getTransactionReceipt: vi.fn().mockResolvedValue(mockRevertedReceipt),
     } as any;
     const revertedRes = await verifyMissionCreationReceipt({
@@ -1133,6 +1142,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       logs: [],
     };
     const strangerClient = {
+      getChainId: vi.fn().mockResolvedValue(43113),
       getTransactionReceipt: vi.fn().mockResolvedValue(strangerReceipt),
     } as any;
 
@@ -1150,6 +1160,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       logs: [],
     };
     const wrongRegistryClient = {
+      getChainId: vi.fn().mockResolvedValue(43113),
       getTransactionReceipt: vi.fn().mockResolvedValue(wrongRegistryReceipt),
     } as any;
     const wrongRegRes = await reconcileOwnerValidationRequestReceipt(mission.slug, dummyTx, {
@@ -1265,5 +1276,383 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     }
     expect(dbJob?.status).toBe('LOCAL_EVALUATED');
     expect(dbJob?.score).toBe(100);
+  });
+
+  // A4-21: UNKNOWN response cannot double-send: writeContract is called at most once across timeout + restart + repeated POST
+  it('M7-A4-21: UNKNOWN response cannot double-send: writeContract is called at most once across timeout + restart + repeated POST', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const tree = computePayeeMerkleTree(payees);
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 60689700n,
+    });
+
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const requestHash = computeValidationRequestHash(bundle);
+
+    // Initial job in RESPONSE_PENDING with score already evaluated
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash,
+        status: 'RESPONSE_PENDING',
+        score: 100,
+        tag: 'verified-full',
+        frozenContext: serializeWithBigInt(bundle),
+      },
+    });
+
+    let writeContractCallCount = 0;
+    const mockValidatorWallet = {
+      writeContract: vi.fn().mockImplementation(async () => {
+        writeContractCallCount++;
+        return '0xfirstResponseTxHash1234567890123456789012345678901234567890123456789012';
+      }),
+    } as any;
+
+    // Public client simulating transaction pending in mempool (receipt not mined yet on first call)
+    let receiptMined = false;
+    const mockPublicClient = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return receiptMined;
+        if (functionName === 'getValidationStatus') {
+          return ['0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5', 294n, 100, '0x0', 'verified-full', 1700000000n];
+        }
+        return true;
+      }),
+      getTransactionReceipt: vi.fn().mockImplementation(async () => {
+        if (!receiptMined) return null; // Still pending in mempool!
+        return { status: 'success', blockNumber: 60689900n };
+      }),
+      waitForTransactionReceipt: vi.fn().mockImplementation(async () => {
+        if (!receiptMined) return null; // Timeout!
+        return { status: 'success', blockNumber: 60689900n };
+      }),
+    } as any;
+
+    // Call 1: Initiates broadcast. waitForTransactionReceipt times out (returns null).
+    const call1Result = await runMissionValidatorJob(mission.slug, {
+      publicClient: mockPublicClient,
+      validatorWalletClient: mockValidatorWallet,
+      validatorAccount: { address: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5' },
+      skipOnChainBroadcast: false,
+    });
+
+    expect(call1Result.status).toBe('RESPONSE_PENDING');
+    expect(call1Result.responseTxHash).toBe('0xfirstResponseTxHash1234567890123456789012345678901234567890123456789012');
+    expect(writeContractCallCount).toBe(1);
+
+    // Call 2: Retry / restart while still pending. Must NOT call writeContract again!
+    const call2Result = await runMissionValidatorJob(mission.slug, {
+      publicClient: mockPublicClient,
+      validatorWalletClient: mockValidatorWallet,
+      validatorAccount: { address: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5' },
+      skipOnChainBroadcast: false,
+    });
+
+    expect(call2Result.status).toBe('RESPONSE_PENDING');
+    expect(writeContractCallCount).toBe(1); // ZERO double-spend!
+
+    // Call 3: Receipt is now mined on chain. Reconcile completes.
+    receiptMined = true;
+    const call3Result = await runMissionValidatorJob(mission.slug, {
+      publicClient: mockPublicClient,
+      validatorWalletClient: mockValidatorWallet,
+      validatorAccount: { address: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5' },
+      skipOnChainBroadcast: false,
+    });
+
+    expect(call3Result.status).toBe('RESPONSE_CONFIRMED');
+    expect(call3Result.isRegisteredOnChain).toBe(true);
+    expect(writeContractCallCount).toBe(1); // STILL exactly 1 call across all retries!
+  });
+
+  // A4-22: Exact chain response: stored local 100 vs actual chain 37 displays/persists 37 as chainScore, with local 100 separately
+  it('M7-A4-22: Exact chain response: stored local 100 vs actual chain 37 displays/persists 37 as chainScore, with local 100 separately', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const tree = computePayeeMerkleTree(payees);
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 60689700n,
+      publicPublished: true,
+    });
+
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const requestHash = computeValidationRequestHash(bundle);
+
+    // Pre-seed job with local score 100
+    const localEval = {
+      valid: true,
+      score: 100,
+      tag: 'verified-full',
+      checks: { headMatchesOnChain: true, rootMatchesOnChain: true, payeesGenerateRoot: true, executedPayeesValid: true, totalSpendWithinCap: true, hasExecutions: true },
+      details: {},
+    };
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash,
+        status: 'LOCAL_EVALUATED',
+        score: 100,
+        tag: 'verified-full',
+        evaluationResult: serializeWithBigInt(localEval),
+        frozenContext: serializeWithBigInt(bundle),
+      },
+    });
+
+    // Mock registry returning actual chain score 37 and chain tag 'partial-override'
+    const mockClient = createMockPublicClient(bundle);
+    mockClient.readContract = vi.fn().mockImplementation(async ({ functionName }) => {
+      if (functionName === 'anchoredMissionProofs') return bundle.auditHead;
+      if (functionName === 'missionPayeeRoot') return bundle.payeeRoot;
+      if (functionName === 'missions') {
+        return [bundle.missionId, bundle.treasury, 2000000n, 1794670342n, true, true];
+      }
+      if (functionName === 'isValidationComplete') return true;
+      if (functionName === 'getValidationStatus') {
+        return ['0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5', 294n, 37, '0x0', 'partial-override', 1700000000n];
+      }
+      throw new Error(`Unexpected function: ${functionName}`);
+    });
+
+    const res = await runMissionValidatorJob(mission.slug, {
+      publicClient: mockClient,
+      skipOnChainBroadcast: false,
+    });
+
+    expect(res.status).toBe('RESPONSE_CONFIRMED');
+    expect(res.chainScore).toBe(37);
+    expect(res.chainTag).toBe('partial-override');
+
+    // DB record must record chainScore 37 distinct from local score 100
+    const dbJob = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+    expect(dbJob?.score).toBe(100); // Local evaluation score preserved
+    expect(dbJob?.chainScore).toBe(37); // Actual chain score from registry
+    expect(dbJob?.chainTag).toBe('partial-override');
+
+    // GET /api/verify/[missionId] must reflect both
+    const req = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`);
+    const verifyRes = await verifyRouteGET(req, { params: Promise.resolve({ missionId: mission.slug }) });
+    const verifyJson = await verifyRes.json();
+    expect(verifyJson.erc8004Validation.score).toBe(37);
+    expect(verifyJson.erc8004Validation.chainScore).toBe(37);
+    expect(verifyJson.erc8004Validation.localScore).toBe(100);
+    expect(verifyJson.erc8004Validation.tag).toBe('partial-override');
+  });
+
+  // A4-23: Passkey-authority creation receipt + treasury MissionCreated log succeeds
+  it('M7-A4-23: Passkey-authority creation receipt + treasury MissionCreated log succeeds and reconciles creation block', async () => {
+    const { mission, spendToken } = await createTestMission({
+      creationBlock: null,
+    });
+
+    const treasury = getGuardedTreasuryAddress().toLowerCase();
+    const authority = getPasskeyAuthorityAddress().toLowerCase();
+
+    const topics = encodeEventTopics({
+      abi: [MISSION_CREATED_EVENT_ABI],
+      eventName: 'MissionCreated',
+      args: {
+        missionId: mission.missionId as `0x${string}`,
+      },
+    });
+
+    // Passkey route: transaction sent to authority, authority emits MissionCreated on treasury
+    const passkeyReceipt = {
+      status: 'success',
+      to: authority, // Recipient is authority!
+      blockNumber: 60689888n,
+      logs: [{ address: treasury, topics, data: '0x' }], // Log emitted by treasury!
+    };
+
+    const mockClient = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      getTransactionReceipt: vi.fn().mockResolvedValue(passkeyReceipt),
+    } as any;
+
+    const receiptTxHash = '0xpasskeyCreationReceiptTxHash12345678901234567890123456789012345678';
+
+    // 1. verifyMissionCreationReceipt accepts passkey authority recipient
+    const verifiedRes = await verifyMissionCreationReceipt({
+      receiptTxHash,
+      expectedMissionId: mission.missionId,
+      publicClient: mockClient,
+    });
+    expect(verifiedRes.valid).toBe(true);
+    expect(verifiedRes.creationBlock).toBe(60689888n);
+
+    // 2. Reconcile via POST /api/missions/[slug]/creation-receipt authenticated route
+    const reconcileRes = await reconcileMissionCreationReceipt(mission.slug, receiptTxHash, {
+      publicClient: mockClient,
+    });
+    expect(reconcileRes.success).toBe(true);
+    expect(BigInt(reconcileRes.creationBlock!)).toBe(60689888n);
+
+    const updatedMission = await prisma.mission.findUnique({ where: { slug: mission.slug } });
+    expect(updatedMission?.creationBlock).toBe(60689888n);
+    expect(updatedMission?.creationTxHash).toBe(receiptTxHash);
+    expect(updatedMission?.creationProvenance).toBe('AUTHORITY_ROUTED_RECEIPT');
+  });
+
+  // A4-24: Database outage with warm memory cache returns 503 DATABASE_UNAVAILABLE
+  it('M7-A4-24: Database outage with warm memory cache returns 503 DATABASE_UNAVAILABLE and cannot show complete', async () => {
+    const { mission } = await createTestMission({
+      publicPublished: true,
+    });
+
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const requestHash = computeValidationRequestHash(bundle);
+
+    // Populate warm memory cache claiming complete
+    setMemoryValidationRecord({
+      requestHash,
+      status: 'RESPONSE_CONFIRMED',
+      score: 100,
+      tag: 'verified-full',
+      isRegisteredOnChain: true,
+    });
+
+    // Mock prisma failure simulating DB crash/outage
+    const originalFindUnique = prisma.validationJob.findUnique;
+    vi.spyOn(prisma.validationJob, 'findUnique').mockRejectedValue(new Error('DATABASE_OUTAGE_SIMULATED'));
+
+    try {
+      const req = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`);
+      const res = await verifyRouteGET(req, { params: Promise.resolve({ missionId: mission.slug }) });
+
+      // Must fail closed with 503 DATABASE_UNAVAILABLE: memory cache cannot bypass DB outage!
+      expect(res.status).toBe(503);
+      const json = await res.json();
+      expect(json.error).toBe('DATABASE_UNAVAILABLE');
+    } finally {
+      vi.spyOn(prisma.validationJob, 'findUnique').mockImplementation(originalFindUnique);
+    }
+  });
+
+  // A4-25: POST /api/verify/[missionId] authorizes via fresh owner EIP-191 signature challenge
+  it('M7-A4-25: POST /api/verify/[missionId] authorizes via fresh owner EIP-191 signature challenge', async () => {
+    const { mission } = await createTestMission();
+
+    const chalReq = new NextRequest('http://localhost:3000/api/auth/challenge', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'VERIFY_MISSION_ACTION',
+        payload: { slug: mission.slug },
+        expectedSigner: ownerAccount.address,
+      }),
+    });
+    const chalRes = await challengePOST(chalReq);
+    expect(chalRes.status).toBe(200);
+    const { message } = await chalRes.json();
+    const signature = await ownerAccount.signMessage({ message });
+
+    const verifyReq = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`, {
+      method: 'POST',
+      headers: {
+        'x-owner-signature': signature,
+        'x-owner-signer': ownerAccount.address,
+        'x-auth-message': encodeURIComponent(message),
+      },
+      body: JSON.stringify({ txHash: '0x1234567890123456789012345678901234567890123456789012345678901234' }),
+    });
+
+    const verifyRes = await verifyRoutePOST(verifyReq, { params: Promise.resolve({ missionId: mission.slug }) });
+    // Must NOT be 401 or 403 (authorization succeeded!)
+    expect(verifyRes.status).not.toBe(401);
+    expect(verifyRes.status).not.toBe(403);
+  });
+
+  // A4-26: Mutate audit head or payee root after enqueue -> restart worker -> STALE_CONTEXT (no broadcast)
+  it('M7-A4-26: Mutate audit head or payee root after enqueue -> restart worker -> STALE_CONTEXT (no broadcast)', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const tree = computePayeeMerkleTree(payees);
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 60689700n,
+    });
+
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const requestHash = computeValidationRequestHash(bundle);
+
+    // Enqueue job with frozen context
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash,
+        status: 'QUEUED',
+        frozenContext: serializeWithBigInt(bundle),
+      },
+    });
+
+    // Mutate auditHeadHash in mission table before worker runs
+    await prisma.mission.update({
+      where: { slug: mission.slug },
+      data: { auditHeadHash: '0x0000000000000000000000000000000000000000000000000000000000000bad' },
+    });
+
+    const mockClient = createMockPublicClient(bundle);
+    const workerRes = await processQueuedValidationJobs(1, {
+      publicClient: mockClient,
+      skipOnChainBroadcast: false,
+    });
+
+    expect(workerRes.processed).toBe(1);
+    expect(workerRes.results[0].status).toBe('STALE_CONTEXT');
+    expect(workerRes.results[0].failureReason).toContain('STALE_CONTEXT');
+
+    const dbJob = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+    expect(dbJob?.status).toBe('STALE_CONTEXT');
+    expect(dbJob?.failureReason).toContain('STALE_CONTEXT');
+  });
+
+  // A4-27: CLI process-validation-jobs reliability: dry-run on empty queue exits 0, failed job exits nonzero
+  it('M7-A4-27: CLI process-validation-jobs: dry run on empty queue exits 0, and reports nonzero on job failure', async () => {
+    const { execSync } = await import('child_process');
+    const path = await import('path');
+    const webDir = path.resolve(__dirname, '..');
+
+    // 1. Dry run with empty queue -> exits 0 and logs properly
+    const dryRunOutput = execSync('npx.cmd tsx scripts/process-validation-jobs.ts', {
+      cwd: webDir,
+      env: { ...process.env, WORKER_LIMIT: '5' },
+      encoding: 'utf8',
+    });
+    expect(dryRunOutput).toContain('[Validator Worker] Starting process-once validation runner...');
+    expect(dryRunOutput).toContain('Finished processing 0 job(s).');
+
+    // 2. Injected failure in queue -> exits 1
+    const { mission } = await createTestMission();
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        status: 'QUEUED',
+        frozenContext: 'MALFORMED_JSON_INVALID_CONTEXT',
+      },
+    });
+
+    let exitCode = 0;
+    try {
+      execSync('npx.cmd tsx scripts/process-validation-jobs.ts', {
+        cwd: webDir,
+        env: { ...process.env, WORKER_LIMIT: '1' },
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
+    } catch (err: any) {
+      exitCode = err.status;
+    }
+    expect(exitCode).toBe(1);
   });
 });

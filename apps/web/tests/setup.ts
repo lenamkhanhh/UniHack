@@ -27,8 +27,7 @@ process.env.MISSION_TOKEN_SECRET =
 process.env.SESSION_WALLET_SEED =
   process.env.SESSION_WALLET_SEED ||
   'test-isolated-session-wallet-seed-must-be-distinct-32chars!';
-process.env.OWNER_ADDRESS =
-  process.env.OWNER_ADDRESS || normalizeAddress(ownerAccount.address);
+process.env.OWNER_ADDRESS = normalizeAddress(ownerAccount.address);
 process.env.AGENT_PRIVATE_KEY = process.env.AGENT_PRIVATE_KEY || TEST_AGENT_KEY;
 process.env.DEPLOYMENT_ID =
   process.env.DEPLOYMENT_ID || 'unihack-test-deployment';

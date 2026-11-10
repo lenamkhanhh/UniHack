@@ -171,6 +171,14 @@ export function getGuardedTreasuryAddress(): `0x${string}` {
   return addr as `0x${string}`;
 }
 
+export function getPasskeyAuthorityAddress(): `0x${string}` {
+  const addr =
+    process.env.PASSKEY_AUTHORITY_ADDRESS?.trim() ||
+    process.env.NEXT_PUBLIC_PASSKEY_AUTHORITY_ADDRESS?.trim() ||
+    '0x46f48bece672266541d73d752684859a8f3c8aef';
+  return addr as `0x${string}`;
+}
+
 /**
  * KEY-02 & CFG-01 Security Guard: Validates that when operating in LIVE_FUJI mode,
  * public Anvil/Hardhat test accounts and private keys are strictly rejected, and
