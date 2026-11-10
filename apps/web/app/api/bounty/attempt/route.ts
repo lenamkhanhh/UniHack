@@ -6,6 +6,11 @@ import {
   getBountyMissionOnchainStats,
   LlmUnavailableError,
   BountyVector,
+  resolveClientIp,
+  reserveBountyQuota,
+  hashIp,
+  QuotaExceededError,
+  DatabaseUnavailableError,
 } from '@/lib/bounty';
 
 const prisma = new PrismaClient();
@@ -77,20 +82,16 @@ export async function POST(req: NextRequest) {
     }
 
     // Extract client IP through trust boundary (Cloudflare / reverse proxy headers)
-    const cfIp = req.headers.get('cf-connecting-ip');
-    const realIp = req.headers.get('x-real-ip');
-    const forwarded = req.headers.get('x-forwarded-for');
-    let clientIp = '127.0.0.1';
+    const { clientIp } = resolveClientIp(req.headers);
 
-    if (cfIp) {
-      clientIp = cfIp.trim();
-    } else if (realIp) {
-      clientIp = realIp.trim();
-    } else if (forwarded) {
-      const parts = forwarded.split(',').map((p) => p.trim()).filter(Boolean);
-      if (parts.length > 0) {
-        clientIp = parts[0];
-      }
+    // Atomically reserve quota in shared DB BEFORE calling expensive LLM or RPC
+    const ipHash = hashIp(clientIp);
+    const reservation = await reserveBountyQuota(ipHash, source);
+    if (!reservation.allowed) {
+      return NextResponse.json(
+        { success: false, error: reservation.reason || 'Quá giới hạn số lượt thử' },
+        { status: 429 }
+      );
     }
 
     const result = await processBountyAttempt(
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
       attackerAddress,
       vector as BountyVector,
       clientIp,
-      { source }
+      { source, reservationId: reservation.reservationId || undefined }
     );
 
     return NextResponse.json({
@@ -106,6 +107,17 @@ export async function POST(req: NextRequest) {
       result,
     });
   } catch (error: any) {
+    if (error instanceof DatabaseUnavailableError || error?.code === 'DB_UNAVAILABLE') {
+      return NextResponse.json(
+        { success: false, error: error.message || 'Cơ sở dữ liệu tạm thời không khả dụng' },
+        { status: 503 }
+      );
+    }
+
+    if (error instanceof QuotaExceededError || error?.code === 'QUOTA_EXCEEDED') {
+      return NextResponse.json({ success: false, error: error.message }, { status: 429 });
+    }
+
     if (
       error instanceof LlmUnavailableError ||
       error?.code === 'LLM_UNAVAILABLE' ||

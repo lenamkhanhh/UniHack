@@ -203,6 +203,20 @@ model BountyAttempt {
   @@index([mode, source])
 }
 
+model BountyQuotaReservation {
+  id              String   @id @default(uuid()) @db.Uuid
+  ipHash          String
+  source          String   @default("public")
+  status          String   @default("RESERVED") // RESERVED, COMPLETED, FAILED, EXPIRED
+  leaseExpiresAt  DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([ipHash, createdAt])
+  @@index([createdAt])
+  @@index([status, leaseExpiresAt])
+}
+
 model ValidationJob {
   id                  String   @id @default(uuid()) @db.Uuid
   missionSlug         String   @unique

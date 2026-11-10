@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
+import { PrismaClient } from '@prisma/client';
 import { POST, GET } from '../app/api/bounty/attempt/route';
 import {
   escapeHtml,
@@ -7,6 +8,10 @@ import {
   buildBountyDocument,
   simulateFujiProposeWithProof,
   BOUNTY_MISSION_ID,
+  reserveBountyQuota,
+  resolveClientIp,
+  hashIp,
+  DatabaseUnavailableError,
 } from '../lib/bounty';
 
 describe('WOW-W3: Public Bounty Challenge (/api/bounty/attempt)', () => {
@@ -270,6 +275,114 @@ describe('WOW-W3: Public Bounty Challenge (/api/bounty/attempt)', () => {
       expect(json.stats.queuedCount).toBeDefined();
       expect(json.stats.rpcErrorCount).toBeDefined();
       expect(json.stats.simulationNotice).toContain('eth_call contract simulation on Avalanche Fuji');
+    });
+
+    it('M7-A8-01: concurrent requests across workers only allow quota limit (5) to invoke model', async () => {
+      const concurrentIp = '198.51.100.77';
+      const requests = Array.from({ length: 8 }).map((_, idx) =>
+        POST(
+          new NextRequest('http://localhost/api/bounty/attempt', {
+            method: 'POST',
+            headers: {
+              'x-forwarded-for': concurrentIp,
+            },
+            body: JSON.stringify({
+              payload: `Concurrent attack attempt #${idx}`,
+              attackerAddress: '0x6666666666666666666666666666666666666666',
+              vector: 'invoice_pdf_text',
+            }),
+          })
+        )
+      );
+
+      const responses = await Promise.all(requests);
+      const statuses = responses.map((r) => r.status);
+      const successCount = statuses.filter((s) => s === 200).length;
+      const rateLimitedCount = statuses.filter((s) => s === 429).length;
+
+      expect(successCount).toBe(5);
+      expect(rateLimitedCount).toBe(3);
+    });
+
+    it('M7-A8-02: process restart does not reset shared allowance (persisted in DB)', async () => {
+      const testIp = '198.51.100.88';
+
+      // 1. Consume 5 slots
+      for (let i = 0; i < 5; i++) {
+        const res = await POST(
+          new NextRequest('http://localhost/api/bounty/attempt', {
+            method: 'POST',
+            headers: { 'x-forwarded-for': testIp },
+            body: JSON.stringify({
+              payload: `Pre-restart attempt #${i}`,
+              attackerAddress: '0x6666666666666666666666666666666666666666',
+              vector: 'invoice_pdf_text',
+            }),
+          })
+        );
+        expect(res.status).toBe(200);
+      }
+
+      // 2. Simulate process restart by clearing all in-memory rate limit maps
+      resetRateLimits();
+
+      // 3. Attempt 6th request from post-restart context: MUST still be rejected via DB window
+      const resAfterRestart = await POST(
+        new NextRequest('http://localhost/api/bounty/attempt', {
+          method: 'POST',
+          headers: { 'x-forwarded-for': testIp },
+          body: JSON.stringify({
+            payload: 'Post-restart attempt (must be blocked by DB state)',
+            attackerAddress: '0x6666666666666666666666666666666666666666',
+            vector: 'invoice_pdf_text',
+          }),
+        })
+      );
+
+      expect(resAfterRestart.status).toBe(429);
+      const json = await resAfterRestart.json();
+      expect(json.error).toContain('Quá giới hạn số lượt thử');
+    });
+
+    it('M7-A8-03: DB failure fails closed and denies expensive work (does not fall back to RAM)', async () => {
+      const mockBrokenDb = {
+        $transaction: async () => {
+          throw new Error('Connection to PostgreSQL lost: ECONNREFUSED');
+        },
+      } as unknown as PrismaClient;
+
+      // Direct call to reserveBountyQuota with broken DB must throw DatabaseUnavailableError
+      await expect(
+        reserveBountyQuota(hashIp('198.51.100.99'), 'public', mockBrokenDb)
+      ).rejects.toThrow(DatabaseUnavailableError);
+    });
+
+    it('M7-A8-04: unverified ingress headers cannot bypass rate limiting via rotation', async () => {
+      // In production ingress with Cloudflare configured:
+      const origTrusted = process.env.TRUSTED_INGRESS;
+      process.env.TRUSTED_INGRESS = 'cloudflare';
+
+      try {
+        // When attacker tries rotating x-forwarded-for headers without valid Cloudflare ingress
+        const header1 = { get: (name: string) => (name === 'x-forwarded-for' ? '1.1.1.1' : null) };
+        const header2 = { get: (name: string) => (name === 'x-forwarded-for' ? '2.2.2.2' : null) };
+
+        const res1 = resolveClientIp(header1);
+        const res2 = resolveClientIp(header2);
+
+        // Both must map to the conservative shared-public-bucket rather than attacker-chosen IP
+        expect(res1.isTrusted).toBe(false);
+        expect(res2.isTrusted).toBe(false);
+        expect(res1.clientIp).toBe('shared-public-bucket');
+        expect(res2.clientIp).toBe('shared-public-bucket');
+        expect(res1.clientIp).toBe(res2.clientIp);
+      } finally {
+        if (origTrusted) {
+          process.env.TRUSTED_INGRESS = origTrusted;
+        } else {
+          delete process.env.TRUSTED_INGRESS;
+        }
+      }
     });
   });
 });
