@@ -16,6 +16,8 @@ import json
 import time
 import random
 import hashlib
+import pickle
+import multiprocessing
 import argparse
 import concurrent.futures
 import urllib.request
@@ -104,14 +106,69 @@ RESULTS_DIR = Path(__file__).parent / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def run_task_with_timeout(fn, timeout_seconds: int = 600):
-    """Executes a callable with a strict wall-clock timeout using ThreadPoolExecutor."""
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(fn)
+def _process_task_worker(q: Any, fn: Any, args: tuple, kwargs: dict):
+    try:
+        res = fn(*args, **kwargs)
+        q.put(("SUCCESS", res))
+    except Exception as e:
+        q.put(("EXCEPTION", e))
+
+
+def run_task_with_timeout(
+    fn: Any,
+    timeout_seconds: float = 600.0,
+    args: tuple = (),
+    kwargs: Optional[dict] = None,
+) -> Any:
+    """
+    Executes a callable with a strict wall-clock timeout and process-level termination.
+    If the timeout expires, the child process is terminated immediately with no lingering
+    worker threads, background API calls, or side effects.
+    Compatible with Windows spawn multiprocessing.
+    """
+    if kwargs is None:
+        kwargs = {}
+
+    can_pickle = True
+    try:
+        pickle.dumps(fn)
+        pickle.dumps(args)
+        pickle.dumps(kwargs)
+    except Exception:
+        can_pickle = False
+
+    if can_pickle:
+        ctx = multiprocessing.get_context("spawn")
+        q = ctx.Queue()
+        p = ctx.Process(target=_process_task_worker, args=(q, fn, args, kwargs))
+        p.start()
+        p.join(timeout=timeout_seconds)
+        if p.is_alive():
+            p.terminate()
+            p.join(timeout=0.5)
+            if p.is_alive():
+                p.kill()
+                p.join(timeout=0.5)
+            raise TimeoutError(f"Task exceeded wall-clock timeout of {timeout_seconds}s")
+
+        if not q.empty():
+            status, payload = q.get()
+            if status == "SUCCESS":
+                return payload
+            elif status == "EXCEPTION":
+                raise payload
+        raise RuntimeError("Worker process terminated without returning result")
+    else:
+        # Fallback for dynamic closures/unpicklable handles: use thread pool with non-blocking shutdown
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(fn, *args, **kwargs)
         try:
             return future.result(timeout=timeout_seconds)
         except concurrent.futures.TimeoutError:
+            executor.shutdown(wait=False, cancel_futures=True)
             raise TimeoutError(f"Task exceeded wall-clock timeout of {timeout_seconds}s")
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
 
 class HonestGoogleLLM(BasePipelineElement):
     """
@@ -348,9 +405,96 @@ def wilson_score_interval(successes: int, total: int, confidence: float = 0.95) 
     spread = (z * ((p_hat * (1 - p_hat) / total + z**2 / (4 * total**2)) ** 0.5)) / denominator
     return (round(max(0.0, centre - spread) * 100, 1), round(min(1.0, centre + spread) * 100, 1))
 
-def get_cache_key(backend: str, model: str, user_task_id: str, inj_task_id: Optional[str], defense: str) -> str:
+def get_defense_code_revision(defense_key: str) -> str:
+    """
+    Computes a deterministic hash of the defense implementation files
+    to ensure cache invalidation when defense logic or rules change.
+    """
+    base_dir = Path(__file__).parent
+    files_to_hash = []
+    if defense_key in ("missionpay", "m3_onchain", "provguard"):
+        files_to_hash.extend([base_dir / "missionpay_defense.py", base_dir / "merkle.py"])
+    elif defense_key == "tool_filter":
+        files_to_hash.append(base_dir / "tool_filter_defense.py")
+    
+    h = hashlib.sha256()
+    for fp in sorted(files_to_hash):
+        if fp.exists():
+            h.update(fp.read_bytes())
+    return h.hexdigest()[:16]
+
+def compute_cache_fingerprint(
+    backend: str,
+    model: str,
+    user_task_id: str,
+    inj_task_id: Optional[str] = None,
+    defense: str = "c0",
+    prompt: Optional[str] = None,
+    attack_payload: Optional[str] = None,
+    system_message: Optional[str] = None,
+    defense_code_revision: Optional[str] = None,
+    model_digest: Optional[str] = None,
+    config: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Computes a cryptographic fingerprint binding:
+    - backend and model
+    - model digest / version
+    - user task prompt / system message
+    - attack payload / injection task
+    - policy / defense code revision
+    - config parameters (e.g. temperature, seed)
+    """
+    if defense_code_revision is None:
+        defense_code_revision = get_defense_code_revision(defense)
+
+    manifest = {
+        "backend": backend,
+        "model": model,
+        "model_digest": model_digest or "default",
+        "user_task_id": user_task_id,
+        "inj_task_id": inj_task_id or "none",
+        "defense": defense,
+        "defense_code_revision": defense_code_revision,
+        "prompt_hash": hashlib.sha256((prompt or "").encode("utf-8")).hexdigest()[:16],
+        "attack_hash": hashlib.sha256((attack_payload or "").encode("utf-8")).hexdigest()[:16],
+        "system_message_hash": hashlib.sha256((system_message or "").encode("utf-8")).hexdigest()[:16],
+        "config": config or {},
+    }
+    canonical_repr = json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical_repr.encode("utf-8")).hexdigest()
+
+def get_legacy_cache_key(backend: str, model: str, user_task_id: str, inj_task_id: Optional[str], defense: str) -> str:
+    """Preserves legacy sha256 formula for historical audit verification."""
     raw = f"{backend}:{model}:{user_task_id}:{inj_task_id or 'none'}:{defense}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+def get_cache_key(
+    backend: str,
+    model: str,
+    user_task_id: str,
+    inj_task_id: Optional[str] = None,
+    defense: str = "c0",
+    prompt: Optional[str] = None,
+    attack_payload: Optional[str] = None,
+    system_message: Optional[str] = None,
+    defense_code_revision: Optional[str] = None,
+    model_digest: Optional[str] = None,
+    config: Optional[Dict[str, Any]] = None,
+) -> str:
+    return compute_cache_fingerprint(
+        backend=backend,
+        model=model,
+        user_task_id=user_task_id,
+        inj_task_id=inj_task_id,
+        defense=defense,
+        prompt=prompt,
+        attack_payload=attack_payload,
+        system_message=system_message,
+        defense_code_revision=defense_code_revision,
+        model_digest=model_digest,
+        config=config,
+    )
 
 def compute_attack_success(security: bool) -> bool:
     """
@@ -565,8 +709,22 @@ def run_benchmark(
         benign_utility = {}
         benign_errors = {}
         for ut_idx, ut_id in enumerate(target_user_tasks):
-            ck = get_cache_key(backend, model, ut_id, None, defense_key)
+            task = suite.user_tasks[ut_id]
+            prompt_text = str(task.prompt) if hasattr(task, "prompt") else ""
+            ck = get_cache_key(
+                backend=backend,
+                model=model,
+                user_task_id=ut_id,
+                inj_task_id=None,
+                defense=defense_key,
+                prompt=prompt_text,
+                attack_payload=None,
+                system_message="",
+                config={"seed": seed, "temperature": 0.0},
+            )
+            legacy_ck = get_legacy_cache_key(backend, model, ut_id, None, defense_key)
             cf = CACHE_DIR / f"{ck}.json"
+            legacy_cf = CACHE_DIR / f"{legacy_ck}.json"
 
             if use_cache and cf.exists():
                 with open(cf, "r", encoding="utf-8") as f:
@@ -575,8 +733,15 @@ def run_benchmark(
                     if missionpay_instance and entry.get("onchain_log"):
                         missionpay_instance.replay_log.append(entry["onchain_log"])
                 print(f"  [{datetime.now().strftime('%H:%M:%S')}] [CACHE-HIT] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id}): utility={benign_utility[ut_id]}", flush=True)
+            elif use_cache and legacy_cf.exists():
+                with open(legacy_cf, "r", encoding="utf-8") as f:
+                    entry = json.load(f)
+                    entry["legacy"] = True
+                    benign_utility[ut_id] = entry["utility"]
+                    if missionpay_instance and entry.get("onchain_log"):
+                        missionpay_instance.replay_log.append(entry["onchain_log"])
+                print(f"  [{datetime.now().strftime('%H:%M:%S')}] [LEGACY-CACHE-HIT] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id}): utility={benign_utility[ut_id]}", flush=True)
             else:
-                task = suite.user_tasks[ut_id]
                 if missionpay_instance:
                     missionpay_instance.current_task_id = ut_id
                 llm_wrapper.reset_task_trace()
@@ -591,9 +756,17 @@ def run_benchmark(
                     onchain_entry = missionpay_instance.replay_log[-1] if (missionpay_instance and missionpay_instance.replay_log) else None
                     with open(cf, "w", encoding="utf-8") as f:
                         json.dump({
+                            "schema_version": "2.0",
+                            "fingerprint": ck,
                             "source": "live",
                             "backend": backend,
                             "model": model,
+                            "model_digest": ollama_meta["digest"] if ollama_meta else None,
+                            "user_task_id": ut_id,
+                            "inj_task_id": None,
+                            "defense_key": defense_key,
+                            "defense_revision": get_defense_code_revision(defense_key),
+                            "prompt_hash": hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()[:16],
                             "timestamp": datetime.now().isoformat(),
                             "utility": u,
                             "security": s,
@@ -605,9 +778,11 @@ def run_benchmark(
                 except TimeoutError as te:
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [TIMEOUT] Benign task {ut_id} timed out after 600s: {te}", flush=True)
                     benign_errors[ut_id] = "TIMEOUT"
+                    save_checkpoint()
                 except Exception as e:
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [ERROR] Benign task {ut_id} failed: {e}", flush=True)
                     benign_errors[ut_id] = str(e)
+                    save_checkpoint()
                     if "QUOTA_EXHAUSTED" in str(e) or "OLLAMA_SERVER_DOWN" in str(e):
                         break
                 time.sleep(0.5)
@@ -634,8 +809,22 @@ def run_benchmark(
             if not injections:
                 continue
 
-            ck = get_cache_key(backend, model, ut_id, it_id, defense_key)
+            prompt_text = str(user_task.prompt) if hasattr(user_task, "prompt") else ""
+            attack_payload_text = json.dumps(injections, sort_keys=True) if isinstance(injections, dict) else str(injections)
+            ck = get_cache_key(
+                backend=backend,
+                model=model,
+                user_task_id=ut_id,
+                inj_task_id=it_id,
+                defense=defense_key,
+                prompt=prompt_text,
+                attack_payload=attack_payload_text,
+                system_message="",
+                config={"seed": seed, "temperature": 0.0},
+            )
+            legacy_ck = get_legacy_cache_key(backend, model, ut_id, it_id, defense_key)
             cf = CACHE_DIR / f"{ck}.json"
+            legacy_cf = CACHE_DIR / f"{legacy_ck}.json"
 
             if use_cache and cf.exists():
                 with open(cf, "r", encoding="utf-8") as f:
@@ -663,6 +852,34 @@ def run_benchmark(
                     f"(Cumul: attack_succ={attack_success_count}/{pairs_evaluated}, util={utility_under_attack_count}/{pairs_evaluated})",
                     flush=True,
                 )
+            elif use_cache and legacy_cf.exists():
+                with open(legacy_cf, "r", encoding="utf-8") as f:
+                    entry = json.load(f)
+                    entry["legacy"] = True
+                    u = entry["utility"]
+                    sec = entry["security"]
+                    if missionpay_instance and entry.get("onchain_log"):
+                        missionpay_instance.replay_log.append(entry["onchain_log"])
+                pairs_evaluated += 1
+                if u:
+                    utility_under_attack_count += 1
+                attack_succeeded = compute_attack_success(sec)
+                if attack_succeeded:
+                    attack_success_count += 1
+                pair_details.append({
+                    "user_task": ut_id,
+                    "injection_task": it_id,
+                    "utility": u,
+                    "attack_succeeded": attack_succeeded,
+                    "legacy": True,
+                })
+                print(
+                    f"  [{datetime.now().strftime('%H:%M:%S')}] [LEGACY-CACHE-HIT] [{defense_key.upper()}] "
+                    f"Pair {p_idx+1}/{len(target_pairs)} ({ut_id}, {it_id}): "
+                    f"utility={u}, attack_succeeded={attack_succeeded} "
+                    f"(Cumul: attack_succ={attack_success_count}/{pairs_evaluated}, util={utility_under_attack_count}/{pairs_evaluated})",
+                    flush=True,
+                )
             else:
                 if missionpay_instance:
                     missionpay_instance.current_task_id = ut_id
@@ -677,9 +894,18 @@ def run_benchmark(
                     onchain_entry = missionpay_instance.replay_log[-1] if (missionpay_instance and missionpay_instance.replay_log) else None
                     with open(cf, "w", encoding="utf-8") as f:
                         json.dump({
+                            "schema_version": "2.0",
+                            "fingerprint": ck,
                             "source": "live",
                             "backend": backend,
                             "model": model,
+                            "model_digest": ollama_meta["digest"] if ollama_meta else None,
+                            "user_task_id": ut_id,
+                            "inj_task_id": it_id,
+                            "defense_key": defense_key,
+                            "defense_revision": get_defense_code_revision(defense_key),
+                            "prompt_hash": hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()[:16],
+                            "attack_hash": hashlib.sha256(attack_payload_text.encode("utf-8")).hexdigest()[:16],
                             "timestamp": datetime.now().isoformat(),
                             "utility": u,
                             "security": sec,
@@ -715,13 +941,24 @@ def run_benchmark(
                         "user_task": ut_id,
                         "injection_task": it_id,
                         "utility": False,
-                        "attack_succeeded": False,
+                        "attack_succeeded": None,
+                        "status": "TIMEOUT",
                         "error": "TIMEOUT",
                     })
+                    save_checkpoint()
                     continue
                 except Exception as e:
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [ERROR] Pair ({ut_id}, {it_id}) failed: {e}", flush=True)
                     pair_errors += 1
+                    pair_details.append({
+                        "user_task": ut_id,
+                        "injection_task": it_id,
+                        "utility": False,
+                        "attack_succeeded": None,
+                        "status": "ERROR",
+                        "error": str(e),
+                    })
+                    save_checkpoint()
                     if "QUOTA_EXHAUSTED" in str(e) or "OLLAMA_SERVER_DOWN" in str(e):
                         break
                     continue
