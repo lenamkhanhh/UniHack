@@ -16,7 +16,10 @@ interface BountyStats {
   trickedCount: number;
   trickedRate: string;
   blockedCount: number;
+  queuedCount?: number;
+  rpcErrorCount?: number;
   leakCount: number;
+  simulationNotice?: string;
   recentAttempts: Array<{
     id: string;
     timestamp: string;
@@ -205,6 +208,12 @@ export default function BountyPage() {
             <div className="text-[10px] text-slate-300 font-mono">{t('bounty.stat.mission_spent_desc')}</div>
           </div>
         </div>
+
+        {stats.simulationNotice && (
+          <div className="text-center text-xs text-slate-400 bg-slate-900/50 border border-slate-800 rounded-lg py-1.5 px-3">
+            ℹ️ {stats.simulationNotice}
+          </div>
+        )}
 
         {/* Main Interactive Form with Accessible Labels */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 md:p-8 space-y-6">

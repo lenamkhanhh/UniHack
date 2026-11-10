@@ -69,17 +69,63 @@ export function hashIp(ip: string): string {
   return crypto.createHash('sha256').update(`${salt}:${ip}`).digest('hex');
 }
 
-// In-memory sliding window rate-limiter: IP -> array of timestamps
+// Persistent sliding window rate-limiter:
+// 1. Checks PostgreSQL database for recent attempts within 1 minute (per IP) and 24 hours (global).
+// 2. Also maintains an in-memory sliding window for sub-second burst protection.
 const ipRateLimits = new Map<string, number[]>();
 const globalRateLimitTimestamps: number[] = [];
 
-export function checkRateLimits(ipHash: string): { allowed: boolean; reason?: string } {
-  const now = Date.now();
-  const oneMinuteAgo = now - 60_000;
-  const oneDayAgo = now - 86_400_000;
+export async function checkRateLimits(
+  ipHash: string,
+  source: 'public' | 'smoke' | 'test' = 'public'
+): Promise<{ allowed: boolean; reason?: string }> {
+  // Internal test/smoke runs do not consume public user quotas
+  if (source === 'test' || source === 'smoke') {
+    return { allowed: true };
+  }
 
-  // 1. IP rate limit: 5 / min
-  const timestamps = (ipRateLimits.get(ipHash) || []).filter((t) => t > oneMinuteAgo);
+  const now = new Date();
+  const oneMinuteAgo = new Date(now.getTime() - 60_000);
+  const oneDayAgo = new Date(now.getTime() - 86_400_000);
+
+  // 1. Check persistent database window (survives process restarts and shared across instances)
+  try {
+    const [dbIpCount, dbGlobalCount] = await Promise.all([
+      prisma.bountyAttempt.count({
+        where: {
+          ipHash,
+          source: 'public',
+          timestamp: { gte: oneMinuteAgo },
+        },
+      }),
+      prisma.bountyAttempt.count({
+        where: {
+          source: 'public',
+          timestamp: { gte: oneDayAgo },
+        },
+      }),
+    ]);
+
+    if (dbIpCount >= 5) {
+      return {
+        allowed: false,
+        reason: 'Quá giới hạn số lượt thử từ IP của bạn (tối đa 5 lượt/phút). Vui lòng thử lại sau 1 phút.',
+      };
+    }
+
+    if (dbGlobalCount >= 300) {
+      return {
+        allowed: false,
+        reason: 'Quá giới hạn bảo vệ toàn cục của hệ thống (tối đa 300 lượt/ngày). Vui lòng thử lại sau.',
+      };
+    }
+  } catch (err) {
+    console.warn('[Bounty RateLimit] DB count check warning, falling back to memory window:', err);
+  }
+
+  // 2. In-memory burst protection window
+  const nowMs = Date.now();
+  const timestamps = (ipRateLimits.get(ipHash) || []).filter((t) => t > nowMs - 60_000);
   if (timestamps.length >= 5) {
     return {
       allowed: false,
@@ -87,8 +133,7 @@ export function checkRateLimits(ipHash: string): { allowed: boolean; reason?: st
     };
   }
 
-  // 2. Global rate limit: 300 / day
-  while (globalRateLimitTimestamps.length > 0 && globalRateLimitTimestamps[0] <= oneDayAgo) {
+  while (globalRateLimitTimestamps.length > 0 && globalRateLimitTimestamps[0] <= nowMs - 86_400_000) {
     globalRateLimitTimestamps.shift();
   }
   if (globalRateLimitTimestamps.length >= 300) {
@@ -98,10 +143,10 @@ export function checkRateLimits(ipHash: string): { allowed: boolean; reason?: st
     };
   }
 
-  // Record valid hit
-  timestamps.push(now);
+  // Record in-memory hit
+  timestamps.push(nowMs);
   ipRateLimits.set(ipHash, timestamps);
-  globalRateLimitTimestamps.push(now);
+  globalRateLimitTimestamps.push(nowMs);
 
   return { allowed: true };
 }
@@ -477,6 +522,13 @@ export async function getLiveTreasuryBalance(): Promise<string> {
   return stats.treasuryBalanceUsdc;
 }
 
+export type BountyAttemptStatus =
+  | 'BLOCKED'
+  | 'NO_PAYOUT_PROPOSED'
+  | 'POTENTIAL_BYPASS'
+  | 'RPC_ERROR'
+  | 'OFFCHAIN_QUEUED';
+
 export interface BountyAttemptResult {
   id: string;
   timestamp: string;
@@ -494,7 +546,7 @@ export interface BountyAttemptResult {
   bountyRemainingUsdc: string;
   mode: 'llm' | 'stub';
   source: 'public' | 'smoke' | 'test';
-  status: 'BLOCKED' | 'NO_PAYOUT_PROPOSED' | 'POTENTIAL_BYPASS';
+  status: BountyAttemptStatus;
   provenanceTrace?: ProvenanceTrace;
   steps: {
     step1_llm: {
@@ -526,8 +578,9 @@ export async function processBountyAttempt(
   clientIp: string,
   options?: { source?: 'public' | 'smoke' | 'test' }
 ): Promise<BountyAttemptResult> {
+  const source = options?.source || 'public';
   const ipHash = hashIp(clientIp);
-  const rateLimitCheck = checkRateLimits(ipHash);
+  const rateLimitCheck = await checkRateLimits(ipHash, source);
   if (!rateLimitCheck.allowed) {
     throw new Error(rateLimitCheck.reason || 'Rate limit exceeded');
   }
@@ -544,7 +597,6 @@ export async function processBountyAttempt(
   const agentDecision = await runBountyAgent(document, attackerAddress);
 
   // 3. Evaluate Agent payout proposal
-  const source = options?.source || 'public';
   const authorizedSet = new Set(BOUNTY_PAYEES.map((a) => a.toLowerCase()));
 
   let isTricked = false;
@@ -552,7 +604,7 @@ export async function processBountyAttempt(
   let onchainResult = 'Skipped (LLM not tricked)';
   let step3Status: 'REVERTED' | 'BYPASS' | 'SKIPPED' | 'RPC_ERROR' = 'SKIPPED';
   let isPotentialBypass = false;
-  let status: 'BLOCKED' | 'NO_PAYOUT_PROPOSED' | 'POTENTIAL_BYPASS' = 'BLOCKED';
+  let status: BountyAttemptStatus = 'BLOCKED';
 
   if (!agentDecision.proposedPayout || !agentDecision.to) {
     // Agent declined or did not propose a payout directive
@@ -641,7 +693,15 @@ export async function processBountyAttempt(
       onchainResult = 'Skipped (LLM not tricked)';
     }
 
-    status = isPotentialBypass ? 'POTENTIAL_BYPASS' : 'BLOCKED';
+    if (isPotentialBypass) {
+      status = 'POTENTIAL_BYPASS';
+    } else if (step3Status === 'RPC_ERROR') {
+      status = 'RPC_ERROR';
+    } else if (offchainVerdict.outcome === 'QUEUE') {
+      status = 'OFFCHAIN_QUEUED';
+    } else {
+      status = 'BLOCKED';
+    }
   }
 
   const stats = await getBountyMissionOnchainStats();

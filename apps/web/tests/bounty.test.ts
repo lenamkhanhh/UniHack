@@ -13,6 +13,7 @@ describe('WOW-W3: Public Bounty Challenge (/api/bounty/attempt)', () => {
   beforeEach(() => {
     resetRateLimits();
     process.env.STUB_BOUNTY_LLM = '1'; // deterministic stub for test execution
+    process.env.BOUNTY_INTERNAL_SECRET = 'internal-test-secret-at-least-16-chars';
   });
 
   it('validates input and rejects empty payload with 400', async () => {
@@ -97,7 +98,6 @@ describe('WOW-W3: Public Bounty Challenge (/api/bounty/attempt)', () => {
         method: 'POST',
         headers: {
           'x-forwarded-for': '203.0.113.195',
-          'x-bounty-source': 'test',
         },
         body: JSON.stringify({
           payload: `Test attempt payload #${i + 1}`,
@@ -114,7 +114,6 @@ describe('WOW-W3: Public Bounty Challenge (/api/bounty/attempt)', () => {
       method: 'POST',
       headers: {
         'x-forwarded-for': '203.0.113.195',
-        'x-bounty-source': 'test',
       },
       body: JSON.stringify({
         payload: 'Test attempt payload #6 (should be rate-limited)',
@@ -138,6 +137,7 @@ describe('WOW-W3: Public Bounty Challenge (/api/bounty/attempt)', () => {
       headers: {
         'x-forwarded-for': '198.51.100.12',
         'x-bounty-source': 'test',
+        'x-bounty-auth-key': 'internal-test-secret-at-least-16-chars',
       },
       body: JSON.stringify({
         payload: attackPayload,
@@ -213,5 +213,63 @@ describe('WOW-W3: Public Bounty Challenge (/api/bounty/attempt)', () => {
     expect(parseFloat(json.stats.treasuryBalanceUsdc)).toBeGreaterThan(0);
     expect(json.stats.blockedCount).toBeDefined();
     expect(Array.isArray(json.stats.recentAttempts)).toBe(true);
+  });
+
+  describe('A8 Server Boundaries & Classification Acceptance Tests', () => {
+    it('client cannot spoof source=test without valid server credential, strictly forced to public', async () => {
+      const req = new NextRequest('http://localhost/api/bounty/attempt', {
+        method: 'POST',
+        headers: {
+          'x-forwarded-for': '198.51.100.44',
+          'x-bounty-source': 'test', // Spoof attempt without auth key
+        },
+        body: JSON.stringify({
+          payload: 'Attempting to spoof test classification',
+          attackerAddress: '0x6666666666666666666666666666666666666666',
+          vector: 'invoice_pdf_text',
+          source: 'smoke', // Also tried in body
+        }),
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      // MUST be forced to public because no valid internal secret was presented
+      expect(json.result.source).toBe('public');
+    });
+
+    it('internal harness with valid secret key successfully classifies source=test', async () => {
+      const req = new NextRequest('http://localhost/api/bounty/attempt', {
+        method: 'POST',
+        headers: {
+          'x-forwarded-for': '198.51.100.45',
+          'x-bounty-source': 'test',
+          'x-bounty-auth-key': 'internal-test-secret-at-least-16-chars',
+        },
+        body: JSON.stringify({
+          payload: 'Authorized internal test run',
+          attackerAddress: '0x6666666666666666666666666666666666666666',
+          vector: 'invoice_pdf_text',
+        }),
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.result.source).toBe('test');
+    });
+
+    it('GET stats honestly separates confirmed blocks and provides simulation disclaimer', async () => {
+      const res = await GET();
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.stats.blockedCount).toBeDefined();
+      expect(json.stats.queuedCount).toBeDefined();
+      expect(json.stats.rpcErrorCount).toBeDefined();
+      expect(json.stats.simulationNotice).toContain('eth_call contract simulation on Avalanche Fuji');
+    });
   });
 });
