@@ -100,4 +100,5 @@ Các migration đã được triển khai và kiểm thử tính toàn vẹn tr�
 3. `20261107120000_payee_root`: Bổ sung payeeRoot và quản lý danh sách payee cho Mission.
 4. `20261110000000_validation_job_and_bounty`: Thêm bảng `BountyAttempt` và `ValidationJob`, thêm `creationBlock` vào `Mission`.
 5. `20261110120000_bounty_quota_reservation`: Thêm bảng `BountyQuotaReservation` cho cơ chế atomic reservation rate limiting đa instance.
-6. `20261110150000_validation_job_leases`: Bổ sung `leaseToken`, `leaseExpiresAt`, `claimAttempts` vào bảng `ValidationJob` hỗ trợ atomic claim lease, lease reclaim khi worker crash, và ngăn chặn race condition đa worker.
+6. `20261110150000_validation_job_leases`: Bổ sung các trường lease quản lý worker claim cơ bản.
+7. `20261110180000_validation_state_machine_and_context`: Bổ sung `creationTxHash`, `creationProvenance` vào bảng `Mission`; bổ sung `frozenContext`, `chainScore`, `chainTag`, `responseHash`, `leaseToken` vào bảng `ValidationJob` cho cỗ máy trạng thái bền vững (state machine), lease fencing cho mọi giai đoạn không kết thúc, đối soát biên nhận on-chain ngăn double-send và phát hiện context bị biến đổi (`STALE_CONTEXT`).
