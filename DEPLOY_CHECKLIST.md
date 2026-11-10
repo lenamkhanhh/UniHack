@@ -6,19 +6,30 @@
 
 ## 1. Yêu Cầu Biến Môi Trường (Environment Variables)
 
-| Tên Biến | Môi Trường | Mô Tả & Giá Trị Chuẩn | Tính Bảo Mật |
+Mọi biến môi trường dưới đây phải được cấu hình bằng giá trị thật trên dashboard hosting (Vercel / AWS / GCP) trước khi chạy. Tuyệt đối không commit giá trị secret vào git.
+
+| Tên Biến | Getter / Source | Mô Tả & Placeholder | Tính Bảo Mật |
 |---|---|---|---|
-| `DATABASE_URL` | Server | Connection string PostgreSQL có pooling (`pgbouncer=true` hoặc Neon serverless pooler, `sslmode=require`). | **Secret (Tuyệt mật)** |
-| `NEXT_PUBLIC_APP_ORIGIN` | Public/Client | Domain công khai chính thức (ví dụ: `https://missionpay.vercel.app` hoặc `http://<ip>:3100` khi chiếu tại hội trường). | Public |
-| `AVALANCHE_FUJI_RPC_URL` | Server/Client | RPC endpoint Avalanche Fuji C-Chain (`https://api.avax-test.network/ext/bc/C/rpc` hoặc QuickNode/Infura endpoint riêng). | Public / Config |
-| `NEXT_PUBLIC_GUARDED_TREASURY_ADDRESS`<br>`GUARDED_TREASURY_ADDRESS` | Both | Địa chỉ smart contract GuardedTreasury đã verified trên Snowtrace: `0x20451c1e2dCD83F166B4f22868BAdECb5868d545`. | Public |
-| `NEXT_PUBLIC_VALIDATION_REGISTRY_ADDRESS` | Both | Địa chỉ ValidationRegistry (ERC-8004): `0x4c5ccda2a630cd1cb706799deadcc8483d06697e`. | Public |
-| `NEXT_PUBLIC_PASSKEY_AUTHORITY_ADDRESS` | Both | Địa chỉ PasskeyMissionAuthority (RIP-7212): `0x77235386fe59A934645C5F273e411b0Bea8cCc9C`. | Public |
-| `OWNER_ADDRESS` | Server | Địa chỉ ví Owner Builder Hub: `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c`. | Public |
-| `AGENT_ADDRESS` | Server | Địa chỉ ví Agent Session Runner: `0x374b8A126FDb9e5deEc8307da385076155Af3D72`. | Public |
-| `GEMINI_API_KEY` | Server | Khóa API Google Gemini để gọi `gemini-3.5-flash-lite` cho LLM Planner và Bounty Challenge. | **Secret (Tuyệt mật)** |
-| `ARENA_PRESENTER_KEY` | Server | Khóa bí mật dùng cho người thuyết trình đặt lại bộ đếm Stage (`/stage`). | **Secret (Presenter)** |
-| `RELAYER_PRIVATE_KEY` | Server | Khóa riêng của EOA Relayer tài trợ gas cho WebAuthn Passkey (tách biệt hoàn toàn khỏi Owner). | **Secret (Tuyệt mật)** |
+| `DATABASE_URL` | `db.ts` | Connection string PostgreSQL có pooling: `postgresql://<user>:<password>@<host>:<port>/<dbname>?sslmode=require&pgbouncer=true` | **Secret (Tuyệt mật)** |
+| `DIRECT_URL` | `schema.prisma` | Connection string PostgreSQL trực tiếp: `postgresql://<user>:<password>@<host>:<port>/<dbname>?sslmode=require` | **Secret (Tuyệt mật)** |
+| `MISSION_TOKEN_SECRET` | `getJwtSecret` | Chuỗi khóa ký HMAC JWT cho mission session token: `<min-32-chars-random-secret>` | **Secret (Tuyệt mật)** |
+| `SESSION_WALLET_SEED` | `getSessionWalletSeed` | Seed sinh ví phiên EOA cho từng mission: `<32-bytes-hex-seed>` | **Secret (Tuyệt mật)** |
+| `DEPLOYMENT_ID` | `getDeploymentId` | Định danh phiên bản deploy: `unihack-prod-<env>` | Config / Public |
+| `APP_ORIGIN`<br>`NEXT_PUBLIC_APP_ORIGIN` | `getAppOrigin` | Domain công khai chính thức: `https://<your-domain>.vercel.app` | Public |
+| `PAYMENT_MODE` | `getPaymentMode` | Chế độ thanh toán: `MOCK` hoặc `LIVE_FUJI` | Config |
+| `AVALANCHE_FUJI_RPC_URL` | viem public client | Endpoint RPC Fuji C-Chain: `https://api.avax-test.network/ext/bc/C/rpc` hoặc QuickNode/Infura riêng | Config |
+| `OWNER_ADDRESS` | `getConfiguredOwner` | Địa chỉ ví Owner (20-byte hex): `0x<40-hex-characters-owner-address>` | Public |
+| `AGENT_PRIVATE_KEY` | `getConfiguredAgentPrivateKey` | Khóa riêng EOA Agent (32-byte hex): `0x<64-hex-characters-agent-key>` | **Secret (Tuyệt mật)** |
+| `SELLER_ADDRESS` | `validateLiveFujiConfigSync` | Địa chỉ ví merchant bán tool (20-byte hex): `0x<40-hex-characters-seller-address>` | Public |
+| `GUARDED_TREASURY_ADDRESS`<br>`NEXT_PUBLIC_GUARD_ADDRESS` | `getGuardedTreasuryAddress` | Địa chỉ contract GuardedTreasury đã verified: `0x<40-hex-characters-treasury-address>` | Public |
+| `VALIDATION_REGISTRY_ADDRESS`<br>`NEXT_PUBLIC_VALIDATION_REGISTRY_ADDRESS` | `getValidationRegistryAddress` | Địa chỉ ValidationRegistry (ERC-8004): `0x<40-hex-characters-registry-address>` | Public |
+| `ERC8004_AGENT_ID`<br>`NEXT_PUBLIC_ERC8004_AGENT_ID` | `getErc8004AgentId` | Token ID của Agent đăng ký trên ERC-8004 Registry (e.g. `294`) | Public |
+| `PASSKEY_AUTHORITY_ADDRESS`<br>`NEXT_PUBLIC_PASSKEY_AUTHORITY_ADDRESS` | `getPasskeyAuthorityAddress` | Địa chỉ PasskeyMissionAuthority (RIP-7212): `0x<40-hex-characters-authority-address>` | Public |
+| `VALIDATOR_PRIVATE_KEY` | `getValidatorPrivateKey` | Khóa riêng của Validator độc lập (M7 runner): `0x<64-hex-characters-validator-key>` | **Secret (Tuyệt mật)** |
+| `VALIDATOR_ADDRESS`<br>`NEXT_PUBLIC_VALIDATOR_ADDRESS` | `runMissionValidatorJob` | Địa chỉ công khai của Validator độc lập: `0x<40-hex-characters-validator-address>` | Public |
+| `RELAYER_PRIVATE_KEY` | `/api/passkey/relay` | Khóa riêng EOA Relayer tài trợ gas cho WebAuthn passkey (tách biệt khỏi Owner): `0x<64-hex-characters-relayer-key>` | **Secret (Tuyệt mật)** |
+| `LLM_API_KEY` | `agent.ts`, `bounty.ts` | API Key Google Gemini cho LLM Planner và Bounty Challenge: `<google-ai-studio-gemini-key>`. *Nếu vắng mặt: hệ thống tự động kích hoạt fallback deterministic có gắn nhãn trung thực, không làm hỏng static build.* | **Secret (Tuyệt mật)** |
+| `ARENA_PRESENTER_KEY` | `arena.ts` | Khóa bí mật dùng cho người thuyết trình đặt lại bộ đếm Stage (`/stage`): `<presenter-passcode>` | **Secret (Presenter)** |
 
 ---
 

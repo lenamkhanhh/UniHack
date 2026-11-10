@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "dev": "npm --workspace=apps/web run dev",
-    "build": "npm --workspace=apps/web run build",
+    "build": "npm --workspace=@missionpay/guard run build && npm --workspace=apps/web run build",
     "test": "npm --workspace=apps/web run test",
     "bench": "tsx scripts/attack-eval.ts",
     "verify-proof": "tsx scripts/verify-proof.ts"
