@@ -231,10 +231,6 @@ export async function GET(req: NextRequest, context: any) {
 
     const isAnchored = Boolean(onchainAnchoredHead);
 
-    if (isAnchored && !anchorTxHash && mission.slug === 'fuji-live-mission-s1b') {
-      anchorTxHash = '0x43bd21b81248a9f1a4dc2ff037a3df8119ae098690cd4e353bdbb4ce6ceb0547';
-    }
-
     const snowtraceUrl = anchorTxHash
       ? `https://testnet.snowtrace.io/tx/${anchorTxHash}`
       : isAnchored
@@ -242,26 +238,34 @@ export async function GET(req: NextRequest, context: any) {
       : null;
 
     // ERC-8004 Validation query
-    let erc8004Validation = {
-      isComplete: false,
-      score: null as number | null,
-      validatorAddress: null as string | null,
-      tag: null as string | null,
-      requestHash: null as string | null,
-      snowtraceUrl: null as string | null,
-      agentId: process.env.NEXT_PUBLIC_ERC8004_AGENT_ID || '294',
-    };
-
     const validationRegistryAddress =
       process.env.VALIDATION_REGISTRY_ADDRESS ||
       process.env.NEXT_PUBLIC_VALIDATION_REGISTRY_ADDRESS ||
       '0x4c5ccda2a630cd1cb706799deadcc8483d06697e';
 
+    let erc8004Validation = {
+      isComplete: false,
+      status: 'NOT_EVALUATED',
+      score: null as number | null,
+      validatorAddress: null as string | null,
+      tag: null as string | null,
+      requestHash: null as string | null,
+      requestTxHash: null as string | null,
+      responseTxHash: null as string | null,
+      unsignedRequest: null as any,
+      snowtraceUrl: null as string | null,
+      agentId: process.env.NEXT_PUBLIC_ERC8004_AGENT_ID || '294',
+      failureReason: null as string | null,
+    };
+
+    // First check persistent database state (ValidationJob)
+    const dbJob = await prisma.validationJob.findUnique({
+      where: { missionSlug: mission.slug },
+    }).catch(() => null);
+
     // Compute dynamic requestHash for mission
-    let targetRequestHash: `0x${string}` | null = null;
-    if (mission.slug === 'fuji-live-mission-s1b') {
-      targetRequestHash = '0x20f83cc1c500af5ad3bf7b8fc2d1c5827cf2acf10454c72391e4f3f5765d6110';
-    } else {
+    let targetRequestHash: `0x${string}` | null = (dbJob?.requestHash as `0x${string}`) || null;
+    if (!targetRequestHash) {
       try {
         let payees: string[] = [];
         if (mission.payeesJson) {
@@ -296,30 +300,66 @@ export async function GET(req: NextRequest, context: any) {
           chainId: 43113,
           treasury: getGuardedTreasuryAddress(),
           payees,
+          creationBlock: mission.creationBlock ?? undefined,
         };
         targetRequestHash = computeValidationRequestHash(bundle);
       } catch {}
+    }
+
+    if (dbJob) {
+      let unsignedRequestParsed: any = null;
+      if (dbJob.unsignedRequest) {
+        try {
+          unsignedRequestParsed = JSON.parse(dbJob.unsignedRequest);
+        } catch {}
+      }
+      erc8004Validation = {
+        isComplete: dbJob.status === 'RESPONSE_CONFIRMED',
+        status: dbJob.status,
+        score: dbJob.score,
+        validatorAddress: dbJob.validatorAddress,
+        tag: dbJob.tag,
+        requestHash: dbJob.requestHash,
+        requestTxHash: dbJob.requestTxHash,
+        responseTxHash: dbJob.responseTxHash,
+        unsignedRequest: unsignedRequestParsed,
+        snowtraceUrl: dbJob.responseTxHash
+          ? `https://testnet.snowtrace.io/tx/${dbJob.responseTxHash}`
+          : dbJob.requestTxHash
+          ? `https://testnet.snowtrace.io/tx/${dbJob.requestTxHash}`
+          : `https://testnet.snowtrace.io/address/${validationRegistryAddress}`,
+        agentId: dbJob.agentId || process.env.NEXT_PUBLIC_ERC8004_AGENT_ID || '294',
+        failureReason: dbJob.failureReason,
+      };
     }
 
     const customValidationFetcher = getValidationFetcherForTesting();
     if (customValidationFetcher && targetRequestHash) {
       const customVal = await customValidationFetcher(mission.slug, targetRequestHash);
       if (customVal) {
-        erc8004Validation = customVal;
-      }
-    } else if (targetRequestHash) {
-      const memoryRecord = getMemoryValidationRecord(targetRequestHash);
-      if (memoryRecord && memoryRecord.isComplete) {
         erc8004Validation = {
-          isComplete: true,
+          ...erc8004Validation,
+          ...customVal,
+        };
+      }
+    } else if (!dbJob && targetRequestHash) {
+      const memoryRecord = getMemoryValidationRecord(targetRequestHash);
+      if (memoryRecord) {
+        erc8004Validation = {
+          isComplete: memoryRecord.isComplete,
+          status: memoryRecord.status || (memoryRecord.isComplete ? 'RESPONSE_CONFIRMED' : 'LOCAL_EVALUATED'),
           score: memoryRecord.score,
           validatorAddress: memoryRecord.validatorAddress,
           tag: memoryRecord.tag,
           requestHash: targetRequestHash,
+          requestTxHash: null,
+          responseTxHash: memoryRecord.txHash || null,
+          unsignedRequest: memoryRecord.unsignedRequest || null,
           snowtraceUrl: memoryRecord.txHash
             ? `https://testnet.snowtrace.io/tx/${memoryRecord.txHash}`
             : `https://testnet.snowtrace.io/address/${validationRegistryAddress}`,
           agentId: memoryRecord.agentId,
+          failureReason: memoryRecord.failureReason || null,
         };
       } else if (validationRegistryAddress && mode === 'LIVE_FUJI' && !isSandbox) {
         try {
@@ -329,7 +369,18 @@ export async function GET(req: NextRequest, context: any) {
             transport: http(rpcUrl),
           });
 
-          const status = await client.readContract({
+          const isComplete = (await client.readContract({
+            address: validationRegistryAddress as `0x${string}`,
+            abi: [
+              parseAbiItem(
+                'function isValidationComplete(bytes32 requestHash) view returns (bool)'
+              ),
+            ],
+            functionName: 'isValidationComplete',
+            args: [targetRequestHash],
+          })) as boolean;
+
+          const status = (await client.readContract({
             address: validationRegistryAddress as `0x${string}`,
             abi: [
               parseAbiItem(
@@ -338,19 +389,22 @@ export async function GET(req: NextRequest, context: any) {
             ],
             functionName: 'getValidationStatus',
             args: [targetRequestHash],
-          });
+          })) as readonly [string, bigint, number, string, string, bigint];
 
           if (status && status[0] !== '0x0000000000000000000000000000000000000000' && status[5] > 0n) {
             erc8004Validation = {
-              isComplete: true,
+              isComplete: Boolean(isComplete),
+              status: isComplete ? 'RESPONSE_CONFIRMED' : 'RESPONSE_PENDING',
               score: Number(status[2]),
               validatorAddress: status[0],
               tag: status[4],
               requestHash: targetRequestHash,
-              snowtraceUrl: mission.slug === 'fuji-live-mission-s1b'
-                ? 'https://testnet.snowtrace.io/tx/0x62451c36b6488cf4423bd7427e560ac2e3de46144d7ba5c30d81c55df7fe1564'
-                : `https://testnet.snowtrace.io/address/${validationRegistryAddress}`,
+              requestTxHash: null,
+              responseTxHash: null,
+              unsignedRequest: null,
+              snowtraceUrl: `https://testnet.snowtrace.io/address/${validationRegistryAddress}`,
               agentId: status[1].toString(),
+              failureReason: null,
             };
           }
         } catch (err) {

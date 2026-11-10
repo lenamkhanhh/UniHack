@@ -318,14 +318,28 @@ export default function VerifyMissionProofPage() {
                   className={`px-2.5 py-0.5 rounded border font-bold ${
                     ercValidation?.isComplete
                       ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/40'
+                      : ercValidation?.status === 'REQUEST_PENDING'
+                      ? 'bg-amber-500/10 text-amber-300 border-amber-500/40'
+                      : ercValidation?.status === 'LOCAL_EVALUATED'
+                      ? 'bg-sky-500/10 text-sky-300 border-sky-500/40'
+                      : ercValidation?.status === 'FAILED'
+                      ? 'bg-red-500/10 text-red-300 border-red-500/40'
                       : 'bg-zinc-800/60 text-zinc-300 border-zinc-700/50'
                   }`}
                 >
                   {ercValidation?.isComplete
-                    ? `Validation Score: ${ercValidation.score}/100`
+                    ? `Validation Score: ${ercValidation.score}/100 (On-Chain Confirmed)`
+                    : ercValidation?.status === 'LOCAL_EVALUATED'
+                    ? `Local Evaluation: ${ercValidation.score}/100 (Snapshot Verified)`
+                    : ercValidation?.status === 'REQUEST_PENDING'
+                    ? 'Pending Owner On-Chain Request'
+                    : ercValidation?.status === 'RESPONSE_PENDING'
+                    ? 'Request On-Chain — Pending Validator Response'
+                    : ercValidation?.status === 'FAILED'
+                    ? `Validation Failed: ${ercValidation.failureReason || 'Error'}`
                     : 'Pending Post-Mission Validation'}
                 </span>
-                {ercValidation?.isComplete && (
+                {(ercValidation?.isComplete || ercValidation?.status === 'LOCAL_EVALUATED') && (
                   <span
                     data-testid="erc8004-tag-badge"
                     className="bg-cyan-950 text-cyan-300 border border-cyan-700 px-2 py-0.5 rounded text-[10px] font-bold"
@@ -335,7 +349,7 @@ export default function VerifyMissionProofPage() {
                 )}
               </div>
 
-              {ercValidation?.snowtraceUrl && (
+              {ercValidation?.isComplete && ercValidation?.snowtraceUrl && (
                 <a
                   href={ercValidation.snowtraceUrl}
                   target="_blank"
@@ -348,7 +362,7 @@ export default function VerifyMissionProofPage() {
               )}
             </div>
 
-            {ercValidation?.isComplete && (
+            {(ercValidation?.isComplete || ercValidation?.status === 'LOCAL_EVALUATED') && (
               <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-2 text-xs mt-2">
                 <div>
                   <span className="text-slate-300 block text-[10px]">Independent Validator EOA:</span>

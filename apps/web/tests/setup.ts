@@ -42,6 +42,8 @@ export async function clearDatabase() {
   await prisma.toolSession.deleteMany({});
   await prisma.treasuryRequest.deleteMany({});
   await prisma.missionFeedback.deleteMany({});
+  await (prisma as any).validationJob?.deleteMany?.({});
+  await (prisma as any).bountyAttempt?.deleteMany?.({});
   await prisma.authChallenge.deleteMany({});
   await prisma.mission.deleteMany({});
 
@@ -87,6 +89,7 @@ export async function createTestMission(params?: {
   payeeRoot?: string;
   publicPublished?: boolean;
   auditHeadHash?: string;
+  creationBlock?: bigint;
 }) {
   const stage = params?.stage || 'S1';
   if (stage === 'S2') {
@@ -122,6 +125,7 @@ export async function createTestMission(params?: {
       payeeRoot: params?.payeeRoot,
       publicPublished: params?.publicPublished ?? false,
       auditHeadHash: params?.auditHeadHash,
+      creationBlock: params?.creationBlock,
     },
   });
 

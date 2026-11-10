@@ -62,8 +62,11 @@ export async function POST(
         score: jobResult.validationResult.score,
         tag: jobResult.validationResult.tag,
         valid: jobResult.validationResult.valid,
+        status: jobResult.status,
         isRegisteredOnChain: jobResult.isRegisteredOnChain,
         responseTxHash: jobResult.responseTxHash,
+        requestTxHash: jobResult.requestTxHash,
+        unsignedRequest: jobResult.unsignedRequest,
       };
     } catch (jobErr) {
       // Soft-fail validation runner so close operation is never blocked

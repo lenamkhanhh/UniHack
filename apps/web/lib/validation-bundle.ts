@@ -19,11 +19,16 @@ export interface ValidationBundle {
   treasury: `0x${string}`;
   payees: string[];
   cap?: string;
+  creationBlock?: bigint;
+  snapshotBlock?: bigint;
 }
 
 export interface ValidationCheckResult {
   valid: boolean;
   score: number;
+  snapshotBlock?: string;
+  fromBlock?: string;
+  toBlock?: string;
   checks: {
     headMatchesOnChain: boolean;
     rootMatchesOnChain: boolean;
@@ -40,6 +45,9 @@ export interface ValidationCheckResult {
     executedCount: number;
     totalExecutedAmount: string;
     missionCap: string;
+    snapshotBlock?: string;
+    fromBlock?: string;
+    toBlock?: string;
     failedChecks: string[];
   };
 }
@@ -120,28 +128,41 @@ export async function validateBundleOnChain(
 ): Promise<ValidationCheckResult> {
   const treasuryAddress = getAddress(bundle.treasury);
 
-  // 1. Read on-chain anchored head
+  // Snapshot block for atomic reads across all contract state
+  const snapshotBlock =
+    toBlock ??
+    bundle.snapshotBlock ??
+    (typeof publicClient.getBlockNumber === 'function'
+      ? await publicClient.getBlockNumber().catch(() => 0n)
+      : 0n);
+
+  const readOpts = snapshotBlock > 0n ? { blockNumber: snapshotBlock } : {};
+
+  // 1. Read on-chain anchored head at snapshot block
   const onChainHead = (await publicClient.readContract({
     address: treasuryAddress,
     abi: TREASURY_READ_ABI,
     functionName: 'anchoredMissionProofs',
     args: [bundle.missionId],
+    ...readOpts,
   })) as `0x${string}`;
 
-  // 2. Read on-chain payee root
+  // 2. Read on-chain payee root at snapshot block
   const onChainRoot = (await publicClient.readContract({
     address: treasuryAddress,
     abi: TREASURY_READ_ABI,
     functionName: 'missionPayeeRoot',
     args: [bundle.missionId],
+    ...readOpts,
   })) as `0x${string}`;
 
-  // 3. Read mission parameters
+  // 3. Read mission parameters at snapshot block
   const missionData = (await publicClient.readContract({
     address: treasuryAddress,
     abi: TREASURY_READ_ABI,
     functionName: 'missions',
     args: [bundle.missionId],
+    ...readOpts,
   })) as readonly [`0x${string}`, `0x${string}`, bigint, bigint, boolean, boolean];
 
   const missionCap = missionData[2];
@@ -160,23 +181,44 @@ export async function validateBundleOnChain(
   const treeResult = computePayeeMerkleTree(bundle.payees);
   const payeesGenerateRoot = treeResult.root.toLowerCase() === bundle.payeeRoot.toLowerCase();
 
-  // 4. Query Executed events for this mission in chunks <= 90 blocks (Avalanche Fuji public RPC limit: 100 blocks)
-  const targetStartBlock = fromBlock ?? 60689760n;
-  const targetEndBlock = toBlock ?? (fromBlock ? targetStartBlock + 90n : 60689770n);
+  // 4. Query Executed events for this mission in chunks <= 90 blocks
+  // No hardcoded 60689760 block window: use real creationBlock or explicit scan range
+  const targetEndBlock = snapshotBlock;
+  const targetStartBlock =
+    fromBlock ??
+    bundle.creationBlock ??
+    (targetEndBlock > 90n ? targetEndBlock - 90n : 0n);
   const CHUNK_SIZE = 90n;
 
   const executedLogs: any[] = [];
-  for (let b = targetStartBlock; b <= targetEndBlock; b += CHUNK_SIZE) {
-    const end = b + CHUNK_SIZE - 1n > targetEndBlock ? targetEndBlock : b + CHUNK_SIZE - 1n;
-    const logs = await publicClient.getLogs({
-      address: treasuryAddress,
-      event: EXECUTED_EVENT_ABI,
-      fromBlock: b,
-      toBlock: end,
-    });
-    for (const log of logs) {
-      if ((log.args as any).missionId?.toLowerCase() === bundle.missionId.toLowerCase()) {
-        executedLogs.push(log);
+  const seenLogKeys = new Set<string>();
+
+  if (targetEndBlock >= targetStartBlock) {
+    for (let b = targetStartBlock; b <= targetEndBlock; b += CHUNK_SIZE) {
+      const end = b + CHUNK_SIZE - 1n > targetEndBlock ? targetEndBlock : b + CHUNK_SIZE - 1n;
+      const logs = await publicClient.getLogs({
+        address: treasuryAddress,
+        event: EXECUTED_EVENT_ABI,
+        fromBlock: b,
+        toBlock: end,
+      });
+      for (const log of logs) {
+        if ((log.args as any).missionId?.toLowerCase() === bundle.missionId.toLowerCase()) {
+          const logKey = log.transactionHash
+            ? `${log.transactionHash}-${log.logIndex ?? (log.args as any).id?.toString() ?? ''}`
+            : (log.args as any).id !== undefined
+            ? `id-${(log.args as any).id?.toString()}`
+            : null;
+
+          if (logKey) {
+            if (!seenLogKeys.has(logKey)) {
+              seenLogKeys.add(logKey);
+              executedLogs.push(log);
+            }
+          } else {
+            executedLogs.push(log);
+          }
+        }
       }
     }
   }
@@ -223,6 +265,9 @@ export async function validateBundleOnChain(
   return {
     valid,
     score,
+    snapshotBlock: snapshotBlock.toString(),
+    fromBlock: targetStartBlock.toString(),
+    toBlock: targetEndBlock.toString(),
     checks,
     tag,
     details: {
@@ -232,6 +277,9 @@ export async function validateBundleOnChain(
       executedCount: executedLogs.length,
       totalExecutedAmount: totalExecutedAmount.toString(),
       missionCap: missionCap.toString(),
+      snapshotBlock: snapshotBlock.toString(),
+      fromBlock: targetStartBlock.toString(),
+      toBlock: targetEndBlock.toString(),
       failedChecks,
     },
   };

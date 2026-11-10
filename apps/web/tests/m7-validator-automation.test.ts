@@ -64,12 +64,14 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
         ];
 
     return {
+      getBlockNumber: vi.fn().mockResolvedValue(60689770n),
       readContract: vi.fn().mockImplementation(async ({ functionName }) => {
         if (functionName === 'anchoredMissionProofs') return head;
         if (functionName === 'missionPayeeRoot') return root;
         if (functionName === 'missions') {
           return [bundle.missionId, bundle.treasury, 2000000n, 1794670342n, true, true];
         }
+        if (functionName === 'isValidationComplete') return true;
         if (functionName === 'getValidationStatus') {
           return ['0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5', 294n, 100, '0x0', 'verified-full', 1700000000n];
         }
@@ -125,6 +127,14 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     expect(jobResult.validationResult.checks.headMatchesOnChain).toBe(true);
     expect(jobResult.validationResult.checks.rootMatchesOnChain).toBe(true);
     expect(jobResult.validationResult.checks.executedPayeesValid).toBe(true);
+    expect(jobResult.status).toBe('LOCAL_EVALUATED');
+
+    // Verify persistent database record populated
+    const dbJob = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+    expect(dbJob).toBeDefined();
+    expect(dbJob?.score).toBe(100);
+    expect(dbJob?.status).toBe('LOCAL_EVALUATED');
+    expect(dbJob?.tag).toBe('verified-full');
 
     // Verify in-memory record populated
     const memRecord = getMemoryValidationRecord(jobResult.requestHash);
@@ -198,7 +208,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
 
     const json = await res.json();
     expect(json.erc8004Validation).toBeDefined();
-    expect(json.erc8004Validation.isComplete).toBe(true);
+    expect(json.erc8004Validation.status).toBe('LOCAL_EVALUATED');
     expect(json.erc8004Validation.score).toBe(100);
     expect(json.erc8004Validation.tag).toBe('verified-full');
     expect(json.erc8004Validation.requestHash).toBe(jobResult.requestHash);
@@ -249,7 +259,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
   });
 
   // 6. Live Anvil Fork test: Tamper detection -> Score 0 on-chain with dedicated validator key
-  it.skipIf(!process.env.VALIDATOR_PRIVATE_KEY?.trim())('M7-06: Live Anvil fork: validator evaluates tampered state -> submits score 0 -> records on-chain', async () => {
+  it.skipIf(!process.env.FORK_ENABLED || !process.env.VALIDATOR_PRIVATE_KEY?.trim())('M7-06: Live Anvil fork: validator evaluates tampered state -> submits score 0 -> records on-chain', async () => {
     const forkRpc = 'http://127.0.0.1:8546';
     const publicClient = createPublicClient({
       chain: avalancheFuji,
@@ -330,5 +340,191 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     expect(agentId).toBe(294n);
     expect(recordedScore).toBe(0);
     expect(recordedTag).toBe(jobResult.validationResult.tag);
+  });
+
+  // A4-01: Mission outside demo block range (e.g. block 75000000..75000050) evaluates correctly against snapshot block without hardcoded 60689760 window
+  it('M7-A4-01: mission outside demo block range (block 75000000..75000050) evaluates correctly against snapshot block without hardcoded 60689760 window', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const tree = computePayeeMerkleTree(payees);
+
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 75000000n,
+    });
+
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    expect(bundle.creationBlock).toBe(75000000n);
+
+    let getLogsRange = { from: 0n, to: 0n };
+    const mockClient = {
+      getBlockNumber: vi.fn().mockResolvedValue(75000050n),
+      readContract: vi.fn().mockImplementation(async ({ functionName, blockNumber }) => {
+        expect(blockNumber).toBe(75000050n); // Snapshot block enforced
+        if (functionName === 'anchoredMissionProofs') return bundle.auditHead;
+        if (functionName === 'missionPayeeRoot') return bundle.payeeRoot;
+        if (functionName === 'missions') {
+          return [bundle.missionId, bundle.treasury, 2000000n, 1794670342n, true, true];
+        }
+        throw new Error(`Unexpected functionName: ${functionName}`);
+      }),
+      getLogs: vi.fn().mockImplementation(async ({ fromBlock, toBlock }) => {
+        getLogsRange = { from: fromBlock, to: toBlock };
+        return [
+          {
+            args: {
+              id: 1n,
+              to: bundle.payees[0],
+              amount: 500000n,
+              missionId: bundle.missionId,
+            },
+          },
+        ];
+      }),
+    } as any;
+
+    const jobResult = await runMissionValidatorJob(mission.slug, {
+      publicClient: mockClient,
+      fromBlock: 75000000n,
+      toBlock: 75000050n,
+      skipOnChainBroadcast: true,
+    });
+
+    expect(jobResult.validationResult.valid).toBe(true);
+    expect(jobResult.validationResult.score).toBe(100);
+    expect(getLogsRange.from).toBe(75000000n);
+    expect(getLogsRange.to).toBe(75000050n);
+    expect(jobResult.validationResult.details.snapshotBlock).toBe('75000050');
+  });
+
+  // A4-02: When request does not exist on-chain and no owner signer provided, job records REQUEST_PENDING with unsignedRequest
+  it('M7-A4-02: when request does not exist on-chain and no owner signer provided, job records REQUEST_PENDING with unsignedRequest and does NOT broadcast response', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const tree = computePayeeMerkleTree(payees);
+
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+    });
+
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const mockClient = createMockPublicClient(bundle);
+    mockClient.readContract = vi.fn().mockImplementation(async ({ functionName }) => {
+      if (functionName === 'anchoredMissionProofs') return bundle.auditHead;
+      if (functionName === 'missionPayeeRoot') return bundle.payeeRoot;
+      if (functionName === 'missions') {
+        return [bundle.missionId, bundle.treasury, 2000000n, 1794670342n, true, true];
+      }
+      if (functionName === 'isValidationComplete') return false;
+      if (functionName === 'getValidationStatus') {
+        return ['0x0000000000000000000000000000000000000000', 0n, 0, '0x0', '', 0n];
+      }
+      throw new Error(`Unexpected function: ${functionName}`);
+    });
+
+    const jobResult = await runMissionValidatorJob(mission.slug, {
+      publicClient: mockClient,
+      skipOnChainBroadcast: false,
+    });
+
+    expect(jobResult.status).toBe('REQUEST_PENDING');
+    expect(jobResult.isRegisteredOnChain).toBe(false);
+    expect(jobResult.unsignedRequest).toBeDefined();
+    expect(jobResult.unsignedRequest.functionName).toBe('validationRequest');
+    expect(jobResult.unsignedRequest.requestHash).toBe(jobResult.requestHash);
+
+    // Verify DB record matches exactly
+    const dbJob = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+    expect(dbJob?.status).toBe('REQUEST_PENDING');
+    expect(dbJob?.unsignedRequest).toContain('validationRequest');
+  });
+
+  // A4-03: When request exists on-chain but response broadcast fails, job records FAILED
+  it('M7-A4-03: when request exists on-chain but response broadcast fails, job records FAILED and does not mark complete', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const tree = computePayeeMerkleTree(payees);
+
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+    });
+
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const mockClient = createMockPublicClient(bundle);
+    mockClient.readContract = vi.fn().mockImplementation(async ({ functionName }) => {
+      if (functionName === 'anchoredMissionProofs') return bundle.auditHead;
+      if (functionName === 'missionPayeeRoot') return bundle.payeeRoot;
+      if (functionName === 'missions') {
+        return [bundle.missionId, bundle.treasury, 2000000n, 1794670342n, true, true];
+      }
+      if (functionName === 'isValidationComplete') return false;
+      if (functionName === 'getValidationStatus') {
+        return ['0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5', 294n, 0, '0x0', '', 1700000000n];
+      }
+      throw new Error(`Unexpected function: ${functionName}`);
+    });
+
+    const failingValidatorWallet = {
+      writeContract: vi.fn().mockRejectedValue(new Error('RPC_GAS_ESTIMATION_FAILED')),
+    } as any;
+
+    const jobResult = await runMissionValidatorJob(mission.slug, {
+      publicClient: mockClient,
+      validatorWalletClient: failingValidatorWallet,
+      validatorAccount: { address: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5' },
+      skipOnChainBroadcast: false,
+    });
+
+    expect(jobResult.status).toBe('FAILED');
+    expect(jobResult.isRegisteredOnChain).toBe(false);
+    expect(jobResult.failureReason).toContain('RPC_GAS_ESTIMATION_FAILED');
+
+    const dbJob = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+    expect(dbJob?.status).toBe('FAILED');
+    expect(dbJob?.failureReason).toContain('RPC_GAS_ESTIMATION_FAILED');
+  });
+
+  // A4-04: Process restart simulation: memory cache is cleared, but /api/verify reads state directly from database
+  it('M7-A4-04: process restart simulation: memory cache is cleared, but /api/verify reads state directly from database', async () => {
+    const { mission, spendToken } = await createTestMission({
+      publicPublished: true,
+      auditHeadHash: TEST_HEAD_HASH,
+    });
+
+    // Seed a confirmed validation job in database
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+        status: 'RESPONSE_CONFIRMED',
+        score: 100,
+        tag: 'verified-full',
+        validatorAddress: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+        agentId: '294',
+        responseTxHash: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef',
+      },
+    });
+
+    // Simulate complete process restart: wipe RAM map
+    clearMemoryValidationCache();
+    expect(getMemoryValidationRecord('0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef')).toBeUndefined();
+
+    // Query API
+    const req = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`, {
+      headers: { authorization: `Bearer ${spendToken}` },
+    });
+    const res = await verifyRouteGET(req, { params: Promise.resolve({ missionId: mission.slug }) });
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.erc8004Validation.isComplete).toBe(true);
+    expect(json.erc8004Validation.status).toBe('RESPONSE_CONFIRMED');
+    expect(json.erc8004Validation.score).toBe(100);
+    expect(json.erc8004Validation.validatorAddress).toBe('0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5');
+    expect(json.erc8004Validation.snowtraceUrl).toContain('0xabcdefabcdefabcdef');
   });
 });

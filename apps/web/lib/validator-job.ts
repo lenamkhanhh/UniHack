@@ -104,7 +104,13 @@ export function getErc8004AgentId(): bigint {
   return DEFAULT_ERC8004_AGENT_ID;
 }
 
-// In-memory registry cache to record validation status for tests and offline operations
+export type ValidationJobStatus =
+  | 'LOCAL_EVALUATED'
+  | 'REQUEST_PENDING'
+  | 'RESPONSE_PENDING'
+  | 'RESPONSE_CONFIRMED'
+  | 'FAILED';
+
 export interface InMemoryValidationRecord {
   requestHash: `0x${string}`;
   validatorAddress: string;
@@ -114,9 +120,12 @@ export interface InMemoryValidationRecord {
   tag: string;
   lastUpdate: number;
   isComplete: boolean;
+  status: ValidationJobStatus;
   txHash?: string;
   bundle?: ValidationBundle;
   details?: any;
+  unsignedRequest?: any;
+  failureReason?: string;
 }
 
 const memoryValidationCache = new Map<string, InMemoryValidationRecord>();
@@ -131,6 +140,26 @@ export function setMemoryValidationRecord(record: InMemoryValidationRecord): voi
 
 export function clearMemoryValidationCache(): void {
   memoryValidationCache.clear();
+}
+
+export async function getValidationJobFromDb(slug: string) {
+  try {
+    return await prisma.validationJob.findUnique({
+      where: { missionSlug: slug },
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function getValidationJobByRequestHash(requestHash: string) {
+  try {
+    return await prisma.validationJob.findUnique({
+      where: { requestHash },
+    });
+  } catch {
+    return null;
+  }
 }
 
 export type ValidationFetcher = (missionId: string, requestHash: string) => Promise<any | null>;
@@ -215,6 +244,7 @@ export async function buildMissionValidationBundle(
     treasury,
     payees,
     cap: mission.treasuryCap?.toString(),
+    creationBlock: mission.creationBlock ?? undefined,
   };
 
   return bundle;
@@ -237,9 +267,12 @@ export interface ValidatorJobResult {
   bundle: ValidationBundle;
   requestHash: `0x${string}`;
   validationResult: ValidationCheckResult;
+  status: ValidationJobStatus;
   isRegisteredOnChain: boolean;
   requestTxHash?: string;
   responseTxHash?: string;
+  unsignedRequest?: any;
+  failureReason?: string;
 }
 
 /**
@@ -275,6 +308,9 @@ export async function runMissionValidatorJob(
 
   // 1. Evaluate bundle against on-chain state directly
   let validationResult: ValidationCheckResult;
+  let status: ValidationJobStatus = 'LOCAL_EVALUATED';
+  let failureReason: string | undefined;
+
   try {
     validationResult = await validateBundleOnChain(
       publicClient,
@@ -283,6 +319,8 @@ export async function runMissionValidatorJob(
       options.toBlock
     );
   } catch (err: any) {
+    status = 'FAILED';
+    failureReason = `Evaluation error: ${err.message?.slice(0, 50)}`;
     validationResult = {
       valid: false,
       score: 0,
@@ -325,6 +363,7 @@ export async function runMissionValidatorJob(
   let requestTxHash: string | undefined;
   let responseTxHash: string | undefined;
   let isRegisteredOnChain = false;
+  let unsignedRequest: any = null;
 
   const validatorKey = getValidatorPrivateKey();
   const validatorAccount =
@@ -335,33 +374,41 @@ export async function runMissionValidatorJob(
     process.env.VALIDATOR_ADDRESS ||
     '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5';
 
-  // 3. Optional On-Chain Submission if enabled and not skipped
-  if (!options.skipOnChainBroadcast && validatorAccount) {
+  // 3. On-Chain Submission if enabled and not skipped
+  if (!options.skipOnChainBroadcast && status !== 'FAILED') {
+    let requestExists = false;
+    let onChainCompleted = false;
+
     try {
-      const validatorWallet =
-        options.validatorWalletClient ||
-        createWalletClient({
-          account: validatorAccount,
-          chain: avalancheFuji,
-          transport: http(rpcUrl),
-        });
+      const isComp = await publicClient.readContract({
+        address: registryAddress,
+        abi: VALIDATION_REGISTRY_ABI,
+        functionName: 'isValidationComplete',
+        args: [requestHash],
+      });
+      onChainCompleted = Boolean(isComp);
 
-      // Ensure request exists on-chain; submit validationRequest from requester if needed
-      let requestExists = false;
-      try {
-        const currentStatus = (await publicClient.readContract({
-          address: registryAddress,
-          abi: VALIDATION_REGISTRY_ABI,
-          functionName: 'getValidationStatus',
-          args: [requestHash],
-        })) as readonly [string, bigint, number, string, string, bigint];
-        requestExists = currentStatus[5] > 0n;
-      } catch {
-        // getValidationStatus reverts on ValidationRegistry if request doesn't exist
-        requestExists = false;
-      }
+      const currentStatus = (await publicClient.readContract({
+        address: registryAddress,
+        abi: VALIDATION_REGISTRY_ABI,
+        functionName: 'getValidationStatus',
+        args: [requestHash],
+      })) as readonly [string, bigint, number, string, string, bigint];
 
-      if (!requestExists && options.ownerWalletClient && options.ownerWalletClient.account) {
+      requestExists =
+        currentStatus[0] !== '0x0000000000000000000000000000000000000000' &&
+        currentStatus[5] > 0n;
+    } catch {
+      requestExists = false;
+      onChainCompleted = false;
+    }
+
+    if (onChainCompleted) {
+      status = 'RESPONSE_CONFIRMED';
+      isRegisteredOnChain = true;
+    } else if (!requestExists) {
+      if (options.ownerWalletClient && options.ownerWalletClient.account) {
+        // Explicit owner signer provided (e.g. in test or authorized session)
         try {
           const requestURI = `evidence/validation/${slug}.json`;
           requestTxHash = await options.ownerWalletClient.writeContract({
@@ -372,36 +419,140 @@ export async function runMissionValidatorJob(
             chain: avalancheFuji,
             account: options.ownerWalletClient.account,
           });
-          await publicClient.waitForTransactionReceipt({ hash: requestTxHash as `0x${string}` });
+          const reqReceipt = await publicClient.waitForTransactionReceipt({
+            hash: requestTxHash as `0x${string}`,
+          });
+          if (reqReceipt.status === 'success') {
+            requestExists = true;
+            status = 'RESPONSE_PENDING';
+          } else {
+            status = 'FAILED';
+            failureReason = 'ValidationRequest transaction reverted';
+          }
         } catch (reqErr: any) {
-          console.warn('[ValidationRequest Broadcast Error]', reqErr?.message || reqErr);
+          status = 'FAILED';
+          failureReason = reqErr?.message || 'Failed submitting validationRequest';
         }
-      }
-
-      // Submit response on-chain
-      const responseURI = `evidence/validation/${slug}.response.json`;
-      responseTxHash = await validatorWallet.writeContract({
-        address: registryAddress,
-        abi: VALIDATION_REGISTRY_ABI,
-        functionName: 'validationResponse',
-        args: [
+      } else {
+        // Backend does not hold owner key. Do NOT forge or assume request exists.
+        status = 'REQUEST_PENDING';
+        unsignedRequest = {
+          to: registryAddress,
+          functionName: 'validationRequest',
+          validatorAddress,
+          agentId: agentId.toString(),
+          requestURI: `evidence/validation/${slug}.json`,
           requestHash,
-          validationResult.score,
-          responseURI,
-          responseHash,
-          validationResult.tag,
-        ],
-        chain: avalancheFuji,
-        account: validatorAccount,
-      });
-      await publicClient.waitForTransactionReceipt({ hash: responseTxHash as `0x${string}` });
-      isRegisteredOnChain = true;
-    } catch (broadcastErr: any) {
-      console.warn('[Validator On-Chain Broadcast Error]', broadcastErr?.message || broadcastErr);
+        };
+      }
+    } else {
+      status = 'RESPONSE_PENDING';
+    }
+
+    // Submit response on-chain only if request exists and validator account available
+    if (requestExists && !onChainCompleted && validatorAccount && status !== 'FAILED') {
+      try {
+        const validatorWallet =
+          options.validatorWalletClient ||
+          createWalletClient({
+            account: validatorAccount,
+            chain: avalancheFuji,
+            transport: http(rpcUrl),
+          });
+
+        const responseURI = `evidence/validation/${slug}.response.json`;
+        responseTxHash = await validatorWallet.writeContract({
+          address: registryAddress,
+          abi: VALIDATION_REGISTRY_ABI,
+          functionName: 'validationResponse',
+          args: [
+            requestHash,
+            validationResult.score,
+            responseURI,
+            responseHash,
+            validationResult.tag,
+          ],
+          chain: avalancheFuji,
+          account: validatorAccount,
+        });
+
+        const respReceipt = await publicClient.waitForTransactionReceipt({
+          hash: responseTxHash as `0x${string}`,
+        });
+
+        if (respReceipt.status === 'success') {
+          const confirmed = await publicClient.readContract({
+            address: registryAddress,
+            abi: VALIDATION_REGISTRY_ABI,
+            functionName: 'isValidationComplete',
+            args: [requestHash],
+          });
+          if (confirmed) {
+            status = 'RESPONSE_CONFIRMED';
+            isRegisteredOnChain = true;
+          } else {
+            status = 'FAILED';
+            failureReason = 'isValidationComplete returned false after response broadcast';
+          }
+        } else {
+          status = 'FAILED';
+          failureReason = 'ValidationResponse transaction reverted';
+        }
+      } catch (broadcastErr: any) {
+        status = 'FAILED';
+        failureReason = broadcastErr?.message || 'Validator broadcast failed';
+      }
     }
   }
 
-  // 4. Update memory cache and write evidence file if directory exists
+  // 4. Persist to database (resilient to restart)
+  try {
+    await prisma.validationJob.upsert({
+      where: { missionSlug: slug },
+      create: {
+        missionSlug: slug,
+        missionId: bundle.missionId,
+        requestHash,
+        status,
+        mode: getPaymentMode(),
+        fromBlock: options.fromBlock,
+        toBlock: options.toBlock,
+        snapshotBlock: validationResult.snapshotBlock ? BigInt(validationResult.snapshotBlock) : null,
+        evaluationResult: JSON.stringify(validationResult),
+        score: validationResult.score,
+        tag: validationResult.tag,
+        validatorAddress,
+        agentId: agentId.toString(),
+        unsignedRequest: unsignedRequest ? JSON.stringify(unsignedRequest) : null,
+        requestTxHash,
+        responseTxHash,
+        failureReason,
+        retryCount: 0,
+      },
+      update: {
+        requestHash,
+        status,
+        mode: getPaymentMode(),
+        fromBlock: options.fromBlock,
+        toBlock: options.toBlock,
+        snapshotBlock: validationResult.snapshotBlock ? BigInt(validationResult.snapshotBlock) : null,
+        evaluationResult: JSON.stringify(validationResult),
+        score: validationResult.score,
+        tag: validationResult.tag,
+        validatorAddress,
+        agentId: agentId.toString(),
+        unsignedRequest: unsignedRequest ? JSON.stringify(unsignedRequest) : null,
+        requestTxHash: requestTxHash ?? undefined,
+        responseTxHash: responseTxHash ?? undefined,
+        failureReason,
+        retryCount: { increment: 1 },
+      },
+    });
+  } catch (dbErr) {
+    console.warn('[ValidationJob DB Persist Warning]', dbErr);
+  }
+
+  // 5. Update memory cache and write evidence file if directory exists
   const memRecord: InMemoryValidationRecord = {
     requestHash,
     validatorAddress,
@@ -410,10 +561,13 @@ export async function runMissionValidatorJob(
     responseHash,
     tag: validationResult.tag,
     lastUpdate: Math.floor(Date.now() / 1000),
-    isComplete: true,
+    isComplete: status === 'RESPONSE_CONFIRMED',
+    status,
     txHash: responseTxHash,
     bundle,
     details: validationResult.details,
+    unsignedRequest,
+    failureReason,
   };
   setMemoryValidationRecord(memRecord);
 
@@ -431,8 +585,11 @@ export async function runMissionValidatorJob(
     bundle,
     requestHash,
     validationResult,
+    status,
     isRegisteredOnChain,
     requestTxHash,
     responseTxHash,
+    unsignedRequest,
+    failureReason,
   };
 }
