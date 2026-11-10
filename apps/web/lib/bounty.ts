@@ -90,6 +90,15 @@ export class DatabaseUnavailableError extends Error {
  * If TRUSTED_INGRESS is not configured or untrusted, returns a conservative shared bucket
  * so that arbitrary caller-supplied headers cannot manipulate or reset rate limits.
  */
+/**
+ * Resolves the client IP through configured reverse proxy trust boundaries.
+ * In production, only 'cloudflare' is accepted as a trusted ingress platform because
+ * Cloudflare edge proxies strip and overwrite `cf-connecting-ip` with the validated client TCP IP.
+ * (Assumption: Origin server enforces Cloudflare Authenticated Origin Pulls / IP firewall).
+ *
+ * For unverified, direct, or unknown ingress, returns a conservative shared bucket ('shared-public-bucket')
+ * to ensure that caller-supplied headers (such as x-forwarded-for) cannot reset or manipulate quota windows.
+ */
 export function resolveClientIp(headers: {
   get: (name: string) => string | null;
 }): { clientIp: string; isTrusted: boolean; trustReason: string } {
@@ -100,25 +109,20 @@ export function resolveClientIp(headers: {
     if (cfIp && cfIp.trim()) {
       return { clientIp: cfIp.trim(), isTrusted: true, trustReason: 'cloudflare:cf-connecting-ip' };
     }
-  } else if (trustedIngress === 'google-cloud' || trustedIngress === 'gcp') {
-    const forwarded = headers.get('x-forwarded-for');
-    if (forwarded) {
-      const parts = forwarded.split(',').map((s) => s.trim()).filter(Boolean);
-      if (parts.length > 0) {
-        return { clientIp: parts[0], isTrusted: true, trustReason: 'gcp:x-forwarded-for' };
-      }
-    }
-  } else if (trustedIngress === 'custom' || trustedIngress === 'test' || process.env.NODE_ENV === 'test') {
-    const candidate = headers.get('cf-connecting-ip') || headers.get('x-forwarded-for') || headers.get('x-real-ip');
-    if (candidate) {
-      const first = candidate.split(',')[0].trim();
+  }
+
+  // Explicit test harness injection (strictly enabled only when TEST_CLIENT_IP_ENABLED=1)
+  if (process.env.TEST_CLIENT_IP_ENABLED === '1') {
+    const testIp = headers.get('x-test-client-ip') || headers.get('x-forwarded-for');
+    if (testIp) {
+      const first = testIp.split(',')[0].trim();
       if (first) {
-        return { clientIp: first, isTrusted: true, trustReason: 'test-harness:forwarded' };
+        return { clientIp: first, isTrusted: true, trustReason: 'test-harness' };
       }
     }
   }
 
-  // Without a verified trusted ingress identity, use a conservative shared unknown/global bucket
+  // Fallback for unverified / untrusted ingress: map to conservative shared public bucket
   return { clientIp: 'shared-public-bucket', isTrusted: false, trustReason: 'untrusted-ingress-fallback' };
 }
 
@@ -129,7 +133,14 @@ const globalRateLimitTimestamps: number[] = [];
 /**
  * Atomically reserves a rate limit slot in PostgreSQL BEFORE calling expensive model or RPC.
  * Per-minute IP limit (5/min) and 24-hour global limit (300/day) are enforced together.
- * Database failure fails closed and denies public expensive work (does not fall back to RAM).
+ *
+ * Concurrency & Invariant Guarantees:
+ * 1. Acquires fixed global advisory lock (999999999) FIRST, then IP advisory lock (hashtext(ipHash)) SECOND.
+ *    This strict two-phase locking order eliminates deadlocks and serializes all global count checks across
+ *    independent worker processes, preventing concurrent interleaving oversubscription (e.g. 305/300).
+ * 2. Every reservation created in the window (status: RESERVED, COMPLETED, FAILED, EXPIRED) consumes quota.
+ *    Failed or expired work does NOT refund or reset the quota allowance, preventing unlimited costly retries.
+ * 3. Database failure fails closed and denies public expensive work (does not fall back to RAM).
  */
 export async function reserveBountyQuota(
   ipHash: string,
@@ -148,65 +159,34 @@ export async function reserveBountyQuota(
 
   try {
     return await db.$transaction(async (tx) => {
-      // Serialize concurrent reservations for the same IP hash
+      // 1. Strict global lock first (fixed key 999999999), then IP lock second
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(999999999)`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ipHash}))`;
 
-      // 1. Expire stale reservations
-      await tx.bountyQuotaReservation.updateMany({
+      // 2. Count all IP reservations created in the last 1 minute (regardless of status/lease)
+      const ipReservationsCount = await tx.bountyQuotaReservation.count({
         where: {
-          status: 'RESERVED',
-          leaseExpiresAt: { lt: now },
-        },
-        data: {
-          status: 'EXPIRED',
+          ipHash,
+          source: 'public',
+          createdAt: { gte: oneMinuteAgo },
         },
       });
 
-      // 2. Count active IP reservations + completed IP attempts in the last 1 minute
-      const [ipReservationsCount, ipAttemptsCount] = await Promise.all([
-        tx.bountyQuotaReservation.count({
-          where: {
-            ipHash,
-            source: 'public',
-            status: 'RESERVED',
-            leaseExpiresAt: { gte: now },
-            createdAt: { gte: oneMinuteAgo },
-          },
-        }),
-        tx.bountyAttempt.count({
-          where: {
-            ipHash,
-            source: 'public',
-            timestamp: { gte: oneMinuteAgo },
-          },
-        }),
-      ]);
-
-      if (ipReservationsCount + ipAttemptsCount >= 5) {
+      if (ipReservationsCount >= 5) {
         throw new QuotaExceededError(
           'Quá giới hạn số lượt thử từ IP của bạn (tối đa 5 lượt/phút). Vui lòng thử lại sau 1 phút.'
         );
       }
 
-      // 3. Count active global reservations + completed global attempts in the last 24 hours
-      const [globalReservationsCount, globalAttemptsCount] = await Promise.all([
-        tx.bountyQuotaReservation.count({
-          where: {
-            source: 'public',
-            status: 'RESERVED',
-            leaseExpiresAt: { gte: now },
-            createdAt: { gte: oneDayAgo },
-          },
-        }),
-        tx.bountyAttempt.count({
-          where: {
-            source: 'public',
-            timestamp: { gte: oneDayAgo },
-          },
-        }),
-      ]);
+      // 3. Count all global reservations created in the last 24 hours (regardless of status/lease)
+      const globalReservationsCount = await tx.bountyQuotaReservation.count({
+        where: {
+          source: 'public',
+          createdAt: { gte: oneDayAgo },
+        },
+      });
 
-      if (globalReservationsCount + globalAttemptsCount >= 300) {
+      if (globalReservationsCount >= 300) {
         throw new QuotaExceededError(
           'Quá giới hạn bảo vệ toàn cục của hệ thống (tối đa 300 lượt/ngày). Vui lòng thử lại sau.'
         );
@@ -475,6 +455,25 @@ export async function simulateFujiProposeWithProof(
   amountAtomic: bigint,
   reason: string
 ): Promise<{ success: boolean; onchainResult: string; status: SimulationStatus }> {
+  // Support deterministic offline stub simulation for hermetic local test suites
+  if (process.env.STUB_BOUNTY_SIMULATION === '1') {
+    const isPayeeAuthorized = BOUNTY_PAYEES.some(
+      (p) => p.toLowerCase() === to.toLowerCase()
+    );
+    if (!isPayeeAuthorized) {
+      return {
+        success: false,
+        onchainResult: 'PayeeNotInMissionSet',
+        status: 'REVERTED',
+      };
+    }
+    return {
+      success: true,
+      onchainResult: 'TRANSACTION_SIMULATED_SUCCESS_POTENTIAL_BYPASS',
+      status: 'BYPASS',
+    };
+  }
+
   const rpcUrl = process.env.AVALANCHE_FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
   const publicClient = createPublicClient({
     chain: avalancheFuji,
