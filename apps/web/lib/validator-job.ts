@@ -440,19 +440,22 @@ export async function reconcileMissionCreationReceipt(
 
 export interface InMemoryValidationRecord {
   requestHash: string;
-  validatorAddress: string;
-  agentId: string;
-  score: number;
-  responseHash: string;
-  tag: string;
-  lastUpdate: number;
-  isComplete: boolean;
+  validatorAddress?: string;
+  agentId?: string;
+  score?: number;
+  responseHash?: string;
+  tag?: string;
+  lastUpdate?: number;
+  isComplete?: boolean;
   status: string;
   txHash?: string;
   bundle?: ValidationBundle;
   details?: any;
   unsignedRequest?: any;
   failureReason?: string;
+  isRegisteredOnChain?: boolean;
+  requestTxHash?: string | null;
+  responseTxHash?: string | null;
 }
 
 const memoryValidationCache = new Map<string, InMemoryValidationRecord>();
@@ -777,7 +780,7 @@ export async function advanceValidationJob(
   }
 
   // 1. Acquire or verify lease
-  let leaseToken = options.leaseToken;
+  let leaseToken: string = options.leaseToken || '';
   let job: any = null;
 
   if (leaseToken) {
@@ -849,8 +852,12 @@ export async function advanceValidationJob(
       leaseToken = newLeaseToken;
     } else {
       job = claim.job || claim;
-      leaseToken = claim.leaseToken;
+      leaseToken = claim.leaseToken || '';
     }
+  }
+
+  if (!leaseToken) {
+    throw new Error('Failed to acquire valid lease token');
   }
 
   const registryAddress = getValidationRegistryAddress();
@@ -888,7 +895,7 @@ export async function advanceValidationJob(
         return {
           bundle,
           requestHash: job.requestHash as Hex,
-          validationResult: { valid: false, score: 0, checks: {} as any, tag: 'STALE_CONTEXT', details: {} },
+          validationResult: { valid: false, score: 0, checks: {} as any, tag: 'STALE_CONTEXT', details: {} as any },
           status: 'STALE_CONTEXT',
           isRegisteredOnChain: false,
           failureReason: 'STALE_CONTEXT: mission auditHeadHash mutated after validation job was frozen',
@@ -904,7 +911,7 @@ export async function advanceValidationJob(
         return {
           bundle,
           requestHash: job.requestHash as Hex,
-          validationResult: { valid: false, score: 0, checks: {} as any, tag: 'STALE_CONTEXT', details: {} },
+          validationResult: { valid: false, score: 0, checks: {} as any, tag: 'STALE_CONTEXT', details: {} as any },
           status: 'STALE_CONTEXT',
           isRegisteredOnChain: false,
           failureReason: 'STALE_CONTEXT: mission payeeRoot mutated after validation job was frozen',
@@ -947,7 +954,7 @@ export async function advanceValidationJob(
         return {
           bundle,
           requestHash,
-          validationResult: { valid: false, score: 0, checks: {} as any, tag: 'EVALUATION_ERROR', details: {} },
+          validationResult: { valid: false, score: 0, checks: {} as any, tag: 'EVALUATION_ERROR', details: {} as any },
           status: 'FAILED',
           isRegisteredOnChain: false,
           failureReason: `Evaluation error: ${err.message?.slice(0, 50)}`,
