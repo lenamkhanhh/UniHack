@@ -282,11 +282,12 @@ test.describe('A2: Passkey Mission Authority (RIP-7212 Precompile 0x100 & Real W
     });
 
     let mockRpIdHash = '0x' + crypto.createHash('sha256').update('unauthorized-foreign-domain.com').digest('hex');
-    let mockOrigin = 'http://localhost:3100';
+    let mockOrigin: string | null = null;
 
     await page.route('**/api/passkey/relay', async (route) => {
       const request = route.request();
       if (request.method() === 'GET') {
+        const currentOrigin = new URL(request.url()).origin;
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -299,7 +300,7 @@ test.describe('A2: Passkey Mission Authority (RIP-7212 Precompile 0x100 & Real W
             passkeyY: '0x0',
             nextNonce: '0',
             rpIdHash: mockRpIdHash,
-            expectedOrigin: mockOrigin,
+            expectedOrigin: mockOrigin ?? currentOrigin,
             requireUserVerification: true,
             chainId: 43113,
           }),
@@ -325,6 +326,7 @@ test.describe('A2: Passkey Mission Authority (RIP-7212 Precompile 0x100 & Real W
     await page.route('**/api/passkey/relay', async (route) => {
       const request = route.request();
       if (request.method() === 'GET') {
+        const currentOrigin = new URL(request.url()).origin;
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -337,7 +339,7 @@ test.describe('A2: Passkey Mission Authority (RIP-7212 Precompile 0x100 & Real W
             passkeyY: storedKey.y,
             nextNonce: '0',
             rpIdHash: mockRpIdHash,
-            expectedOrigin: mockOrigin,
+            expectedOrigin: mockOrigin ?? currentOrigin,
             requireUserVerification: true,
             chainId: 43113,
           }),

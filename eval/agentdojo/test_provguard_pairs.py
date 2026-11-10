@@ -417,6 +417,10 @@ class TestProvGuardPairs(unittest.TestCase):
         suite_fp = get_task_suite_fingerprint("banking", "v1")
         self.assertEqual(len(suite_fp), 16)
 
+        # Verify invalid suite fails visibly
+        with self.assertRaises(Exception):
+            get_task_suite_fingerprint("nonexistent_suite_xyz_missing", "v1")
+
 
 if __name__ == "__main__":
     unittest.main()

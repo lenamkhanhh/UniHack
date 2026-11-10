@@ -578,20 +578,35 @@ def get_defense_code_revision(defense_key: str) -> str:
 def get_task_suite_fingerprint(suite_name: str = "banking", suite_version: str = "v1") -> str:
     """
     Computes a cryptographic fingerprint over the task suite environment and tool definitions.
-    Includes tool names, parameters, docstrings, and suite version so any change in tools/environment invalidates the cache.
+    Includes tool run implementation source, parameters, docstrings, environment class source,
+    and suite version so any change in tools/environment invalidates the cache.
+    Fails visibly if fingerprint computation cannot be performed.
     """
-    try:
-        suite = get_suite(suite_version, suite_name)
-        tool_reprs = []
-        for t in sorted(suite.tools, key=lambda x: getattr(x, "name", str(x))):
-            t_name = getattr(t, "name", str(t))
-            t_doc = getattr(t, "docstring", getattr(t, "__doc__", "")) or ""
-            t_params = str(getattr(t, "parameters", ""))
-            tool_reprs.append(f"{t_name}:{t_params}:{t_doc}")
-        raw = f"{suite_name}:{suite_version}:" + ";".join(tool_reprs)
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
-    except Exception:
-        return "banking_v1_standard"
+    suite = get_suite(suite_version, suite_name)
+    parts = [f"suite:{suite_name}:{suite_version}"]
+    if hasattr(suite, "environment_type") and suite.environment_type is not None:
+        try:
+            parts.append("env:" + inspect.getsource(suite.environment_type))
+        except Exception:
+            parts.append("env_str:" + str(suite.environment_type))
+
+    if hasattr(suite, "data_path") and suite.data_path is not None:
+        parts.append("data_path:" + str(suite.data_path))
+
+    for t in sorted(suite.tools, key=lambda x: getattr(x, "name", str(x))):
+        t_name = getattr(t, "name", str(t))
+        t_doc = getattr(t, "docstring", getattr(t, "__doc__", "")) or ""
+        t_params = str(getattr(t, "parameters", ""))
+        tool_entry = [f"tool:{t_name}", f"doc:{t_doc}", f"params:{t_params}"]
+        if hasattr(t, "run") and callable(t.run):
+            try:
+                tool_entry.append("code:" + inspect.getsource(t.run))
+            except Exception:
+                tool_entry.append("code_repr:" + repr(t.run))
+        parts.append(";".join(tool_entry))
+
+    raw = "\n---\n".join(parts)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
 def extract_task_prompt(task: Any) -> str:
@@ -722,9 +737,13 @@ def build_pipeline(
         pipeline_name = f"ollama/{model}"
     elif backend == "google":
         if not google_client:
-            raise ValueError("google_client is required for google backend")
-        llm = HonestGoogleLLM(model=model, client=google_client, temperature=0.0)
-        pipeline_name = f"google/{model}"
+            # For offline/dummy construction (e.g. legacy cache report mode or pair enumeration),
+            # provide a stub LLM to avoid crashing on missing key/network
+            llm = HonestOllamaLLM(model=model, base_url="http://127.0.0.1:0", temperature=0.0)
+            pipeline_name = f"google-offline-stub/{model}"
+        else:
+            llm = HonestGoogleLLM(model=model, client=google_client, temperature=0.0)
+            pipeline_name = f"google/{model}"
     else:
         raise ValueError(f"Unknown backend: {backend}. Must be 'google' or 'ollama'.")
 
@@ -774,16 +793,23 @@ def run_benchmark(
     google_client = None
     ollama_meta = None
     if backend == "ollama":
-        ollama_meta = fetch_ollama_metadata(ollama_url, model)
+        if not allow_legacy_cache:
+            ollama_meta = fetch_ollama_metadata(ollama_url, model)
+        else:
+            try:
+                ollama_meta = fetch_ollama_metadata(ollama_url, model)
+            except Exception:
+                ollama_meta = {"digest": "unavailable", "quantization": "unavailable"}
     elif backend == "google":
         api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
+        if not api_key and not allow_legacy_cache:
             print("[ERROR] GEMINI_API_KEY environment variable is missing.")
             sys.exit(1)
-        google_client = genai.Client(
-            api_key=api_key,
-            http_options=genai_types.HttpOptions(timeout=120_000),
-        )
+        if api_key:
+            google_client = genai.Client(
+                api_key=api_key,
+                http_options=genai_types.HttpOptions(timeout=120_000),
+            )
     else:
         print(f"[ERROR] Unsupported backend: {backend}")
         sys.exit(1)
@@ -903,6 +929,9 @@ def run_benchmark(
         benign_errors = {}
         total_api_calls = 0
         total_api_errors = 0
+        cached_api_calls = 0
+        fresh_api_calls = 0
+        unknown_call_tasks = 0
         system_msg = load_system_message("banking")
         model_digest = (ollama_meta.get("digest") if ollama_meta else None) or "unavailable"
 
@@ -931,7 +960,9 @@ def run_benchmark(
                     benign_utility[ut_id] = entry["utility"]
                     if missionpay_instance and entry.get("onchain_log"):
                         missionpay_instance.replay_log.append(entry["onchain_log"])
-                    total_api_calls += entry.get("api_calls", 0)
+                    c_calls = entry.get("api_calls", 0)
+                    cached_api_calls += c_calls
+                    total_api_calls += c_calls
                     total_api_errors += entry.get("api_errors", 0)
                 print(f"  [{datetime.now().strftime('%H:%M:%S')}] [CACHE-HIT] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id}): utility={benign_utility[ut_id]}", flush=True)
             elif allow_legacy_cache:
@@ -942,7 +973,9 @@ def run_benchmark(
                         benign_utility[ut_id] = entry["utility"]
                         if missionpay_instance and entry.get("onchain_log"):
                             missionpay_instance.replay_log.append(entry["onchain_log"])
-                        total_api_calls += entry.get("api_calls", 0)
+                        c_calls = entry.get("api_calls", 0)
+                        cached_api_calls += c_calls
+                        total_api_calls += c_calls
                         total_api_errors += entry.get("api_errors", 0)
                         print(f"  [{datetime.now().strftime('%H:%M:%S')}] [LEGACY-HISTORICAL] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id}): utility={benign_utility[ut_id]}", flush=True)
                 else:
@@ -967,6 +1000,7 @@ def run_benchmark(
                     s = task_result["security"]
                     calls = task_result.get("api_calls", 0)
                     errors = task_result.get("api_errors", 0)
+                    fresh_api_calls += calls
                     total_api_calls += calls
                     total_api_errors += errors
                     benign_utility[ut_id] = u
@@ -1000,13 +1034,13 @@ def run_benchmark(
                 except TimeoutError as te:
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [TIMEOUT] Benign task {ut_id} timed out after 600s: {te}", flush=True)
                     benign_errors[ut_id] = "TIMEOUT"
-                    total_api_calls += 1
+                    unknown_call_tasks += 1
                     total_api_errors += 1
                     save_checkpoint()
                 except Exception as e:
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [ERROR] Benign task {ut_id} failed: {e}", flush=True)
                     benign_errors[ut_id] = str(e)
-                    total_api_calls += 1
+                    unknown_call_tasks += 1
                     total_api_errors += 1
                     save_checkpoint()
                     if "QUOTA_EXHAUSTED" in str(e) or "OLLAMA_SERVER_DOWN" in str(e):
@@ -1060,7 +1094,9 @@ def run_benchmark(
                     sec = entry["security"]
                     if missionpay_instance and entry.get("onchain_log"):
                         missionpay_instance.replay_log.append(entry["onchain_log"])
-                    total_api_calls += entry.get("api_calls", 0)
+                    c_calls = entry.get("api_calls", 0)
+                    cached_api_calls += c_calls
+                    total_api_calls += c_calls
                     total_api_errors += entry.get("api_errors", 0)
                 pairs_evaluated += 1
                 if u:
@@ -1090,7 +1126,9 @@ def run_benchmark(
                         sec = entry["security"]
                         if missionpay_instance and entry.get("onchain_log"):
                             missionpay_instance.replay_log.append(entry["onchain_log"])
-                        total_api_calls += entry.get("api_calls", 0)
+                        c_calls = entry.get("api_calls", 0)
+                        cached_api_calls += c_calls
+                        total_api_calls += c_calls
                         total_api_errors += entry.get("api_errors", 0)
                     pairs_evaluated += 1
                     if u:
@@ -1141,6 +1179,7 @@ def run_benchmark(
                     sec = task_result["security"]
                     calls = task_result.get("api_calls", 0)
                     errors = task_result.get("api_errors", 0)
+                    fresh_api_calls += calls
                     total_api_calls += calls
                     total_api_errors += errors
                     onchain_entry = task_result.get("onchain_log")
@@ -1194,7 +1233,7 @@ def run_benchmark(
                 except TimeoutError as te:
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [TIMEOUT] Pair ({ut_id}, {it_id}) timed out after 600s: {te}", flush=True)
                     pair_errors += 1
-                    total_api_calls += 1
+                    unknown_call_tasks += 1
                     total_api_errors += 1
                     pair_details.append({
                         "user_task": ut_id,
@@ -1209,7 +1248,7 @@ def run_benchmark(
                 except Exception as e:
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [ERROR] Pair ({ut_id}, {it_id}) failed: {e}", flush=True)
                     pair_errors += 1
-                    total_api_calls += 1
+                    unknown_call_tasks += 1
                     total_api_errors += 1
                     pair_details.append({
                         "user_task": ut_id,
@@ -1264,7 +1303,10 @@ def run_benchmark(
             },
             "api_metrics": {
                 "calls_count": total_api_calls,
+                "fresh_calls": fresh_api_calls,
+                "cached_calls": cached_api_calls,
                 "errors_count": total_api_errors,
+                "unknown_call_tasks": unknown_call_tasks,
             },
             "onchain_simulation": {
                 "total_calls": onchain_total,
