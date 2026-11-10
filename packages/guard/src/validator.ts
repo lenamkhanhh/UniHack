@@ -210,7 +210,7 @@ export function validateTreasuryProposal(
   );
   const hasPayeeRoot = config.hasPayeeRoot !== undefined ? config.hasPayeeRoot : isPayeeRootConfigured;
 
-  if (hasPayeeRoot) {
+  if (!config.disableProvenance && hasPayeeRoot) {
     if (isPayeeRootConfigured) {
       // Recalculate root from supplied payees to verify integrity
       const computedTree = computePayeeMerkleTree(config.payees || []);
@@ -265,20 +265,7 @@ export function validateTreasuryProposal(
     }
   }
 
-  // 10. Hard BLOCK checks: Mission Budget Cap Exhaustion
-  // Evaluated before soft QUEUE so exceeding mission cap is strictly BLOCKED!
-  const missionCap = config.caps?.missionCapAtomic ? BigInt(config.caps.missionCapAtomic.toString()) : 10_000_000n;
-  if (spentTreasuryAtomic + amount > missionCap) {
-    return {
-      outcome: 'BLOCK',
-      rule: 'MISSION_CAP_EXHAUSTED',
-      reason: `Proposal exceeds total mission budget cap (${missionCap})`,
-      toProvenance,
-      amountProvenance,
-    };
-  }
-
-  // 11. Soft QUEUE: Provenance and Per-tx Cap
+  // 10. Soft QUEUE: Provenance and Caps
   if (!config.disableProvenance) {
     if (toProvenance === 'LLM') {
       return {
@@ -307,6 +294,17 @@ export function validateTreasuryProposal(
       outcome: 'QUEUE',
       rule: 'OVER_PER_TX_CAP',
       reason: 'Amount exceeds per-tx treasury cap',
+      toProvenance,
+      amountProvenance,
+    };
+  }
+
+  const missionCap = config.caps?.missionCapAtomic ? BigInt(config.caps.missionCapAtomic.toString()) : 10_000_000n;
+  if (spentTreasuryAtomic + amount > missionCap) {
+    return {
+      outcome: 'BLOCK',
+      rule: 'MISSION_CAP_EXHAUSTED',
+      reason: `Proposal exceeds total mission budget cap (${missionCap})`,
       toProvenance,
       amountProvenance,
     };

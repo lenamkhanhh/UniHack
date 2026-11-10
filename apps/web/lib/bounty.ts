@@ -695,10 +695,12 @@ export async function processBountyAttempt(
 
     if (isPotentialBypass) {
       status = 'POTENTIAL_BYPASS';
-    } else if (step3Status === 'RPC_ERROR') {
-      status = 'RPC_ERROR';
     } else if (offchainVerdict.outcome === 'QUEUE') {
       status = 'OFFCHAIN_QUEUED';
+    } else if (offchainVerdict.outcome === 'BLOCK') {
+      status = 'BLOCKED';
+    } else if (step3Status === 'RPC_ERROR') {
+      status = 'RPC_ERROR';
     } else {
       status = 'BLOCKED';
     }
