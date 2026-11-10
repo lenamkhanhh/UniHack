@@ -36,6 +36,7 @@ describe('ERC-8004 Validation Bundle Specification', () => {
     chainId: 43113,
     treasury: '0x20451c1e2dCD83F166B4f22868BAdECb5868d545',
     payees: validPayees,
+    creationBlock: 60685200n,
   };
 
   function createMockPublicClient(overrides: {

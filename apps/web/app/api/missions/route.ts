@@ -118,6 +118,13 @@ export async function POST(req: NextRequest) {
     // PV-F9: Bind payeeRoot into policyHash
     const policyHash = hashUtf8(`policy:1:${treasuryCap}:${toolCap}:${payeeRoot || ''}`);
 
+    let creationBlock: bigint | null = null;
+    if (payload.creationBlock !== undefined && payload.creationBlock !== null) {
+      try {
+        creationBlock = BigInt(payload.creationBlock);
+      } catch {}
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       await verifyAndConsumeChallenge(tx, {
         nonce,
@@ -142,6 +149,7 @@ export async function POST(req: NextRequest) {
           status: 'ACTIVE',
           payeesJson,
           payeeRoot,
+          creationBlock,
           configVersion: 1,
           policyHash,
         },

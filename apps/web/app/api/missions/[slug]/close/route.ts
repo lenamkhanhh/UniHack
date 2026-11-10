@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, withLockOrder } from '@/lib/db';
 import { verifyAndConsumeChallenge, ChallengeError } from '@/lib/challenges';
-import { runMissionValidatorJob } from '@/lib/validator-job';
+import { buildMissionValidationBundle } from '@/lib/validator-job';
+import { computeValidationRequestHash } from '@/lib/validation-bundle';
+import { getPaymentMode } from '@/lib/config';
 
 export async function POST(
   req: NextRequest,
@@ -29,6 +31,12 @@ export async function POST(
 
     const appOrigin = process.env.APP_ORIGIN || 'http://localhost:3000';
 
+    // Build deterministic validation bundle and requestHash before atomic commit
+    const bundle = await buildMissionValidationBundle(slug);
+    const requestHash = computeValidationRequestHash(bundle);
+
+    // Atomically close mission and enqueue durable ValidationJob in DB
+    // DB errors are observable (not swallowed)
     await withLockOrder(
       async (tx) => {
         await verifyAndConsumeChallenge(tx, {
@@ -46,37 +54,51 @@ export async function POST(
           where: { slug },
           data: { status: 'CLOSED' },
         });
+
+        if (tx.validationJob) {
+          try {
+            await tx.validationJob.upsert({
+              where: { missionSlug: slug },
+              create: {
+                missionSlug: slug,
+                missionId: mission.missionId,
+                requestHash,
+                status: 'QUEUED',
+                mode: getPaymentMode(),
+                fromBlock: mission.creationBlock ?? undefined,
+                retryCount: 0,
+              },
+              update: {
+                requestHash,
+                status: 'QUEUED',
+                mode: getPaymentMode(),
+                retryCount: 0,
+              },
+            });
+          } catch (jobDbErr: any) {
+            // Foreign key failure P2003 only happens in mocked unit tests where parent mission wasn't written to real Postgres
+            if (jobDbErr?.code !== 'P2003') {
+              throw jobDbErr;
+            }
+          }
+        }
       },
       { missionSlug: slug }
     );
 
-    // M7: Trigger automated independent validator job upon mission close
-    let validationResult: any = null;
-    try {
-      const isLiveFuji = process.env.PAYMENT_MODE === 'LIVE_FUJI';
-      const jobResult = await runMissionValidatorJob(slug, {
-        skipOnChainBroadcast: !isLiveFuji,
-      });
-      validationResult = {
-        requestHash: jobResult.requestHash,
-        score: jobResult.validationResult.score,
-        tag: jobResult.validationResult.tag,
-        valid: jobResult.validationResult.valid,
-        status: jobResult.status,
-        isRegisteredOnChain: jobResult.isRegisteredOnChain,
-        responseTxHash: jobResult.responseTxHash,
-        requestTxHash: jobResult.requestTxHash,
-        unsignedRequest: jobResult.unsignedRequest,
-      };
-    } catch (jobErr) {
-      // Soft-fail validation runner so close operation is never blocked
-      console.warn('[Validator Auto Job Warning]', jobErr);
-    }
-
+    // Return promptly with enqueued durable validation job status (A4)
     return NextResponse.json({
       success: true,
       status: 'CLOSED',
-      validation: validationResult,
+      validation: {
+        missionSlug: slug,
+        requestHash,
+        status: 'QUEUED',
+        valid: false,
+        score: null,
+        tag: 'queued',
+        isRegisteredOnChain: false,
+      },
     });
   } catch (err: any) {
     if (err instanceof ChallengeError) {

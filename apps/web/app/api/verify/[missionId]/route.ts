@@ -7,7 +7,11 @@ import { verifyToken } from '@/lib/auth';
 import { getPaymentMode, getGuardedTreasuryAddress, getAnchorFetcherForTesting } from '@/lib/config';
 import { computeValidationRequestHash, ValidationBundle } from '@/lib/validation-bundle';
 import { computePayeeMerkleTree } from '@/lib/merkle';
-import { getMemoryValidationRecord, getValidationFetcherForTesting } from '@/lib/validator-job';
+import {
+  getMemoryValidationRecord,
+  getValidationFetcherForTesting,
+  reconcileOwnerValidationRequestReceipt,
+} from '@/lib/validator-job';
 
 // Clear sandbox addresses (WOW-F6) — not Anvil, not real wallets
 const SANDBOX_OWNER = '0x00000000000000000000000000000000000A11CE';
@@ -432,5 +436,30 @@ export async function GET(req: NextRequest, context: any) {
     });
   } catch (err: any) {
     return NextResponse.json({ error: 'Internal verify lookup error' }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest, context: any) {
+  try {
+    const { missionId } = await context.params;
+    const body = await req.json().catch(() => ({}));
+    const { txHash } = body;
+
+    if (!txHash || typeof txHash !== 'string') {
+      return NextResponse.json({ error: 'txHash is required' }, { status: 400 });
+    }
+
+    const mission = await prisma.mission.findUnique({
+      where: { slug: missionId },
+    });
+
+    if (!mission) {
+      return NextResponse.json({ error: 'Mission not found' }, { status: 404 });
+    }
+
+    const result = await reconcileOwnerValidationRequestReceipt(mission.slug, txHash);
+    return NextResponse.json(result, { status: result.success ? 200 : 400 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || 'Reconciliation error' }, { status: 500 });
   }
 }

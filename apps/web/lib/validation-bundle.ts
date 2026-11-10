@@ -136,7 +136,95 @@ export async function validateBundleOnChain(
       ? await publicClient.getBlockNumber().catch(() => 0n)
       : 0n);
 
-  const readOpts = snapshotBlock > 0n ? { blockNumber: snapshotBlock } : {};
+  if (snapshotBlock <= 0n) {
+    return {
+      valid: false,
+      score: 0,
+      tag: 'unverified-snapshot-failed',
+      checks: {
+        headMatchesOnChain: false,
+        rootMatchesOnChain: false,
+        payeesGenerateRoot: false,
+        executedPayeesValid: false,
+        totalSpendWithinCap: false,
+        hasExecutions: false,
+      },
+      details: {
+        onChainHead: '0x0',
+        onChainRoot: '0x0',
+        computedRoot: '0x0',
+        executedCount: 0,
+        totalExecutedAmount: '0',
+        missionCap: '0',
+        failedChecks: ['SNAPSHOT_READ_FAILED'],
+      },
+    };
+  }
+
+  const targetEndBlock = snapshotBlock;
+  const targetStartBlock = fromBlock ?? bundle.creationBlock;
+
+  // Strict scan start integrity: missing start cannot guess or truncate history
+  if (targetStartBlock === undefined || targetStartBlock === null) {
+    return {
+      valid: false,
+      score: 0,
+      snapshotBlock: snapshotBlock.toString(),
+      checks: {
+        headMatchesOnChain: false,
+        rootMatchesOnChain: false,
+        payeesGenerateRoot: false,
+        executedPayeesValid: false,
+        totalSpendWithinCap: false,
+        hasExecutions: false,
+      },
+      tag: 'unverified-missing-start',
+      details: {
+        onChainHead: '0x0',
+        onChainRoot: '0x0',
+        computedRoot: '0x0',
+        executedCount: 0,
+        totalExecutedAmount: '0',
+        missionCap: '0',
+        snapshotBlock: snapshotBlock.toString(),
+        failedChecks: ['TRUSTED_SCAN_START_MISSING'],
+      },
+    };
+  }
+
+  // Range validation: inverted range is invalid
+  if (targetStartBlock > targetEndBlock) {
+    return {
+      valid: false,
+      score: 0,
+      snapshotBlock: snapshotBlock.toString(),
+      fromBlock: targetStartBlock.toString(),
+      toBlock: targetEndBlock.toString(),
+      checks: {
+        headMatchesOnChain: false,
+        rootMatchesOnChain: false,
+        payeesGenerateRoot: false,
+        executedPayeesValid: false,
+        totalSpendWithinCap: false,
+        hasExecutions: false,
+      },
+      tag: 'invalid-range',
+      details: {
+        onChainHead: '0x0',
+        onChainRoot: '0x0',
+        computedRoot: '0x0',
+        executedCount: 0,
+        totalExecutedAmount: '0',
+        missionCap: '0',
+        snapshotBlock: snapshotBlock.toString(),
+        fromBlock: targetStartBlock.toString(),
+        toBlock: targetEndBlock.toString(),
+        failedChecks: ['INVERTED_BLOCK_RANGE'],
+      },
+    };
+  }
+
+  const readOpts = { blockNumber: snapshotBlock };
 
   // 1. Read on-chain anchored head at snapshot block
   const onChainHead = (await publicClient.readContract({
@@ -182,18 +270,12 @@ export async function validateBundleOnChain(
   const payeesGenerateRoot = treeResult.root.toLowerCase() === bundle.payeeRoot.toLowerCase();
 
   // 4. Query Executed events for this mission in chunks <= 90 blocks
-  // No hardcoded 60689760 block window: use real creationBlock or explicit scan range
-  const targetEndBlock = snapshotBlock;
-  const targetStartBlock =
-    fromBlock ??
-    bundle.creationBlock ??
-    (targetEndBlock > 90n ? targetEndBlock - 90n : 0n);
+  // Scan full range from targetStartBlock through targetEndBlock without history truncation
   const CHUNK_SIZE = 90n;
-
   const executedLogs: any[] = [];
   const seenLogKeys = new Set<string>();
 
-  if (targetEndBlock >= targetStartBlock) {
+  try {
     for (let b = targetStartBlock; b <= targetEndBlock; b += CHUNK_SIZE) {
       const end = b + CHUNK_SIZE - 1n > targetEndBlock ? targetEndBlock : b + CHUNK_SIZE - 1n;
       const logs = await publicClient.getLogs({
@@ -221,6 +303,35 @@ export async function validateBundleOnChain(
         }
       }
     }
+  } catch (scanErr: any) {
+    return {
+      valid: false,
+      score: 0,
+      snapshotBlock: snapshotBlock.toString(),
+      fromBlock: targetStartBlock.toString(),
+      toBlock: targetEndBlock.toString(),
+      checks: {
+        headMatchesOnChain,
+        rootMatchesOnChain,
+        payeesGenerateRoot,
+        executedPayeesValid: false,
+        totalSpendWithinCap: false,
+        hasExecutions: false,
+      },
+      tag: 'scan-error',
+      details: {
+        onChainHead,
+        onChainRoot,
+        computedRoot: treeResult.root,
+        executedCount: 0,
+        totalExecutedAmount: '0',
+        missionCap: missionCap.toString(),
+        snapshotBlock: snapshotBlock.toString(),
+        fromBlock: targetStartBlock.toString(),
+        toBlock: targetEndBlock.toString(),
+        failedChecks: ['RPC_SCAN_ERROR'],
+      },
+    };
   }
 
   const normalizedBundlePayees = new Set(bundle.payees.map((p) => p.toLowerCase()));

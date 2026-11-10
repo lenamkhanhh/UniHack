@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { createPublicClient, createWalletClient, http, parseAbiItem } from 'viem';
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  parseAbiItem,
+  encodeEventTopics,
+  encodeAbiParameters,
+} from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { avalancheFuji } from 'viem/chains';
 import { prisma } from '@/lib/db';
@@ -15,9 +22,12 @@ import {
   getMemoryValidationRecord,
   clearMemoryValidationCache,
   setValidationFetcherForTesting,
+  processQueuedValidationJobs,
+  reconcileOwnerValidationRequestReceipt,
+  buildUnsignedValidationRequest,
   DEFAULT_VALIDATION_REGISTRY,
 } from '@/lib/validator-job';
-import { computeValidationRequestHash } from '@/lib/validation-bundle';
+import { computeValidationRequestHash, validateBundleOnChain } from '@/lib/validation-bundle';
 import { computePayeeMerkleTree } from '@/lib/merkle';
 import { POST as closeRoutePOST } from '@/app/api/missions/[slug]/close/route';
 import { POST as challengePOST } from '@/app/api/auth/challenge/route';
@@ -111,6 +121,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       payeesJson: JSON.stringify(payees),
       payeeRoot: tree.root,
       auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 60689700n,
     });
 
     const bundle = await buildMissionValidationBundle(mission.slug);
@@ -152,6 +163,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       payeesJson: JSON.stringify(payees),
       payeeRoot: tree.root,
       auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 60689700n,
     });
 
     const bundle = await buildMissionValidationBundle(mission.slug);
@@ -189,6 +201,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       payeeRoot: tree.root,
       publicPublished: true,
       auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 60689700n,
     });
 
     const bundle = await buildMissionValidationBundle(mission.slug);
@@ -253,9 +266,13 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     expect(body.status).toBe('CLOSED');
     expect(body.validation).toBeDefined();
     expect(body.validation.requestHash).toMatch(/^0x[0-9a-fA-F]{64}$/);
+    expect(body.validation.status).toBe('QUEUED');
 
     const updatedMission = await prisma.mission.findUnique({ where: { slug: mission.slug } });
     expect(updatedMission?.status).toBe('CLOSED');
+
+    const dbJob = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+    expect(dbJob?.status).toBe('QUEUED');
   });
 
   // 6. Live Anvil Fork test: Tamper detection -> Score 0 on-chain with dedicated validator key
@@ -526,5 +543,300 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     expect(json.erc8004Validation.score).toBe(100);
     expect(json.erc8004Validation.validatorAddress).toBe('0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5');
     expect(json.erc8004Validation.snowtraceUrl).toContain('0xabcdefabcdefabcdef');
+  });
+
+  // A4-05: Reviewer probe: unauthorized payout at block 100 outside last 90 blocks is detected by full range scan
+  it('M7-A4-05: reviewer probe: unauthorized payout at block 100 outside last 90 blocks causes failure / score 0', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const tree = computePayeeMerkleTree(payees);
+
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 50n,
+      treasuryCap: 5000000n, // 5 USDC cap
+    });
+
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    expect(bundle.creationBlock).toBe(50n);
+
+    // Mock client where:
+    // Block 100: payout of 6 USDC (unauthorized overspend!)
+    // Block 999: payout of 1 USDC
+    // Snapshot: 1000n
+    const mockClient = {
+      getBlockNumber: vi.fn().mockResolvedValue(1000n),
+      readContract: vi.fn().mockImplementation(async ({ functionName, blockNumber }) => {
+        expect(blockNumber).toBe(1000n);
+        if (functionName === 'anchoredMissionProofs') return bundle.auditHead;
+        if (functionName === 'missionPayeeRoot') return bundle.payeeRoot;
+        if (functionName === 'missions') {
+          return [bundle.missionId, bundle.treasury, 5000000n, 1794670342n, true, true];
+        }
+        throw new Error(`Unexpected functionName: ${functionName}`);
+      }),
+      getLogs: vi.fn().mockImplementation(async ({ fromBlock, toBlock }) => {
+        const logs: any[] = [];
+        // Payout at block 100
+        if (fromBlock <= 100n && toBlock >= 100n) {
+          logs.push({
+            blockNumber: 100n,
+            transactionHash: '0x1000000000000000000000000000000000000000000000000000000000000100',
+            logIndex: 0,
+            args: {
+              id: 1n,
+              to: bundle.payees[0],
+              amount: 6000000n, // 6 USDC
+              missionId: bundle.missionId,
+            },
+          });
+        }
+        // Payout at block 999
+        if (fromBlock <= 999n && toBlock >= 999n) {
+          logs.push({
+            blockNumber: 999n,
+            transactionHash: '0x9990000000000000000000000000000000000000000000000000000000000999',
+            logIndex: 0,
+            args: {
+              id: 2n,
+              to: bundle.payees[0],
+              amount: 1000000n, // 1 USDC
+              missionId: bundle.missionId,
+            },
+          });
+        }
+        return logs;
+      }),
+    } as any;
+
+    const result = await validateBundleOnChain(mockClient, bundle, 50n, 1000n);
+
+    // Full scan from block 50 to 1000 must find the 6 USDC payout at block 100 + 1 USDC at block 999 = 7 USDC > 5 USDC cap!
+    expect(result.valid).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.checks.totalSpendWithinCap).toBe(false);
+    expect(result.tag).toContain('SPEND_EXCEEDS_CAP');
+    expect(result.details.totalExecutedAmount).toBe('7000000');
+    expect(result.details.executedCount).toBe(2);
+  });
+
+  // A4-06: Missing trusted scan start returns unverified-missing-start
+  it('M7-A4-06: missing trusted scan start returns score 0 with unverified-missing-start tag', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const tree = computePayeeMerkleTree(payees);
+
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+      // No creationBlock provided
+    });
+
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    expect(bundle.creationBlock).toBeUndefined();
+
+    const mockClient = {
+      getBlockNumber: vi.fn().mockResolvedValue(1000n),
+    } as any;
+
+    const result = await validateBundleOnChain(mockClient, bundle, undefined, 1000n);
+    expect(result.valid).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.tag).toBe('unverified-missing-start');
+    expect(result.details.failedChecks).toContain('TRUSTED_SCAN_START_MISSING');
+  });
+
+  // A4-07: Inverted block range returns invalid-range
+  it('M7-A4-07: inverted block range (start > end) returns score 0 with invalid-range tag', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const tree = computePayeeMerkleTree(payees);
+
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 500n,
+    });
+
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const mockClient = {
+      getBlockNumber: vi.fn().mockResolvedValue(400n),
+    } as any;
+
+    const result = await validateBundleOnChain(mockClient, bundle, 500n, 400n);
+    expect(result.valid).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.tag).toBe('invalid-range');
+    expect(result.details.failedChecks).toContain('INVERTED_BLOCK_RANGE');
+  });
+
+  // A4-08: RPC log query error returns scan-error
+  it('M7-A4-08: RPC log query failure returns score 0 with scan-error tag', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const tree = computePayeeMerkleTree(payees);
+
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 100n,
+    });
+
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const mockClient = {
+      getBlockNumber: vi.fn().mockResolvedValue(200n),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'anchoredMissionProofs') return bundle.auditHead;
+        if (functionName === 'missionPayeeRoot') return bundle.payeeRoot;
+        if (functionName === 'missions') {
+          return [bundle.missionId, bundle.treasury, 5000000n, 1794670342n, true, true];
+        }
+        throw new Error(`Unexpected functionName: ${functionName}`);
+      }),
+      getLogs: vi.fn().mockRejectedValue(new Error('RPC_NODE_TIMEOUT')),
+    } as any;
+
+    const result = await validateBundleOnChain(mockClient, bundle, 100n, 200n);
+    expect(result.valid).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.tag).toBe('scan-error');
+    expect(result.details.failedChecks).toContain('RPC_SCAN_ERROR');
+  });
+
+  // A4-09: Unsigned request returns wallet-sendable transaction format
+  it('M7-A4-09: buildUnsignedValidationRequest produces wallet-sendable transaction with to, data, value, chainId', () => {
+    const unsignedTx = buildUnsignedValidationRequest({
+      registryAddress: DEFAULT_VALIDATION_REGISTRY,
+      validatorAddress: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+      agentId: 294n,
+      slug: 'test-mission-a4',
+      requestHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+    });
+
+    expect(unsignedTx.to).toBe(DEFAULT_VALIDATION_REGISTRY);
+    expect(unsignedTx.value).toBe('0');
+    expect(unsignedTx.chainId).toBe(43113);
+    expect(unsignedTx.data).toMatch(/^0x[0-9a-fA-F]+/);
+    expect(unsignedTx.functionName).toBe('validationRequest');
+    expect(unsignedTx.requestHash).toBe('0x1111111111111111111111111111111111111111111111111111111111111111');
+  });
+
+  // A4-10: Queue worker processes enqueued jobs idempotently
+  it('M7-A4-10: processQueuedValidationJobs processes enqueued jobs idempotently and advances state', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const tree = computePayeeMerkleTree(payees);
+
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 60689700n,
+    });
+
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const mockClient = createMockPublicClient(bundle);
+
+    // Enqueue job in DB
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash: computeValidationRequestHash(bundle),
+        status: 'QUEUED',
+        fromBlock: 60689700n,
+      },
+    });
+
+    const workerRes = await processQueuedValidationJobs(5, {
+      publicClient: mockClient,
+      skipOnChainBroadcast: true,
+    });
+
+    expect(workerRes.processed).toBe(1);
+    expect(workerRes.results[0].status).toBe('LOCAL_EVALUATED');
+    expect(workerRes.results[0].validationResult.valid).toBe(true);
+
+    const updatedJob = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+    expect(updatedJob?.status).toBe('LOCAL_EVALUATED');
+    expect(updatedJob?.score).toBe(100);
+  });
+
+  // A4-11: Owner receipt reconciliation verifies event and advances job
+  it('M7-A4-11: reconcileOwnerValidationRequestReceipt validates event and advances job', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const tree = computePayeeMerkleTree(payees);
+
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 60689700n,
+    });
+
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const requestHash = computeValidationRequestHash(bundle);
+
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash,
+        status: 'REQUEST_PENDING',
+        score: 100,
+        tag: 'verified-full',
+        validatorAddress: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+        agentId: '294',
+      },
+    });
+
+    const dummyTxHash = '0x1234567890123456789012345678901234567890123456789012345678901234';
+    const validationRequestEventAbi = parseAbiItem(
+      'event ValidationRequest(address indexed validatorAddress, uint256 indexed agentId, string requestURI, bytes32 indexed requestHash)'
+    );
+    const topics = encodeEventTopics({
+      abi: [validationRequestEventAbi],
+      eventName: 'ValidationRequest',
+      args: {
+        validatorAddress: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+        agentId: 294n,
+        requestHash,
+      },
+    });
+    const data = encodeAbiParameters([{ type: 'string' }], [`evidence/validation/${mission.slug}.json`]);
+
+    const mockReceipt = {
+      status: 'success',
+      to: DEFAULT_VALIDATION_REGISTRY,
+      logs: [
+        {
+          address: DEFAULT_VALIDATION_REGISTRY,
+          topics,
+          data,
+        },
+      ],
+    };
+
+    const mockClient = {
+      getTransactionReceipt: vi.fn().mockResolvedValue(mockReceipt),
+      readContract: vi.fn().mockResolvedValue(true),
+      waitForTransactionReceipt: vi.fn().mockResolvedValue({ status: 'success' }),
+    } as any;
+
+    const reconRes = await reconcileOwnerValidationRequestReceipt(mission.slug, dummyTxHash, {
+      publicClient: mockClient,
+      validatorAccount: { address: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5' },
+      validatorWalletClient: {
+        writeContract: vi.fn().mockResolvedValue('0xresponseTxHash1234567890123456789012345678901234567890123456789012'),
+      } as any,
+    });
+
+    expect(reconRes.success).toBe(true);
+    expect(reconRes.status).toBe('RESPONSE_CONFIRMED');
+    expect(reconRes.requestTxHash).toBe(dummyTxHash);
+
+    const dbJob = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+    expect(dbJob?.status).toBe('RESPONSE_CONFIRMED');
+    expect(dbJob?.requestTxHash).toBe(dummyTxHash);
   });
 });
