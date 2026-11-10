@@ -68,8 +68,8 @@ MissionPay secures autonomous AI agent spending across multi-agent tool executio
   3. *On-chain Cryptographic Gate*: If the agent bypasses off-chain validators and calls `proposeWithProof` on-chain, the transaction reverts with `PayeeNotInMissionSet` unless a valid Merkle proof is provided.
 - **Test & Proof Evidence**:
   - `apps/web/tests/attack-scoring.test.ts`: Vitest suite verifies 100% block rate across NOMOS known-payee diversion cases.
-  - `ATTACK_EVAL.md` & `eval/runs/known-payee-*.json`: Multi-model benchmark (Gemini 3.5 Flash Lite & Gemini 3.1 Flash Lite) demonstrates 0.0% ASR for MissionPay (C2) with 10/10 zero-gas `eth_call` reverts on live Fuji testnet.
-  - `contracts/test/invariant/GuardedTreasury.invariant.t.sol`: Invariant `invariant_disbursementRequiresMerkleProof` verified across 512 fuzzed runs.
+  - `eval/agentdojo/SUMMARY.md` & `results/replay-ground-truth-20261109-035811.json`: Evaluated on local Fuji fork replay (120/128 financial attacks blocked on AgentDojo banking, with 150/150 off-mission attacks reverting on-chain with `PayeeNotInMissionSet`). Live model testing on Fuji remains incomplete and is not claimed as verified evidence.
+  - `contracts/test/invariant/GuardedTreasury.invariant.t.sol`: Invariant `invariant_payeeAlwaysInRoot` verified across 512 fuzzed runs (32,768 calls, 0 reverts).
 - **Residual Risk & Stated Limitations**: If an authorized vendor in the mission's owner-signed set turns rogue or their address is compromised outside of MissionPay, payments within the signed cap to that address will succeed.
 
 ---
@@ -164,8 +164,11 @@ MissionPay secures autonomous AI agent spending across multi-agent tool executio
     - `test_highS_reverts`
     - `test_crossOriginTrue_reverts`
     - `test_rotatePasskey_requiresSameChecks`
-  - Live Fuji Tx [`0x494b...a929`](https://testnet.snowtrace.io/tx/0x494b664be33d2c2d08575884f3ceb546779e8c7eb8eaec0bed171a11f0d7a929): Verified hardware WebAuthn mission approval on Avalanche Fuji using native precompile `0x100`.
-- **Residual Risk & Stated Limitations**: The initial authority instance is bound to the immutable `rpIdHash` and `expectedOrigin` configured at deployment. Deploying to a new public domain requires deploying a corresponding authority instance for that origin.
+  - Historical Fuji Tx [`0x494b...a929`](https://testnet.snowtrace.io/tx/0x494b664be33d2c2d08575884f3ceb546779e8c7eb8eaec0bed171a11f0d7a929): Recorded during initial Fuji deployment with RIP-7212 precompile `0x100`.
+  - Passkey UI & Relay cryptographic boundary: Tested via virtual authenticators and exact P-256 software verification in automated suites (`apps/web/tests/webauthn-p256.test.ts` and `apps/web/tests/passkey-relay.test.ts`). Live physical biometric hardware verification on Fuji testnet with user biometric presence is marked **NOT_RUN** pending live owner signoff.
+- **Residual Risk & Stated Limitations**:
+  - The initial authority instance is bound to the immutable `rpIdHash` and `expectedOrigin` configured at deployment.
+  - **On-Chain Deployment Notice:** The existing live deployment on Avalanche Fuji (`0x2045...` for GuardedTreasury and `0x494b...` authority) reflects an earlier deployment and does NOT contain recent patches (A1 root snapshot check and A3 passkey owner governance actions). Updating the live deployment is pending explicit owner authorization.
 
 ---
 
@@ -173,11 +176,12 @@ MissionPay secures autonomous AI agent spending across multi-agent tool executio
 
 | Invariant ID | Target Contract | Formal Description | Verification Method | Proof Artifact |
 |---|---|---|---|---|
-| `INV-1` | `GuardedTreasury` | $\forall m, \text{spent}(m) \le \text{cap}(m)$ | Foundry Invariant (512 runs, 64 depth) | `evidence/formal/invariant.txt` |
-| `INV-2` | `GuardedTreasury` | Nonce uniqueness & monotonic progression | Foundry Invariant | `contracts/test/invariant/` |
-| `INV-3` | `GuardedTreasury` | Disbursement requires valid Merkle proof when root is set | Halmos Symbolic Execution & Mutant Testing | `evidence/formal/mutant.txt` |
-| `INV-4` | `PasskeyMissionAuthority` | Origin & RP ID verification cannot be bypassed | Foundry Unit & Mutation tests | `PasskeyMissionAuthority.t.sol` |
-| `INV-5` | `x402-binding` | Request binding nonce collision resistance | Vitest ATC'26 test suite (F1-F4) | `tests/x402-atc26.test.ts` |
+| `INV-1` | `GuardedTreasury` | `invariant_payeeAlwaysInRoot`: Every disbursed payee strictly belongs to the committed Merkle leaf set | Foundry Invariant (512 runs, 32,768 calls) & Halmos SMT | `evidence/formal/invariant.txt` |
+| `INV-2` | `GuardedTreasury` | `invariant_missionSpendWithinCap` & `invariant_dailySpendWithinCap`: Cumulative mission spend $\le \text{cap}(m)$ and daily spend $\le \text{dailyCap}$ | Foundry Invariant (512 runs, 32,768 calls) | `evidence/formal/invariant.txt` |
+| `INV-3` | `GuardedTreasury` | `invariant_nonOwnerCannotChangePolicy`: Non-owner actors cannot mutate caps, roots, or allowlists | Foundry Invariant (512 runs, 32,768 calls) & Halmos SMT | `evidence/formal/invariant.txt` |
+| `INV-4` | `GuardedTreasury` | `invariant_pausedNoOutflow`: Rejects all recipient transfers during emergency pause | Foundry Invariant (512 runs, 32,768 calls) | `evidence/formal/invariant.txt` |
+| `INV-5` | `GuardedTreasury` | `invariant_balanceAccounting`: Treasury balance strictly equals deposits minus total outflows | Foundry Invariant (512 runs, 32,768 calls) | `evidence/formal/invariant.txt` |
+| `INV-6` | `x402-binding` | Request binding nonce collision resistance & parameter integrity | Vitest ATC'26 test suite (F1-F4) | `tests/x402-atc26.test.ts` |
 
 ---
 

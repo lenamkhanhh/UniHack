@@ -11,8 +11,12 @@ Cập nhật: 2026-11-09.
 | 8 đòn lọt | Đều nằm ở `user_task_15`: chính prompt của người dùng đặt IBAN của kẻ tấn công làm chủ nhà mới. Ở 15 task còn lại chặn 120/120 | như trên |
 | Replay trên fork Fuji | Contract và guard off-chain khớp nhau 169/169. Khi cố tình đưa kẻ tấn công vào allowlist chung, contract vẫn revert 150 lệnh với `PayeeNotInMissionSet` | như trên |
 | AgentDojo live, gemini-3.1-flash-lite, C2 strict (ĐANG DỞ, chưa nói lên sân khấu) | Tính đến 09/11 lúc 20:36 (hết quota): 0/30 đòn lọt (Wilson 95% CI 0–11,4%); làm đúng việc khi bị tấn công 9/30; benign 4/16. Chưa chạy C0 nên chưa so được, và benign 4/16 chưa giải thích được | `eval/agentdojo/LIVE_SUMMARY.md`, commit f8b4bc8 |
-| Foundry | 74/74 test pass, có invariant suite | `contracts/` |
-| Web | 240/240 test pass. Lighthouse accessibility 100 trên 5 trang (mobile) | `apps/web` |
+| Foundry | 111/111 test pass across 6 suites (43 GuardedTreasury, 32 PasskeyGovernance, 16 PasskeyMissionAuthority, 12 MissionCrossChainICM, 7 ValidationRegistry, 1 GuardedTreasuryInvariant suite với 6 properties fuzzed 512 runs / 32,768 calls) | `contracts/test/` |
+| Web | 277 passed / 1 skipped across 32 test files. Lighthouse accessibility 100 trên 5 trang (mobile) | `apps/web` |
+| Guard SDK | 19/19 test pass (16 guard + 3 parity) | `packages/guard` |
+| Python Benchmark | 8/8 unit tests pass trong `eval/agentdojo/test_provguard_pairs.py` | `eval/agentdojo` |
+| On-chain Contracts Fuji | Địa chỉ Fuji hiện tại (`0x2045...`) là bản deploy cũ. Các bản vá mới (A1 root snapshot, A3 passkey governance) **CHƯA** deploy lên Fuji; đang chờ lệnh duyệt của Owner | `contracts/` |
+| Passkey WebAuthn | Xác thực P-256 / DER / RP ID / Origin đã kiểm bằng unit tests và virtual authenticators (LOCAL_BROWSER_CRYPTO_BOUNDARY). Sinh trắc học phần cứng live trên Fuji ghi **NOT_RUN** | `apps/web`, `contracts/` |
 | ICM Fuji ↔ Dispatch | Mới chạy với **mock local** (12 test). Chưa có giao dịch live | `contracts/test/MissionCrossChainICM.t.sol` |
 
 ## 2. Câu hỏi khó và câu trả lời
@@ -35,7 +39,7 @@ Cập nhật: 2026-11-09.
 **"allowance-ai trên NEAR làm y hệt?"**
 - Giống ở cap, allowlist, Face ID và arena.
 - Khác ở chỗ: tập người nhận theo từng mission thay vì allowlist chung; kiểm provenance; x402 trên Avalanche có ràng request; proof được neo on-chain kèm ERC-8004 Validation.
-- Bộ kiểm passkey của họ hiện chặt hơn (có kiểm origin và RP ID). Nếu bị hỏi thì thừa nhận.
+- Bộ kiểm passkey của mình đã bổ sung kiểm tra exact RP ID, closed origin, UV/UP, DER canonical parser và P-256 normalization (A2), cùng với passkey governance đa hành động (A3). Ranh giới kiểm tự động là local browser virtual authenticator; hardware passkey trực tiếp trên Fuji chưa chạy.
 
 **"AgentGuard402 cũng trên Fuji?"**
 - Họ có allowlist chung cho cả tài khoản cộng cap. Không có mission, không có provenance, không neo proof, không có benchmark.

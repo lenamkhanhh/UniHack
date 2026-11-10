@@ -29,6 +29,7 @@ Mọi biến môi trường dưới đây phải được cấu hình bằng gi�
 | `VALIDATOR_ADDRESS`<br>`NEXT_PUBLIC_VALIDATOR_ADDRESS` | `runMissionValidatorJob` | Địa chỉ công khai của Validator độc lập: `0x<40-hex-characters-validator-address>` | Public |
 | `RELAYER_PRIVATE_KEY` | `/api/passkey/relay` | Khóa riêng EOA Relayer tài trợ gas cho WebAuthn passkey (tách biệt khỏi Owner): `0x<64-hex-characters-relayer-key>` | **Secret (Tuyệt mật)** |
 | `LLM_API_KEY` | `agent.ts`, `bounty.ts` | API Key Google Gemini cho LLM Planner và Bounty Challenge: `<google-ai-studio-gemini-key>`. *Nếu vắng mặt: hệ thống tự động kích hoạt fallback deterministic có gắn nhãn trung thực, không làm hỏng static build.* | **Secret (Tuyệt mật)** |
+| `BOUNTY_INTERNAL_SECRET` | `/api/bounty/attempt` | Khóa bí mật dùng cho internal test harness phân loại source=test/smoke (x-bounty-auth-key): `<min-32-chars-bounty-secret>`. *Không có key mặc định.* | **Secret (Harness)** |
 | `ARENA_PRESENTER_KEY` | `arena.ts` | Khóa bí mật dùng cho người thuyết trình đặt lại bộ đếm Stage (`/stage`): `<presenter-passcode>` | **Secret (Presenter)** |
 
 ---
@@ -62,7 +63,7 @@ Trước khi bật trình chiếu hoặc gửi link cho ban giám khảo:
    - Trả về HTTP 200 OK.
    - `chainId`: 43113.
    - `database`: `connected`.
-   - `treasuryAddress`: `0x20451c1e2dCD83F166B4f22868BAdECb5868d545`.
+   - `treasuryAddress`: `0x20451c1e2dCD83F166B4f22868BAdECb5868d545` *(Lưu ý: Địa chỉ Fuji lịch sử này CHƯA bao gồm các bản vá contracts/ mới; hợp đồng đã vá chỉ có trong repo local, việc redeploy Fuji cần lệnh duyệt của Owner)*.
    - `latestBlock`: lớn hơn #60715000.
 2. **Kiểm tra số dư gas ví Owner & Relayer trên Fuji:**
    - Owner EOA (`0x4BC9...`): $\ge 0.2$ AVAX.

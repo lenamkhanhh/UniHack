@@ -3,12 +3,13 @@
 > **"Giao cho AI agent một nhiệm vụ và một ngân sách. Avalanche bảo đảm nó không tiêu quá, và bạn thấy từng đồng đi đâu."**  
 > *(Give your AI agent a mission and a budget. Avalanche makes sure it can't overspend — and shows you every cent.)*
 
-- **Verification Status**: S1 Payment & Audit Slice Verified; Stage S2 Lifecycle Wired (fund / anchor / feedback); x402 Hardening (ATC'26) Completed.
-- **Test Suite**: **169/169 Vitest tests pass** across 21 test suites on PostgreSQL 16 + PGlite.
-- **Smart Contracts**: **37/37 Foundry tests pass** (`contracts/test/GuardedTreasury.t.sol`), including Merkle payee root verification, gasless EIP-3009 sweep, and strict tool cap guardrails.
+- **Verification Status**: S1 Payment & Audit Slice Verified; Stage S2 Lifecycle Wired (fund / anchor / feedback); x402 Hardening (ATC'26) Completed; Reviewer Fixes A1–A8 Completed.
+- **Test Suite**: **277 passed / 1 skipped Vitest tests** across 32 test files in `apps/web` on PostgreSQL 16 + PGlite, and **19/19 Vitest tests** in `@missionpay/guard`.
+- **Smart Contracts**: **111/111 Foundry tests pass** across 6 suites in `contracts/test/` (43 GuardedTreasury with A1 root snapshot checks, 32 PasskeyGovernance with A3 owner actions, 16 PasskeyMissionAuthority, 12 MissionCrossChainICM, 7 ValidationRegistry, and 1 GuardedTreasuryInvariant suite with 6 stateful properties fuzzed over 512 runs / 32,768 calls).
+- **Python Benchmark**: **8/8 unit tests pass** in `eval/agentdojo/test_provguard_pairs.py` with process-isolated hard timeout termination and provenance fingerprinting.
 - **ERC-8004 Support**: Pinned and verified against official Fuji Identity (`0x8004A818...`) and Reputation (`0x8004B663...`) registries.
 - **Proof Verifier**: Standalone cryptographic verifier pass (`scripts/verify-proof.ts`, keccak256 hash-chaining + checkpoint matching).
-- **Open Code Findings**: 0 (SW-01, SW-02, SW-03, ERC-01, ERC-02, P1-WIRE closed).
+- **On-Chain Deployment Notice**: Smart contract patches in `contracts/src/` are tested and verified locally. The existing Fuji deployment (`0x2045...`) is the historical deployment and does NOT yet reflect these new patches. Live Fuji deployment is pending explicit owner authorization.
 
 ---
 
@@ -134,9 +135,10 @@ The verifier independently checks:
 | **Database Persistence (PostgreSQL 16)** | **VERIFIED** | 101 Vitest cases run directly against live PostgreSQL daemon on port 55432 & PGlite. |
 | **Unmocked Browser E2E** | **VERIFIED** | Playwright real-integration spec passes against live backend & DB. |
 | **Cryptographic Proof Verifier** | **VERIFIED** | Standalone CLI verifier validates hash-chain and database checkpoint. |
-| **GuardedTreasury Smart Contract (S2)** | **COMPILED & VERIFIED** | Smart contract in `contracts/src/GuardedTreasury.sol`, **31/31 Foundry tests pass** (`contracts/test/GuardedTreasury.t.sol`). Includes EIP-3009 gasless sweep and tool cap check. |
-| **ERC-8004 Identity & Feedback (S3)** | **VERIFIED & PINNED** | Pinned verified implementation ABIs from Fuji contracts (`0x16e0FA...` and `0x7274e8...`), **7/7 Vitest tests pass** with function selector matching. |
-| **Avalanche Fuji Live Settlement** | *PENDING_FUJI* | Requires live testnet RPC, funded Fuji USDC, and owner broadcast approval. |
+| **GuardedTreasury & Passkey Smart Contracts (S2)** | **COMPILED & VERIFIED** | Smart contracts in `contracts/src/`, **111/111 Foundry tests pass** (`contracts/test/`). Includes A1 root snapshot enforcement, A3 passkey owner governance actions, and 6 stateful invariants. *(Lưu ý: Triển khai Fuji lịch sử `0x2045...` chưa cập nhật các bản vá mới này).* |
+| **Passkey UI & WebAuthn Relay** | **VERIFIED (LOCAL CRYPTO BOUNDARY)** | Exact P-256 software verification and virtual authenticators verified in tests (`webauthn-p256.test.ts`, `passkey-relay.test.ts`). Live physical biometric hardware prompt on Fuji is marked `NOT_RUN` (pending live hardware owner signoff). |
+| **ERC-8004 Identity & Feedback (S3)** | **VERIFIED & PINNED** | Pinned verified implementation ABIs from Fuji contracts (`0x16e0FA...` and `0x7274e8...`), **11/11 Vitest tests pass** (`erc8004.test.ts`). |
+| **Avalanche Fuji Live Settlement** | *PENDING_FUJI* | Requires live testnet RPC, funded Fuji USDC, and explicit owner broadcast approval. Historical Fuji deployment does NOT include new contract patches. |
 | **Public Production Deployment** | *PENDING_FUJI* | Production deployment cutover scheduled for Step 6. |
 
 ---

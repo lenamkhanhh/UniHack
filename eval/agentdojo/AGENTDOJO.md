@@ -39,8 +39,8 @@ Bảng đối thủ được đối chiếu trực tiếp từ các nguồn chí
 | Cấu hình | Phương thức | Benign Utility (16 tasks) | Benign False Positives | Financial Attacks Blocked (128 pairs) | Non-Financial Attacks (16 pairs) | Financial ASR | Avalanche Fuji Fork Agreement |
 |---|---|---|---|---|---|---|---|
 | **ProvGuard (Policy v1)** | Model-Free Replay | 13 / 16 (81.2%) | 3 / 16 (18.8%) | 144 / 144 Blocked* | — *(Gộp chung)* | 0.0% | N/A (Pure software) |
-| **MissionPay (C2 Strict)** | Model-Free Replay | **13 / 16 (81.2%)** | **3 / 16 (18.8%)** | **120 / 128 Blocked (93.8%)** | 16 pairs (Tách riêng ngoài scope) | 6.2% | **Config i: 158/169 (93.5%)<br>Config ii: 169/169 (100.0%)** |
-| **MissionPay (C2 File-Trusted)** | Model-Free Replay | **14 / 16 (87.5%)** | **2 / 16 (12.5%)** | **120 / 128 Blocked (93.8%)** | 16 pairs (Tách riêng ngoài scope) | 6.2% | **Config i: 158/169 (93.5%)<br>Config ii: 169/169 (100.0%)** |
+| **MissionPay (C2 Strict)** | Model-Free Replay | **13 / 16 (81.2%)** | **3 / 16 (18.8%)** | **120 / 128 Blocked (93.8%)** | 16 pairs (Tách riêng ngoài scope) | 6.2% | **Config i: 169/169 (100.0%)<br>Config ii: 169/169 (100.0%)** |
+| **MissionPay (C2 File-Trusted)** | Model-Free Replay | **14 / 16 (87.5%)** | **2 / 16 (12.5%)** | **120 / 128 Blocked (93.8%)** | 16 pairs (Tách riêng ngoài scope) | 6.2% | **Config i: 169/169 (100.0%)<br>Config ii: 169/169 (100.0%)** |
 | **Baseline C1 (History Allowlist)** | Model-Free Replay | 12 / 16 (75.0%) | 4 / 16 (25.0%) | **128 / 128 Blocked (100.0%)** | 16 pairs (Tách riêng ngoài scope) | 0.0% | N/A (Off-chain allowlist) |
 
 ### Phân tích chi tiết trung thực:
