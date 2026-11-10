@@ -56,31 +56,24 @@ export async function POST(
         });
 
         if (tx.validationJob) {
-          try {
-            await tx.validationJob.upsert({
-              where: { missionSlug: slug },
-              create: {
-                missionSlug: slug,
-                missionId: mission.missionId,
-                requestHash,
-                status: 'QUEUED',
-                mode: getPaymentMode(),
-                fromBlock: mission.creationBlock ?? undefined,
-                retryCount: 0,
-              },
-              update: {
-                requestHash,
-                status: 'QUEUED',
-                mode: getPaymentMode(),
-                retryCount: 0,
-              },
-            });
-          } catch (jobDbErr: any) {
-            // Foreign key failure P2003 only happens in mocked unit tests where parent mission wasn't written to real Postgres
-            if (jobDbErr?.code !== 'P2003') {
-              throw jobDbErr;
-            }
-          }
+          await tx.validationJob.upsert({
+            where: { missionSlug: slug },
+            create: {
+              missionSlug: slug,
+              missionId: mission.missionId,
+              requestHash,
+              status: 'QUEUED',
+              mode: getPaymentMode(),
+              fromBlock: mission.creationBlock ?? undefined,
+              retryCount: 0,
+            },
+            update: {
+              requestHash,
+              status: 'QUEUED',
+              mode: getPaymentMode(),
+              retryCount: 0,
+            },
+          });
         }
       },
       { missionSlug: slug }

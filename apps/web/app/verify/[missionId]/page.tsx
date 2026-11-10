@@ -22,6 +22,53 @@ export default function VerifyMissionProofPage() {
   const [verifyUrl, setVerifyUrl] = useState('');
   const [isSeededDemo, setIsSeededDemo] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [walletSubmitting, setWalletSubmitting] = useState(false);
+  const [walletError, setWalletError] = useState<string | null>(null);
+  const [reconcileSuccess, setReconcileSuccess] = useState<string | null>(null);
+
+  const handleOwnerSignAndBroadcast = async () => {
+    if (!ercValidation?.unsignedRequest) return;
+    setWalletSubmitting(true);
+    setWalletError(null);
+    try {
+      if (typeof window === 'undefined' || !(window as any).ethereum) {
+        throw new Error('No Web3 wallet (MetaMask) detected in browser.');
+      }
+      const ethereum = (window as any).ethereum;
+      const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
+      const currentAccount = accounts[0];
+      const req = ercValidation.unsignedRequest;
+      if (req.ownerAddress && currentAccount.toLowerCase() !== req.ownerAddress.toLowerCase()) {
+        throw new Error(`Connected wallet (${currentAccount}) is not the mission owner (${req.ownerAddress})`);
+      }
+      const txHash = await ethereum.request({
+        method: 'eth_sendTransaction',
+        params: [
+          {
+            from: currentAccount,
+            to: req.to,
+            data: req.data,
+            value: req.value || '0x0',
+          },
+        ],
+      });
+      const res = await fetch(`/api/verify/${missionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ txHash }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Reconciliation failed');
+      }
+      setReconcileSuccess(`Request submitted on-chain! Tx: ${txHash}`);
+      setTimeout(() => { window.location.reload(); }, 1500);
+    } catch (err: any) {
+      setWalletError(err?.message || 'Failed to submit validation request');
+    } finally {
+      setWalletSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -382,6 +429,34 @@ export default function VerifyMissionProofPage() {
                     #{ercValidation.agentId || '294'}
                   </span>
                 </div>
+              </div>
+            )}
+
+            {ercValidation?.status === 'REQUEST_PENDING' && ercValidation?.unsignedRequest && (
+              <div className="bg-amber-950/40 border border-amber-600/60 p-3 rounded-xl space-y-2 text-xs mt-2" data-testid="owner-unsigned-request-box">
+                <span className="font-bold text-amber-300 block">Owner Action Required: Submit On-Chain Validation Request</span>
+                <p className="text-slate-300 text-[11px]">
+                  Backend does not hold owner private key. Sign this transaction with the mission owner wallet to request independent validator verification.
+                </p>
+                <div className="font-mono text-[10px] text-slate-300 bg-black/40 p-2 rounded">
+                  <div>Registry: <span className="text-amber-200">{ercValidation.unsignedRequest.to}</span></div>
+                  <div>RequestHash: <span className="text-cyan-200">{ercValidation.unsignedRequest.requestHash}</span></div>
+                </div>
+                <button
+                  type="button"
+                  data-testid="sign-validation-request-button"
+                  onClick={handleOwnerSignAndBroadcast}
+                  disabled={walletSubmitting}
+                  className="w-full py-1.5 px-3 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-black font-bold rounded-lg text-xs transition-colors"
+                >
+                  {walletSubmitting ? 'Signing in Wallet...' : 'Sign & Broadcast Request via MetaMask'}
+                </button>
+                {walletError && (
+                  <div className="text-red-400 text-[11px] font-bold mt-1">⚠️ {walletError}</div>
+                )}
+                {reconcileSuccess && (
+                  <div className="text-emerald-400 text-[11px] font-bold mt-1">✓ {reconcileSuccess}</div>
+                )}
               </div>
             )}
           </div>

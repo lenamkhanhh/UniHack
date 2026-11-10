@@ -16,11 +16,22 @@ export class ChallengeError extends Error {
 }
 
 const ALLOWED_PAYLOAD_KEYS: Record<ActionType, string[]> = {
-  CREATE_MISSION: ['slug', 'agentAddress', 'treasuryCap', 'toolCap', 'durationSeconds', 'targetMissionSlug', 'payees'],
+  CREATE_MISSION: [
+    'slug',
+    'agentAddress',
+    'treasuryCap',
+    'toolCap',
+    'durationSeconds',
+    'targetMissionSlug',
+    'payees',
+    'creationBlock',
+    'receiptTxHash',
+    'creationReceiptTxHash',
+  ],
   ACTIVATE: ['missionId', 'ownerAddress', 'agentAddress', 'treasuryCap', 'toolCap', 'configVersion', 'policyHash', 'targetMissionSlug', 'fundingTxHash', 'payees', 'payeeRootTxHash'],
   READ_MISSION: ['slug', 'targetMissionSlug'],
   PAUSE_S1: ['desiredPaused'],
-  CLOSE_MISSION_S1: ['slug', 'targetMissionSlug'],
+  CLOSE_MISSION_S1: ['slug', 'targetMissionSlug', 'action'],
   COMPLETE_MISSION: ['slug', 'deliverableHash', 'targetMissionSlug', 'anchorTxHash'],
   PREPARE_FEEDBACK: ['slug', 'deliverableHash', 'agentId', 'score', 'feedbackHash', 'targetMissionSlug'],
   PUBLISH_MISSION: ['slug', 'publicPublished', 'targetMissionSlug'],

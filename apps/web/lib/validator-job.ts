@@ -12,6 +12,7 @@ import {
   getAddress,
   encodeFunctionData,
   decodeEventLog,
+  encodeEventTopics,
   parseAbiItem,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -115,12 +116,28 @@ export const VALIDATION_RESPONSE_EVENT_ABI = parseAbiItem(
   'event ValidationResponse(address indexed validatorAddress, uint256 indexed agentId, bytes32 indexed requestHash, uint8 response, string responseURI, bytes32 responseHash, string tag)'
 );
 
+export const MISSION_CREATED_EVENT_ABI = parseAbiItem(
+  'event MissionCreated(bytes32 indexed missionId, address indexed agent, uint256 cap, uint256 expiresAt)'
+);
+
+export function getValidatorAddress(): string {
+  const key = getValidatorPrivateKey();
+  if (key) {
+    try {
+      return privateKeyToAccount(key).address;
+    } catch {}
+  }
+  return process.env.VALIDATOR_ADDRESS || '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5';
+}
+
 export type ValidationJobStatus =
   | 'QUEUED'
+  | 'LOCAL_EVALUATING'
   | 'LOCAL_EVALUATED'
   | 'REQUEST_PENDING'
   | 'RESPONSE_PENDING'
   | 'RESPONSE_CONFIRMED'
+  | 'STALE_CONTEXT'
   | 'FAILED';
 
 export interface UnsignedValidationRequest {
@@ -171,6 +188,90 @@ export function buildUnsignedValidationRequest(params: {
     ownerAddress: params.ownerAddress,
     missionSlug: params.slug,
   };
+}
+
+export async function verifyMissionCreationReceipt(params: {
+  receiptTxHash: string;
+  expectedMissionId: string;
+  expectedTreasury?: string;
+  publicClient?: PublicClient;
+  rpcUrl?: string;
+}): Promise<{ valid: boolean; creationBlock?: bigint; error?: string }> {
+  const treasury = (params.expectedTreasury || getGuardedTreasuryAddress()).toLowerCase();
+  const rpcUrl =
+    params.rpcUrl ||
+    process.env.AVALANCHE_FUJI_RPC_URL ||
+    process.env.NEXT_PUBLIC_RPC_URL ||
+    'https://api.avax-test.network/ext/bc/C/rpc';
+
+  const client =
+    params.publicClient ||
+    createPublicClient({
+      chain: avalancheFuji,
+      transport: http(rpcUrl),
+    });
+
+  const receipt = await client.getTransactionReceipt({
+    hash: params.receiptTxHash as Hex,
+  }).catch(() => null);
+
+  if (!receipt) {
+    return { valid: false, error: 'Transaction receipt not found on chain' };
+  }
+
+  if (receipt.status !== 'success') {
+    return { valid: false, error: 'Creation transaction reverted on chain' };
+  }
+
+  if (receipt.to && receipt.to.toLowerCase() !== treasury) {
+    return { valid: false, error: `Recipient mismatch: expected ${treasury}, got ${receipt.to}` };
+  }
+
+  const expectedMissionIdFormatted = (
+    params.expectedMissionId.startsWith('0x')
+      ? params.expectedMissionId
+      : `0x${params.expectedMissionId}`
+  ).toLowerCase();
+
+  const expectedTopic0 = encodeEventTopics({
+    abi: [MISSION_CREATED_EVENT_ABI],
+    eventName: 'MissionCreated',
+  })[0]?.toLowerCase();
+
+  let eventFound = false;
+  for (const log of receipt.logs || []) {
+    if (log.address && log.address.toLowerCase() !== treasury) {
+      continue;
+    }
+    if (log.topics && log.topics[0]?.toLowerCase() === expectedTopic0) {
+      if (log.topics[1]?.toLowerCase() === expectedMissionIdFormatted) {
+        eventFound = true;
+        break;
+      }
+    }
+    try {
+      const decoded = decodeEventLog({
+        abi: [MISSION_CREATED_EVENT_ABI],
+        data: log.data,
+        topics: log.topics,
+      }) as any;
+
+      if (decoded.eventName === 'MissionCreated') {
+        const evMissionId = (decoded.args.missionId as string)?.toLowerCase();
+        if (evMissionId === expectedMissionIdFormatted) {
+          eventFound = true;
+          break;
+        }
+      }
+    } catch {}
+  }
+
+  if (!eventFound) {
+    return { valid: false, error: 'MissionCreated event not found or missionId mismatch in receipt logs' };
+  }
+
+  const blockNumber = typeof receipt.blockNumber === 'bigint' ? receipt.blockNumber : BigInt(receipt.blockNumber || 0);
+  return { valid: true, creationBlock: blockNumber };
 }
 
 export interface InMemoryValidationRecord {
@@ -309,6 +410,7 @@ export async function buildMissionValidationBundle(
     treasury,
     payees,
     cap: mission.treasuryCap?.toString(),
+    ownerAddress: mission.ownerAddress,
     creationBlock: mission.creationBlock ?? undefined,
   };
 
@@ -410,7 +512,48 @@ export async function runMissionValidatorJob(
     };
   }
 
-  // 2. Prepare evidence payload
+  // 2. Persist local evaluation to DB BEFORE any expensive/external broadcast (A4.4)
+  // Fail closed if database is unavailable (do not swallow!)
+  const snapshotBlockBigInt = validationResult.snapshotBlock ? BigInt(validationResult.snapshotBlock) : null;
+  const fromBlockBigInt = options.fromBlock ?? (validationResult.fromBlock ? BigInt(validationResult.fromBlock) : (bundle.creationBlock ?? null));
+  const toBlockBigInt = options.toBlock ?? (validationResult.toBlock ? BigInt(validationResult.toBlock) : (snapshotBlockBigInt ?? null));
+
+  await prisma.validationJob.upsert({
+    where: { missionSlug: slug },
+    create: {
+      missionSlug: slug,
+      missionId: bundle.missionId,
+      requestHash,
+      status: 'LOCAL_EVALUATED',
+      mode: getPaymentMode(),
+      fromBlock: fromBlockBigInt,
+      toBlock: toBlockBigInt,
+      snapshotBlock: snapshotBlockBigInt,
+      evaluationResult: JSON.stringify(validationResult),
+      score: validationResult.score,
+      tag: validationResult.tag,
+      validatorAddress: process.env.VALIDATOR_ADDRESS || '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+      agentId: agentId.toString(),
+      unsignedRequest: null,
+      retryCount: 0,
+    },
+    update: {
+      requestHash,
+      status: 'LOCAL_EVALUATED',
+      mode: getPaymentMode(),
+      fromBlock: fromBlockBigInt,
+      toBlock: toBlockBigInt,
+      snapshotBlock: snapshotBlockBigInt,
+      evaluationResult: JSON.stringify(validationResult),
+      score: validationResult.score,
+      tag: validationResult.tag,
+      validatorAddress: process.env.VALIDATOR_ADDRESS || '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+      agentId: agentId.toString(),
+      failureReason: null,
+    },
+  });
+
+  // 3. Prepare evidence payload
   const responseData = {
     requestHash,
     missionId: bundle.missionId,
@@ -439,7 +582,7 @@ export async function runMissionValidatorJob(
     process.env.VALIDATOR_ADDRESS ||
     '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5';
 
-  // 3. On-Chain Submission if enabled and not skipped
+  // 4. On-Chain Submission if enabled and not skipped
   if (!options.skipOnChainBroadcast && status !== 'FAILED') {
     let requestExists = false;
     let onChainCompleted = false;
@@ -471,6 +614,12 @@ export async function runMissionValidatorJob(
     if (onChainCompleted) {
       status = 'RESPONSE_CONFIRMED';
       isRegisteredOnChain = true;
+      await prisma.validationJob.update({
+        where: { missionSlug: slug },
+        data: {
+          status: 'RESPONSE_CONFIRMED',
+        },
+      });
     } else if (!requestExists) {
       if (options.ownerWalletClient && options.ownerWalletClient.account) {
         // Explicit owner signer provided (e.g. in test or authorized session)
@@ -507,7 +656,16 @@ export async function runMissionValidatorJob(
           agentId,
           slug,
           requestHash,
-          ownerAddress: bundle.treasury,
+          ownerAddress: bundle.ownerAddress,
+        });
+        await prisma.validationJob.update({
+          where: { missionSlug: slug },
+          data: {
+            status: 'REQUEST_PENDING',
+            unsignedRequest: JSON.stringify(unsignedRequest),
+            validatorAddress,
+            agentId: agentId.toString(),
+          },
         });
       }
     } else {
@@ -541,11 +699,20 @@ export async function runMissionValidatorJob(
           account: validatorAccount,
         });
 
-        const respReceipt = await publicClient.waitForTransactionReceipt({
-          hash: responseTxHash as `0x${string}`,
+        // Save tx hash immediately after submission (A4.4)
+        await prisma.validationJob.update({
+          where: { missionSlug: slug },
+          data: {
+            responseTxHash,
+            status: 'RESPONSE_PENDING',
+          },
         });
 
-        if (respReceipt.status === 'success') {
+        const respReceipt = await publicClient.waitForTransactionReceipt({
+          hash: responseTxHash as `0x${string}`,
+        }).catch(() => null);
+
+        if (respReceipt && respReceipt.status === 'success') {
           const confirmed = await publicClient.readContract({
             address: registryAddress,
             abi: VALIDATION_REGISTRY_ABI,
@@ -559,62 +726,34 @@ export async function runMissionValidatorJob(
             status = 'FAILED';
             failureReason = 'isValidationComplete returned false after response broadcast';
           }
-        } else {
+        } else if (respReceipt && respReceipt.status !== 'success') {
           status = 'FAILED';
           failureReason = 'ValidationResponse transaction reverted';
+        } else {
+          // Unknown / timeout receipt remains pending (A4.4)
+          status = 'RESPONSE_PENDING';
+          failureReason = 'Receipt confirmation pending or timed out';
         }
+
+        await prisma.validationJob.update({
+          where: { missionSlug: slug },
+          data: {
+            status,
+            failureReason: status === 'FAILED' ? failureReason : null,
+          },
+        });
       } catch (broadcastErr: any) {
         status = 'FAILED';
         failureReason = broadcastErr?.message || 'Validator broadcast failed';
+        await prisma.validationJob.update({
+          where: { missionSlug: slug },
+          data: {
+            status: 'FAILED',
+            failureReason,
+          },
+        });
       }
     }
-  }
-
-  // 4. Persist to database (resilient to restart)
-  try {
-    await prisma.validationJob.upsert({
-      where: { missionSlug: slug },
-      create: {
-        missionSlug: slug,
-        missionId: bundle.missionId,
-        requestHash,
-        status,
-        mode: getPaymentMode(),
-        fromBlock: options.fromBlock,
-        toBlock: options.toBlock,
-        snapshotBlock: validationResult.snapshotBlock ? BigInt(validationResult.snapshotBlock) : null,
-        evaluationResult: JSON.stringify(validationResult),
-        score: validationResult.score,
-        tag: validationResult.tag,
-        validatorAddress,
-        agentId: agentId.toString(),
-        unsignedRequest: unsignedRequest ? JSON.stringify(unsignedRequest) : null,
-        requestTxHash,
-        responseTxHash,
-        failureReason,
-        retryCount: 0,
-      },
-      update: {
-        requestHash,
-        status,
-        mode: getPaymentMode(),
-        fromBlock: options.fromBlock,
-        toBlock: options.toBlock,
-        snapshotBlock: validationResult.snapshotBlock ? BigInt(validationResult.snapshotBlock) : null,
-        evaluationResult: JSON.stringify(validationResult),
-        score: validationResult.score,
-        tag: validationResult.tag,
-        validatorAddress,
-        agentId: agentId.toString(),
-        unsignedRequest: unsignedRequest ? JSON.stringify(unsignedRequest) : null,
-        requestTxHash: requestTxHash ?? undefined,
-        responseTxHash: responseTxHash ?? undefined,
-        failureReason,
-        retryCount: { increment: 1 },
-      },
-    });
-  } catch (dbErr) {
-    console.warn('[ValidationJob DB Persist Warning]', dbErr);
   }
 
   // 5. Update memory cache and write evidence file if directory exists
@@ -692,6 +831,16 @@ export async function reconcileOwnerValidationRequestReceipt(
     return { success: false, status: 'FAILED', error: `ValidationJob not found for slug: ${slug}` };
   }
 
+  // CRITICAL (Round 3 §A4.6): A job must have an actual evaluated score and tag before responding!
+  // Never default unevaluated jobs to 100 or 'verified-full'.
+  if (job.score === null || job.score === undefined || !job.tag) {
+    return {
+      success: false,
+      status: job.status as ValidationJobStatus,
+      error: 'Cannot reconcile or respond for unevaluated job: score and tag must be persisted from evaluation',
+    };
+  }
+
   const rpcUrl =
     options.rpcUrl ||
     process.env.AVALANCHE_FUJI_RPC_URL ||
@@ -735,8 +884,24 @@ export async function reconcileOwnerValidationRequestReceipt(
     };
   }
 
-  // Find and decode ValidationRequest event in logs
+  // Verify transaction sender is authorized owner or agent
+  const sender = (receipt as any).from?.toLowerCase();
+  const authorizedOwner = job.mission.ownerAddress.toLowerCase();
+  const authorizedAgent = job.mission.agentAddress.toLowerCase();
+  if (sender && sender !== authorizedOwner && sender !== authorizedAgent) {
+    return {
+      success: false,
+      status: job.status as ValidationJobStatus,
+      error: `Unauthorized transaction sender: ${sender} is neither mission owner (${authorizedOwner}) nor agent (${authorizedAgent})`,
+    };
+  }
+
+  // Find and decode ValidationRequest event in logs with exact validatorAddress, agentId, and requestHash
   let requestEventFound = false;
+  const expectedValidator = (job.validatorAddress || getValidatorAddress()).toLowerCase();
+  const expectedAgentId = (job.agentId || getErc8004AgentId().toString()).toLowerCase();
+  const expectedRequestHash = job.requestHash.toLowerCase();
+
   for (const log of receipt.logs || []) {
     if (log.address && log.address.toLowerCase() !== registryAddress.toLowerCase()) {
       continue;
@@ -749,8 +914,15 @@ export async function reconcileOwnerValidationRequestReceipt(
       }) as any;
 
       if (decoded.eventName === 'ValidationRequest') {
-        const eventReqHash = decoded.args.requestHash?.toLowerCase();
-        if (eventReqHash === job.requestHash.toLowerCase()) {
+        const evValidator = decoded.args.validatorAddress?.toLowerCase();
+        const evAgentId = decoded.args.agentId?.toString().toLowerCase();
+        const evReqHash = decoded.args.requestHash?.toLowerCase();
+
+        if (
+          evValidator === expectedValidator &&
+          evAgentId === expectedAgentId &&
+          evReqHash === expectedRequestHash
+        ) {
           requestEventFound = true;
           break;
         }
@@ -762,8 +934,50 @@ export async function reconcileOwnerValidationRequestReceipt(
     return {
       success: false,
       status: job.status as ValidationJobStatus,
-      error: 'Matching ValidationRequest event for requestHash not found in transaction logs',
+      error: 'Matching ValidationRequest event with exact validator, agentId, and requestHash not found in transaction logs',
     };
+  }
+
+  // Check if already completed on-chain
+  let onChainCompleted = false;
+  try {
+    onChainCompleted = Boolean(
+      await publicClient.readContract({
+        address: registryAddress,
+        abi: VALIDATION_REGISTRY_ABI,
+        functionName: 'isValidationComplete',
+        args: [job.requestHash as Hex],
+      })
+    );
+  } catch {}
+
+  if (onChainCompleted) {
+    // Read actual matched on-chain status fields (A4.6)
+    try {
+      const statusData = (await publicClient.readContract({
+        address: registryAddress,
+        abi: VALIDATION_REGISTRY_ABI,
+        functionName: 'getValidationStatus',
+        args: [job.requestHash as Hex],
+      })) as readonly [string, bigint, number, string, string, bigint];
+
+      await prisma.validationJob.update({
+        where: { missionSlug: slug },
+        data: {
+          requestTxHash: txHash,
+          status: 'RESPONSE_CONFIRMED',
+          score: Number(statusData[2]),
+          tag: statusData[4] || job.tag,
+        },
+      });
+
+      return {
+        success: true,
+        status: 'RESPONSE_CONFIRMED',
+        requestTxHash: txHash,
+        responseTxHash: job.responseTxHash || undefined,
+      };
+    } catch {}
   }
 
   // Advance state to RESPONSE_PENDING
@@ -790,8 +1004,8 @@ export async function reconcileOwnerValidationRequestReceipt(
       const responseData = {
         requestHash: job.requestHash,
         missionSlug: slug,
-        score: job.score ?? 100,
-        tag: job.tag ?? 'verified-full',
+        score: job.score,
+        tag: job.tag,
       };
       const responseHash = keccak256(toHex(JSON.stringify(responseData)));
 
@@ -801,20 +1015,30 @@ export async function reconcileOwnerValidationRequestReceipt(
         functionName: 'validationResponse',
         args: [
           job.requestHash as Hex,
-          job.score ?? 100,
+          job.score,
           responseURI,
           responseHash,
-          job.tag ?? 'verified-full',
+          job.tag,
         ],
         chain: avalancheFuji,
         account: validatorAccount,
       });
 
-      const respReceipt = await publicClient.waitForTransactionReceipt({
-        hash: responseTxHash as Hex,
+      // Save responseTxHash immediately in case receipt wait times out (A4.4)
+      await prisma.validationJob.update({
+        where: { missionSlug: slug },
+        data: {
+          requestTxHash: txHash,
+          responseTxHash,
+          status: 'RESPONSE_PENDING',
+        },
       });
 
-      if (respReceipt.status === 'success') {
+      const respReceipt = await publicClient.waitForTransactionReceipt({
+        hash: responseTxHash as Hex,
+      }).catch(() => null);
+
+      if (respReceipt && respReceipt.status === 'success') {
         const confirmed = await publicClient.readContract({
           address: registryAddress,
           abi: VALIDATION_REGISTRY_ABI,
@@ -826,9 +1050,10 @@ export async function reconcileOwnerValidationRequestReceipt(
         } else {
           currentStatus = 'FAILED';
         }
-      } else {
+      } else if (respReceipt && respReceipt.status !== 'success') {
         currentStatus = 'FAILED';
       }
+      // If respReceipt is null (wait timed out), stays RESPONSE_PENDING with responseTxHash saved
     } catch (broadcastErr: any) {
       currentStatus = 'FAILED';
       await prisma.validationJob.update({
@@ -866,39 +1091,89 @@ export async function reconcileOwnerValidationRequestReceipt(
 }
 
 /**
+ * Claims the next queued or expired-lease validation job atomically with lease semantics.
+ */
+export async function claimNextValidationJob(
+  workerId: string = 'worker-default',
+  leaseDurationMs: number = 60_000
+): Promise<any | null> {
+  const now = new Date();
+  const leaseUntil = new Date(now.getTime() + leaseDurationMs);
+
+  return await prisma.$transaction(async (tx) => {
+    const candidate = await tx.validationJob.findFirst({
+      where: {
+        OR: [
+          { status: 'QUEUED' },
+          {
+            status: 'LOCAL_EVALUATING',
+            workerLeaseUntil: { lt: now },
+          },
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (!candidate) return null;
+
+    const updated = await tx.validationJob.updateMany({
+      where: {
+        id: candidate.id,
+        status: candidate.status,
+        workerLeaseUntil: candidate.workerLeaseUntil,
+      },
+      data: {
+        status: 'LOCAL_EVALUATING',
+        workerLeaseOwner: workerId,
+        workerLeaseUntil: leaseUntil,
+        retryCount: { increment: 1 },
+      },
+    });
+
+    if (updated.count === 0) {
+      return null;
+    }
+
+    return await tx.validationJob.findUnique({
+      where: { id: candidate.id },
+      include: { mission: true },
+    });
+  });
+}
+
+/**
  * Worker entry point to process queued validation jobs with claim/lease semantics.
  */
 export async function processQueuedValidationJobs(
   limit: number = 5,
   options: RunValidatorJobOptions = {}
 ): Promise<{ processed: number; results: ValidatorJobResult[] }> {
-  const queuedJobs = await prisma.validationJob.findMany({
-    where: { status: 'QUEUED' },
-    take: limit,
-    orderBy: { createdAt: 'asc' },
-  });
-
+  const workerId = `worker-${Math.random().toString(36).slice(2, 9)}`;
   const results: ValidatorJobResult[] = [];
-  for (const job of queuedJobs) {
-    try {
-      // Lease / claim job atomically
-      await prisma.validationJob.update({
-        where: { id: job.id },
-        data: {
-          status: 'LOCAL_EVALUATED',
-          retryCount: { increment: 1 },
-        },
-      });
 
-      const res = await runMissionValidatorJob(job.missionSlug, options);
+  for (let i = 0; i < limit; i++) {
+    const claimedJob = await claimNextValidationJob(workerId);
+    if (!claimedJob) break;
+
+    try {
+      const res = await runMissionValidatorJob(claimedJob.missionSlug, options);
       results.push(res);
     } catch (err: any) {
       await prisma.validationJob.update({
-        where: { id: job.id },
+        where: { id: claimedJob.id },
         data: {
           status: 'FAILED',
           failureReason: err?.message || 'Worker processing error',
+          workerLeaseUntil: null,
         },
+      });
+      results.push({
+        bundle: null as any,
+        requestHash: claimedJob.requestHash as Hex,
+        validationResult: null as any,
+        status: 'FAILED',
+        isRegisteredOnChain: false,
+        failureReason: err?.message || 'Worker processing error',
       });
     }
   }

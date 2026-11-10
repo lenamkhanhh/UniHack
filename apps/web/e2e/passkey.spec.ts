@@ -13,7 +13,7 @@ test.describe('A2: Passkey Mission Authority (RIP-7212 Precompile 0x100 & Real W
   test('User cancellation does NOT succeed and displays error deterministically (A2-R6)', async ({ page }) => {
     // Deterministic cancellation mock via init script
     await page.addInitScript(() => {
-      window.__simulateWebAuthnCancel = true;
+      (window as any).__simulateWebAuthnCancel = true;
     });
 
     await page.goto('/missions/new');

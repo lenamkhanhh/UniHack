@@ -12,6 +12,7 @@ import {
   PayeeMerkleTreeResult,
 } from '@/lib/merkle';
 import { getGuardedTreasuryAddress } from '@/lib/config';
+import { verifyMissionCreationReceipt } from '@/lib/validator-job';
 
 export async function GET(req: NextRequest) {
   try {
@@ -119,11 +120,26 @@ export async function POST(req: NextRequest) {
     const policyHash = hashUtf8(`policy:1:${treasuryCap}:${toolCap}:${payeeRoot || ''}`);
 
     let creationBlock: bigint | null = null;
-    if (payload.creationBlock !== undefined && payload.creationBlock !== null) {
+    const receiptTxHash = payload.receiptTxHash || payload.creationReceiptTxHash;
+    if (receiptTxHash) {
+      const verifyRes = await verifyMissionCreationReceipt({
+        receiptTxHash,
+        expectedMissionId: missionId,
+      });
+      if (!verifyRes.valid) {
+        return NextResponse.json(
+          { error: `Invalid creation receipt: ${verifyRes.error}` },
+          { status: 400 }
+        );
+      }
+      creationBlock = verifyRes.creationBlock ?? null;
+    } else if (payload.creationBlock !== undefined && payload.creationBlock !== null && process.env.TEST_ALLOW_UNVERIFIED_CREATION_BLOCK === '1') {
+      // Test harness only: explicit flag to test legacy/unverified block paths
       try {
         creationBlock = BigInt(payload.creationBlock);
       } catch {}
     }
+    // Note: without verified on-chain receipt, creationBlock remains null (UNVERIFIED_PENDING_RECEIPT)
 
     const result = await prisma.$transaction(async (tx) => {
       await verifyAndConsumeChallenge(tx, {
@@ -163,7 +179,7 @@ export async function POST(req: NextRequest) {
       saveMissionPayees(slug, treeResult.payees);
     }
 
-    return NextResponse.json({ mission: result, payeeInfo }, { status: 201 });
+    return NextResponse.json({ mission: toMissionDto(result), payeeInfo }, { status: 201 });
   } catch (err: any) {
     if (err instanceof ChallengeError) {
       return NextResponse.json({ error: err.message }, { status: err.statusCode });

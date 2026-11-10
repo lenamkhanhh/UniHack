@@ -238,10 +238,13 @@ model ValidationJob {
   responseTxHash      String?
   failureReason       String?
   retryCount          Int      @default(0)
+  workerLeaseUntil    DateTime?
+  workerLeaseOwner    String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   @@index([status])
+  @@index([status, workerLeaseUntil])
   @@index([missionSlug])
 }
 

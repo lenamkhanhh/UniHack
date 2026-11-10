@@ -75,6 +75,7 @@ export function toMissionDto(
     payeesJson: mission.payeesJson ?? null,
     payeeRoot: mission.payeeRoot ?? null,
     payeeRootConfirmedOnchain: Boolean(options?.hasOnchainPayeeRoot),
+    creationBlock: mission.creationBlock != null ? mission.creationBlock.toString() : null,
     configVersion: mission.configVersion ?? 1,
     policyHash: mission.policyHash,
     publicPublished: Boolean(mission.publicPublished),

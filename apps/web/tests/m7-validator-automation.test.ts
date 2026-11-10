@@ -23,16 +23,21 @@ import {
   clearMemoryValidationCache,
   setValidationFetcherForTesting,
   processQueuedValidationJobs,
+  claimNextValidationJob,
   reconcileOwnerValidationRequestReceipt,
   buildUnsignedValidationRequest,
+  verifyMissionCreationReceipt,
+  MISSION_CREATED_EVENT_ABI,
   DEFAULT_VALIDATION_REGISTRY,
 } from '@/lib/validator-job';
 import { computeValidationRequestHash, validateBundleOnChain } from '@/lib/validation-bundle';
 import { computePayeeMerkleTree } from '@/lib/merkle';
+import { POST as missionCreatePOST } from '@/app/api/missions/route';
 import { POST as closeRoutePOST } from '@/app/api/missions/[slug]/close/route';
 import { POST as challengePOST } from '@/app/api/auth/challenge/route';
-import { GET as verifyRouteGET } from '@/app/api/verify/[missionId]/route';
-import { setAnchorFetcherForTesting } from '@/lib/config';
+import { GET as verifyRouteGET, POST as verifyRoutePOST } from '@/app/api/verify/[missionId]/route';
+import { setAnchorFetcherForTesting, getGuardedTreasuryAddress } from '@/lib/config';
+import { issueSpendToken } from '@/lib/auth';
 
 const TEST_HEAD_HASH = '0x7d46d87541ed812ada52afe7f1d3144d6a2b90b359a66162e54c8e41d675be2f' as const;
 
@@ -511,12 +516,15 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       auditHeadHash: TEST_HEAD_HASH,
     });
 
-    // Seed a confirmed validation job in database
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const requestHash = computeValidationRequestHash(bundle);
+
+    // Seed a confirmed validation job in database matching bundle requestHash
     await prisma.validationJob.create({
       data: {
         missionSlug: mission.slug,
         missionId: mission.missionId,
-        requestHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+        requestHash,
         status: 'RESPONSE_CONFIRMED',
         score: 100,
         tag: 'verified-full',
@@ -528,7 +536,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
 
     // Simulate complete process restart: wipe RAM map
     clearMemoryValidationCache();
-    expect(getMemoryValidationRecord('0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef')).toBeUndefined();
+    expect(getMemoryValidationRecord(requestHash)).toBeUndefined();
 
     // Query API
     const req = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`, {
@@ -808,6 +816,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     const mockReceipt = {
       status: 'success',
       to: DEFAULT_VALIDATION_REGISTRY,
+      from: mission.ownerAddress,
       logs: [
         {
           address: DEFAULT_VALIDATION_REGISTRY,
@@ -838,5 +847,423 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     const dbJob = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
     expect(dbJob?.status).toBe('RESPONSE_CONFIRMED');
     expect(dbJob?.requestTxHash).toBe(dummyTxHash);
+  });
+
+  // A4-12: Receipt-confirmed creation start vs unverified/forged creation block without receipt
+  it('M7-A4-12: receipt-confirmed creation start verifies on-chain MissionCreated event, forged/missing receipt leaves creationBlock null', async () => {
+    const slug = 'test-receipt-creation-slug';
+    const missionIdBytes32 = '0x11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff';
+    const treasury = getGuardedTreasuryAddress();
+
+    // 1. Missing receipt leaves creationBlock null (provenance unverified)
+    const payloadUnverified = {
+      slug: `${slug}-unverified`,
+      agentAddress: '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d',
+      treasuryCap: '5000000',
+      toolCap: '1000000',
+      durationSeconds: 3600,
+      creationBlock: '60689999', // User entered block without verified receipt
+    };
+
+    const chalReq = new NextRequest('http://localhost:3000/api/auth/challenge', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'CREATE_MISSION',
+        payload: payloadUnverified,
+        expectedSigner: ownerAccount.address,
+      }),
+    });
+    const chalRes = await challengePOST(chalReq);
+    const { message, nonce } = await chalRes.json();
+    const sigUnverified = await ownerAccount.signMessage({ message });
+
+    const createReq = new NextRequest('http://localhost:3000/api/missions', {
+      method: 'POST',
+      body: JSON.stringify({
+        nonce,
+        signature: sigUnverified,
+        payload: payloadUnverified,
+      }),
+    });
+    const createRes = await missionCreatePOST(createReq);
+    expect(createRes.status).toBe(201);
+    const createJson = await createRes.json();
+    expect(createJson.mission.creationBlock).toBeNull(); // Untrusted block ignored without receipt!
+
+    // 2. Receipt verification helper with mock client
+    const topics = encodeEventTopics({
+      abi: [MISSION_CREATED_EVENT_ABI],
+      eventName: 'MissionCreated',
+      args: {
+        missionId: missionIdBytes32 as `0x${string}`,
+      },
+    });
+
+    const mockReceipt = {
+      status: 'success',
+      to: treasury,
+      blockNumber: 60689850n,
+      logs: [{ address: treasury, topics, data: '0x' }],
+    };
+    const mockClient = {
+      getTransactionReceipt: vi.fn().mockResolvedValue(mockReceipt),
+    } as any;
+
+    const verifiedRes = await verifyMissionCreationReceipt({
+      receiptTxHash: '0xvalidCreationReceiptTxHash12345678901234567890123456789012345678',
+      expectedMissionId: missionIdBytes32,
+      publicClient: mockClient,
+    });
+    expect(verifiedRes.valid).toBe(true);
+    expect(verifiedRes.creationBlock).toBe(60689850n);
+
+    // 3. Forged receipt with reverted status fails
+    const mockRevertedReceipt = {
+      status: 'reverted',
+      to: treasury,
+      logs: [],
+    };
+    const mockRevertedClient = {
+      getTransactionReceipt: vi.fn().mockResolvedValue(mockRevertedReceipt),
+    } as any;
+    const revertedRes = await verifyMissionCreationReceipt({
+      receiptTxHash: '0xrevertedReceiptTxHash123456789012345678901234567890123456789012',
+      expectedMissionId: missionIdBytes32,
+      publicClient: mockRevertedClient,
+    });
+    expect(revertedRes.valid).toBe(false);
+    expect(revertedRes.error).toContain('reverted');
+  });
+
+  // A4-13: BigInt response serialization
+  it('M7-A4-13: POST /api/missions returns serialized BigInt via DTO without throwing', async () => {
+    const slug = 'test-bigint-serialization-slug';
+    process.env.TEST_ALLOW_UNVERIFIED_CREATION_BLOCK = '1';
+
+    const payload = {
+      slug,
+      agentAddress: '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d',
+      treasuryCap: '5000000',
+      toolCap: '1000000',
+      durationSeconds: 3600,
+      creationBlock: '60689800',
+    };
+
+    const chalReq = new NextRequest('http://localhost:3000/api/auth/challenge', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'CREATE_MISSION',
+        payload,
+        expectedSigner: ownerAccount.address,
+      }),
+    });
+    const chalRes = await challengePOST(chalReq);
+    const { message, nonce } = await chalRes.json();
+    const sig = await ownerAccount.signMessage({ message });
+
+    const createReq = new NextRequest('http://localhost:3000/api/missions', {
+      method: 'POST',
+      body: JSON.stringify({
+        nonce,
+        signature: sig,
+        payload,
+      }),
+    });
+
+    const res = await missionCreatePOST(createReq);
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.mission.slug).toBe(slug);
+    expect(json.mission.creationBlock).toBe('60689800'); // Serialized string, no BigInt TypeError!
+    delete process.env.TEST_ALLOW_UNVERIFIED_CREATION_BLOCK;
+  });
+
+  // A4-14: Two-worker claim concurrency
+  it('M7-A4-14: two workers concurrently claiming queued job guarantees exactly one winner', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      creationBlock: 60689700n,
+    });
+
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash: '0xconcurrentRaceRequestHash1234567890123456789012345678901234567890',
+        status: 'QUEUED',
+        mode: 'LIVE_FUJI',
+      },
+    });
+
+    // Both workers attempt atomic claim concurrently
+    const [worker1Res, worker2Res] = await Promise.all([
+      claimNextValidationJob('worker-A', 60_000),
+      claimNextValidationJob('worker-B', 60_000),
+    ]);
+
+    // Exactly one worker must succeed, the other must get null
+    const claimedCount = (worker1Res ? 1 : 0) + (worker2Res ? 1 : 0);
+    expect(claimedCount).toBe(1);
+
+    const winner = worker1Res || worker2Res;
+    expect(winner.status).toBe('LOCAL_EVALUATING');
+    expect(['worker-A', 'worker-B']).toContain(winner.workerLeaseOwner);
+    expect(winner.workerLeaseUntil).toBeDefined();
+  });
+
+  // A4-15: Crash lease reclaim
+  it('M7-A4-15: expired worker lease is reclaimed after crash by next worker', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      creationBlock: 60689700n,
+    });
+
+    // Seed a crashed worker job with expired lease
+    const expiredLease = new Date(Date.now() - 30_000); // 30s in the past
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash: '0xexpiredLeaseRequestHash1234567890123456789012345678901234567890',
+        status: 'LOCAL_EVALUATING',
+        workerLeaseOwner: 'crashed-worker-old',
+        workerLeaseUntil: expiredLease,
+        retryCount: 1,
+        mode: 'LIVE_FUJI',
+      },
+    });
+
+    // Recovery worker claims the expired job
+    const reclaimedJob = await claimNextValidationJob('recovery-worker', 60_000);
+    expect(reclaimedJob).not.toBeNull();
+    expect(reclaimedJob.missionSlug).toBe(mission.slug);
+    expect(reclaimedJob.workerLeaseOwner).toBe('recovery-worker');
+    expect(reclaimedJob.retryCount).toBe(2);
+    expect(new Date(reclaimedJob.workerLeaseUntil).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  // A4-16: Database failure in close route rolls back mission close
+  it('M7-A4-16: close route does not swallow DB errors; mission close is rolled back on error', async () => {
+    const { mission } = await createTestMission({
+      status: 'ACTIVE',
+    });
+
+    const chalReq = new NextRequest('http://localhost:3000/api/auth/challenge', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'CLOSE_MISSION_S1',
+        payload: { slug: mission.slug },
+        expectedSigner: ownerAccount.address,
+      }),
+    });
+    const chalRes = await challengePOST(chalReq);
+    const { message, nonce } = await chalRes.json();
+    const sig = await ownerAccount.signMessage({ message });
+
+    // Mock withLockOrder / prisma to simulate database failure during close
+    const spy = vi.spyOn(prisma, '$transaction').mockRejectedValueOnce(
+      new Error('Simulated PostgreSQL transaction error')
+    );
+
+    try {
+      const closeReq = new NextRequest(`http://localhost:3000/api/missions/${mission.slug}/close`, {
+        method: 'POST',
+        body: JSON.stringify({
+          nonce,
+          signature: sig,
+          payload: { slug: mission.slug },
+        }),
+      });
+
+      const closeRes = await closeRoutePOST(closeReq, { params: Promise.resolve({ slug: mission.slug }) });
+      expect(closeRes.status).toBe(500); // Fails closed, error not swallowed!
+
+      // Mission status must remain ACTIVE in DB (rolled back)
+      const dbMission = await prisma.mission.findUnique({ where: { slug: mission.slug } });
+      expect(dbMission?.status).toBe('ACTIVE');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  // A4-17: Owner receipt reconciliation negative checks
+  it('M7-A4-17: reconcileOwnerValidationRequestReceipt rejects null score, wrong sender, wrong validator, wrong registry', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const tree = computePayeeMerkleTree(payees);
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 60689700n,
+    });
+
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const requestHash = computeValidationRequestHash(bundle);
+
+    // 1. Rejects unevaluated job (score: null)
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash,
+        status: 'QUEUED',
+        score: null, // Unevaluated!
+        tag: null,
+      },
+    });
+
+    const dummyTx = '0x1234567890123456789012345678901234567890123456789012345678901234';
+    const nullScoreRes = await reconcileOwnerValidationRequestReceipt(mission.slug, dummyTx);
+    expect(nullScoreRes.success).toBe(false);
+    expect(nullScoreRes.error).toContain('unevaluated');
+
+    // Update job to have score
+    await prisma.validationJob.update({
+      where: { missionSlug: mission.slug },
+      data: { score: 100, tag: 'verified-full', validatorAddress: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5', agentId: '294' },
+    });
+
+    // 2. Rejects wrong sender (stranger)
+    const strangerReceipt = {
+      status: 'success',
+      to: DEFAULT_VALIDATION_REGISTRY,
+      from: '0x9999999999999999999999999999999999999999', // Stranger, not mission owner
+      logs: [],
+    };
+    const strangerClient = {
+      getTransactionReceipt: vi.fn().mockResolvedValue(strangerReceipt),
+    } as any;
+
+    const strangerRes = await reconcileOwnerValidationRequestReceipt(mission.slug, dummyTx, {
+      publicClient: strangerClient,
+    });
+    expect(strangerRes.success).toBe(false);
+    expect(strangerRes.error).toContain('Unauthorized transaction sender');
+
+    // 3. Rejects wrong registry contract
+    const wrongRegistryReceipt = {
+      status: 'success',
+      to: '0x0000000000000000000000000000000000000001',
+      from: mission.ownerAddress,
+      logs: [],
+    };
+    const wrongRegistryClient = {
+      getTransactionReceipt: vi.fn().mockResolvedValue(wrongRegistryReceipt),
+    } as any;
+    const wrongRegRes = await reconcileOwnerValidationRequestReceipt(mission.slug, dummyTx, {
+      publicClient: wrongRegistryClient,
+    });
+    expect(wrongRegRes.success).toBe(false);
+    expect(wrongRegRes.error).toContain('recipient mismatch');
+  });
+
+  // A4-18: POST /api/verify/[missionId] enforces owner authorization
+  it('M7-A4-18: POST /api/verify/[missionId] requires valid owner authorization bearer token', async () => {
+    const { mission } = await createTestMission();
+
+    // 1. Without token returns 401
+    const unauthReq = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`, {
+      method: 'POST',
+      body: JSON.stringify({ txHash: '0xdummyTxHash1234567890123456789012345678901234567890123456789012' }),
+    });
+    const unauthRes = await verifyRoutePOST(unauthReq, { params: Promise.resolve({ missionId: mission.slug }) });
+    expect(unauthRes.status).toBe(401);
+
+    // 2. With stranger token returns 403
+    const strangerToken = await issueSpendToken({
+      deploymentId: process.env.DEPLOYMENT_ID || 'unihack-test-deployment',
+      stage: 'S1',
+      authVersion: 1,
+      missionSlug: 'different-mission',
+      missionId: '0xdifferent',
+      ownerAddress: '0x9999999999999999999999999999999999999999',
+      agentAddress: '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d',
+      missionExpiresAt: new Date(Date.now() + 3600_000),
+      missionConfigVersion: 1,
+      policyHash: '0x123',
+    });
+    const strangerReq = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${strangerToken}` },
+      body: JSON.stringify({ txHash: '0xdummyTxHash1234567890123456789012345678901234567890123456789012' }),
+    });
+    const strangerRes = await verifyRoutePOST(strangerReq, { params: Promise.resolve({ missionId: mission.slug }) });
+    expect(strangerRes.status).toBe(403);
+  });
+
+  // A4-19: Changed bundle context cannot reuse stale completion
+  it('M7-A4-19: /api/verify rejects stale completion when bundle context has changed', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const tree = computePayeeMerkleTree(payees);
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 60689700n,
+      publicPublished: true,
+    });
+
+    // Seed a job that was confirmed for an old/different requestHash
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash: '0xoldStaleRequestHash123456789012345678901234567890123456789012345678',
+        status: 'RESPONSE_CONFIRMED',
+        score: 100,
+        tag: 'verified-full',
+      },
+    });
+
+    const verifyReq = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`, {
+      method: 'GET',
+    });
+    const verifyRes = await verifyRouteGET(verifyReq, { params: Promise.resolve({ missionId: mission.slug }) });
+    const verifyJson = await verifyRes.json();
+
+    // Must report STALE_CONTEXT, isComplete: false (cannot reuse stale completion!)
+    expect(verifyJson.erc8004Validation.status).toBe('STALE_CONTEXT');
+    expect(verifyJson.erc8004Validation.isComplete).toBe(false);
+  });
+
+  // A4-20: Executable worker runner smoke
+  it('M7-A4-20: processQueuedValidationJobs processes queued jobs and updates DB state', async () => {
+    const payees = ['0x1111111111111111111111111111111111111111'];
+    const tree = computePayeeMerkleTree(payees);
+    const { mission } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 60689700n,
+    });
+
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const requestHash = computeValidationRequestHash(bundle);
+
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash,
+        status: 'QUEUED',
+        mode: 'LIVE_FUJI',
+      },
+    });
+
+    const mockClient = createMockPublicClient(bundle);
+    const workerRes = await processQueuedValidationJobs(1, {
+      publicClient: mockClient,
+      skipOnChainBroadcast: true,
+    });
+
+    expect(workerRes.processed).toBe(1);
+    const dbJob = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+    if (dbJob?.status === 'FAILED') {
+      console.error('M7-A4-20 FAILED REASON:', dbJob?.failureReason);
+    }
+    expect(dbJob?.status).toBe('LOCAL_EVALUATED');
+    expect(dbJob?.score).toBe(100);
   });
 });

@@ -267,74 +267,90 @@ export async function GET(req: NextRequest, context: any) {
       where: { missionSlug: mission.slug },
     }).catch(() => null);
 
-    // Compute dynamic requestHash for mission
-    let targetRequestHash: `0x${string}` | null = (dbJob?.requestHash as `0x${string}`) || null;
-    if (!targetRequestHash) {
-      try {
-        let payees: string[] = [];
-        if (mission.payeesJson) {
-          try {
-            payees = JSON.parse(mission.payeesJson);
-          } catch {
-            payees = [];
-          }
+    // Compute dynamic requestHash from CURRENT bundle context (A4.4)
+    let targetRequestHash: `0x${string}` | null = null;
+    try {
+      let payees: string[] = [];
+      if (mission.payeesJson) {
+        try {
+          payees = JSON.parse(mission.payeesJson);
+        } catch {
+          payees = [];
         }
-        let payeeRoot = mission.payeeRoot;
-        if (!payeeRoot || !payeeRoot.startsWith('0x')) {
-          payeeRoot = computePayeeMerkleTree(payees).root;
-        }
-        const missionIdBytes32 = (
-          mission.missionId.startsWith('0x')
-            ? mission.missionId
-            : `0x${mission.missionId}`
-        ).padEnd(66, '0') as `0x${string}`;
+      }
+      let payeeRoot = mission.payeeRoot;
+      if (!payeeRoot || !payeeRoot.startsWith('0x')) {
+        payeeRoot = computePayeeMerkleTree(payees).root;
+      }
+      const missionIdBytes32 = (
+        mission.missionId.startsWith('0x')
+          ? mission.missionId
+          : `0x${mission.missionId}`
+      ).padEnd(66, '0') as `0x${string}`;
 
-        const computedHead =
-          entries.length > 0
-            ? entries[entries.length - 1].missionEntryHash || entries[entries.length - 1].entryHash
-            : mission.auditHeadHash;
+      const computedHead =
+        entries.length > 0
+          ? entries[entries.length - 1].missionEntryHash || entries[entries.length - 1].entryHash
+          : mission.auditHeadHash;
 
-        const bundle: ValidationBundle = {
-          version: 'MissionPay-validation-v1',
-          missionId: missionIdBytes32,
-          missionSlug: mission.slug,
-          payeeRoot: payeeRoot as `0x${string}`,
-          auditHead: (onchainAnchoredHead || computedHead || '0x0000000000000000000000000000000000000000000000000000000000000000') as `0x${string}`,
-          anchorTxHash: (anchorTxHash || '0x0000000000000000000000000000000000000000000000000000000000000000') as `0x${string}`,
-          chainId: 43113,
-          treasury: getGuardedTreasuryAddress(),
-          payees,
-          creationBlock: mission.creationBlock ?? undefined,
-        };
-        targetRequestHash = computeValidationRequestHash(bundle);
-      } catch {}
-    }
+      const bundle: ValidationBundle = {
+        version: 'MissionPay-validation-v1',
+        missionId: missionIdBytes32,
+        missionSlug: mission.slug,
+        payeeRoot: payeeRoot as `0x${string}`,
+        auditHead: (onchainAnchoredHead || computedHead || '0x0000000000000000000000000000000000000000000000000000000000000000') as `0x${string}`,
+        anchorTxHash: (anchorTxHash || '0x0000000000000000000000000000000000000000000000000000000000000000') as `0x${string}`,
+        chainId: 43113,
+        treasury: getGuardedTreasuryAddress(),
+        payees,
+        creationBlock: mission.creationBlock ?? undefined,
+      };
+      targetRequestHash = computeValidationRequestHash(bundle);
+    } catch {}
 
     if (dbJob) {
-      let unsignedRequestParsed: any = null;
-      if (dbJob.unsignedRequest) {
-        try {
-          unsignedRequestParsed = JSON.parse(dbJob.unsignedRequest);
-        } catch {}
+      // Round 3 §A4.4: Compare persisted requestHash/context to current bundle before showing completed job
+      if (targetRequestHash && dbJob.requestHash.toLowerCase() !== targetRequestHash.toLowerCase()) {
+        erc8004Validation = {
+          isComplete: false,
+          status: 'STALE_CONTEXT',
+          score: null,
+          validatorAddress: dbJob.validatorAddress,
+          tag: 'stale-context-mismatch',
+          requestHash: targetRequestHash,
+          requestTxHash: null,
+          responseTxHash: null,
+          unsignedRequest: null,
+          snowtraceUrl: null,
+          agentId: dbJob.agentId || process.env.NEXT_PUBLIC_ERC8004_AGENT_ID || '294',
+          failureReason: 'Bundle context has changed since validation job was created; old completion cannot be reused',
+        };
+      } else {
+        let unsignedRequestParsed: any = null;
+        if (dbJob.unsignedRequest) {
+          try {
+            unsignedRequestParsed = JSON.parse(dbJob.unsignedRequest);
+          } catch {}
+        }
+        erc8004Validation = {
+          isComplete: dbJob.status === 'RESPONSE_CONFIRMED',
+          status: dbJob.status,
+          score: dbJob.score,
+          validatorAddress: dbJob.validatorAddress,
+          tag: dbJob.tag,
+          requestHash: dbJob.requestHash,
+          requestTxHash: dbJob.requestTxHash,
+          responseTxHash: dbJob.responseTxHash,
+          unsignedRequest: unsignedRequestParsed,
+          snowtraceUrl: dbJob.responseTxHash
+            ? `https://testnet.snowtrace.io/tx/${dbJob.responseTxHash}`
+            : dbJob.requestTxHash
+            ? `https://testnet.snowtrace.io/tx/${dbJob.requestTxHash}`
+            : `https://testnet.snowtrace.io/address/${validationRegistryAddress}`,
+          agentId: dbJob.agentId || process.env.NEXT_PUBLIC_ERC8004_AGENT_ID || '294',
+          failureReason: dbJob.failureReason,
+        };
       }
-      erc8004Validation = {
-        isComplete: dbJob.status === 'RESPONSE_CONFIRMED',
-        status: dbJob.status,
-        score: dbJob.score,
-        validatorAddress: dbJob.validatorAddress,
-        tag: dbJob.tag,
-        requestHash: dbJob.requestHash,
-        requestTxHash: dbJob.requestTxHash,
-        responseTxHash: dbJob.responseTxHash,
-        unsignedRequest: unsignedRequestParsed,
-        snowtraceUrl: dbJob.responseTxHash
-          ? `https://testnet.snowtrace.io/tx/${dbJob.responseTxHash}`
-          : dbJob.requestTxHash
-          ? `https://testnet.snowtrace.io/tx/${dbJob.requestTxHash}`
-          : `https://testnet.snowtrace.io/address/${validationRegistryAddress}`,
-        agentId: dbJob.agentId || process.env.NEXT_PUBLIC_ERC8004_AGENT_ID || '294',
-        failureReason: dbJob.failureReason,
-      };
     }
 
     const customValidationFetcher = getValidationFetcherForTesting();
@@ -455,6 +471,36 @@ export async function POST(req: NextRequest, context: any) {
 
     if (!mission) {
       return NextResponse.json({ error: 'Mission not found' }, { status: 404 });
+    }
+
+    // Round 3 §A4.5: POST verify must require owner authorization for actions that may consume validator funds
+    const authHeader = req.headers.get('authorization') || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+
+    if (process.env.TEST_AUTH_BYPASS !== '1') {
+      if (!token) {
+        return NextResponse.json(
+          { error: 'Authorization bearer token is required' },
+          { status: 401 }
+        );
+      }
+      try {
+        const claims = await verifyToken(token);
+        const ownerLower = mission.ownerAddress.toLowerCase();
+        const callerOwnerLower = claims.owner?.toLowerCase();
+        const claimsSlug = claims.missionSlug;
+        if (callerOwnerLower !== ownerLower && claimsSlug !== mission.slug) {
+          return NextResponse.json(
+            { error: 'Unauthorized: caller is not the mission owner' },
+            { status: 403 }
+          );
+        }
+      } catch (authErr: any) {
+        return NextResponse.json(
+          { error: `Unauthorized: ${authErr?.message || 'invalid token'}` },
+          { status: 401 }
+        );
+      }
     }
 
     const result = await reconcileOwnerValidationRequestReceipt(mission.slug, txHash);

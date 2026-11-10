@@ -19,6 +19,7 @@ export interface ValidationBundle {
   treasury: `0x${string}`;
   payees: string[];
   cap?: string;
+  ownerAddress?: string;
   creationBlock?: bigint;
   snapshotBlock?: bigint;
 }
