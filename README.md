@@ -3,10 +3,10 @@
 > **"Giao cho AI agent một nhiệm vụ và một ngân sách. Avalanche bảo đảm nó không tiêu quá, và bạn thấy từng đồng đi đâu."**  
 > *(Give your AI agent a mission and a budget. Avalanche makes sure it can't overspend — and shows you every cent.)*
 
-- **Verification Status**: S1 Payment & Audit Slice Verified; Stage S2 Lifecycle Wired (fund / anchor / feedback); x402 Hardening (ATC'26) Completed; Reviewer Fixes A1–A8 Completed.
-- **Test Suite**: **277 passed / 1 skipped Vitest tests** across 32 test files in `apps/web` on PostgreSQL 16 + PGlite, and **19/19 Vitest tests** in `@missionpay/guard`.
+- **Verification Status**: S1 Payment & Audit Slice Verified; Stage S2 Lifecycle Wired (fund / anchor / feedback); x402 Hardening (ATC'26) Completed; Reviewer Fixes A1–A9 Completed.
+- **Test Suite**: **301 passed / 1 skipped Vitest tests (302 total)** across 32 test files in `apps/web` on PostgreSQL 16 + PGlite, and **19/19 Vitest tests** in `@missionpay/guard`.
 - **Smart Contracts**: **111/111 Foundry tests pass** across 6 suites in `contracts/test/` (43 GuardedTreasury with A1 root snapshot checks, 32 PasskeyGovernance with A3 owner actions, 16 PasskeyMissionAuthority, 12 MissionCrossChainICM, 7 ValidationRegistry, and 1 GuardedTreasuryInvariant suite with 6 stateful properties fuzzed over 512 runs / 32,768 calls).
-- **Python Benchmark**: **8/8 unit tests pass** in `eval/agentdojo/test_provguard_pairs.py` with process-isolated hard timeout termination and provenance fingerprinting.
+- **Python Benchmark**: **14/14 unit tests pass** in `eval/agentdojo/test_provguard_pairs.py` with process-isolated hard timeout termination, child counter aggregation, and provenance fingerprinting.
 - **ERC-8004 Support**: Pinned and verified against official Fuji Identity (`0x8004A818...`) and Reputation (`0x8004B663...`) registries.
 - **Proof Verifier**: Standalone cryptographic verifier pass (`scripts/verify-proof.ts`, keccak256 hash-chaining + checkpoint matching).
 - **On-Chain Deployment Notice**: Smart contract patches in `contracts/src/` are tested and verified locally. The existing Fuji deployment (`0x2045...`) is the historical deployment and does NOT yet reflect these new patches. Live Fuji deployment is pending explicit owner authorization.

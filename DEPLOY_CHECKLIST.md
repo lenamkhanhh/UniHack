@@ -80,6 +80,13 @@ Trước khi bật trình chiếu hoặc gửi link cho ban giám khảo:
 ```bash
 # Lệnh build chính thức từ root (xây dựng @missionpay/guard trước khi build web)
 npm run build
+
+# Chạy Validation Job Worker CLI (chế độ process-once hoặc daemon định kỳ)
+npm --prefix apps/web run worker:validation
+# Biến môi trường điều khiển tùy chọn:
+# WORKER_ONCE=true (chạy 1 lượt rồi thoát, phù hợp cronjob)
+# WORKER_LIMIT=10 (số lượng job tối đa quét mỗi lượt)
+# WORKER_LEASE_SECONDS=60 (thời hạn giữ lease cho worker trước khi reclaim)
 ```
 - Kết quả: Build thành công (Exit code 0), tất cả các trang SSG/SSR compile sạch, không có cảnh báo Type error hay ESLint error.
 
@@ -93,3 +100,4 @@ Các migration đã được triển khai và kiểm thử tính toàn vẹn tr�
 3. `20261107120000_payee_root`: Bổ sung payeeRoot và quản lý danh sách payee cho Mission.
 4. `20261110000000_validation_job_and_bounty`: Thêm bảng `BountyAttempt` và `ValidationJob`, thêm `creationBlock` vào `Mission`.
 5. `20261110120000_bounty_quota_reservation`: Thêm bảng `BountyQuotaReservation` cho cơ chế atomic reservation rate limiting đa instance.
+6. `20261110150000_validation_job_leases`: Bổ sung `leaseToken`, `leaseExpiresAt`, `claimAttempts` vào bảng `ValidationJob` hỗ trợ atomic claim lease, lease reclaim khi worker crash, và ngăn chặn race condition đa worker.

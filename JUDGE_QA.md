@@ -12,9 +12,9 @@ Cập nhật: 2026-11-09.
 | Replay trên fork Fuji | Contract và guard off-chain khớp nhau 169/169. Khi cố tình đưa kẻ tấn công vào allowlist chung, contract vẫn revert 150 lệnh với `PayeeNotInMissionSet` | như trên |
 | AgentDojo live, gemini-3.1-flash-lite, C2 strict (ĐANG DỞ, chưa nói lên sân khấu) | Tính đến 09/11 lúc 20:36 (hết quota): 0/30 đòn lọt (Wilson 95% CI 0–11,4%); làm đúng việc khi bị tấn công 9/30; benign 4/16. Chưa chạy C0 nên chưa so được, và benign 4/16 chưa giải thích được | `eval/agentdojo/LIVE_SUMMARY.md`, commit f8b4bc8 |
 | Foundry | 111/111 test pass across 6 suites (43 GuardedTreasury, 32 PasskeyGovernance, 16 PasskeyMissionAuthority, 12 MissionCrossChainICM, 7 ValidationRegistry, 1 GuardedTreasuryInvariant suite với 6 properties fuzzed 512 runs / 32,768 calls) | `contracts/test/` |
-| Web | 277 passed / 1 skipped across 32 test files. Lighthouse accessibility 100 trên 5 trang (mobile) | `apps/web` |
+| Web | 301 passed / 1 skipped across 32 test files (302 total). Lighthouse accessibility 100 trên 5 trang (mobile) | `apps/web` |
 | Guard SDK | 19/19 test pass (16 guard + 3 parity) | `packages/guard` |
-| Python Benchmark | 8/8 unit tests pass trong `eval/agentdojo/test_provguard_pairs.py` | `eval/agentdojo` |
+| Python Benchmark | 14/14 unit tests pass trong `eval/agentdojo/test_provguard_pairs.py` | `eval/agentdojo` |
 | On-chain Contracts Fuji | Địa chỉ Fuji hiện tại (`0x2045...`) là bản deploy cũ. Các bản vá mới (A1 root snapshot, A3 passkey governance) **CHƯA** deploy lên Fuji; đang chờ lệnh duyệt của Owner | `contracts/` |
 | Passkey WebAuthn | Xác thực P-256 / DER / RP ID / Origin đã kiểm bằng unit tests và virtual authenticators (LOCAL_BROWSER_CRYPTO_BOUNDARY). Sinh trắc học phần cứng live trên Fuji ghi **NOT_RUN** | `apps/web`, `contracts/` |
 | ICM Fuji ↔ Dispatch | Mới chạy với **mock local** (12 test). Chưa có giao dịch live | `contracts/test/MissionCrossChainICM.t.sol` |
