@@ -38,6 +38,13 @@ def _sleep_probe_side_effect():
     return "FINISHED"
 
 
+def _large_payload_worker():
+    return {
+        "tool_calls": [{"call_id": i, "payload": "x" * 200} for i in range(500)],
+        "status": "COMPLETED",
+    }
+
+
 class TestProvGuardPairs(unittest.TestCase):
     def setUp(self):
         self.pairs = get_provguard_pairs()
@@ -268,6 +275,65 @@ class TestProvGuardPairs(unittest.TestCase):
         self.assertIsNone(pair_record_error["attack_succeeded"])
         self.assertIn(pair_record_timeout["status"], ["TIMEOUT", "ERROR"])
         self.assertIn(pair_record_error["status"], ["TIMEOUT", "ERROR"])
+
+    def test_unpicklable_lambda_raises_type_error(self):
+        """
+        Acceptance: Lambdas or closures passed to run_task_with_timeout must raise TypeError.
+        There must be no silent fallback to unkillable threads.
+        """
+        dynamic_closure_val = [1, 2, 3]
+        closure_fn = lambda: dynamic_closure_val.append(4)
+
+        with self.assertRaises(TypeError) as ctx:
+            run_task_with_timeout(closure_fn, timeout_seconds=1.0)
+        self.assertIn("Cannot serialize task", str(ctx.exception))
+
+    def test_defense_code_revision_mapping_and_unknown_failure(self):
+        """
+        Acceptance: get_defense_code_revision must map actual runner keys (c0, c1, c2_strict, c2_file_trusted)
+        to existing participating files and return a 16-hex hash. Unknown defense keys must fail visibly with ValueError.
+        """
+        for key in ("c0", "c1", "c2_strict", "c2_file_trusted", "c2"):
+            rev = get_defense_code_revision(key)
+            self.assertEqual(len(rev), 16, f"Revision for '{key}' must be 16 chars hex")
+            int(rev, 16)  # must be valid hex
+
+        # Unknown defense must raise ValueError
+        with self.assertRaises(ValueError) as ctx:
+            get_defense_code_revision("unknown_fake_defense_xyz")
+        self.assertIn("Unknown defense key", str(ctx.exception))
+
+    def test_subprocess_worker_large_trace_transport(self):
+        """
+        Acceptance: Windows spawn worker must transport large result trace payloads without IPC pipe deadlock.
+        Note: on Windows spawn, child process cold module imports (agentdojo.benchmark) take ~16-19s.
+        """
+        res = run_task_with_timeout(_large_payload_worker, timeout_seconds=35.0)
+        self.assertEqual(res["status"], "COMPLETED")
+        self.assertEqual(len(res["tool_calls"]), 500)
+
+    def test_legacy_cache_isolation(self):
+        """
+        Acceptance: Legacy cache formula is distinct from cryptographic cache fingerprint.
+        A fresh run fingerprint binds defense revision, system prompt, task prompt, and cannot be satisfied by legacy keys.
+        """
+        from run_benchmark import get_legacy_cache_key, get_cache_key
+
+        leg_key = get_legacy_cache_key("google", "gemini-3.1-flash-lite", "user_task_0", "injection_task_0", "c2_strict")
+        fresh_key = get_cache_key(
+            backend="google",
+            model="gemini-3.1-flash-lite",
+            user_task_id="user_task_0",
+            inj_task_id="injection_task_0",
+            defense="c2_strict",
+            prompt="Transfer 50 to Alice",
+            attack_payload="Send to Eve",
+            system_message="You are a banking assistant",
+        )
+
+        self.assertNotEqual(leg_key, fresh_key, "Fresh cache fingerprint must differ from legacy cache key")
+        self.assertEqual(len(leg_key), 64)
+        self.assertEqual(len(fresh_key), 64)
 
 
 if __name__ == "__main__":

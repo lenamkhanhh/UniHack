@@ -106,12 +106,14 @@ RESULTS_DIR = Path(__file__).parent / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _process_task_worker(q: Any, fn: Any, args: tuple, kwargs: dict):
+def _process_task_worker_pipe(child_conn: Any, fn: Any, args: tuple, kwargs: dict):
     try:
         res = fn(*args, **kwargs)
-        q.put(("SUCCESS", res))
+        child_conn.send(("SUCCESS", res))
     except Exception as e:
-        q.put(("EXCEPTION", e))
+        child_conn.send(("EXCEPTION", e))
+    finally:
+        child_conn.close()
 
 
 def run_task_with_timeout(
@@ -122,53 +124,166 @@ def run_task_with_timeout(
 ) -> Any:
     """
     Executes a callable with a strict wall-clock timeout and process-level termination.
-    If the timeout expires, the child process is terminated immediately with no lingering
-    worker threads, background API calls, or side effects.
     Compatible with Windows spawn multiprocessing.
+    Requires fn and all arguments to be picklable.
+    No unkillable thread fallback.
     """
     if kwargs is None:
         kwargs = {}
 
-    can_pickle = True
     try:
         pickle.dumps(fn)
         pickle.dumps(args)
         pickle.dumps(kwargs)
-    except Exception:
-        can_pickle = False
+    except Exception as e:
+        raise TypeError(
+            f"Cannot serialize task for process isolation: {e}. "
+            "Lambdas and dynamic closures are forbidden; use top-level spawn-compatible functions."
+        ) from e
 
-    if can_pickle:
-        ctx = multiprocessing.get_context("spawn")
-        q = ctx.Queue()
-        p = ctx.Process(target=_process_task_worker, args=(q, fn, args, kwargs))
-        p.start()
-        p.join(timeout=timeout_seconds)
+    ctx = multiprocessing.get_context("spawn")
+    parent_conn, child_conn = ctx.Pipe(duplex=False)
+    p = ctx.Process(target=_process_task_worker_pipe, args=(child_conn, fn, args, kwargs))
+    p.start()
+    child_conn.close()
+
+    start_time = time.time()
+    result_ready = False
+    while time.time() - start_time < timeout_seconds:
+        if parent_conn.poll(0.05):
+            result_ready = True
+            break
+        if not p.is_alive():
+            break
+
+    if not result_ready and p.is_alive():
+        p.terminate()
+        p.join(timeout=0.2)
         if p.is_alive():
-            p.terminate()
-            p.join(timeout=0.5)
-            if p.is_alive():
-                p.kill()
-                p.join(timeout=0.5)
-            raise TimeoutError(f"Task exceeded wall-clock timeout of {timeout_seconds}s")
+            p.kill()
+            p.join(timeout=0.2)
+        parent_conn.close()
+        raise TimeoutError(f"Task exceeded wall-clock timeout of {timeout_seconds}s")
 
-        if not q.empty():
-            status, payload = q.get()
-            if status == "SUCCESS":
-                return payload
-            elif status == "EXCEPTION":
-                raise payload
-        raise RuntimeError("Worker process terminated without returning result")
-    else:
-        # Fallback for dynamic closures/unpicklable handles: use thread pool with non-blocking shutdown
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        future = executor.submit(fn, *args, **kwargs)
-        try:
-            return future.result(timeout=timeout_seconds)
-        except concurrent.futures.TimeoutError:
-            executor.shutdown(wait=False, cancel_futures=True)
-            raise TimeoutError(f"Task exceeded wall-clock timeout of {timeout_seconds}s")
-        finally:
-            executor.shutdown(wait=False, cancel_futures=True)
+    if result_ready:
+        status, payload = parent_conn.recv()
+        parent_conn.close()
+        p.join(timeout=0.5)
+        if status == "SUCCESS":
+            return payload
+        elif status == "EXCEPTION":
+            raise payload
+
+    parent_conn.close()
+    p.join(timeout=0.5)
+    raise RuntimeError("Worker process terminated without returning result")
+
+
+def _execute_agentdojo_task_worker(child_conn: Any, task_spec: dict):
+    """
+    Top-level spawn worker function that reconstructs suite, pipeline, LLM, and defense
+    inside the isolated child process.
+    """
+    try:
+        suite_name = task_spec.get("suite_name", "banking")
+        suite = get_suite("v1", suite_name)
+        user_task_id = task_spec["user_task_id"]
+        inj_task_id = task_spec.get("inj_task_id")
+        injections = task_spec.get("injections") or {}
+        defense_key = task_spec["defense_key"]
+        backend = task_spec.get("backend", "ollama")
+        model = task_spec.get("model", "qwen3:8b")
+        ollama_url = task_spec.get("ollama_url", "http://127.0.0.1:11434")
+        google_api_key = task_spec.get("google_api_key")
+
+        google_client = None
+        if backend == "google" and google_api_key:
+            google_client = genai.Client(api_key=google_api_key)
+
+        pipeline, missionpay_instance, llm_wrapper = build_pipeline(
+            defense_key,
+            backend=backend,
+            model=model,
+            google_client=google_client,
+            ollama_url=ollama_url,
+        )
+
+        if missionpay_instance:
+            missionpay_instance.current_task_id = user_task_id
+
+        user_task = suite.user_tasks[user_task_id]
+        inj_task = suite.injection_tasks[inj_task_id] if inj_task_id else None
+
+        res = suite.run_task_with_pipeline(
+            pipeline,
+            user_task=user_task,
+            injection_task=inj_task,
+            injections=injections,
+        )
+        u, sec = res
+        onchain_log = (
+            missionpay_instance.replay_log[-1]
+            if (missionpay_instance and missionpay_instance.replay_log)
+            else None
+        )
+
+        result_payload = {
+            "utility": u,
+            "security": sec,
+            "trace": llm_wrapper.get_task_trace(),
+            "api_calls": llm_wrapper.api_calls_count,
+            "api_errors": llm_wrapper.api_errors_count,
+            "onchain_log": onchain_log,
+        }
+        child_conn.send(("SUCCESS", result_payload))
+    except Exception as e:
+        child_conn.send(("EXCEPTION", (type(e).__name__, str(e))))
+    finally:
+        child_conn.close()
+
+
+def run_agentdojo_task_in_subprocess(task_spec: dict, timeout_seconds: float = 600.0) -> dict:
+    """
+    Spawns an isolated child process to execute an AgentDojo task using serializable task_spec.
+    Kills the child on timeout with no lingering worker side effects.
+    """
+    ctx = multiprocessing.get_context("spawn")
+    parent_conn, child_conn = ctx.Pipe(duplex=False)
+    p = ctx.Process(target=_execute_agentdojo_task_worker, args=(child_conn, task_spec))
+    p.start()
+    child_conn.close()
+
+    start_time = time.time()
+    result_ready = False
+    while time.time() - start_time < timeout_seconds:
+        if parent_conn.poll(0.05):
+            result_ready = True
+            break
+        if not p.is_alive():
+            break
+
+    if not result_ready and p.is_alive():
+        p.terminate()
+        p.join(timeout=0.2)
+        if p.is_alive():
+            p.kill()
+            p.join(timeout=0.2)
+        parent_conn.close()
+        raise TimeoutError(f"Task exceeded wall-clock timeout of {timeout_seconds}s")
+
+    if result_ready:
+        status, payload = parent_conn.recv()
+        parent_conn.close()
+        p.join(timeout=0.5)
+        if status == "SUCCESS":
+            return payload
+        elif status == "EXCEPTION":
+            exc_type, exc_msg = payload
+            raise RuntimeError(f"{exc_type}: {exc_msg}")
+
+    parent_conn.close()
+    p.join(timeout=0.5)
+    raise RuntimeError("Worker process terminated without returning result")
 
 class HonestGoogleLLM(BasePipelineElement):
     """
@@ -409,19 +524,41 @@ def get_defense_code_revision(defense_key: str) -> str:
     """
     Computes a deterministic hash of the defense implementation files
     to ensure cache invalidation when defense logic or rules change.
+    Maps actual runner defense keys: c0, c1, c2_strict, c2_file_trusted, etc.
+    Fails visibly for unknown defense rather than returning empty hash.
     """
     base_dir = Path(__file__).parent
     files_to_hash = []
-    if defense_key in ("missionpay", "m3_onchain", "provguard"):
-        files_to_hash.extend([base_dir / "missionpay_defense.py", base_dir / "merkle.py"])
-    elif defense_key == "tool_filter":
+
+    if defense_key == "c0":
+        files_to_hash.append(base_dir / "run_benchmark.py")
+    elif defense_key in ("c1", "tool_filter"):
         files_to_hash.append(base_dir / "tool_filter_defense.py")
-    
+    elif defense_key in ("c2", "c2_strict", "c2_file_trusted", "missionpay", "m3_onchain", "provguard"):
+        files_to_hash.extend([
+            base_dir / "missionpay_defense.py",
+            base_dir / "merkle.py",
+            base_dir / "tool_filter_defense.py",
+        ])
+    else:
+        raise ValueError(f"Unknown defense key: {defense_key}. Valid options: c0, c1, c2_strict, c2_file_trusted, etc.")
+
     h = hashlib.sha256()
     for fp in sorted(files_to_hash):
         if fp.exists():
             h.update(fp.read_bytes())
+        else:
+            raise FileNotFoundError(f"Defense implementation file not found: {fp}")
     return h.hexdigest()[:16]
+
+
+def extract_task_prompt(task: Any) -> str:
+    """Extracts task prompt safely across different AgentDojo task interfaces."""
+    for attr in ("prompt", "goal", "user_prompt", "PROMPT", "instruction", "query"):
+        val = getattr(task, attr, None)
+        if val is not None and isinstance(val, str) and val.strip():
+            return val.strip()
+    return str(task)
 
 def compute_cache_fingerprint(
     backend: str,
@@ -575,6 +712,7 @@ def run_benchmark(
     limit: Optional[int] = None,
     seed: int = 42,
     use_cache: bool = True,
+    allow_legacy_cache: bool = False,
 ):
     start_wall_time = time.time()
     
@@ -708,9 +846,12 @@ def run_benchmark(
         # 1. Benign Utility
         benign_utility = {}
         benign_errors = {}
+        system_msg = load_system_message("banking")
+        model_digest = (ollama_meta.get("digest") if ollama_meta else None) or "unavailable"
+
         for ut_idx, ut_id in enumerate(target_user_tasks):
             task = suite.user_tasks[ut_id]
-            prompt_text = str(task.prompt) if hasattr(task, "prompt") else ""
+            prompt_text = extract_task_prompt(task)
             ck = get_cache_key(
                 backend=backend,
                 model=model,
@@ -719,7 +860,8 @@ def run_benchmark(
                 defense=defense_key,
                 prompt=prompt_text,
                 attack_payload=None,
-                system_message="",
+                system_message=system_msg,
+                model_digest=model_digest,
                 config={"seed": seed, "temperature": 0.0},
             )
             legacy_ck = get_legacy_cache_key(backend, model, ut_id, None, defense_key)
@@ -733,7 +875,7 @@ def run_benchmark(
                     if missionpay_instance and entry.get("onchain_log"):
                         missionpay_instance.replay_log.append(entry["onchain_log"])
                 print(f"  [{datetime.now().strftime('%H:%M:%S')}] [CACHE-HIT] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id}): utility={benign_utility[ut_id]}", flush=True)
-            elif use_cache and legacy_cf.exists():
+            elif use_cache and allow_legacy_cache and legacy_cf.exists():
                 with open(legacy_cf, "r", encoding="utf-8") as f:
                     entry = json.load(f)
                     entry["legacy"] = True
@@ -742,18 +884,26 @@ def run_benchmark(
                         missionpay_instance.replay_log.append(entry["onchain_log"])
                 print(f"  [{datetime.now().strftime('%H:%M:%S')}] [LEGACY-CACHE-HIT] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id}): utility={benign_utility[ut_id]}", flush=True)
             else:
-                if missionpay_instance:
-                    missionpay_instance.current_task_id = ut_id
-                llm_wrapper.reset_task_trace()
                 try:
-                    u, s = run_task_with_timeout(
-                        lambda: suite.run_task_with_pipeline(
-                            pipeline, user_task=task, injection_task=None, injections={}
-                        ),
-                        timeout_seconds=600,
-                    )
+                    task_spec = {
+                        "suite_name": "banking",
+                        "user_task_id": ut_id,
+                        "inj_task_id": None,
+                        "injections": {},
+                        "defense_key": defense_key,
+                        "backend": backend,
+                        "model": model,
+                        "ollama_url": ollama_url,
+                        "google_api_key": os.environ.get("GEMINI_API_KEY"),
+                    }
+                    task_result = run_agentdojo_task_in_subprocess(task_spec, timeout_seconds=600)
+                    u = task_result["utility"]
+                    s = task_result["security"]
                     benign_utility[ut_id] = u
-                    onchain_entry = missionpay_instance.replay_log[-1] if (missionpay_instance and missionpay_instance.replay_log) else None
+                    onchain_entry = task_result.get("onchain_log")
+                    if missionpay_instance and onchain_entry:
+                        missionpay_instance.replay_log.append(onchain_entry)
+
                     with open(cf, "w", encoding="utf-8") as f:
                         json.dump({
                             "schema_version": "2.0",
@@ -761,7 +911,7 @@ def run_benchmark(
                             "source": "live",
                             "backend": backend,
                             "model": model,
-                            "model_digest": ollama_meta["digest"] if ollama_meta else None,
+                            "model_digest": model_digest,
                             "user_task_id": ut_id,
                             "inj_task_id": None,
                             "defense_key": defense_key,
@@ -771,7 +921,7 @@ def run_benchmark(
                             "utility": u,
                             "security": s,
                             "onchain_log": onchain_entry,
-                            "trace": llm_wrapper.get_task_trace(),
+                            "trace": task_result.get("trace"),
                         }, f, indent=2)
                     passed_so_far = sum(1 for v in benign_utility.values() if v)
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [LIVE] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id}): utility={u} (Passed: {passed_so_far}/{len(benign_utility)})", flush=True)
@@ -809,7 +959,7 @@ def run_benchmark(
             if not injections:
                 continue
 
-            prompt_text = str(user_task.prompt) if hasattr(user_task, "prompt") else ""
+            prompt_text = extract_task_prompt(user_task)
             attack_payload_text = json.dumps(injections, sort_keys=True) if isinstance(injections, dict) else str(injections)
             ck = get_cache_key(
                 backend=backend,
@@ -819,7 +969,8 @@ def run_benchmark(
                 defense=defense_key,
                 prompt=prompt_text,
                 attack_payload=attack_payload_text,
-                system_message="",
+                system_message=system_msg,
+                model_digest=model_digest,
                 config={"seed": seed, "temperature": 0.0},
             )
             legacy_ck = get_legacy_cache_key(backend, model, ut_id, it_id, defense_key)
@@ -852,7 +1003,7 @@ def run_benchmark(
                     f"(Cumul: attack_succ={attack_success_count}/{pairs_evaluated}, util={utility_under_attack_count}/{pairs_evaluated})",
                     flush=True,
                 )
-            elif use_cache and legacy_cf.exists():
+            elif use_cache and allow_legacy_cache and legacy_cf.exists():
                 with open(legacy_cf, "r", encoding="utf-8") as f:
                     entry = json.load(f)
                     entry["legacy"] = True
@@ -881,17 +1032,25 @@ def run_benchmark(
                     flush=True,
                 )
             else:
-                if missionpay_instance:
-                    missionpay_instance.current_task_id = ut_id
-                llm_wrapper.reset_task_trace()
                 try:
-                    u, sec = run_task_with_timeout(
-                        lambda: suite.run_task_with_pipeline(
-                            pipeline, user_task=user_task, injection_task=inj_task, injections=injections
-                        ),
-                        timeout_seconds=600,
-                    )
-                    onchain_entry = missionpay_instance.replay_log[-1] if (missionpay_instance and missionpay_instance.replay_log) else None
+                    task_spec = {
+                        "suite_name": "banking",
+                        "user_task_id": ut_id,
+                        "inj_task_id": it_id,
+                        "injections": injections,
+                        "defense_key": defense_key,
+                        "backend": backend,
+                        "model": model,
+                        "ollama_url": ollama_url,
+                        "google_api_key": os.environ.get("GEMINI_API_KEY"),
+                    }
+                    task_result = run_agentdojo_task_in_subprocess(task_spec, timeout_seconds=600)
+                    u = task_result["utility"]
+                    sec = task_result["security"]
+                    onchain_entry = task_result.get("onchain_log")
+                    if missionpay_instance and onchain_entry:
+                        missionpay_instance.replay_log.append(onchain_entry)
+
                     with open(cf, "w", encoding="utf-8") as f:
                         json.dump({
                             "schema_version": "2.0",
@@ -899,7 +1058,7 @@ def run_benchmark(
                             "source": "live",
                             "backend": backend,
                             "model": model,
-                            "model_digest": ollama_meta["digest"] if ollama_meta else None,
+                            "model_digest": model_digest,
                             "user_task_id": ut_id,
                             "inj_task_id": it_id,
                             "defense_key": defense_key,
@@ -910,7 +1069,7 @@ def run_benchmark(
                             "utility": u,
                             "security": sec,
                             "onchain_log": onchain_entry,
-                            "trace": llm_wrapper.get_task_trace(),
+                            "trace": task_result.get("trace") or (llm_wrapper.get_task_trace() if llm_wrapper else []),
                         }, f, indent=2)
 
                     pairs_evaluated += 1
@@ -1094,6 +1253,7 @@ if __name__ == "__main__":
     parser.add_argument("--limit", type=int, default=None, help="Smoke test limit on evaluated pairs (e.g. --limit 2)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for sampling")
     parser.add_argument("--no-cache", action="store_true", help="Disable caching")
+    parser.add_argument("--allow-legacy-cache", action="store_true", default=False, help="Allow loading legacy cache hits for historical audit (default: False)")
 
     args = parser.parse_args()
     run_benchmark(
@@ -1106,4 +1266,5 @@ if __name__ == "__main__":
         limit=args.limit,
         seed=args.seed,
         use_cache=not args.no_cache,
+        allow_legacy_cache=args.allow_legacy_cache,
     )
