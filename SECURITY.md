@@ -123,9 +123,14 @@ MissionPay secures autonomous AI agent spending across multi-agent tool executio
      ```solidity
      require(_verifyMerkle(proof, root, leaf), "PayeeNotInMissionSet");
      ```
-     (calling internal function `_verifyMerkle` at line 457) and enforces `spent + amount <= missionCap`. Even with 100% off-chain validator compromise, the smart contract on-chain reverts any illegal transfer.
+     (calling internal function `_verifyMerkle`) and enforces `spent + amount <= missionCap`. Even with 100% off-chain validator compromise, the smart contract on-chain reverts any illegal transfer.
+  3. *Policy Root Snapshot Integrity (A1)*: When a proposal is submitted via `proposeWithProof`, the contract snapshots the active payee root in `proposalRoots[proposalId]`. During both `approveProposal` and `executeProposal`, the contract enforces:
+     ```solidity
+     require(currentRoot == proposalRoots[proposalId], "ProposalPayeePolicyChanged");
+     ```
+     If the owner changes the root (or sets root from 0 to nonzero), pending proposals under the obsolete policy revert with reason string `"ProposalPayeePolicyChanged"`, preventing stale proposals from executing against a changed payee policy.
 - **Test & Proof Evidence**:
-  - `contracts/test/GuardedTreasury.t.sol`: `test_PV1_proposeWithProof_invalid_proof_or_unauthorized_payee_reverts` (on-chain revert `PayeeNotInMissionSet` regardless of off-chain simulation status).
+  - `contracts/test/GuardedTreasury.t.sol`: `test_PV1_proposeWithProof_invalid_proof_or_unauthorized_payee_reverts` (on-chain revert `PayeeNotInMissionSet` regardless of off-chain simulation status), `test_A1_rootChangedBeforeApprove_revertsProposalPayeePolicyChanged`, `test_A1_rootChangedAfterApproveBeforeExecute_revertsProposalPayeePolicyChanged`.
   - `contracts/test/invariant/GuardedTreasury.invariant.t.sol`: `invariant_payeeAlwaysInRoot` fuzzed across 512 runs / 32,768 calls without a single invalid payee disbursement.
 - **Residual Risk & Stated Limitations**: A compromised off-chain validator could falsely reject valid proposals (denial of service), halting mission execution, but cannot extract unauthorized treasury funds.
 
@@ -152,7 +157,7 @@ MissionPay secures autonomous AI agent spending across multi-agent tool executio
      - Mandatory User Verification (UV flag, bit 2) and User Presence (UP flag, bit 0).
      - Cross-origin rejection: Reverts if `crossOrigin: true` is present.
      - Anti-malleability: Enforces $s \le N/2$ for SECP256R1 curve order.
-  2. *Native Avalanche RIP-7212 Precompile*: Hardware P-256 verification executes directly on Avalanche C-Chain precompile `0x100`, eliminating complex or vulnerable custom Solidity math libraries.
+  2. *Avalanche RIP-7212 Precompile Architecture*: Hardware P-256 verification routes to Avalanche C-Chain precompile `0x100`. In automated local Foundry unit testing (`PasskeyMissionAuthority.t.sol`), testing uses `MockP256Precompile`, which acts as a registered golden-signature oracle using `vm.signP256` rather than native EVM curve arithmetic.
   3. *Replay Nonce*: Incremental `nextNonce` prevents replay of previous assertions.
 - **Test & Proof Evidence**:
   - `contracts/test/PasskeyMissionAuthority.t.sol`: 8 dedicated security tests pass:

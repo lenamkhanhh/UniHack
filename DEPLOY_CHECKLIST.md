@@ -30,6 +30,7 @@ Mọi biến môi trường dưới đây phải được cấu hình bằng gi�
 | `RELAYER_PRIVATE_KEY` | `/api/passkey/relay` | Khóa riêng EOA Relayer tài trợ gas cho WebAuthn passkey (tách biệt khỏi Owner): `0x<64-hex-characters-relayer-key>` | **Secret (Tuyệt mật)** |
 | `LLM_API_KEY` | `agent.ts`, `bounty.ts` | API Key Google Gemini cho LLM Planner và Bounty Challenge: `<google-ai-studio-gemini-key>`. *Nếu vắng mặt: hệ thống tự động kích hoạt fallback deterministic có gắn nhãn trung thực, không làm hỏng static build.* | **Secret (Tuyệt mật)** |
 | `BOUNTY_INTERNAL_SECRET` | `/api/bounty/attempt` | Khóa bí mật dùng cho internal test harness phân loại source=test/smoke (x-bounty-auth-key): `<min-32-chars-bounty-secret>`. *Không có key mặc định.* | **Secret (Harness)** |
+| `TRUSTED_INGRESS` | `resolveClientIp` | Xác định nền tảng reverse proxy tin cậy để đọc IP client (`cloudflare`, `gcp`, `none`). Khi vắng mặt hoặc `none`, các IP unverified tự động gom vào shared bucket an toàn để chống xoay vòng header bypass rate limit. | Config |
 | `ARENA_PRESENTER_KEY` | `arena.ts` | Khóa bí mật dùng cho người thuyết trình đặt lại bộ đếm Stage (`/stage`): `<presenter-passcode>` | **Secret (Presenter)** |
 
 ---
@@ -51,7 +52,7 @@ Mọi biến môi trường dưới đây phải được cấu hình bằng gi�
 
 3. **Chống Tấn Công Spam & Rate Limiting:**
    - Đã cấu hình trần toàn cục 60 requests/phút cho `/api/arena/attack` để chống tràn màn hình sân khấu.
-   - Đã cấu hình rate limit 5 requests/phút cho mỗi IP tại `/api/bounty/attempt`.
+   - Đã cấu hình atomic PostgreSQL reservation rate limit: 5 requests/phút cho mỗi IP và 300 requests/ngày toàn cục tại `/api/bounty/attempt`. Database failure tự động fail-closed (từ chối suy luận đắt tiền).
    - Các route quản trị (`resetArenaAction`) sử dụng so sánh `timingSafeEqual` với biến môi trường `ARENA_PRESENTER_KEY`.
 
 ---
@@ -77,8 +78,18 @@ Trước khi bật trình chiếu hoặc gửi link cho ban giám khảo:
 ## 4. Biên Bản Kiểm Tra Build Production
 
 ```bash
-# Lệnh build chính thức
-cd apps/web
+# Lệnh build chính thức từ root (xây dựng @missionpay/guard trước khi build web)
 npm run build
 ```
 - Kết quả: Build thành công (Exit code 0), tất cả các trang SSG/SSR compile sạch, không có cảnh báo Type error hay ESLint error.
+
+---
+
+## 5. Danh Sách Migration Cơ Sở Dữ Liệu Thực Tế (Prisma Migrations)
+
+Các migration đã được triển khai và kiểm thử tính toàn vẹn trên database sạch:
+1. `20261104000000_init`: Khởi tạo bảng Mission, ToolSession, ToolOperation, AuditHead, AuditEntry, MissionFeedback.
+2. `20261104100000_round2_hardening`: Thêm các ràng buộc bảo mật, bảng TreasuryRequest.
+3. `20261107120000_payee_root`: Bổ sung payeeRoot và quản lý danh sách payee cho Mission.
+4. `20261110000000_validation_job_and_bounty`: Thêm bảng `BountyAttempt` và `ValidationJob`, thêm `creationBlock` vào `Mission`.
+5. `20261110120000_bounty_quota_reservation`: Thêm bảng `BountyQuotaReservation` cho cơ chế atomic reservation rate limiting đa instance.
