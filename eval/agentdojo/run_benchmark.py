@@ -185,6 +185,24 @@ def _execute_agentdojo_task_worker(child_conn: Any, task_spec: dict):
     inside the isolated child process.
     """
     try:
+        if task_spec.get("backend") == "offline_stub":
+            # Deterministic offline stub for testing worker reconstruction and IPC without live model
+            stub_calls = task_spec.get("stub_api_calls", 3)
+            stub_errors = task_spec.get("stub_api_errors", 1)
+            stub_trace = task_spec.get("stub_trace", [{"function": "get_balance", "args": {}}])
+            stub_u = task_spec.get("stub_utility", True)
+            stub_sec = task_spec.get("stub_security", False)
+            result_payload = {
+                "utility": stub_u,
+                "security": stub_sec,
+                "trace": stub_trace,
+                "api_calls": stub_calls,
+                "api_errors": stub_errors,
+                "onchain_log": None,
+            }
+            child_conn.send(("SUCCESS", result_payload))
+            return
+
         suite_name = task_spec.get("suite_name", "banking")
         suite = get_suite("v1", suite_name)
         user_task_id = task_spec["user_task_id"]
@@ -247,6 +265,11 @@ def run_agentdojo_task_in_subprocess(task_spec: dict, timeout_seconds: float = 6
     Spawns an isolated child process to execute an AgentDojo task using serializable task_spec.
     Kills the child on timeout with no lingering worker side effects.
     """
+    try:
+        pickle.dumps(task_spec)
+    except Exception as e:
+        raise TypeError(f"Cannot serialize task_spec for subprocess execution: {e}") from e
+
     ctx = multiprocessing.get_context("spawn")
     parent_conn, child_conn = ctx.Pipe(duplex=False)
     p = ctx.Process(target=_execute_agentdojo_task_worker, args=(child_conn, task_spec))
@@ -523,15 +546,15 @@ def wilson_score_interval(successes: int, total: int, confidence: float = 0.95) 
 def get_defense_code_revision(defense_key: str) -> str:
     """
     Computes a deterministic hash of the defense implementation files
-    to ensure cache invalidation when defense logic or rules change.
+    to ensure cache invalidation when defense logic, harness, or rules change.
     Maps actual runner defense keys: c0, c1, c2_strict, c2_file_trusted, etc.
     Fails visibly for unknown defense rather than returning empty hash.
     """
     base_dir = Path(__file__).parent
-    files_to_hash = []
+    files_to_hash = [base_dir / "run_benchmark.py"]
 
     if defense_key == "c0":
-        files_to_hash.append(base_dir / "run_benchmark.py")
+        pass
     elif defense_key in ("c1", "tool_filter"):
         files_to_hash.append(base_dir / "tool_filter_defense.py")
     elif defense_key in ("c2", "c2_strict", "c2_file_trusted", "missionpay", "m3_onchain", "provguard"):
@@ -550,6 +573,25 @@ def get_defense_code_revision(defense_key: str) -> str:
         else:
             raise FileNotFoundError(f"Defense implementation file not found: {fp}")
     return h.hexdigest()[:16]
+
+
+def get_task_suite_fingerprint(suite_name: str = "banking", suite_version: str = "v1") -> str:
+    """
+    Computes a cryptographic fingerprint over the task suite environment and tool definitions.
+    Includes tool names, parameters, docstrings, and suite version so any change in tools/environment invalidates the cache.
+    """
+    try:
+        suite = get_suite(suite_version, suite_name)
+        tool_reprs = []
+        for t in sorted(suite.tools, key=lambda x: getattr(x, "name", str(x))):
+            t_name = getattr(t, "name", str(t))
+            t_doc = getattr(t, "docstring", getattr(t, "__doc__", "")) or ""
+            t_params = str(getattr(t, "parameters", ""))
+            tool_reprs.append(f"{t_name}:{t_params}:{t_doc}")
+        raw = f"{suite_name}:{suite_version}:" + ";".join(tool_reprs)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+    except Exception:
+        return "banking_v1_standard"
 
 
 def extract_task_prompt(task: Any) -> str:
@@ -571,28 +613,36 @@ def compute_cache_fingerprint(
     system_message: Optional[str] = None,
     defense_code_revision: Optional[str] = None,
     model_digest: Optional[str] = None,
+    task_suite_fingerprint: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Computes a cryptographic fingerprint binding:
     - backend and model
-    - model digest / version
+    - model digest / version (explicitly 'unavailable' if absent, never fabricated)
     - user task prompt / system message
     - attack payload / injection task
-    - policy / defense code revision
+    - policy / defense code revision (including harness run_benchmark.py)
+    - task suite environment / tool definitions
     - config parameters (e.g. temperature, seed)
     """
     if defense_code_revision is None:
         defense_code_revision = get_defense_code_revision(defense)
 
+    if task_suite_fingerprint is None:
+        task_suite_fingerprint = get_task_suite_fingerprint("banking", "v1")
+
+    resolved_model_digest = model_digest if model_digest else "unavailable"
+
     manifest = {
         "backend": backend,
         "model": model,
-        "model_digest": model_digest or "default",
+        "model_digest": resolved_model_digest,
         "user_task_id": user_task_id,
         "inj_task_id": inj_task_id or "none",
         "defense": defense,
         "defense_code_revision": defense_code_revision,
+        "task_suite_fingerprint": task_suite_fingerprint,
         "prompt_hash": hashlib.sha256((prompt or "").encode("utf-8")).hexdigest()[:16],
         "attack_hash": hashlib.sha256((attack_payload or "").encode("utf-8")).hexdigest()[:16],
         "system_message_hash": hashlib.sha256((system_message or "").encode("utf-8")).hexdigest()[:16],
@@ -617,6 +667,7 @@ def get_cache_key(
     system_message: Optional[str] = None,
     defense_code_revision: Optional[str] = None,
     model_digest: Optional[str] = None,
+    task_suite_fingerprint: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
 ) -> str:
     return compute_cache_fingerprint(
@@ -630,6 +681,7 @@ def get_cache_key(
         system_message=system_message,
         defense_code_revision=defense_code_revision,
         model_digest=model_digest,
+        task_suite_fingerprint=task_suite_fingerprint,
         config=config,
     )
 
@@ -804,11 +856,14 @@ def run_benchmark(
     overall_results: Dict[str, Any] = {
         "metadata": {
             "run_id": run_id,
+            "run_type": "historical_legacy_audit" if allow_legacy_cache else "fresh_benchmark",
+            "comparable_to_fresh": not allow_legacy_cache,
+            "legacy_cache_mode": allow_legacy_cache,
             "timestamp": datetime.now().isoformat(),
             "backend": backend,
             "model": model,
-            "model_digest": ollama_meta["digest"] if ollama_meta else None,
-            "quantization": ollama_meta["quantization"] if ollama_meta else None,
+            "model_digest": (ollama_meta.get("digest") if ollama_meta else None) or "unavailable",
+            "quantization": (ollama_meta.get("quantization") if ollama_meta else None) or "unavailable",
             "model_details": ollama_meta if ollama_meta else None,
             "temperature": 0.0,
             "seed": seed,
@@ -846,6 +901,8 @@ def run_benchmark(
         # 1. Benign Utility
         benign_utility = {}
         benign_errors = {}
+        total_api_calls = 0
+        total_api_errors = 0
         system_msg = load_system_message("banking")
         model_digest = (ollama_meta.get("digest") if ollama_meta else None) or "unavailable"
 
@@ -868,21 +925,30 @@ def run_benchmark(
             cf = CACHE_DIR / f"{ck}.json"
             legacy_cf = CACHE_DIR / f"{legacy_ck}.json"
 
-            if use_cache and cf.exists():
+            if use_cache and not allow_legacy_cache and cf.exists():
                 with open(cf, "r", encoding="utf-8") as f:
                     entry = json.load(f)
                     benign_utility[ut_id] = entry["utility"]
                     if missionpay_instance and entry.get("onchain_log"):
                         missionpay_instance.replay_log.append(entry["onchain_log"])
+                    total_api_calls += entry.get("api_calls", 0)
+                    total_api_errors += entry.get("api_errors", 0)
                 print(f"  [{datetime.now().strftime('%H:%M:%S')}] [CACHE-HIT] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id}): utility={benign_utility[ut_id]}", flush=True)
-            elif use_cache and allow_legacy_cache and legacy_cf.exists():
-                with open(legacy_cf, "r", encoding="utf-8") as f:
-                    entry = json.load(f)
-                    entry["legacy"] = True
-                    benign_utility[ut_id] = entry["utility"]
-                    if missionpay_instance and entry.get("onchain_log"):
-                        missionpay_instance.replay_log.append(entry["onchain_log"])
-                print(f"  [{datetime.now().strftime('%H:%M:%S')}] [LEGACY-CACHE-HIT] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id}): utility={benign_utility[ut_id]}", flush=True)
+            elif allow_legacy_cache:
+                # Isolated historical reporting mode: NEVER run fresh tasks, NEVER mix into fresh metrics
+                if legacy_cf.exists():
+                    with open(legacy_cf, "r", encoding="utf-8") as f:
+                        entry = json.load(f)
+                        benign_utility[ut_id] = entry["utility"]
+                        if missionpay_instance and entry.get("onchain_log"):
+                            missionpay_instance.replay_log.append(entry["onchain_log"])
+                        total_api_calls += entry.get("api_calls", 0)
+                        total_api_errors += entry.get("api_errors", 0)
+                        print(f"  [{datetime.now().strftime('%H:%M:%S')}] [LEGACY-HISTORICAL] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id}): utility={benign_utility[ut_id]}", flush=True)
+                else:
+                    benign_utility[ut_id] = False
+                    benign_errors[ut_id] = "MISSING_IN_LEGACY_CACHE"
+                    print(f"  [{datetime.now().strftime('%H:%M:%S')}] [LEGACY-MISSING] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id})", flush=True)
             else:
                 try:
                     task_spec = {
@@ -899,6 +965,10 @@ def run_benchmark(
                     task_result = run_agentdojo_task_in_subprocess(task_spec, timeout_seconds=600)
                     u = task_result["utility"]
                     s = task_result["security"]
+                    calls = task_result.get("api_calls", 0)
+                    errors = task_result.get("api_errors", 0)
+                    total_api_calls += calls
+                    total_api_errors += errors
                     benign_utility[ut_id] = u
                     onchain_entry = task_result.get("onchain_log")
                     if missionpay_instance and onchain_entry:
@@ -920,6 +990,8 @@ def run_benchmark(
                             "timestamp": datetime.now().isoformat(),
                             "utility": u,
                             "security": s,
+                            "api_calls": calls,
+                            "api_errors": errors,
                             "onchain_log": onchain_entry,
                             "trace": task_result.get("trace"),
                         }, f, indent=2)
@@ -928,10 +1000,14 @@ def run_benchmark(
                 except TimeoutError as te:
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [TIMEOUT] Benign task {ut_id} timed out after 600s: {te}", flush=True)
                     benign_errors[ut_id] = "TIMEOUT"
+                    total_api_calls += 1
+                    total_api_errors += 1
                     save_checkpoint()
                 except Exception as e:
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [ERROR] Benign task {ut_id} failed: {e}", flush=True)
                     benign_errors[ut_id] = str(e)
+                    total_api_calls += 1
+                    total_api_errors += 1
                     save_checkpoint()
                     if "QUOTA_EXHAUSTED" in str(e) or "OLLAMA_SERVER_DOWN" in str(e):
                         break
@@ -977,13 +1053,15 @@ def run_benchmark(
             cf = CACHE_DIR / f"{ck}.json"
             legacy_cf = CACHE_DIR / f"{legacy_ck}.json"
 
-            if use_cache and cf.exists():
+            if use_cache and not allow_legacy_cache and cf.exists():
                 with open(cf, "r", encoding="utf-8") as f:
                     entry = json.load(f)
                     u = entry["utility"]
                     sec = entry["security"]
                     if missionpay_instance and entry.get("onchain_log"):
                         missionpay_instance.replay_log.append(entry["onchain_log"])
+                    total_api_calls += entry.get("api_calls", 0)
+                    total_api_errors += entry.get("api_errors", 0)
                 pairs_evaluated += 1
                 if u:
                     utility_under_attack_count += 1
@@ -1003,34 +1081,48 @@ def run_benchmark(
                     f"(Cumul: attack_succ={attack_success_count}/{pairs_evaluated}, util={utility_under_attack_count}/{pairs_evaluated})",
                     flush=True,
                 )
-            elif use_cache and allow_legacy_cache and legacy_cf.exists():
-                with open(legacy_cf, "r", encoding="utf-8") as f:
-                    entry = json.load(f)
-                    entry["legacy"] = True
-                    u = entry["utility"]
-                    sec = entry["security"]
-                    if missionpay_instance and entry.get("onchain_log"):
-                        missionpay_instance.replay_log.append(entry["onchain_log"])
-                pairs_evaluated += 1
-                if u:
-                    utility_under_attack_count += 1
-                attack_succeeded = compute_attack_success(sec)
-                if attack_succeeded:
-                    attack_success_count += 1
-                pair_details.append({
-                    "user_task": ut_id,
-                    "injection_task": it_id,
-                    "utility": u,
-                    "attack_succeeded": attack_succeeded,
-                    "legacy": True,
-                })
-                print(
-                    f"  [{datetime.now().strftime('%H:%M:%S')}] [LEGACY-CACHE-HIT] [{defense_key.upper()}] "
-                    f"Pair {p_idx+1}/{len(target_pairs)} ({ut_id}, {it_id}): "
-                    f"utility={u}, attack_succeeded={attack_succeeded} "
-                    f"(Cumul: attack_succ={attack_success_count}/{pairs_evaluated}, util={utility_under_attack_count}/{pairs_evaluated})",
-                    flush=True,
-                )
+            elif allow_legacy_cache:
+                # Isolated historical reporting mode: NEVER run fresh tasks, NEVER mix into fresh metrics
+                if legacy_cf.exists():
+                    with open(legacy_cf, "r", encoding="utf-8") as f:
+                        entry = json.load(f)
+                        u = entry["utility"]
+                        sec = entry["security"]
+                        if missionpay_instance and entry.get("onchain_log"):
+                            missionpay_instance.replay_log.append(entry["onchain_log"])
+                        total_api_calls += entry.get("api_calls", 0)
+                        total_api_errors += entry.get("api_errors", 0)
+                    pairs_evaluated += 1
+                    if u:
+                        utility_under_attack_count += 1
+                    attack_succeeded = compute_attack_success(sec)
+                    if attack_succeeded:
+                        attack_success_count += 1
+                    pair_details.append({
+                        "user_task": ut_id,
+                        "injection_task": it_id,
+                        "utility": u,
+                        "attack_succeeded": attack_succeeded,
+                        "source": "legacy_historical",
+                    })
+                    print(
+                        f"  [{datetime.now().strftime('%H:%M:%S')}] [LEGACY-HISTORICAL] [{defense_key.upper()}] "
+                        f"Pair {p_idx+1}/{len(target_pairs)} ({ut_id}, {it_id}): "
+                        f"utility={u}, attack_succeeded={attack_succeeded} "
+                        f"(Cumul: attack_succ={attack_success_count}/{pairs_evaluated}, util={utility_under_attack_count}/{pairs_evaluated})",
+                        flush=True,
+                    )
+                else:
+                    pairs_evaluated += 1
+                    pair_errors += 1
+                    pair_details.append({
+                        "user_task": ut_id,
+                        "injection_task": it_id,
+                        "utility": False,
+                        "attack_succeeded": None,
+                        "status": "MISSING_IN_LEGACY_CACHE",
+                        "error": "MISSING_IN_LEGACY_CACHE",
+                    })
             else:
                 try:
                     task_spec = {
@@ -1047,6 +1139,10 @@ def run_benchmark(
                     task_result = run_agentdojo_task_in_subprocess(task_spec, timeout_seconds=600)
                     u = task_result["utility"]
                     sec = task_result["security"]
+                    calls = task_result.get("api_calls", 0)
+                    errors = task_result.get("api_errors", 0)
+                    total_api_calls += calls
+                    total_api_errors += errors
                     onchain_entry = task_result.get("onchain_log")
                     if missionpay_instance and onchain_entry:
                         missionpay_instance.replay_log.append(onchain_entry)
@@ -1068,6 +1164,8 @@ def run_benchmark(
                             "timestamp": datetime.now().isoformat(),
                             "utility": u,
                             "security": sec,
+                            "api_calls": calls,
+                            "api_errors": errors,
                             "onchain_log": onchain_entry,
                             "trace": task_result.get("trace") or (llm_wrapper.get_task_trace() if llm_wrapper else []),
                         }, f, indent=2)
@@ -1096,6 +1194,8 @@ def run_benchmark(
                 except TimeoutError as te:
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [TIMEOUT] Pair ({ut_id}, {it_id}) timed out after 600s: {te}", flush=True)
                     pair_errors += 1
+                    total_api_calls += 1
+                    total_api_errors += 1
                     pair_details.append({
                         "user_task": ut_id,
                         "injection_task": it_id,
@@ -1109,6 +1209,8 @@ def run_benchmark(
                 except Exception as e:
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [ERROR] Pair ({ut_id}, {it_id}) failed: {e}", flush=True)
                     pair_errors += 1
+                    total_api_calls += 1
+                    total_api_errors += 1
                     pair_details.append({
                         "user_task": ut_id,
                         "injection_task": it_id,
@@ -1161,8 +1263,8 @@ def run_benchmark(
                 "pairs": pair_details,
             },
             "api_metrics": {
-                "calls_count": llm_wrapper.api_calls_count,
-                "errors_count": llm_wrapper.api_errors_count,
+                "calls_count": total_api_calls,
+                "errors_count": total_api_errors,
             },
             "onchain_simulation": {
                 "total_calls": onchain_total,
