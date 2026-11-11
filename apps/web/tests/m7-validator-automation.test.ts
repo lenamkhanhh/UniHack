@@ -31,7 +31,12 @@ import {
   setMemoryValidationRecord,
   serializeWithBigInt,
   MISSION_CREATED_EVENT_ABI,
+  VALIDATION_RESPONSE_EVENT_ABI,
   DEFAULT_VALIDATION_REGISTRY,
+  verifyStrictChainResponse,
+  renewJobLease,
+  advanceValidationJob,
+  buildFrozenValidationContext,
 } from '@/lib/validator-job';
 import { POST as creationReceiptPOST } from '@/app/api/missions/[slug]/creation-receipt/route';
 import { getPasskeyAuthorityAddress } from '@/lib/config';
@@ -42,7 +47,7 @@ import { POST as closeRoutePOST } from '@/app/api/missions/[slug]/close/route';
 import { POST as challengePOST } from '@/app/api/auth/challenge/route';
 import { GET as verifyRouteGET, POST as verifyRoutePOST } from '@/app/api/verify/[missionId]/route';
 import { setAnchorFetcherForTesting, getGuardedTreasuryAddress } from '@/lib/config';
-import { issueSpendToken } from '@/lib/auth';
+import { issueSpendToken, issueReadToken } from '@/lib/auth';
 
 const TEST_HEAD_HASH = '0x7d46d87541ed812ada52afe7f1d3144d6a2b90b359a66162e54c8e41d675be2f' as const;
 
@@ -191,8 +196,15 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     expect(resultHeadMismatch.validationResult.tag).toContain('HEAD_MISMATCH');
 
     // Case B: Tampered payee root
-    const mockClientRootMismatch = createMockPublicClient(bundle, { rootMatches: false });
-    const resultRootMismatch = await runMissionValidatorJob(mission.slug, {
+    const { mission: missionB } = await createTestMission({
+      payeesJson: JSON.stringify(payees),
+      payeeRoot: tree.root,
+      auditHeadHash: TEST_HEAD_HASH,
+      creationBlock: 60689700n,
+    });
+    const bundleB = await buildMissionValidationBundle(missionB.slug);
+    const mockClientRootMismatch = createMockPublicClient(bundleB, { rootMatches: false });
+    const resultRootMismatch = await runMissionValidatorJob(missionB.slug, {
       publicClient: mockClientRootMismatch,
       skipOnChainBroadcast: true,
     });
@@ -835,7 +847,20 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     const mockClient = {
       getChainId: vi.fn().mockResolvedValue(43113),
       getTransactionReceipt: vi.fn().mockResolvedValue(mockReceipt),
-      readContract: vi.fn().mockResolvedValue(true),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return true;
+        if (functionName === 'getValidationStatus') {
+          return [
+            '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+            294n,
+            100,
+            '0x0',
+            'verified-full',
+            1700000000n,
+          ];
+        }
+        return true;
+      }),
       waitForTransactionReceipt: vi.fn().mockResolvedValue({ status: 'success' }),
     } as any;
 
@@ -1449,9 +1474,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
 
   // A4-23: Passkey-authority creation receipt + treasury MissionCreated log succeeds
   it('M7-A4-23: Passkey-authority creation receipt + treasury MissionCreated log succeeds and reconciles creation block', async () => {
-    const { mission, spendToken } = await createTestMission({
-      creationBlock: null,
-    });
+    const { mission, spendToken } = await createTestMission();
 
     const treasury = getGuardedTreasuryAddress().toLowerCase();
     const authority = getPasskeyAuthorityAddress().toLowerCase();
@@ -1539,28 +1562,31 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
   // A4-25: POST /api/verify/[missionId] authorizes via fresh owner EIP-191 signature challenge
   it('M7-A4-25: POST /api/verify/[missionId] authorizes via fresh owner EIP-191 signature challenge', async () => {
     const { mission } = await createTestMission();
+    const txHash = '0x1234567890123456789012345678901234567890123456789012345678901234';
 
     const chalReq = new NextRequest('http://localhost:3000/api/auth/challenge', {
       method: 'POST',
       body: JSON.stringify({
-        action: 'VERIFY_MISSION_ACTION',
-        payload: { slug: mission.slug },
+        action: 'RECONCILE_VALIDATION_REQUEST',
+        payload: { slug: mission.slug, txHash, chainId: 43113, targetMissionSlug: mission.slug },
         expectedSigner: ownerAccount.address,
       }),
     });
     const chalRes = await challengePOST(chalReq);
     expect(chalRes.status).toBe(200);
-    const { message } = await chalRes.json();
-    const signature = await ownerAccount.signMessage({ message });
+    const chalData = await chalRes.json();
+    const challengeMessage = chalData.message || chalData.challenge?.message;
+    const challengeNonce = chalData.nonce || chalData.challenge?.nonce;
+    const signature = await ownerAccount.signMessage({ message: challengeMessage });
 
     const verifyReq = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`, {
       method: 'POST',
-      headers: {
-        'x-owner-signature': signature,
-        'x-owner-signer': ownerAccount.address,
-        'x-auth-message': encodeURIComponent(message),
-      },
-      body: JSON.stringify({ txHash: '0x1234567890123456789012345678901234567890123456789012345678901234' }),
+      body: JSON.stringify({
+        txHash,
+        nonce: challengeNonce,
+        signature,
+        payload: { slug: mission.slug, txHash, chainId: 43113, targetMissionSlug: mission.slug },
+      }),
     });
 
     const verifyRes = await verifyRoutePOST(verifyReq, { params: Promise.resolve({ missionId: mission.slug }) });
@@ -1654,5 +1680,509 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       exitCode = err.status;
     }
     expect(exitCode).toBe(1);
+  });
+
+  // A4-28: Action-bound owner auth (unrelated challenge action, other mission slug, wrong txHash in payload, expired nonce, wrong-purpose token)
+  it('M7-A4-28: Action-bound owner auth: rejects unrelated messages, expired nonces, wrong-purpose tokens, and mismatched payloads', async () => {
+    const { mission } = await createTestMission();
+    const dummyTx = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const systemState = await prisma.systemState.findUnique({ where: { id: 1 } });
+    const currentDeploymentId = systemState?.deploymentId || 'dep-local';
+
+    // 1. Missing auth header and signature -> 401
+    const reqNoAuth = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`, {
+      method: 'POST',
+      body: JSON.stringify({ txHash: dummyTx }),
+    });
+    const resNoAuth = await verifyRoutePOST(reqNoAuth, { params: Promise.resolve({ missionId: mission.slug }) });
+    expect(resNoAuth.status).toBe(401);
+
+    // 2. Wrong-purpose token: execution session token (type: 'session') -> 403
+    const sessionToken = await issueSpendToken({
+      deploymentId: currentDeploymentId,
+      stage: 'S1',
+      authVersion: systemState?.authVersion || 1,
+      missionSlug: mission.slug,
+      missionId: mission.missionId,
+      ownerAddress: mission.ownerAddress,
+      agentAddress: mission.agentAddress,
+      missionExpiresAt: new Date(Date.now() + 86400000),
+      missionConfigVersion: 1,
+      policyHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+    });
+    const reqSessionToken = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sessionToken}` },
+      body: JSON.stringify({ txHash: dummyTx }),
+    });
+    const resSessionToken = await verifyRoutePOST(reqSessionToken, { params: Promise.resolve({ missionId: mission.slug }) });
+    expect(resSessionToken.status).toBe(403);
+    const sessionData = await resSessionToken.json();
+    expect(sessionData.error).toContain('execution token cannot authorize owner reconciliation');
+
+    // 3. Token for different mission -> 403
+    const otherMissionToken = await issueReadToken({
+      deploymentId: currentDeploymentId,
+      stage: 'S1',
+      authVersion: systemState?.authVersion || 1,
+      missionSlug: 'different-mission-slug',
+      missionId: '0xdifferent0000000000000000000000000000000000000000000000000000000000',
+      ownerAddress: mission.ownerAddress,
+      agentAddress: mission.agentAddress,
+      missionConfigVersion: 1,
+      policyHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+    });
+    const reqOtherToken = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${otherMissionToken}` },
+      body: JSON.stringify({ txHash: dummyTx }),
+    });
+    const resOtherToken = await verifyRoutePOST(reqOtherToken, { params: Promise.resolve({ missionId: mission.slug }) });
+    expect(resOtherToken.status).toBe(403);
+
+    // 4. Server challenge with unrelated action (READ_MISSION) -> 400
+    const readChalReq = new NextRequest('http://localhost:3000/api/auth/challenge', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'READ_MISSION',
+        expectedSigner: mission.ownerAddress,
+        payload: { slug: mission.slug, targetMissionSlug: mission.slug },
+      }),
+    });
+    const readChalRes = await challengePOST(readChalReq);
+    const readChalData = await readChalRes.json();
+    const readMessage = readChalData.message || readChalData.challenge?.message;
+    const readNonce = readChalData.nonce || readChalData.challenge?.nonce;
+    const readSig = await ownerAccount.signMessage({ message: readMessage });
+
+    const reqWrongAction = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        txHash: dummyTx,
+        nonce: readNonce,
+        signature: readSig,
+        payload: { slug: mission.slug, txHash: dummyTx, targetMissionSlug: mission.slug },
+      }),
+    });
+    const resWrongAction = await verifyRoutePOST(reqWrongAction, { params: Promise.resolve({ missionId: mission.slug }) });
+    expect(resWrongAction.status).toBe(400);
+    const wrongActionData = await resWrongAction.json();
+    expect(wrongActionData.error).toMatch(/Action mismatch|missing slug or txHash/);
+
+    // 5. Server challenge for RECONCILE_VALIDATION_REQUEST with mismatched payload txHash -> 400
+    const goodChalReq = new NextRequest('http://localhost:3000/api/auth/challenge', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'RECONCILE_VALIDATION_REQUEST',
+        expectedSigner: mission.ownerAddress,
+        payload: {
+          slug: mission.slug,
+          txHash: dummyTx,
+          chainId: 43113,
+          targetMissionSlug: mission.slug,
+        },
+      }),
+    });
+    const goodChalRes = await challengePOST(goodChalReq);
+    const goodChalData = await goodChalRes.json();
+    const goodMessage = goodChalData.message || goodChalData.challenge?.message;
+    const goodNonce = goodChalData.nonce || goodChalData.challenge?.nonce;
+    const goodSig = await ownerAccount.signMessage({ message: goodMessage });
+
+    const reqMismatchedTx = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        txHash: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', // Mismatched!
+        nonce: goodNonce,
+        signature: goodSig,
+        payload: {
+          slug: mission.slug,
+          txHash: dummyTx,
+          chainId: 43113,
+          targetMissionSlug: mission.slug,
+        },
+      }),
+    });
+    const resMismatchedTx = await verifyRoutePOST(reqMismatchedTx, { params: Promise.resolve({ missionId: mission.slug }) });
+    expect(resMismatchedTx.status).toBe(400);
+
+    // 6. Expired challenge nonce -> 400
+    await prisma.authChallenge.update({
+      where: { nonce: goodNonce },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    const reqExpired = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        txHash: dummyTx,
+        nonce: goodNonce,
+        signature: goodSig,
+        payload: {
+          slug: mission.slug,
+          txHash: dummyTx,
+          chainId: 43113,
+          targetMissionSlug: mission.slug,
+        },
+      }),
+    });
+    const resExpired = await verifyRoutePOST(reqExpired, { params: Promise.resolve({ missionId: mission.slug }) });
+    expect(resExpired.status).toBe(400);
+    const expiredData = await resExpired.json();
+    expect(expiredData.error).toContain('expired');
+  });
+
+  // A4-29: Strict chain response verification (no success fallbacks, rejects mismatch, preserves local 100 with chain 37)
+  it('M7-A4-29: Strict chain response verification: rejects malformed/errored RPC, mismatch identity/event, and keeps local 100 distinct from chain 37', async () => {
+    const registry = '0x4c5ccda2a630cd1cb706799deadcc8483d06697e';
+    const valAddress = '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5';
+    const reqHash = '0x1111111111111111111111111111111111111111111111111111111111111111' as const;
+
+    // Case 1: isValidationComplete=true but getValidationStatus throws RPC error -> UNAVAILABLE, not confirmed, no fallback to 100
+    const clientRpcThrows = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return true;
+        if (functionName === 'getValidationStatus') throw new Error('RPC connection reset by peer');
+        throw new Error(`Unexpected call: ${functionName}`);
+      }),
+    } as any;
+
+    const resThrows = await verifyStrictChainResponse({
+      publicClient: clientRpcThrows,
+      registryAddress: registry,
+      expectedValidator: valAddress,
+      expectedAgentId: '294',
+      expectedRequestHash: reqHash,
+    });
+    expect(resThrows.isConfirmed).toBe(false);
+    expect(resThrows.status).toBe('UNAVAILABLE');
+    expect(resThrows.chainScore).toBeUndefined();
+
+    // Case 2: getValidationStatus returns malformed tuple -> UNAVAILABLE, not confirmed
+    const clientMalformed = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return true;
+        if (functionName === 'getValidationStatus') return []; // Malformed empty array
+        throw new Error(`Unexpected call: ${functionName}`);
+      }),
+    } as any;
+
+    const resMalformed = await verifyStrictChainResponse({
+      publicClient: clientMalformed,
+      registryAddress: registry,
+      expectedValidator: valAddress,
+      expectedAgentId: '294',
+      expectedRequestHash: reqHash,
+    });
+    expect(resMalformed.isConfirmed).toBe(false);
+    expect(resMalformed.status).toBe('UNAVAILABLE');
+
+    // Case 3: Validator address mismatch on registry -> FAILED, not confirmed
+    const clientWrongVal = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return true;
+        if (functionName === 'getValidationStatus') {
+          return ['0x9999999999999999999999999999999999999999', 294n, 100, '0x0', 'verified-full', 1700000000n];
+        }
+        throw new Error(`Unexpected call: ${functionName}`);
+      }),
+    } as any;
+
+    const resWrongVal = await verifyStrictChainResponse({
+      publicClient: clientWrongVal,
+      registryAddress: registry,
+      expectedValidator: valAddress,
+      expectedAgentId: '294',
+      expectedRequestHash: reqHash,
+    });
+    expect(resWrongVal.isConfirmed).toBe(false);
+    expect(resWrongVal.status).toBe('FAILED');
+    expect(resWrongVal.error).toContain('Validator address mismatch');
+
+    // Case 4: Agent ID mismatch on registry -> FAILED, not confirmed
+    const clientWrongAgent = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return true;
+        if (functionName === 'getValidationStatus') {
+          return [valAddress, 9999n, 100, '0x0', 'verified-full', 1700000000n];
+        }
+        throw new Error(`Unexpected call: ${functionName}`);
+      }),
+    } as any;
+
+    const resWrongAgent = await verifyStrictChainResponse({
+      publicClient: clientWrongAgent,
+      registryAddress: registry,
+      expectedValidator: valAddress,
+      expectedAgentId: '294',
+      expectedRequestHash: reqHash,
+    });
+    expect(resWrongAgent.isConfirmed).toBe(false);
+    expect(resWrongAgent.status).toBe('FAILED');
+    expect(resWrongAgent.error).toContain('Agent ID mismatch');
+
+    // Case 5: Valid chain response with score 37 -> isConfirmed = true, chainScore = 37
+    const clientValid37 = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return true;
+        if (functionName === 'getValidationStatus') {
+          return [valAddress, 294n, 37, '0x3737373737373737373737373737373737373737373737373737373737373737', 'verified-partial', 1700000000n];
+        }
+        throw new Error(`Unexpected call: ${functionName}`);
+      }),
+    } as any;
+
+    const resValid37 = await verifyStrictChainResponse({
+      publicClient: clientValid37,
+      registryAddress: registry,
+      expectedValidator: valAddress,
+      expectedAgentId: '294',
+      expectedRequestHash: reqHash,
+    });
+    expect(resValid37.isConfirmed).toBe(true);
+    expect(resValid37.status).toBe('RESPONSE_CONFIRMED');
+    expect(resValid37.chainScore).toBe(37);
+    expect(resValid37.chainTag).toBe('verified-partial');
+  });
+
+  // A4-30: Live lease fencing: worker 1 expires during scan, worker 2 claims, worker 1 cannot broadcast or update
+  it('M7-A4-30: Live lease fencing: worker 1 cannot broadcast or update after lease expires and is reclaimed by worker 2', async () => {
+    const { mission } = await createTestMission();
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const requestHash = computeValidationRequestHash(bundle);
+
+    // Initial job queued
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash,
+        status: 'QUEUED',
+        frozenContext: serializeWithBigInt(bundle),
+      },
+    });
+
+    // Worker 1 claims with very short lease (10ms)
+    const claim1 = await claimNextValidationJob('worker-1', 10);
+    expect(claim1).not.toBeNull();
+    const leaseToken1 = claim1.leaseToken;
+
+    // Wait past worker 1's lease expiration
+    await new Promise((r) => setTimeout(r, 30));
+
+    // Worker 2 claims the expired job
+    const claim2 = await claimNextValidationJob('worker-2', 60_000);
+    expect(claim2).not.toBeNull();
+    expect(claim2.missionSlug).toBe(mission.slug);
+    expect(claim2.leaseToken).not.toBe(leaseToken1);
+
+    // Worker 1 tries to renew lease -> throws renewal error
+    await expect(renewJobLease(mission.slug, leaseToken1, 60_000)).rejects.toThrow(/Lease renewal error/);
+
+    // Worker 1 tries to update job or advance state -> throws lease fencing error
+    await expect(
+      advanceValidationJob(mission.slug, {
+        leaseToken: leaseToken1,
+        workerId: 'worker-1',
+      })
+    ).rejects.toThrow(/Invalid or expired lease token|Lease fencing error/);
+
+    // Verify DB still holds Worker 2's lease
+    const currentJob = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+    expect(currentJob?.workerLeaseOwner).toBe('worker-2');
+    expect(currentJob?.leaseToken).toBe(claim2.leaseToken);
+  });
+
+  // A4-31: Deterministic prepared response before broadcast & crash recovery (no double spend)
+  it('M7-A4-31: Prepared response before broadcast & crash recovery: never submits a second transaction', async () => {
+    const { mission } = await createTestMission();
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const requestHash = computeValidationRequestHash(bundle);
+
+    const frozenCtx = buildFrozenValidationContext({
+      bundle,
+      ownerAddress: mission.ownerAddress,
+    });
+    frozenCtx.evidence = {
+      evaluatedAt: new Date().toISOString(),
+      responseJsonString: '{}',
+      responseHash: '0x2222222222222222222222222222222222222222222222222222222222222222',
+      score: 100,
+      tag: 'verified-full',
+      checks: {},
+      details: {},
+    };
+
+    const deterministicTx = '0xd000000000000000000000000000000000000000000000000000000000000001' as const;
+
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash,
+        status: 'RESPONSE_PENDING',
+        score: 100,
+        tag: 'verified-full',
+        frozenContext: serializeWithBigInt(frozenCtx),
+      },
+    });
+
+    let writeContractCallCount = 0;
+    const mockWallet = {
+      account: { address: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5' },
+      writeContract: vi.fn().mockImplementation(async () => {
+        writeContractCallCount++;
+        return deterministicTx;
+      }),
+    } as any;
+
+    let receiptMined = false;
+    const mockPublic = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return receiptMined;
+        if (functionName === 'getValidationStatus') {
+          return [
+            '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+            294n,
+            100,
+            '0x2222222222222222222222222222222222222222222222222222222222222222',
+            'verified-full',
+            1700000000n,
+          ];
+        }
+        throw new Error(`Unexpected call: ${functionName}`);
+      }),
+      getTransactionReceipt: vi.fn().mockImplementation(async () => {
+        if (!receiptMined) return null; // Still in mempool
+        const validationResponseEventAbi = parseAbiItem(
+          'event ValidationResponse(address indexed validatorAddress, uint256 indexed agentId, bytes32 indexed requestHash, uint8 response, bytes32 responseHash, string tag)'
+        );
+        const topics = encodeEventTopics({
+          abi: [validationResponseEventAbi],
+          eventName: 'ValidationResponse',
+          args: {
+            validatorAddress: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+            agentId: 294n,
+            requestHash,
+          },
+        });
+        const data = encodeAbiParameters(
+          [{ type: 'uint8' }, { type: 'bytes32' }, { type: 'string' }],
+          [100, '0x2222222222222222222222222222222222222222222222222222222222222222', 'verified-full']
+        );
+        return {
+          status: 'success',
+          logs: [
+            {
+              address: DEFAULT_VALIDATION_REGISTRY,
+              topics,
+              data,
+            },
+          ],
+        };
+      }),
+    } as any;
+
+    // Run 1: Broadcasts transaction and saves prepared responseTxHash; receipt is still pending in mempool
+    const run1 = await advanceValidationJob(mission.slug, {
+      publicClient: mockPublic,
+      validatorWalletClient: mockWallet,
+      validatorAccount: mockWallet.account,
+      preparedTxHash: deterministicTx,
+    });
+    expect(writeContractCallCount).toBe(1);
+    expect(run1.status).toBe('RESPONSE_PENDING');
+
+    const jobAfterSend = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+    expect(jobAfterSend?.responseTxHash).toBe(deterministicTx);
+
+    // Simulate crash and worker restart: Run 2 executed with the same job
+    // Receipt mines in between
+    receiptMined = true;
+    const run2 = await advanceValidationJob(mission.slug, {
+      publicClient: mockPublic,
+      validatorWalletClient: mockWallet,
+      validatorAccount: mockWallet.account,
+    });
+
+    // WriteContract was NOT called a second time!
+    expect(writeContractCallCount).toBe(1);
+    expect(run2.status).toBe('RESPONSE_CONFIRMED');
+    expect(run2.responseTxHash).toBe(deterministicTx);
+  });
+
+  // A4-32: Truly frozen evidence & identities
+  it('M7-A4-32: Truly frozen evidence & identities: rejects mutated identities with STALE_CONTEXT and reuses frozen evidence hash without re-scan', async () => {
+    const { mission } = await createTestMission();
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const requestHash = computeValidationRequestHash(bundle);
+
+    const context = buildFrozenValidationContext({
+      bundle,
+      ownerAddress: mission.ownerAddress,
+    });
+
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash,
+        status: 'QUEUED',
+        frozenContext: serializeWithBigInt(context),
+      },
+    });
+
+    let scanCount = 0;
+    const mockClient = createMockPublicClient(bundle);
+    const origReadContract = mockClient.readContract;
+    mockClient.readContract = vi.fn().mockImplementation(async (params) => {
+      if (params.functionName === 'missions') {
+        scanCount++;
+      }
+      return origReadContract(params);
+    });
+
+    // Run 1: Initial evaluation
+    const res1 = await advanceValidationJob(mission.slug, {
+      publicClient: mockClient,
+      skipOnChainBroadcast: true,
+    });
+    expect(res1.status).toBe('LOCAL_EVALUATED');
+    const firstScore = res1.validationResult.score;
+    const jobAfter1 = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+    const ctxAfter1 = JSON.parse(jobAfter1?.frozenContext || '{}');
+    const firstResponseHash = ctxAfter1.evidence?.responseHash;
+    const firstEvaluatedAt = ctxAfter1.evidence?.evaluatedAt;
+    expect(firstResponseHash).toBeDefined();
+    expect(firstEvaluatedAt).toBeDefined();
+
+    // Run 2 with test client provided: MUST NOT re-scan because evidence is frozen!
+    const res2 = await advanceValidationJob(mission.slug, {
+      publicClient: mockClient,
+      skipOnChainBroadcast: true,
+    });
+    const jobAfter2 = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+    const ctxAfter2 = JSON.parse(jobAfter2?.frozenContext || '{}');
+    expect(ctxAfter2.evidence?.responseHash).toBe(firstResponseHash);
+    expect(ctxAfter2.evidence?.evaluatedAt).toBe(firstEvaluatedAt);
+
+    // Run 3: Mutate configured validator in frozen context -> STALE_CONTEXT
+    ctxAfter2.identities.validatorAddress = '0x0000000000000000000000000000000000000bad';
+    await prisma.validationJob.update({
+      where: { missionSlug: mission.slug },
+      data: { frozenContext: serializeWithBigInt(ctxAfter2), status: 'QUEUED' },
+    });
+
+    const res3 = await advanceValidationJob(mission.slug, {
+      publicClient: mockClient,
+      skipOnChainBroadcast: true,
+    });
+    expect(res3.status).toBe('STALE_CONTEXT');
+    expect(res3.failureReason).toContain('STALE_CONTEXT: configured identities');
   });
 });

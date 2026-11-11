@@ -72,6 +72,14 @@ export interface ActionPayloadMap {
     txHash: string;
     targetMissionSlug?: string;
   };
+  RECONCILE_VALIDATION_REQUEST: {
+    slug: string;
+    txHash: string;
+    chainId?: number;
+    registryAddress?: string;
+    ownerAddress?: string;
+    targetMissionSlug?: string;
+  };
 }
 
 export type ActionType = keyof ActionPayloadMap;

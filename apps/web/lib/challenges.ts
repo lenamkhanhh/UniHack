@@ -38,6 +38,7 @@ const ALLOWED_PAYLOAD_KEYS: Record<ActionType, string[]> = {
   SUBMIT_FEEDBACK: ['operationId', 'score', 'tag1', 'tag2', 'txHash', 'targetMissionSlug'],
   CONFIRM_FUNDING: ['slug', 'txHash', 'targetMissionSlug'],
   CONFIRM_ANCHOR: ['slug', 'txHash', 'targetMissionSlug'],
+  RECONCILE_VALIDATION_REQUEST: ['slug', 'txHash', 'chainId', 'registryAddress', 'ownerAddress', 'targetMissionSlug'],
 };
 
 export function validatePayloadTarget(
@@ -182,6 +183,21 @@ export function validatePayloadTarget(
       }
       if (targetMissionSlug && payload.slug !== targetMissionSlug) {
         throw new ChallengeError('CONFIRM_ANCHOR slug mismatch with target', 400);
+      }
+      break;
+    }
+    case 'RECONCILE_VALIDATION_REQUEST': {
+      if (!payload.slug || typeof payload.slug !== 'string' || !payload.txHash) {
+        throw new ChallengeError('RECONCILE_VALIDATION_REQUEST payload missing slug or txHash', 400);
+      }
+      if (targetMissionSlug && payload.slug !== targetMissionSlug) {
+        throw new ChallengeError('RECONCILE_VALIDATION_REQUEST slug mismatch with target', 400);
+      }
+      if (payload.chainId !== undefined && Number(payload.chainId) !== 43113) {
+        throw new ChallengeError(`RECONCILE_VALIDATION_REQUEST chainId mismatch: expected 43113, got ${payload.chainId}`, 400);
+      }
+      if (payload.registryAddress && (!isValidAddress(payload.registryAddress))) {
+        throw new ChallengeError(`RECONCILE_VALIDATION_REQUEST invalid registryAddress: ${payload.registryAddress}`, 400);
       }
       break;
     }

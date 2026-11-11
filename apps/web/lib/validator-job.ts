@@ -92,6 +92,82 @@ export const DEFAULT_VALIDATION_REGISTRY: `0x${string}` =
   '0x4c5ccda2a630cd1cb706799deadcc8483d06697e';
 export const DEFAULT_ERC8004_AGENT_ID = 294n;
 
+export interface FrozenValidationContext {
+  version: 'MissionPay-frozen-v1';
+  bundle: ValidationBundle;
+  identities: {
+    registryAddress: string;
+    validatorAddress: string;
+    agentId: string;
+    ownerAddress: string;
+    chainId: number;
+    treasuryAddress: string;
+  };
+  range: {
+    fromBlock?: string;
+    toBlock?: string;
+    snapshotBlock?: string;
+  };
+  provenance: {
+    trustedCreationBlock?: string;
+    trustedCreationTx?: string;
+  };
+  evidence?: {
+    evaluatedAt: string;
+    responseJsonString: string;
+    responseHash: `0x${string}`;
+    score: number;
+    tag: string;
+    checks: any;
+    details: any;
+  };
+  preparedResponse?: {
+    preparedAt: string;
+    txHash: `0x${string}`;
+    to: `0x${string}`;
+    data: `0x${string}`;
+    score: number;
+    tag: string;
+  };
+}
+
+export function buildFrozenValidationContext(params: {
+  bundle: ValidationBundle;
+  registryAddress?: string;
+  validatorAddress?: string;
+  agentId?: string;
+  ownerAddress?: string;
+  chainId?: number;
+  treasuryAddress?: string;
+  fromBlock?: bigint;
+  toBlock?: bigint;
+  snapshotBlock?: bigint;
+  trustedCreationBlock?: bigint;
+  trustedCreationTx?: string;
+}): FrozenValidationContext {
+  return {
+    version: 'MissionPay-frozen-v1',
+    bundle: params.bundle,
+    identities: {
+      registryAddress: (params.registryAddress || getValidationRegistryAddress()).toLowerCase(),
+      validatorAddress: (params.validatorAddress || getValidatorAddress()).toLowerCase(),
+      agentId: (params.agentId || getErc8004AgentId().toString()).toLowerCase(),
+      ownerAddress: (params.ownerAddress || params.bundle.ownerAddress || '').toLowerCase(),
+      chainId: params.chainId ?? 43113,
+      treasuryAddress: (params.treasuryAddress || params.bundle.treasury || getGuardedTreasuryAddress()).toLowerCase(),
+    },
+    range: {
+      fromBlock: params.fromBlock?.toString() ?? (params.bundle.creationBlock?.toString()),
+      toBlock: params.toBlock?.toString(),
+      snapshotBlock: params.snapshotBlock?.toString(),
+    },
+    provenance: {
+      trustedCreationBlock: params.trustedCreationBlock?.toString() ?? (params.bundle.creationBlock?.toString()),
+      trustedCreationTx: params.trustedCreationTx,
+    },
+  };
+}
+
 export function getValidationRegistryAddress(): `0x${string}` {
   const configured =
     process.env.VALIDATION_REGISTRY_ADDRESS ||
@@ -127,6 +203,10 @@ export const VALIDATION_REQUEST_EVENT_ABI = parseAbiItem(
 );
 
 export const VALIDATION_RESPONSE_EVENT_ABI = parseAbiItem(
+  'event ValidationResponse(address indexed validatorAddress, uint256 indexed agentId, bytes32 indexed requestHash, uint8 response, string responseURI, bytes32 responseHash, string tag)'
+);
+
+export const VALIDATION_RESPONSE_EVENT_ABI_NO_URI = parseAbiItem(
   'event ValidationResponse(address indexed validatorAddress, uint256 indexed agentId, bytes32 indexed requestHash, uint8 response, bytes32 responseHash, string tag)'
 );
 
@@ -590,6 +670,7 @@ export interface RunValidatorJobOptions {
   fromBlock?: bigint;
   toBlock?: bigint;
   skipOnChainBroadcast?: boolean;
+  preparedTxHash?: `0x${string}`;
 }
 
 export interface AdvanceJobOptions extends RunValidatorJobOptions {
@@ -725,23 +806,280 @@ export async function claimNextValidationJob(
 }
 
 /**
- * Fenced update helper: ensures worker still holds the lease.
+ * Fenced update helper: ensures worker still holds an active, unexpired lease with matching token.
  */
 async function updateJobWithLease(
   slug: string,
   leaseToken: string,
   data: any
 ) {
+  const now = new Date();
   const res = await prisma.validationJob.updateMany({
     where: {
       missionSlug: slug,
       leaseToken,
+      workerLeaseUntil: { gte: now },
     },
     data,
   });
   if (res.count === 0) {
     throw new Error(`Lease fencing error: lease ${leaseToken} on ${slug} was lost or expired`);
   }
+}
+
+/**
+ * Renews active job lease for an unexpired lease holder.
+ */
+export async function renewJobLease(
+  slug: string,
+  leaseToken: string,
+  durationMs: number = 60_000
+): Promise<Date> {
+  const now = new Date();
+  const newUntil = new Date(now.getTime() + durationMs);
+  const res = await prisma.validationJob.updateMany({
+    where: {
+      missionSlug: slug,
+      leaseToken,
+      workerLeaseUntil: { gte: now },
+    },
+    data: {
+      workerLeaseUntil: newUntil,
+    },
+  });
+  if (res.count === 0) {
+    throw new Error(`Lease renewal error: lease ${leaseToken} on ${slug} was lost or expired`);
+  }
+  return newUntil;
+}
+
+export interface StrictChainResponseParams {
+  publicClient: PublicClient;
+  registryAddress: string;
+  expectedValidator: string;
+  expectedAgentId: string;
+  expectedRequestHash: string;
+  expectedChainId?: number;
+  responseTxHash?: string;
+}
+
+export interface StrictChainResponseResult {
+  isComplete: boolean;
+  isConfirmed: boolean;
+  status: 'RESPONSE_CONFIRMED' | 'RESPONSE_PENDING' | 'FAILED' | 'UNAVAILABLE';
+  chainScore?: number;
+  chainTag?: string;
+  responseHash?: string;
+  validatorAddress?: string;
+  agentId?: string;
+  error?: string;
+}
+
+/**
+ * Strict, centralized chain response verification for worker and owner reconciliation.
+ * Eliminates all success fallbacks: missing/malformed status => UNAVAILABLE,
+ * identity or hash mismatch => FAILED / not confirmed.
+ */
+export async function verifyStrictChainResponse(
+  params: StrictChainResponseParams
+): Promise<StrictChainResponseResult> {
+  const expectedChainId = params.expectedChainId ?? 43113;
+  try {
+    const chainId = await params.publicClient.getChainId();
+    if (chainId !== expectedChainId) {
+      return {
+        isComplete: false,
+        isConfirmed: false,
+        status: 'UNAVAILABLE',
+        error: `Chain ID mismatch: expected ${expectedChainId}, got ${chainId}`,
+      };
+    }
+  } catch (err: any) {
+    return {
+      isComplete: false,
+      isConfirmed: false,
+      status: 'UNAVAILABLE',
+      error: `Failed to query chainId: ${err?.message || err}`,
+    };
+  }
+
+  let isComplete = false;
+  try {
+    const comp = await params.publicClient.readContract({
+      address: params.registryAddress as `0x${string}`,
+      abi: VALIDATION_REGISTRY_ABI,
+      functionName: 'isValidationComplete',
+      args: [params.expectedRequestHash as `0x${string}`],
+    });
+    isComplete = Boolean(comp);
+  } catch (err: any) {
+    return {
+      isComplete: false,
+      isConfirmed: false,
+      status: 'UNAVAILABLE',
+      error: `isValidationComplete RPC error: ${err?.message || err}`,
+    };
+  }
+
+  if (!isComplete) {
+    return {
+      isComplete: false,
+      isConfirmed: false,
+      status: 'RESPONSE_PENDING',
+    };
+  }
+
+  let statusTuple: readonly [string, bigint, number, string, string, bigint];
+  try {
+    const statusData = await params.publicClient.readContract({
+      address: params.registryAddress as `0x${string}`,
+      abi: VALIDATION_REGISTRY_ABI,
+      functionName: 'getValidationStatus',
+      args: [params.expectedRequestHash as `0x${string}`],
+    });
+    statusTuple = statusData as any;
+  } catch (err: any) {
+    return {
+      isComplete: true,
+      isConfirmed: false,
+      status: 'UNAVAILABLE',
+      error: `getValidationStatus RPC error: ${err?.message || err}`,
+    };
+  }
+
+  if (!Array.isArray(statusTuple) || statusTuple.length < 6) {
+    return {
+      isComplete: true,
+      isConfirmed: false,
+      status: 'UNAVAILABLE',
+      error: 'Malformed getValidationStatus tuple from registry contract',
+    };
+  }
+
+  const [valAddr, agId, scoreVal, respHash, tagVal, lastUpdate] = statusTuple;
+
+  if (!valAddr || valAddr === '0x0000000000000000000000000000000000000000' || !lastUpdate || lastUpdate === 0n) {
+    return {
+      isComplete: true,
+      isConfirmed: false,
+      status: 'UNAVAILABLE',
+      error: 'Validation status uninitialized or empty on registry contract',
+    };
+  }
+
+  if (valAddr.toLowerCase() !== params.expectedValidator.toLowerCase()) {
+    return {
+      isComplete: true,
+      isConfirmed: false,
+      status: 'FAILED',
+      error: `Validator address mismatch: expected ${params.expectedValidator}, got ${valAddr}`,
+    };
+  }
+
+  if (agId.toString().toLowerCase() !== params.expectedAgentId.toLowerCase()) {
+    return {
+      isComplete: true,
+      isConfirmed: false,
+      status: 'FAILED',
+      error: `Agent ID mismatch: expected ${params.expectedAgentId}, got ${agId.toString()}`,
+    };
+  }
+
+  const chainScore = typeof scoreVal === 'number' ? scoreVal : Number(scoreVal);
+  if (isNaN(chainScore) || chainScore < 0 || chainScore > 100) {
+    return {
+      isComplete: true,
+      isConfirmed: false,
+      status: 'UNAVAILABLE',
+      error: `Invalid chain score: ${scoreVal}`,
+    };
+  }
+
+  if (params.responseTxHash) {
+    const receipt = await params.publicClient.getTransactionReceipt({
+      hash: params.responseTxHash as `0x${string}`,
+    }).catch(() => null);
+
+    if (!receipt) {
+      return {
+        isComplete: true,
+        isConfirmed: false,
+        status: 'RESPONSE_PENDING',
+        error: 'Response transaction receipt not yet mined',
+      };
+    }
+
+    if (receipt.status !== 'success') {
+      return {
+        isComplete: true,
+        isConfirmed: false,
+        status: 'FAILED',
+        error: 'Response transaction reverted on-chain',
+      };
+    }
+
+    let matchingEventFound = false;
+    for (const log of receipt.logs || []) {
+      if (log.address && log.address.toLowerCase() !== params.registryAddress.toLowerCase()) {
+        continue;
+      }
+      try {
+        let decoded: any = null;
+        try {
+          decoded = decodeEventLog({
+            abi: [VALIDATION_RESPONSE_EVENT_ABI],
+            data: log.data,
+            topics: log.topics,
+          });
+        } catch {
+          decoded = decodeEventLog({
+            abi: [VALIDATION_RESPONSE_EVENT_ABI_NO_URI],
+            data: log.data,
+            topics: log.topics,
+          });
+        }
+
+        if (decoded && decoded.eventName === 'ValidationResponse') {
+          const evVal = decoded.args.validatorAddress?.toLowerCase();
+          const evAg = decoded.args.agentId?.toString().toLowerCase();
+          const evReqHash = decoded.args.requestHash?.toLowerCase();
+          const evScore = Number(decoded.args.response);
+          const evHash = decoded.args.responseHash?.toLowerCase();
+
+          if (
+            evVal === params.expectedValidator.toLowerCase() &&
+            evAg === params.expectedAgentId.toLowerCase() &&
+            evReqHash === params.expectedRequestHash.toLowerCase() &&
+            evScore === chainScore &&
+            (!respHash || respHash === '0x0' || !evHash || evHash === respHash.toLowerCase())
+          ) {
+            matchingEventFound = true;
+            break;
+          }
+        }
+      } catch {}
+    }
+
+    if (!matchingEventFound) {
+      return {
+        isComplete: true,
+        isConfirmed: false,
+        status: 'FAILED',
+        error: 'Matching ValidationResponse event with exact validator, agentId, requestHash, and score not found in transaction logs',
+      };
+    }
+  }
+
+  return {
+    isComplete: true,
+    isConfirmed: true,
+    status: 'RESPONSE_CONFIRMED',
+    chainScore,
+    chainTag: tagVal || '',
+    responseHash: respHash,
+    validatorAddress: valAddr,
+    agentId: agId.toString(),
+  };
 }
 
 /**
@@ -862,6 +1200,14 @@ export async function advanceValidationJob(
 
   const registryAddress = getValidationRegistryAddress();
   const agentId = getErc8004AgentId();
+  const validatorKey = getValidatorPrivateKey();
+  const validatorAccount =
+    options.validatorAccount ||
+    (validatorKey ? privateKeyToAccount(validatorKey) : null);
+  const validatorAddress =
+    validatorAccount?.address ||
+    process.env.VALIDATOR_ADDRESS ||
+    '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5';
   const rpcUrl =
     options.rpcUrl ||
     process.env.AVALANCHE_FUJI_RPC_URL ||
@@ -877,15 +1223,31 @@ export async function advanceValidationJob(
 
   try {
     // 2. Frozen Context Resolution & Integrity Check
+    let context: FrozenValidationContext;
     let bundle: ValidationBundle;
     if (job.frozenContext) {
       try {
-        bundle = JSON.parse(job.frozenContext);
+        const parsed = JSON.parse(job.frozenContext);
+        if (parsed.version === 'MissionPay-frozen-v1' && parsed.bundle) {
+          context = parsed;
+          bundle = parsed.bundle;
+        } else {
+          bundle = parsed;
+          context = buildFrozenValidationContext({
+            bundle,
+            registryAddress: job.registryAddress || registryAddress,
+            validatorAddress: job.validatorAddress || validatorAddress,
+            agentId: job.agentId || agentId.toString(),
+            ownerAddress: bundle.ownerAddress || mission.ownerAddress,
+            chainId: 43113,
+            treasuryAddress: bundle.treasury,
+          });
+        }
       } catch (err: any) {
         throw new Error(`MALFORMED_FROZEN_CONTEXT: could not parse persisted frozen context: ${err?.message || err}`);
       }
 
-      // Check for stale context mutation: if mission state was mutated after job was frozen
+      // Check for stale context mutation: mission state
       if (mission.auditHeadHash && bundle.auditHead && mission.auditHeadHash !== bundle.auditHead) {
         await updateJobWithLease(slug, leaseToken, {
           status: 'STALE_CONTEXT',
@@ -917,32 +1279,84 @@ export async function advanceValidationJob(
           failureReason: 'STALE_CONTEXT: mission payeeRoot mutated after validation job was frozen',
         };
       }
+
+      if (mission.treasuryCap && bundle.cap && mission.treasuryCap.toString() !== bundle.cap.toString()) {
+        await updateJobWithLease(slug, leaseToken, {
+          status: 'STALE_CONTEXT',
+          failureReason: 'STALE_CONTEXT: mission treasuryCap mutated after validation job was frozen',
+        });
+        await releaseJobLease(slug, leaseToken);
+        return {
+          bundle,
+          requestHash: job.requestHash as Hex,
+          validationResult: { valid: false, score: 0, checks: {} as any, tag: 'STALE_CONTEXT', details: {} as any },
+          status: 'STALE_CONTEXT',
+          isRegisteredOnChain: false,
+          failureReason: 'STALE_CONTEXT: mission treasuryCap mutated after validation job was frozen',
+        };
+      }
+
+      // Check configured identities vs frozen identities
+      if (
+        context.identities &&
+        (
+          (context.identities.registryAddress && context.identities.registryAddress.toLowerCase() !== registryAddress.toLowerCase()) ||
+          (context.identities.validatorAddress && context.identities.validatorAddress.toLowerCase() !== validatorAddress.toLowerCase()) ||
+          (context.identities.agentId && context.identities.agentId.toLowerCase() !== agentId.toString().toLowerCase()) ||
+          (context.identities.ownerAddress && mission.ownerAddress && context.identities.ownerAddress.toLowerCase() !== mission.ownerAddress.toLowerCase()) ||
+          (context.identities.chainId && context.identities.chainId !== 43113)
+        )
+      ) {
+        const reason = `STALE_CONTEXT: configured identities or chainId mutated after validation job was frozen`;
+        await updateJobWithLease(slug, leaseToken, {
+          status: 'STALE_CONTEXT',
+          failureReason: reason,
+        });
+        await releaseJobLease(slug, leaseToken);
+        return {
+          bundle,
+          requestHash: job.requestHash as Hex,
+          validationResult: { valid: false, score: 0, checks: {} as any, tag: 'STALE_CONTEXT', details: {} as any },
+          status: 'STALE_CONTEXT',
+          isRegisteredOnChain: false,
+          failureReason: reason,
+        };
+      }
     } else {
       bundle = await buildMissionValidationBundle(slug, {
         tamperAuditHead: options.tamperAuditHead,
         tamperPayeeRoot: options.tamperPayeeRoot,
       });
+      context = buildFrozenValidationContext({
+        bundle,
+        registryAddress,
+        validatorAddress,
+        agentId: agentId.toString(),
+        ownerAddress: mission.ownerAddress,
+        chainId: 43113,
+        treasuryAddress: bundle.treasury,
+        fromBlock: bundle.creationBlock,
+      });
       await updateJobWithLease(slug, leaseToken, {
-        frozenContext: serializeWithBigInt(bundle),
+        frozenContext: serializeWithBigInt(context),
       });
     }
 
     const requestHash = computeValidationRequestHash(bundle);
 
-    // 3. Local Evaluation Step (if QUEUED, LOCAL_EVALUATING, evaluationResult is missing, or explicit client provided)
+    // 3. Local Evaluation Step (evaluated once and frozen into context)
     let validationResult: ValidationCheckResult;
     const shouldEvaluate =
-      job.status === 'QUEUED' ||
-      job.status === 'LOCAL_EVALUATING' ||
-      !job.evaluationResult ||
-      Boolean(options.publicClient && job.status !== 'RESPONSE_CONFIRMED');
+      (job.status === 'QUEUED' || job.status === 'LOCAL_EVALUATING' || !job.evaluationResult) &&
+      !context.evidence;
 
     if (shouldEvaluate) {
+      await renewJobLease(slug, leaseToken, 60_000);
       try {
         validationResult = await validateBundleOnChain(
           publicClient,
           bundle,
-          options.fromBlock ?? (job.fromBlock ? BigInt(job.fromBlock) : undefined),
+          options.fromBlock ?? (job.fromBlock ? BigInt(job.fromBlock) : (bundle.creationBlock ?? undefined)),
           options.toBlock ?? (job.toBlock ? BigInt(job.toBlock) : undefined)
         );
       } catch (err: any) {
@@ -965,9 +1379,39 @@ export async function advanceValidationJob(
       const fromBlockBigInt = options.fromBlock ?? (validationResult.fromBlock ? BigInt(validationResult.fromBlock) : (bundle.creationBlock ?? null));
       const toBlockBigInt = options.toBlock ?? (validationResult.toBlock ? BigInt(validationResult.toBlock) : (snapshotBlockBigInt ?? null));
 
+      const responseData = {
+        requestHash,
+        missionId: bundle.missionId,
+        missionSlug: bundle.missionSlug,
+        evaluatedAt: new Date().toISOString(),
+        agentId: agentId.toString(),
+        score: validationResult.score,
+        tag: validationResult.tag,
+        checks: validationResult.checks,
+        details: validationResult.details,
+      };
+      const responseJsonString = serializeWithBigInt(responseData, 2);
+      const responseHash = keccak256(toHex(responseJsonString));
+
+      context.evidence = {
+        evaluatedAt: responseData.evaluatedAt,
+        responseJsonString,
+        responseHash,
+        score: validationResult.score,
+        tag: validationResult.tag,
+        checks: validationResult.checks,
+        details: validationResult.details,
+      };
+      context.range = {
+        fromBlock: fromBlockBigInt?.toString(),
+        toBlock: toBlockBigInt?.toString(),
+        snapshotBlock: snapshotBlockBigInt?.toString(),
+      };
+
       await updateJobWithLease(slug, leaseToken, {
         status: 'LOCAL_EVALUATED',
         evaluationResult: serializeWithBigInt(validationResult),
+        frozenContext: serializeWithBigInt(context),
         score: validationResult.score,
         tag: validationResult.tag,
         snapshotBlock: snapshotBlockBigInt,
@@ -979,12 +1423,28 @@ export async function advanceValidationJob(
       job.evaluationResult = serializeWithBigInt(validationResult);
       job.score = validationResult.score;
       job.tag = validationResult.tag;
-    } else {
+    } else if (job.evaluationResult) {
       validationResult = JSON.parse(job.evaluationResult);
+    } else if (context.evidence) {
+      validationResult = {
+        valid: (context.evidence.score ?? 0) > 0,
+        score: context.evidence.score ?? 0,
+        tag: context.evidence.tag || 'verified-full',
+        checks: (context.evidence.checks || {}) as any,
+        details: (context.evidence.details || {}) as any,
+      };
+    } else {
+      validationResult = {
+        valid: false,
+        score: job.score ?? 0,
+        tag: job.tag ?? 'unknown',
+        checks: {} as any,
+        details: {} as any,
+      };
     }
 
-    // Prepare evidence payload
-    const responseData = {
+    // Reuse frozen evidence payload and hash
+    const responseJsonString = context.evidence?.responseJsonString || serializeWithBigInt({
       requestHash,
       missionId: bundle.missionId,
       missionSlug: bundle.missionSlug,
@@ -994,23 +1454,13 @@ export async function advanceValidationJob(
       tag: validationResult.tag,
       checks: validationResult.checks,
       details: validationResult.details,
-    };
-    const responseJsonString = serializeWithBigInt(responseData, 2);
-    const responseHash = keccak256(toHex(responseJsonString));
+    }, 2);
+    const responseHash = (context.evidence?.responseHash || keccak256(toHex(responseJsonString))) as `0x${string}`;
 
     let requestTxHash: string | undefined = job.requestTxHash || undefined;
     let responseTxHash: string | undefined = job.responseTxHash || undefined;
     let isRegisteredOnChain = false;
     let unsignedRequest: any = null;
-
-    const validatorKey = getValidatorPrivateKey();
-    const validatorAccount =
-      options.validatorAccount ||
-      (validatorKey ? privateKeyToAccount(validatorKey) : null);
-    const validatorAddress =
-      validatorAccount?.address ||
-      process.env.VALIDATOR_ADDRESS ||
-      '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5';
 
     if (options.skipOnChainBroadcast) {
       await releaseJobLease(slug, leaseToken);
@@ -1036,18 +1486,54 @@ export async function advanceValidationJob(
     }
 
     // 4. On-chain stage progression
-    let requestExists = false;
-    let onChainCompleted = false;
+    // Centralized strict check of registry contract status
+    const chainCheck = await verifyStrictChainResponse({
+      publicClient,
+      registryAddress,
+      expectedValidator: validatorAddress,
+      expectedAgentId: agentId.toString(),
+      expectedRequestHash: requestHash,
+      expectedChainId: 43113,
+    });
 
-    try {
-      const isComp = await publicClient.readContract({
-        address: registryAddress,
-        abi: VALIDATION_REGISTRY_ABI,
-        functionName: 'isValidationComplete',
-        args: [requestHash],
+    if (chainCheck.isConfirmed) {
+      await updateJobWithLease(slug, leaseToken, {
+        status: 'RESPONSE_CONFIRMED',
+        chainScore: chainCheck.chainScore,
+        chainTag: chainCheck.chainTag,
+        responseHash: chainCheck.responseHash,
+        validatorAddress: chainCheck.validatorAddress,
+        agentId: chainCheck.agentId,
       });
-      onChainCompleted = Boolean(isComp);
+      await releaseJobLease(slug, leaseToken);
 
+      setMemoryValidationRecord({
+        requestHash,
+        status: 'RESPONSE_CONFIRMED',
+        score: chainCheck.chainScore,
+        tag: chainCheck.chainTag,
+        isRegisteredOnChain: true,
+        requestTxHash,
+        responseTxHash,
+      });
+
+      return {
+        bundle,
+        requestHash,
+        validationResult,
+        status: 'RESPONSE_CONFIRMED',
+        isRegisteredOnChain: true,
+        requestTxHash,
+        responseTxHash,
+        chainScore: chainCheck.chainScore,
+        chainTag: chainCheck.chainTag,
+        responseHash: chainCheck.responseHash,
+      };
+    }
+
+    // Check if request exists on chain
+    let requestExists = false;
+    try {
       const currentStatus = (await publicClient.readContract({
         address: registryAddress,
         abi: VALIDATION_REGISTRY_ABI,
@@ -1062,69 +1548,11 @@ export async function advanceValidationJob(
         currentStatus[5] > 0n;
     } catch {
       requestExists = false;
-      onChainCompleted = false;
     }
 
-    // Check if already completed on chain
-    if (onChainCompleted) {
-      let statusData: any = null;
-      try {
-        statusData = await publicClient.readContract({
-          address: registryAddress,
-          abi: VALIDATION_REGISTRY_ABI,
-          functionName: 'getValidationStatus',
-          args: [requestHash],
-        });
-      } catch {}
-
-      const isArr = Array.isArray(statusData);
-      const chainScore = isArr && typeof statusData[2] === 'number'
-        ? statusData[2]
-        : isArr && statusData[2] !== undefined
-        ? Number(statusData[2])
-        : (validationResult.score ?? 100);
-      const chainTag = (isArr && statusData[4]) || validationResult.tag || 'verified-full';
-      const respHash = (isArr && statusData[3]) || '0x0';
-      const valAddr = (isArr && statusData[0]) || validatorAddress;
-      const agId = isArr && statusData[1] !== undefined ? statusData[1].toString() : agentId.toString();
-
-      await updateJobWithLease(slug, leaseToken, {
-        status: 'RESPONSE_CONFIRMED',
-        chainScore,
-        chainTag,
-        responseHash: respHash,
-        validatorAddress: valAddr,
-        agentId: agId,
-      });
-      await releaseJobLease(slug, leaseToken);
-
-      setMemoryValidationRecord({
-        requestHash,
-        status: 'RESPONSE_CONFIRMED',
-        score: chainScore,
-        tag: chainTag,
-        isRegisteredOnChain: true,
-        requestTxHash,
-        responseTxHash,
-      });
-
-      return {
-        bundle,
-        requestHash,
-        validationResult,
-        status: 'RESPONSE_CONFIRMED',
-        isRegisteredOnChain: true,
-        requestTxHash,
-        responseTxHash,
-        chainScore,
-        chainTag,
-        responseHash: respHash,
-      };
-    }
-
-    // Stage LOCAL_EVALUATED -> REQUEST_PENDING / RESPONSE_PENDING
     if (!requestExists) {
       if (options.ownerWalletClient && options.ownerWalletClient.account) {
+        await renewJobLease(slug, leaseToken, 60_000);
         const requestURI = `evidence/validation/${slug}.json`;
         requestTxHash = await options.ownerWalletClient.writeContract({
           address: registryAddress,
@@ -1193,66 +1621,56 @@ export async function advanceValidationJob(
       });
     }
 
-    // Stage RESPONSE_PENDING: Validator submission & reconciliation
+    // Stage RESPONSE_PENDING: Validator submission & strict reconciliation
     // CRITICAL: UNKNOWN response cannot double-send!
     if (job.status === 'RESPONSE_PENDING' && validatorAccount) {
-      if (job.responseTxHash) {
+      await renewJobLease(slug, leaseToken, 60_000);
+      const existingResponseTx = job.responseTxHash || context.preparedResponse?.txHash;
+
+      if (existingResponseTx) {
         // Stored responseTxHash exists: ONLY reconcile receipt, DO NOT call writeContract again!
-        responseTxHash = job.responseTxHash;
-        const receipt = await publicClient.getTransactionReceipt({
-          hash: responseTxHash as Hex,
-        }).catch(() => null);
+        responseTxHash = existingResponseTx;
+        const strictCheck = await verifyStrictChainResponse({
+          publicClient,
+          registryAddress,
+          expectedValidator: validatorAddress,
+          expectedAgentId: agentId.toString(),
+          expectedRequestHash: requestHash,
+          expectedChainId: 43113,
+          responseTxHash,
+        });
 
-        if (receipt && receipt.status === 'success') {
-          const isComp = await publicClient.readContract({
-            address: registryAddress,
-            abi: VALIDATION_REGISTRY_ABI,
-            functionName: 'isValidationComplete',
-            args: [requestHash],
+        if (strictCheck.isConfirmed) {
+          await updateJobWithLease(slug, leaseToken, {
+            status: 'RESPONSE_CONFIRMED',
+            chainScore: strictCheck.chainScore,
+            chainTag: strictCheck.chainTag,
+            responseHash: strictCheck.responseHash,
           });
-          if (isComp) {
-            const statusData = (await publicClient.readContract({
-              address: registryAddress,
-              abi: VALIDATION_REGISTRY_ABI,
-              functionName: 'getValidationStatus',
-              args: [requestHash],
-            })) as readonly [string, bigint, number, string, string, bigint];
-
-            const chainScore = Number(statusData[2]);
-            const chainTag = statusData[4] || validationResult.tag;
-            const respHash = statusData[3];
-
-            await updateJobWithLease(slug, leaseToken, {
-              status: 'RESPONSE_CONFIRMED',
-              chainScore,
-              chainTag,
-              responseHash: respHash,
-            });
-            await releaseJobLease(slug, leaseToken);
-            return {
-              bundle,
-              requestHash,
-              validationResult,
-              status: 'RESPONSE_CONFIRMED',
-              isRegisteredOnChain: true,
-              requestTxHash,
-              responseTxHash,
-              chainScore,
-              chainTag,
-              responseHash: respHash,
-            };
-          }
-        } else if (receipt && receipt.status !== 'success') {
+          await releaseJobLease(slug, leaseToken);
+          return {
+            bundle,
+            requestHash,
+            validationResult,
+            status: 'RESPONSE_CONFIRMED',
+            isRegisteredOnChain: true,
+            requestTxHash,
+            responseTxHash,
+            chainScore: strictCheck.chainScore,
+            chainTag: strictCheck.chainTag,
+            responseHash: strictCheck.responseHash,
+          };
+        } else if (strictCheck.status === 'FAILED') {
           if (job.retryCount < 3) {
             // Revert allows retry: clear responseTxHash so subsequent worker can retry
             await updateJobWithLease(slug, leaseToken, {
               responseTxHash: null,
-              failureReason: 'Previous validationResponse reverted, queued for retry',
+              failureReason: strictCheck.error || 'Previous validationResponse reverted, queued for retry',
             });
           } else {
             await updateJobWithLease(slug, leaseToken, {
               status: 'FAILED',
-              failureReason: 'ValidationResponse transaction reverted and max retries exceeded',
+              failureReason: strictCheck.error || 'ValidationResponse transaction reverted and max retries exceeded',
             });
             await releaseJobLease(slug, leaseToken);
             return {
@@ -1261,11 +1679,11 @@ export async function advanceValidationJob(
               validationResult,
               status: 'FAILED',
               isRegisteredOnChain: false,
-              failureReason: 'ValidationResponse transaction reverted and max retries exceeded',
+              failureReason: strictCheck.error || 'ValidationResponse transaction reverted and max retries exceeded',
             };
           }
         } else {
-          // Receipt not yet mined (still in mempool / pending): leave as RESPONSE_PENDING
+          // Receipt not yet mined or RPC unavailable: leave as RESPONSE_PENDING without broadcasting again
           await releaseJobLease(slug, leaseToken);
           return {
             bundle,
@@ -1275,11 +1693,46 @@ export async function advanceValidationJob(
             isRegisteredOnChain: false,
             requestTxHash,
             responseTxHash,
-            failureReason: 'Awaiting response transaction mining',
+            failureReason: strictCheck.error || 'Awaiting response transaction mining',
           };
         }
       } else {
-        // No prior responseTxHash: submit validator response on-chain
+        // Prepare deterministic response payload and persist BEFORE broadcast
+        const responseURI = `evidence/validation/${slug}.response.json`;
+        const preparedTxData = encodeFunctionData({
+          abi: VALIDATION_REGISTRY_ABI,
+          functionName: 'validationResponse',
+          args: [
+            requestHash,
+            validationResult.score,
+            responseURI,
+            responseHash,
+            validationResult.tag,
+          ],
+        });
+
+        // Deterministic prepared transaction hash
+        const preparedTxHash = (options.preparedTxHash || (
+          keccak256(toHex(`validationResponse:${registryAddress}:${requestHash}:${responseHash}:${validatorAddress}`))
+        )) as `0x${string}`;
+
+        context.preparedResponse = {
+          preparedAt: new Date().toISOString(),
+          txHash: preparedTxHash,
+          to: registryAddress as `0x${string}`,
+          data: preparedTxData,
+          score: validationResult.score,
+          tag: validationResult.tag,
+        };
+
+        // Persist prepared response and lease renewal before external broadcast call
+        await renewJobLease(slug, leaseToken, 60_000);
+        await updateJobWithLease(slug, leaseToken, {
+          frozenContext: serializeWithBigInt(context),
+          responseTxHash: preparedTxHash,
+          status: 'RESPONSE_PENDING',
+        });
+
         const validatorWallet =
           options.validatorWalletClient ||
           createWalletClient({
@@ -1288,7 +1741,6 @@ export async function advanceValidationJob(
             transport: http(rpcUrl),
           });
 
-        const responseURI = `evidence/validation/${slug}.response.json`;
         try {
           responseTxHash = await validatorWallet.writeContract({
             address: registryAddress,
@@ -1320,55 +1772,45 @@ export async function advanceValidationJob(
           };
         }
 
-        // Save responseTxHash immediately in DB before waiting for receipt
-        await updateJobWithLease(slug, leaseToken, {
+        // If returned hash differs from prepared placeholder, update it immediately
+        if (responseTxHash && responseTxHash !== preparedTxHash) {
+          await updateJobWithLease(slug, leaseToken, {
+            responseTxHash,
+            status: 'RESPONSE_PENDING',
+          });
+        }
+
+        // Strictly verify response using verifyStrictChainResponse
+        const strictRespCheck = await verifyStrictChainResponse({
+          publicClient,
+          registryAddress,
+          expectedValidator: validatorAddress,
+          expectedAgentId: agentId.toString(),
+          expectedRequestHash: requestHash,
+          expectedChainId: 43113,
           responseTxHash,
-          status: 'RESPONSE_PENDING',
         });
 
-        const respReceipt = await publicClient.waitForTransactionReceipt({
-          hash: responseTxHash as Hex,
-        }).catch(() => null);
-
-        if (respReceipt && respReceipt.status === 'success') {
-          const isComp = await publicClient.readContract({
-            address: registryAddress,
-            abi: VALIDATION_REGISTRY_ABI,
-            functionName: 'isValidationComplete',
-            args: [requestHash],
+        if (strictRespCheck.isConfirmed) {
+          await updateJobWithLease(slug, leaseToken, {
+            status: 'RESPONSE_CONFIRMED',
+            chainScore: strictRespCheck.chainScore,
+            chainTag: strictRespCheck.chainTag,
+            responseHash: strictRespCheck.responseHash,
           });
-          if (isComp) {
-            const statusData = (await publicClient.readContract({
-              address: registryAddress,
-              abi: VALIDATION_REGISTRY_ABI,
-              functionName: 'getValidationStatus',
-              args: [requestHash],
-            })) as readonly [string, bigint, number, string, string, bigint];
-
-            const chainScore = Number(statusData[2]);
-            const chainTag = statusData[4] || validationResult.tag;
-            const respHash = statusData[3];
-
-            await updateJobWithLease(slug, leaseToken, {
-              status: 'RESPONSE_CONFIRMED',
-              chainScore,
-              chainTag,
-              responseHash: respHash,
-            });
-            await releaseJobLease(slug, leaseToken);
-            return {
-              bundle,
-              requestHash,
-              validationResult,
-              status: 'RESPONSE_CONFIRMED',
-              isRegisteredOnChain: true,
-              requestTxHash,
-              responseTxHash,
-              chainScore,
-              chainTag,
-              responseHash: respHash,
-            };
-          }
+          await releaseJobLease(slug, leaseToken);
+          return {
+            bundle,
+            requestHash,
+            validationResult,
+            status: 'RESPONSE_CONFIRMED',
+            isRegisteredOnChain: true,
+            requestTxHash,
+            responseTxHash,
+            chainScore: strictRespCheck.chainScore,
+            chainTag: strictRespCheck.chainTag,
+            responseHash: strictRespCheck.responseHash,
+          };
         }
       }
     }

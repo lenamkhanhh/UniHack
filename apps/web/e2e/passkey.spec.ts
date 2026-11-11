@@ -727,4 +727,188 @@ test.describe('A2: Passkey Mission Authority (RIP-7212 Precompile 0x100 & Real W
 
     await cdp.send('WebAuthn.disable');
   });
+
+  test('A4-Gap-5: Wallet pending flow on verify page: unmined -> reload -> mined reconciliation (sendTransaction count 1); wrong/unknown chain sends 0', async ({
+    page,
+  }) => {
+    const missionId = 'test-wallet-mission';
+
+    // Track state
+    await page.route(`**/api/verify/${missionId}`, async (route) => {
+      const req = route.request();
+      if (req.method() === 'GET') {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            missionId,
+            anchorStatus: { anchored: false },
+            entries: [
+              {
+                id: 1,
+                sourceKey: 'init',
+                prevHash: '0x0000000000000000000000000000000000000000000000000000000000000000',
+                entryHash: '0x7d46d87541ed812ada52afe7f1d3144d6a2b90b359a66162e54c8e41d675be2f',
+                canonicalJson: '{"init":true}',
+                missionSequence: 1,
+                createdAt: new Date().toISOString(),
+              },
+            ],
+            erc8004Validation: {
+              isComplete: false,
+              status: 'REQUEST_PENDING',
+              score: 100,
+              tag: 'verified-full',
+              unsignedRequest: {
+                to: '0x4c5ccda2a630cd1cb706799deadcc8483d06697e',
+                data: '0x12345678',
+                value: '0x0',
+                chainId: 43113,
+                requestHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
+                ownerAddress: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+                missionSlug: missionId,
+              },
+            },
+          }),
+        });
+      }
+
+      if (req.method() === 'POST') {
+        const postData = JSON.parse(req.postData() || '{}');
+        expect(postData.txHash).toBe('0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+        expect(postData.nonce).toBe('test-nonce-12345');
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            status: 'RESPONSE_PENDING',
+            requestTxHash: postData.txHash,
+          }),
+        });
+      }
+
+      return route.continue();
+    });
+
+    await page.route('**/api/auth/challenge', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          challenge: {
+            nonce: 'test-nonce-12345',
+            message: 'Authorize validation request reconciliation',
+          },
+        }),
+      });
+    });
+
+    // 1. Initial State: wrong chain (0x1) and switch fails
+    await page.addInitScript(() => {
+      let _sendTxCount = 0;
+      (window as any).ethereum = {
+        isMetaMask: true,
+        request: async ({ method }: any) => {
+          if (method === 'eth_chainId') return '0x1';
+          if (method === 'wallet_switchEthereumChain') throw new Error('User rejected network switch');
+          if (method === 'eth_sendTransaction') {
+            _sendTxCount++;
+            return '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+          }
+          throw new Error(`Unsupported method ${method}`);
+        },
+      };
+      (window as any).getSendTxCount = () => _sendTxCount;
+    });
+
+    await page.goto(`/verify/${missionId}`);
+    const signBtn = page.getByTestId('sign-validation-request-button');
+    await expect(signBtn).toBeVisible();
+
+    await signBtn.click();
+    await expect(page.locator('text=Please switch wallet network')).toBeVisible();
+
+    // Verify eth_sendTransaction called 0 times on wrong/failed chain
+    let sendCount = await page.evaluate(() => (window as any).getSendTxCount());
+    expect(sendCount).toBe(0);
+
+    // 2. Fix wallet chain to Avalanche Fuji (0xa869), but receipt is UNMINED
+    await page.addInitScript(() => {
+      let _sendTxCount = 0;
+      let _receiptMined = false;
+
+      (window as any).setReceiptMined = (val: boolean) => {
+        _receiptMined = val;
+      };
+
+      (window as any).ethereum = {
+        isMetaMask: true,
+        request: async ({ method, params }: any) => {
+          if (method === 'eth_chainId') return '0xa869';
+          if (method === 'eth_requestAccounts' || method === 'eth_accounts') {
+            return ['0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5'];
+          }
+          if (method === 'eth_sendTransaction') {
+            _sendTxCount++;
+            return '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+          }
+          if (method === 'eth_getTransactionReceipt') {
+            if (_receiptMined) {
+              return { status: '0x1', transactionHash: params[0] };
+            }
+            return null; // Unmined
+          }
+          if (method === 'personal_sign') {
+            return '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1c';
+          }
+          throw new Error(`Method ${method} unsupported`);
+        },
+      };
+      (window as any).getSendTxCount = () => _sendTxCount;
+    });
+
+    await page.goto(`/verify/${missionId}`);
+    const signBtn2 = page.getByTestId('sign-validation-request-button');
+    await expect(signBtn2).toBeVisible();
+
+    // Click broadcast: sends transaction once, but times out waiting for unmined receipt
+    await signBtn2.click();
+    await expect(page.locator('text=Receipt not yet mined')).toBeVisible({ timeout: 15000 });
+
+    // Verify eth_sendTransaction count is 1
+    sendCount = await page.evaluate(() => (window as any).getSendTxCount());
+    expect(sendCount).toBe(1);
+
+    // Verify pending tx is persisted in localStorage under key with chain+registry+requestHash+mission+owner
+    const savedStorage = await page.evaluate(() => {
+      const keys = Object.keys(localStorage);
+      const pendingKey = keys.find((k) => k.startsWith('pending_validation_tx_43113_'));
+      return { pendingKey, value: pendingKey ? localStorage.getItem(pendingKey) : null };
+    });
+    expect(savedStorage.pendingKey).toBeDefined();
+    expect(savedStorage.value).toBe('0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+
+    // 3. Now simulate receipt mined and click again: MUST NOT send transaction again (count remains 1)
+    await page.evaluate(() => {
+      (window as any).setReceiptMined(true);
+    });
+
+    await signBtn2.click();
+
+    // Verify reconciliation POST succeeded
+    await expect(page.locator('text=Request submitted and reconciled on-chain!')).toBeVisible({ timeout: 10000 });
+
+    // Verify eth_sendTransaction was NOT called again: count remains 1!
+    sendCount = await page.evaluate(() => (window as any).getSendTxCount());
+    expect(sendCount).toBe(1);
+
+    // Verify pending tx is removed from localStorage
+    const storageAfterReconcile = await page.evaluate(() => {
+      const keys = Object.keys(localStorage);
+      return keys.find((k) => k.startsWith('pending_validation_tx_43113_'));
+    });
+    expect(storageAfterReconcile).toBeUndefined();
+  });
 });

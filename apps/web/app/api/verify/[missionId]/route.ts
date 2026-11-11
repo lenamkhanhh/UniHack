@@ -5,6 +5,7 @@ import { keccak256, stringToBytes, createPublicClient, http, parseAbiItem, verif
 import { avalancheFuji } from 'viem/chains';
 import { verifyToken } from '@/lib/auth';
 import { normalizeAddress } from '@/lib/chain';
+import { verifyAndConsumeChallenge, ChallengeError } from '@/lib/challenges';
 import { getPaymentMode, getGuardedTreasuryAddress, getAnchorFetcherForTesting } from '@/lib/config';
 import { computeValidationRequestHash, ValidationBundle } from '@/lib/validation-bundle';
 import { computePayeeMerkleTree } from '@/lib/merkle';
@@ -507,28 +508,28 @@ export async function POST(req: NextRequest, context: any) {
       return NextResponse.json({ error: 'Mission not found' }, { status: 404 });
     }
 
-    // Owner authorization: Bearer token OR fresh owner-signed challenge
+    // Owner authorization: strictly scoped Bearer token OR fresh owner-signed server challenge
     const authHeader = req.headers.get('authorization') || '';
     const token = authHeader.replace(/^Bearer\s+/i, '');
 
-    const signature = req.headers.get('x-owner-signature') || body.authSignature || body.signature;
-    const signer = req.headers.get('x-owner-signer') || body.authSigner || body.signer;
-    let message = req.headers.get('x-auth-message') || body.authMessage || body.message;
-    if (message && typeof message === 'string') {
-      try {
-        message = decodeURIComponent(message);
-      } catch {}
-    }
-
+    const { nonce, signature, payload } = body;
     let isAuthorized = false;
 
     if (token) {
       try {
         const claims = await verifyToken(token);
+        // Scoped check: must be a read token for this exact mission and owner
+        // Execution/session tokens (e.g. type: 'session') are NOT authorized for reconciliation
+        if (claims.type !== 'read') {
+          return NextResponse.json(
+            { error: 'Unauthorized: execution token cannot authorize owner reconciliation (read-capability token required)' },
+            { status: 403 }
+          );
+        }
         const ownerLower = mission.ownerAddress.toLowerCase();
         const callerOwnerLower = claims.owner?.toLowerCase();
         const claimsSlug = claims.missionSlug;
-        if (callerOwnerLower === ownerLower && (!claimsSlug || claimsSlug === mission.slug)) {
+        if (callerOwnerLower === ownerLower && claimsSlug === mission.slug) {
           isAuthorized = true;
         } else {
           return NextResponse.json(
@@ -542,32 +543,39 @@ export async function POST(req: NextRequest, context: any) {
           { status: 401 }
         );
       }
-    } else if (signature && signer && message) {
-      const normalizedSigner = normalizeAddress(signer);
-      const normalizedOwner = normalizeAddress(mission.ownerAddress);
-      if (normalizedSigner !== normalizedOwner) {
+    } else if (nonce && signature) {
+      if (payload && payload.txHash && payload.txHash.toLowerCase() !== txHash.toLowerCase()) {
         return NextResponse.json(
-          { error: 'Unauthorized: signature signer does not match mission owner' },
-          { status: 403 }
+          { error: 'Payload txHash does not match request txHash' },
+          { status: 400 }
         );
       }
-      const isValid = await verifyMessage({
-        address: signer as `0x${string}`,
-        message,
-        signature: signature as `0x${string}`,
-      });
-      if (!isValid) {
+      try {
+        await prisma.$transaction(async (tx) => {
+          await verifyAndConsumeChallenge(tx, {
+            nonce,
+            signature,
+            action: 'RECONCILE_VALIDATION_REQUEST',
+            payload: payload || { slug: mission.slug, txHash, chainId: 43113 },
+            expectedSigner: mission.ownerAddress,
+            targetMissionSlug: mission.slug,
+            targetMissionId: mission.missionId,
+            appOrigin: process.env.APP_ORIGIN || 'http://localhost:3000',
+          });
+        });
+        isAuthorized = true;
+      } catch (chalErr: any) {
+        const status = chalErr instanceof ChallengeError ? chalErr.statusCode : 401;
         return NextResponse.json(
-          { error: 'Unauthorized: invalid owner signature' },
-          { status: 401 }
+          { error: `Challenge authorization failed: ${chalErr.message}` },
+          { status }
         );
       }
-      isAuthorized = true;
     }
 
     if (!isAuthorized) {
       return NextResponse.json(
-        { error: 'Authorization required: valid Bearer token or owner signature is required' },
+        { error: 'Authorization required: valid Bearer read token or active server challenge signature is required' },
         { status: 401 }
       );
     }
