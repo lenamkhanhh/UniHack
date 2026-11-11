@@ -28,7 +28,7 @@ Lời thoại tiếng Anh (khớp deck). Ghi chú quay bằng tiếng Việt. M�
 ## Cập nhật sau PLAN_MAX
 
 Khi có kết quả thật thì thay cảnh 6 hoặc thêm 1 câu:
-- **M4 (AgentDojo):** "On AgentDojo banking, the standard benchmark, MissionPay blocked X of Y attacks with Z% utility." Chỉ thêm khi Claude đã kiểm lại số.
+- **M4 (AgentDojo replay):** "On AgentDojo banking replay, MissionPay blocked 120 of 128 payment injections, and even with the attacker on the allowlist, the Avalanche contract rejected every off-mission payout." (Được đánh dấu là số đo replay mô hình ngoại tuyến, không phải live run).
 - **M9 (ICM):** thay cảnh 5 bằng 1 lượt chi xuyên L1 bị C-Chain từ chối, nếu có tx thật.
 
 ## Mẹo

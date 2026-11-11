@@ -306,7 +306,7 @@ async function main() {
     { name: "Caps + allowlist", labels: ["Gemini 3.5 Flash-Lite", "Gemini 3.1 Flash-Lite"], values: [12.1, 13.9] },
     { name: "MissionPay", labels: ["Gemini 3.5 Flash-Lite", "Gemini 3.1 Flash-Lite"], values: [0, 0] },
   ], {
-    x: MX, y: 1.5, w: 7.3, h: 4.6, barDir: "col", barGrouping: "clustered",
+    x: MX, y: 1.45, w: 7.3, h: 4.35, barDir: "col", barGrouping: "clustered",
     chartColors: [HEX.accent1, HEX.accent3, HEX.accent2],
     showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: '0.0"%"', dataLabelColor: HEX.lt1, dataLabelFontSize: 13, dataLabelFontFace: "+mn-lt",
     showLegend: true, legendPos: "b", legendColor: HEX.lt2, legendFontSize: 12, legendFontFace: "+mn-lt",
@@ -321,12 +321,16 @@ async function main() {
     ["40 / 40", "legitimate tasks (payouts and tool buys) still went through, on both models (no false positives)", GREEN],
   ];
   for (let i = 0; i < 3; i++) {
-    const y = 1.5 + i * 1.55;
-    card(s, 8.25, y, W - MX - 8.25, 1.38, "bench stat card " + (i + 1));
-    T(s, bstats[i][0], { x: 8.45, y: y + 0.1, w: W - MX - 8.65, h: 0.55, fontSize: 26, bold: true, color: bstats[i][2], objectName: "bench stat " + (i + 1) });
-    T(s, bstats[i][1], { x: 8.45, y: y + 0.65, w: W - MX - 8.65, h: 0.68, fontSize: 12, color: TXT, objectName: "bench label " + (i + 1) });
+    const y = 1.45 + i * 1.48;
+    card(s, 8.25, y, W - MX - 8.25, 1.32, "bench stat card " + (i + 1));
+    T(s, bstats[i][0], { x: 8.45, y: y + 0.08, w: W - MX - 8.65, h: 0.52, fontSize: 25, bold: true, color: bstats[i][2], objectName: "bench stat " + (i + 1) });
+    T(s, bstats[i][1], { x: 8.45, y: y + 0.60, w: W - MX - 8.65, h: 0.65, fontSize: 11.5, color: TXT, objectName: "bench label " + (i + 1) });
   }
-  T(s, "PayBench-ADI: 140 attack + 40 benign synthetic cases per model (instruction injection, structural ADI, vendor diversion, Bankr/Zscaler/Cornell/Freysa-style), temperature 0, one fresh agent run per case; N = 180 and 177. The structural ADI cases fooled neither model (0/40 and 0/39). Off-chain provenance guards also reach about 0% on AgentDojo banking (ProvGuard, NOMOS); numbers are not comparable across benchmarks. 10 blocked payouts replayed against GuardedTreasury on Fuji via eth_call: 9 reverted PayeeNotInMissionSet, 1 other revert. Dataset, scorer and leaderboard are public (eval/README.md, CC-BY-4.0) so other teams can plug in their own agent.", { x: MX, y: 6.2, w: W - 2 * MX, h: 0.6, fontSize: 10, color: MUTED, objectName: "bench method" });
+  T(s, [
+    { text: "AgentDojo banking, model-free replay: ", options: { bold: true, color: SKY } },
+    { text: "120/128 financial injections blocked (all 8 misses: user_task_15, where the user's own prompt names the attacker IBAN); benign false positives 3/16, same as ProvGuard policy v1; Fuji fork: guard and GuardedTreasury agree 169/169; with the attacker on the global allowlist the contract still reverts 150/150 PayeeNotInMissionSet.", options: { color: TXT } }
+  ], { x: MX, y: 5.92, w: W - 2 * MX, h: 0.36, fontSize: 9.5, objectName: "bench agentdojo replay" });
+  T(s, "PayBench-ADI: 140 attack + 40 benign synthetic cases per model (instruction injection, structural ADI, vendor diversion, Bankr/Zscaler/Cornell/Freysa-style), temperature 0, one fresh agent run per case; N = 180 and 177. The structural ADI cases fooled neither model (0/40 and 0/39). Off-chain provenance guards also reach about 0% on AgentDojo banking (ProvGuard, NOMOS); numbers are not comparable across benchmarks. 10 blocked payouts replayed against GuardedTreasury on Fuji via eth_call: 9 reverted PayeeNotInMissionSet, 1 other revert. Dataset, scorer and leaderboard are public (eval/README.md, CC-BY-4.0) so other teams can plug in their own agent.", { x: MX, y: 6.32, w: W - 2 * MX, h: 0.55, fontSize: 9, color: MUTED, objectName: "bench method" });
   s.addNotes("45 giây. Đây là số đo thật, không phải demo. Không guard: 32 đến 45% đòn làm tiền đi. Cap cộng allowlist chặn được phần lớn, nhưng khi kẻ tấn công chỉ tới một vendor có trong allowlist chung của công ty mà không thuộc mission này thì allowlist để lọt 17/20 và 19/20. MissionPay: 0 trên 277 lượt tấn công, và 40/40 khoản trả hợp lệ vẫn đi. Nếu bị hỏi: case là synthetic dựa trên sự cố thật; ADI phá cấu trúc (40 case) không lừa được hai model này; chưa dùng dataset APort vì cần token Hugging Face.");
 
   // ===== 8. Verify =====
@@ -423,8 +427,10 @@ async function main() {
   s.addNotes("Quay lại trang /bounty trước khi sang slide này: đọc N lượt thử, M lần LLM bị lừa, 0 đô ra ngoài (số đọc từ chain). Rồi nói câu chốt và dừng.");
 
   await pres.writeFile({ fileName: OUT });
-  const { applyTheme } = require(process.env.PPTX_SKILL + "/scripts/apply_theme.js");
-  await applyTheme(OUT, THEME);
+  if (process.env.PPTX_SKILL && fs.existsSync(process.env.PPTX_SKILL + "/scripts/apply_theme.js")) {
+    const { applyTheme } = require(process.env.PPTX_SKILL + "/scripts/apply_theme.js");
+    await applyTheme(OUT, THEME);
+  }
   console.log("wrote", OUT);
 }
 
