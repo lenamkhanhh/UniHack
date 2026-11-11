@@ -1,8 +1,8 @@
-# BÁO CÁO NGHIỆM THU REVIEW & SỬA LỖI (VÒNG 6 - HOÀN TẤT TRIỆT ĐỂ A1..A9)
+# BÁO CÁO NGHIỆM THU REVIEW & SỬA LỖI (VÒNG 7 - HOÀN TẤT TRIỆT ĐỂ A1..A9)
 
-**Thời điểm:** 2026-11-11 08:45 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
-**HEAD Đánh Giá Trước Khi Fix (Reviewer Baseline Round 6):** `4c4295c`  
-**HEAD Mã Nguồn Đã Sửa & Kiểm Thử Toàn Diện (Round 6 Fix):** `019025c` (`feat/s1-app`)
+**Thời điểm:** 2026-11-11 11:05 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
+**HEAD Đánh Giá Trước Khi Fix (Reviewer Baseline Round 7):** `1764b5b`  
+**HEAD Mã Nguồn Đã Sửa & Kiểm Thử Toàn Diện (Round 7 Fix):** Working Tree (`feat/s1-app`)
 
 ---
 
@@ -13,12 +13,12 @@
 | **A1** | **P1** | **ACCEPTED** *(Reviewer đã accept)* | `15d8ee5` | `contracts/src/GuardedTreasury.sol`<br>`contracts/test/GuardedTreasury.t.sol`<br>`contracts/test/invariant/Handler.sol`<br>`contracts/test/invariant/GuardedTreasury.invariant.t.sol` | Snapshot Merkle root tại `proposeWithProof`; `approve` và `execute` từ chối nếu root khác snapshot (`require(currentRoot == proposalRoots[proposalId], "ProposalPayeePolicyChanged")`). Handler ghi `rootAtPayout` tại thời điểm execute thật. 5 unit tests hồi quy (`test_A1_*`) pass; invariant suite (512 runs, 32,768 calls, 0 reverts) pass. Địa chỉ Fuji lịch sử là `OLD_DEPLOYMENT`. |
 | **A2** | **P1** | **RESOLVED** | `4955a99`<br>`f644dec` | `apps/web/e2e/passkey.spec.ts`<br>`apps/web/app/missions/new/page.tsx`<br>`apps/web/app/api/passkey/relay/route.ts`<br>`apps/web/lib/webauthn-p256.ts`<br>`apps/web/tests/passkey-relay.test.ts` | Sửa dynamic origin trong test RP ID (`currentOrigin` từ request/URL, giữ nguyên verify RP mismatch không gọi `credentials.get`). Adapter mật mã P-256 độc lập xác minh ECDSA trên `authenticatorData \|\| sha256(clientDataJSON)`, từ chối sai key, sai signature, tráo mission/nonce/cap. UI phân biệt rõ ràng simulation và confirmed card. 7/7 Playwright browser tests pass trên port 3138; 24/24 WebAuthn tests pass; 11/11 relay unit tests pass. Nhãn `LOCAL_BROWSER_CRYPTO_BOUNDARY`, hardware ghi `NOT_RUN`. |
 | **A3** | **P1** | **ACCEPTED** *(Reviewer đã accept)* | `1981c21` | `contracts/src/PasskeyMissionAuthority.sol`<br>`contracts/test/PasskeyMissionAuthority.t.sol`<br>`contracts/test/PasskeyGovernance.t.sol` | Quyền governance và recovery qua passkey (`emergencyWithdraw`, `withdrawTokens`, `sweepMissionWalletWithAuthorization`). Ghi nhận giới hạn kỹ thuật: `MockP256Precompile` trong Foundry là golden-signature oracle dùng `vm.signP256`; test negative wrong-private-key và mutated signature pass. 32/32 tests pass. |
-| **A4** | **P1** | **RESOLVED** *(Round 6: Real Signed Raw Tx & Strict Hash Validation)* | `019025c` | `apps/web/lib/validator-job.ts`<br>`apps/web/tests/m7-validator-automation.test.ts` | **Khắc phục triệt để 2 khiếm khuyết Round 6:**<br>1. **Real Locally Signed Raw EVM Transaction & Deterministic Recovery:** Xóa bỏ hoàn toàn descriptive placeholder string `preparedTxHash` và override giả lập. Ký trực tiếp raw transaction EVM bằng `signingAccount.signTransaction` (với đầy đủ `nonce`, `gas`, `fees`, `data`, `to`, `chainId: 43113`), tính mã băm chuẩn xác qua `keccak256(rawTransaction)`. Tuần tự hóa cấp phát nonce của ví validator bằng PostgreSQL transaction advisory lock (`pg_advisory_lock(hashtext('validator_nonce:<address>'))`). Lưu nguyên tử raw bytes và txHash vào `context.preparedResponse` trước khi broadcast. Phát sóng qua raw transport `sendRawTransaction`; khi restart/crash chỉ đối soát và rebroadcast chính xác raw bytes đã lưu, không ký tx mới.<br>2. **Strict Response Hash & Honest External Response Distinction:** Loại bỏ toàn bộ điều kiện fail-open (`!respHash \|\| respHash === '0x0' \|\| !evHash \|\| evHash === respHash`). Xác thực nghiêm ngặt tuple types: address EVM hợp lệ, `agentId >= 0n`, `lastUpdate > 0n`, integer score 0..100, exact bytes32 hash (từ chối `'0x0'`, zero hash, malformed strings). Yêu cầu `log.address == registryAddress`, exact event responseHash và tag. Nếu tx do chính job gửi (`responseTxHash`), tuple và event responseHash phải khớp tuyệt đối frozen evidence. Nếu on-chain đã có response độc lập với score/hash khác, ghi nhận rõ ràng `isExternalResponse: true` hiển thị bằng chứng chain mà không mạo nhận nó chứng minh cho evidence của job này.<br>**Kết quả:** 38 passed / 1 skipped (39 tests) trong `m7-validator-automation.test.ts`; 7 passed trong `passkey.spec.ts`. |
+| **A4** | **P1** | **RESOLVED** *(Round 7: No writeContract fallback, serialized advisory xact lock nonce, privacy boundary)* | Current (`feat/s1-app`) | `apps/web/lib/validator-job.ts`<br>`apps/web/tests/m7-validator-automation.test.ts` | **Khắc phục triệt để 3 khiếm khuyết Round 7:**<br>1. **Xóa bỏ hoàn toàn fallback `writeContract`:** Loại bỏ triệt để nhánh fallback `writeContract` ở cả luồng phát sóng ban đầu lẫn luồng phát sóng lại (rebroadcast). Nếu client phát sóng không hỗ trợ `sendRawTransaction`, worker fail-closed: giữ nguyên trạng thái `RESPONSE_PENDING`, ghi nhận `failureReason` rõ ràng, không gửi bất kỳ giao dịch nào (0 sends) và giữ nguyên `responseTxHash` đã ký trong DB (M7-A4-34).<br>2. **Tuần tự hóa cấp phát nonce bằng `pg_advisory_xact_lock`:** Hàm `reserveValidatorNonce` thực thi trong một `prisma.$transaction` duy nhất với câu lệnh tham số hóa `SELECT pg_advisory_xact_lock(hashtext(${...}))`. Nonce được ghi nhận bền vững vào `frozenContext` (`reservedNonce` + `reservedAt`) trước khi transaction commit. Nếu RPC đếm nonce hoặc DB gặp lỗi, ném ngoại lệ fail-closed (giữ job ở `RESPONSE_PENDING`, tuyệt đối không fallback âm thầm về nonce 0). Kiểm chứng 2 job chạy đồng thời cấp phát đúng 2 nonce riêng biệt (N và N+1) và RPC lỗi hủy ký (M7-A4-35).<br>3. **Bảo mật chuỗi byte ký `rawTransaction`:** Xác minh qua kiểm thử tự động rằng `rawTransaction` và `frozenContext` không bao giờ bị lộ qua bất kỳ API route nào (`/api/verify/*`, `/api/missions/*`) hay in ra console log (M7-A4-36).<br>**Kết quả:** 41 passed / 0 failed / 1 skipped (42 tests) trong `m7-validator-automation.test.ts`. |
 | **A5** | **P1** | **RESOLVED** | `3fa5ff9` | `apps/web/prisma/migrations/`<br>`package.json`<br>`DEPLOY_CHECKLIST.md` | Clean staging build proof: Root `npm run build` hoàn tất thành công (Exit code 0, 33/33 routes). Database sạch áp dụng trọn vẹn toàn bộ 7 migration qua `prisma migrate deploy` (không dùng `db push`). `tsc --noEmit -p apps/web/tsconfig.json` không có lỗi. |
 | **A6** | **P2** | **RESOLVED** | `4955a99` | `eval/agentdojo/run_benchmark.py`<br>`eval/agentdojo/test_provguard_pairs.py` | Fingerprint môi trường suite và tool schemas thực tế; thu thập chính xác counters từ tiến trình con worker (`api_calls`, `api_errors`, `trace`); timeout/error không bịa đặt số đếm; chế độ legacy cache hoàn toàn cô lập phục vụ báo cáo lịch sử ngoại tuyến. 14/14 Python tests pass. |
 | **A7** | **P2** | **ACCEPTED** *(Reviewer đã accept)* | `fea5f20`<br>`dde044e` | `packages/guard/src/validator.ts`<br>`packages/guard/src/merkle.ts`<br>`packages/guard/src/guard.ts`<br>`packages/guard/tests/guard.test.ts`<br>`packages/guard/tests/parity.test.ts` | Đối chiếu canonical mission ID/slug; đối chiếu Merkle root từ payees; ưu tiên hard BLOCK trước soft QUEUE. 19/19 SDK tests pass. |
 | **A8** | **P2** | **ACCEPTED** *(Reviewer đã accept)* | `467e251`<br>`937f41a`<br>`b7da608` | `apps/web/lib/bounty.ts`<br>`apps/web/app/api/bounty/attempt/route.ts`<br>`apps/web/prisma/schema.prisma`<br>`apps/web/prisma/migrations/20261110120000_bounty_quota_reservation/`<br>`apps/web/tests/bounty.test.ts` | Atomic PostgreSQL reservation rate limiting: global advisory lock trước IP lock, tuần tự hóa nghiêm ngặt tại ngưỡng 299; bảo lưu khấu trừ hạn ngạch độc lập với kết quả/lease; DB down fail-closed; reverse proxy `TRUSTED_INGRESS` chống giả mạo header; offline simulation stub. 18/18 tests pass. |
-| **A9** | **P2** | **RESOLVED** | `019025c` | `REPORT_REVIEW_AND_FIX_COMPLETION.md`<br>`DEPLOY_CHECKLIST.md` | Cập nhật đầy đủ bằng chứng kiểm thử Round 6 (38 unit tests M7, 7 browser Playwright tests); mô tả chi tiết giải pháp ký raw transaction thật, serialized nonce, strict hash validation; xác nhận không push public, không broadcast Fuji testnet, không commit secret; kê khai ranh giới `NOT_RUN` rõ ràng. |
+| **A9** | **P2** | **RESOLVED** | Current (`feat/s1-app`) | `REPORT_REVIEW_AND_FIX_COMPLETION.md`<br>`DEPLOY_CHECKLIST.md` | Cập nhật đầy đủ bằng chứng kiểm thử Round 7 (41 unit tests M7, 29 bounty/relay tests, 7 browser Playwright tests); mô tả chi tiết giải pháp xóa fallback writeContract, cấp phát nonce nguyên tử bằng advisory xact lock, và kiểm chứng ranh giới quyền riêng tư của raw bytes; xác nhận không push public, không broadcast Fuji testnet, không commit secret; kê khai ranh giới `NOT_RUN` rõ ràng. |
 
 ---
 
@@ -39,15 +39,15 @@
 - **Kết quả:** **19 Passed / 0 Failed / 0 Skipped** (2 test files: `guard.test.ts`, `parity.test.ts`).
 
 ### 2.3 Web Application (`apps/web/`)
-- **Lệnh chạy:** `vitest run --root apps/web tests/m7-validator-automation.test.ts`
-- **Kết quả:** **38 Passed / 0 Failed / 1 Skipped** (39 total tests trong suite M7).
-  - M7-A4-28: Action-bound owner challenge (`RECONCILE_VALIDATION_REQUEST`) rejects unrelated action, expired nonce, or unauthenticated caller [PASS]
-  - M7-A4-29: Token mission scope check rejects spend token for a different mission slug [PASS]
-  - M7-A4-30: Live lease fencing: worker 1 cannot broadcast or update after lease expires and is reclaimed by worker 2 [PASS]
+- **Lệnh chạy:** `& .\node_modules\.bin\vitest.cmd run --root apps/web tests/m7-validator-automation.test.ts`
+- **Kết quả:** **41 Passed / 0 Failed / 1 Skipped** (42 total tests trong suite M7):
   - M7-A4-31: Locally prepared and signed raw EVM transaction: hash matches `keccak256(rawTx)`, same bytes rebroadcast on crash, single tx identity [PASS]
   - M7-A4-32: Truly frozen evidence & identities: rejects mutated identities with STALE_CONTEXT and reuses frozen evidence hash without re-scan [PASS]
   - M7-A4-33: Strict chain response verification: rejects malformed tuple hashes (`0x0`, zero bytes32), absent event emitter (`log.address != registryAddress`), different event hash/tag, and distinguishes external response [PASS]
-- **Lệnh chạy:** `vitest run --root apps/web tests/bounty.test.ts tests/passkey-relay.test.ts`
+  - **M7-A4-34 (New Round 7):** Raw transport unavailable: client lacking `sendRawTransaction` results in 0 sends, job status stays `RESPONSE_PENDING`, persisted `responseTxHash` unchanged across initial and rebroadcast attempts [PASS]
+  - **M7-A4-35 (New Round 7):** Nonce allocation serialization: concurrent jobs acquire distinct serialized nonces via single-transaction `pg_advisory_xact_lock` against PostgreSQL; RPC count failure aborts signing and fails closed without defaulting to nonce 0 [PASS]
+  - **M7-A4-36 (New Round 7):** Privacy boundary verification: raw transaction bytes and frozen context are never exposed via API endpoints (`/api/verify/[missionId]`, `/api/missions/[slug]`) or printed in logs [PASS]
+- **Lệnh chạy:** `& .\node_modules\.bin\vitest.cmd run --root apps/web tests/bounty.test.ts tests/passkey-relay.test.ts`
 - **Kết quả:** **29 Passed / 0 Failed** (18 bounty tests, 11 passkey-relay tests).
 - **TypeScript Compiler Check:** `& .\node_modules\.bin\tsc.cmd --noEmit -p apps\web\tsconfig.json`
 - **Kết quả:** **Exit code 0** (0 errors).
@@ -69,25 +69,26 @@
 
 ---
 
-## 3. CHI TIẾT SỬA LỖI ROUND 6 (A4 DEFECTS RESOLVED)
+## 3. CHI TIẾT SỬA LỖI ROUND 7 (A4 DEFECTS RESOLVED)
 
-1. **Ký raw transaction thật và cấp phát nonce tuần tự qua PostgreSQL Advisory Lock:**
-   - Xóa bỏ hoàn toàn descriptive placeholder string `preparedTxHash` và option override.
-   - Thêm `allocateValidatorNonce(publicClient, validatorAddress)`: Sử dụng PostgreSQL transaction advisory lock (`pg_advisory_lock(hashtext('validator_nonce:<address>'))`) để tuần tự hóa việc lấy nonce giữa các concurrent worker; tính nonce kế tiếp dựa trên on-chain transaction count và các job active trong DB.
-   - Ký trực tiếp raw transaction EVM bằng `signingAccount.signTransaction` với đầy đủ tham số (`to`, `data`, `value: 0n`, `nonce`, `gas`, `maxFeePerGas`, `maxPriorityFeePerGas`, `chainId: 43113`).
-   - Tính toán deterministic transaction hash từ chính chuỗi bytes đã ký: `realTxHash = keccak256(rawTransaction)`.
-   - Lưu trữ nguyên tử cấu trúc `PreparedResponseRecord` (chứa `txHash`, `rawTransaction`, `nonce`, `to`, `data`, `score`, `tag`) vào DB trong `context.preparedResponse` với trạng thái `RESPONSE_PENDING` TRƯỚC KHI phát sóng ra mạng.
-   - Phát sóng qua raw transport `broadcastClient.sendRawTransaction({ serializedTransaction: rawTransaction })`.
-   - Khi restart hoặc phục hồi sau crash: Kiểm tra trạng thái chain; nếu chưa được mined, rebroadcast CHÍNH XÁC raw bytes đã lưu, tuyệt đối không ký transaction mới, bảo đảm transaction identity đơn nhất (single transaction identity).
+1. **Xóa bỏ hoàn toàn fallback `writeContract`:**
+   - Trong `apps/web/lib/validator-job.ts`, đã loại bỏ hoàn toàn các dòng lệnh gọi `(broadcastClient as any).writeContract(...)` ở cả luồng gửi lần đầu và luồng phát sóng lại.
+   - Nếu `typeof broadcastClient?.sendRawTransaction !== 'function'`, worker cập nhật job với `status: 'RESPONSE_PENDING'`, `failureReason: 'Raw transaction transport (sendRawTransaction) unavailable on broadcast client'`, giải phóng lease và dừng lại. Không có giao dịch thay thế nào được ký hoặc gửi.
+   - Xác nhận bằng kiểm thử `M7-A4-34`: Client không có `sendRawTransaction` dẫn tới 0 lần gửi (zero sends), trạng thái vẫn là `RESPONSE_PENDING`, và `responseTxHash` đã ký trước đó được bảo toàn nguyên vẹn.
 
-2. **Xác thực hash nghiêm ngặt & Phân định trung thực external response:**
-   - Xóa bỏ toàn bộ điều kiện lỏng lẻo (`!respHash || respHash === '0x0' || !evHash || evHash === respHash`).
-   - Kiểm tra định dạng `isBytes32Hex`: Chuỗi hex đúng 32 bytes (`/^0x[0-9a-fA-F]{64}$/`) và khác zero hash `0x000...000`.
-   - Xác thực kiểu dữ liệu tuple `getValidationStatus`: `validatorAddress` hợp lệ, `agentId` là bigint không âm, `lastUpdate > 0n`, điểm số `chainScore` là số nguyên trong khoảng 0..100.
-   - Xác minh event `ValidationResponse` trong logs: Bắt buộc `log.address == registryAddress`, decode event và so khớp chính xác validator, agentId, requestHash, score, responseHash và tag.
-   - Ràng buộc response do chính job này gửi (`responseTxHash`): tuple responseHash và event responseHash bắt buộc phải khớp tuyệt đối frozen evidence responseHash. Nếu không khớp -> trả về `FAILED`.
-   - Phân định response độc lập đã tồn tại trên chain (`responseTxHash` rỗng): Nếu on-chain có response hợp lệ nhưng điểm/hash khác, ghi nhận `isExternalResponse: true`, `isConfirmed: false`, `status: 'UNAVAILABLE'` để hiển thị bằng chứng chain mà không mạo nhận nó chứng minh cho evidence cục bộ của job này.
-   - Khi RPC đọc status hợp đồng thất bại -> trả về `UNAVAILABLE` (fail closed), không bao giờ tự nhận CONFIRMED.
+2. **Tuần tự hóa cấp phát nonce bằng `pg_advisory_xact_lock`:**
+   - Thay thế session-level lock rời rạc bằng `reserveValidatorNonce` thực thi bên trong một giao dịch `prisma.$transaction`.
+   - Sử dụng câu lệnh SQL tham số hóa an toàn: `tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'validator_nonce:' + valAddrLower}))``. Khóa này tồn tại trong suốt transaction và tự động giải phóng khi transaction commit hoặc rollback, ngăn chặn hoàn toàn rò rỉ lock qua connection pool.
+   - Nonce phân bổ được tính toán bằng `Math.max(onChainCount, maxAllocatedNonce + 1)` và được cập nhật bền vững vào trường `frozenContext` (`reservedNonce`, `reservedAt`) của chính bản ghi `validationJob` trước khi transaction hoàn tất.
+   - Khi `getTransactionCount` gặp lỗi mạng hoặc lỗi RPC, hàm ném ngoại lệ fail-closed; worker giữ nguyên job ở trạng thái `RESPONSE_PENDING` và hủy bỏ bước ký giao dịch, tuyệt đối không âm thầm gán nonce 0.
+   - Hỗ trợ tiêm `nonceAllocator` cho môi trường kiểm thử.
+   - Xác nhận bằng kiểm thử `M7-A4-35`: Hai job đồng thời nhận hai nonce phân biệt (10 và 11) không bị xung đột, và khi RPC ném lỗi thì quá trình ký bị hủy bỏ, `responseTxHash` vẫn là null.
+
+3. **Bảo mật tuyệt đối chuỗi bytes ký `rawTransaction`:**
+   - Xác minh toàn bộ các API route (`/api/verify/[missionId]`, `/api/missions/[slug]`, v.v.) chỉ trả về các trường được định nghĩa nghiêm ngặt trong allowlist DTO (`toMissionDto`, `toOperationDto`).
+   - Trường `frozenContext` và chuỗi `rawTransaction` hoàn toàn không bao giờ xuất hiện trong response JSON của bất kỳ endpoint nào.
+   - Các lệnh logging trong worker không in chuỗi byte giao dịch đã ký ra console.
+   - Xác nhận bằng kiểm thử `M7-A4-36`: Tìm kiếm sâu trên response text của các API endpoint xác nhận không chứa byte hex `rawTransaction` hay trường `frozenContext`.
 
 ---
 

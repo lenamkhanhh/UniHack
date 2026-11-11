@@ -122,6 +122,8 @@ export interface FrozenValidationContext {
     checks: any;
     details: any;
   };
+  reservedNonce?: number;
+  reservedAt?: string;
   preparedResponse?: PreparedResponseRecord;
 }
 
@@ -676,6 +678,7 @@ export interface RunValidatorJobOptions {
   fromBlock?: bigint;
   toBlock?: bigint;
   skipOnChainBroadcast?: boolean;
+  nonceAllocator?: (address: string) => Promise<number> | number;
 }
 
 export interface AdvanceJobOptions extends RunValidatorJobOptions {
@@ -859,82 +862,186 @@ export async function renewJobLease(
   return newUntil;
 }
 
+export interface ReserveValidatorNonceOptions {
+  publicClient?: any;
+  validatorAddress: string;
+  slug: string;
+  leaseToken: string;
+  nonceAllocator?: (address: string) => Promise<number> | number;
+}
+
 /**
- * Allocates a serialized transaction nonce for the validator wallet across jobs.
- * Acquires a PostgreSQL advisory lock when available and checks active DB jobs.
+ * Durably reserves a serialized transaction nonce for the validator wallet.
+ * Operates inside a single PostgreSQL transaction taking pg_advisory_xact_lock($1)
+ * (parameterized) and writes the reservation (slug + reservedNonce) into frozenContext
+ * BEFORE committing.
+ *
+ * If RPC count, DB read or lock throws, fails closed (throws without signing).
+ */
+export async function reserveValidatorNonce(
+  options: ReserveValidatorNonceOptions
+): Promise<number> {
+  const { publicClient, validatorAddress, slug, leaseToken, nonceAllocator } = options;
+  const valAddrLower = validatorAddress.toLowerCase();
+
+  return await prisma.$transaction(async (tx) => {
+    // 1. Transaction-scoped advisory lock: automatically released when transaction commits or aborts
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`validator_nonce:${valAddrLower}`}))`;
+
+    // 2. Check if current job already has a reservedNonce
+    const currentJob = await tx.validationJob.findFirst({
+      where: {
+        missionSlug: slug,
+        leaseToken,
+        workerLeaseUntil: { gte: new Date() },
+      },
+    });
+
+    if (!currentJob) {
+      throw new Error(`Cannot reserve validator nonce: active lease token lost for mission ${slug}`);
+    }
+
+    const parsedCtx = currentJob.frozenContext ? JSON.parse(currentJob.frozenContext) : {};
+    if (typeof parsedCtx.reservedNonce === 'number' && !isNaN(parsedCtx.reservedNonce)) {
+      return parsedCtx.reservedNonce;
+    }
+
+    // 3. Determine on-chain transaction count (or test-injected allocator)
+    let onChainCount: number;
+    if (typeof nonceAllocator === 'function') {
+      const res = await nonceAllocator(validatorAddress);
+      onChainCount = Number(res);
+      if (isNaN(onChainCount) || onChainCount < 0) {
+        throw new Error(`Injected nonceAllocator returned invalid nonce: ${res}`);
+      }
+    } else {
+      if (!publicClient || typeof publicClient.getTransactionCount !== 'function') {
+        throw new Error('PublicClient with getTransactionCount is required for nonce allocation');
+      }
+      // Fail closed: if RPC throws, let it throw! No silent nonce 0 fallback.
+      const count = await publicClient.getTransactionCount({
+        address: validatorAddress as `0x${string}`,
+        blockTag: 'pending',
+      });
+      onChainCount = Number(count);
+      if (isNaN(onChainCount) || onChainCount < 0) {
+        throw new Error(`Invalid on-chain transaction count for validator: ${count}`);
+      }
+    }
+
+    // 4. Inspect active/pending jobs in DB to ensure no collision across concurrent/unmined jobs
+    const activeJobs = await tx.validationJob.findMany({
+      where: {
+        status: { in: ['RESPONSE_PENDING', 'LOCAL_EVALUATED'] },
+      },
+      select: { id: true, missionSlug: true, frozenContext: true },
+    });
+
+    let maxAllocatedNonce = -1;
+    for (const aj of activeJobs) {
+      if (aj.missionSlug === slug) continue;
+      if (aj.frozenContext) {
+        try {
+          const parsed = JSON.parse(aj.frozenContext);
+          const jobVal = parsed.identities?.validatorAddress || parsed.validatorAddress;
+          if (jobVal && jobVal.toLowerCase() === valAddrLower) {
+            const n = parsed.preparedResponse?.nonce ?? parsed.reservedNonce;
+            if (typeof n === 'number' && !isNaN(n) && n > maxAllocatedNonce) {
+              maxAllocatedNonce = n;
+            }
+          }
+        } catch {}
+      }
+    }
+
+    const allocatedNonce = Math.max(onChainCount, maxAllocatedNonce + 1);
+
+    // 5. Durably persist reservation (slug + reservedNonce) into job record BEFORE commit
+    parsedCtx.reservedNonce = allocatedNonce;
+    parsedCtx.reservedAt = new Date().toISOString();
+    parsedCtx.identities = parsedCtx.identities || {};
+    parsedCtx.identities.validatorAddress = validatorAddress;
+
+    await tx.validationJob.update({
+      where: { missionSlug: slug },
+      data: {
+        frozenContext: serializeWithBigInt(parsedCtx),
+      },
+    });
+
+    return allocatedNonce;
+  });
+}
+
+/**
+ * Backwards-compatible or standalone nonce allocator helper.
+ * Uses parameterized pg_advisory_xact_lock in a single transaction and fails closed on RPC error.
  */
 export async function allocateValidatorNonce(
   publicClient: any,
-  validatorAddress: string
+  validatorAddress: string,
+  slug?: string,
+  leaseToken?: string,
+  nonceAllocator?: (address: string) => Promise<number> | number
 ): Promise<number> {
-  let acquiredLock = false;
-  try {
-    await prisma.$executeRawUnsafe(`SELECT pg_advisory_lock(hashtext('validator_nonce:${validatorAddress.toLowerCase()}'))`);
-    acquiredLock = true;
-  } catch {
-    // Graceful fallback if PostgreSQL advisory locks not available in test harness
+  if (slug && leaseToken) {
+    return await reserveValidatorNonce({
+      publicClient,
+      validatorAddress,
+      slug,
+      leaseToken,
+      nonceAllocator,
+    });
   }
 
-  try {
-    let onChainCount = 0;
-    try {
-      if (publicClient && typeof publicClient.getTransactionCount === 'function') {
-        const count = await publicClient.getTransactionCount({
-          address: validatorAddress as `0x${string}`,
-          blockTag: 'pending',
-        });
-        onChainCount = Number(count);
-      }
-    } catch {
-      try {
-        if (publicClient && typeof publicClient.getTransactionCount === 'function') {
-          const count = await publicClient.getTransactionCount({
-            address: validatorAddress as `0x${string}`,
-          });
-          onChainCount = Number(count);
-        }
-      } catch {
-        onChainCount = 0;
-      }
-    }
+  const valAddrLower = validatorAddress.toLowerCase();
+  return await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`validator_nonce:${valAddrLower}`}))`;
 
-    // Inspect pending jobs in DB to ensure no nonce collision across parallel jobs
-    let maxAllocatedNonce = -1;
-    try {
-      const pendingJobs = await prisma.validationJob.findMany({
-        where: {
-          status: { in: ['RESPONSE_PENDING', 'LOCAL_EVALUATED'] },
-          responseTxHash: { not: null },
-        },
-        select: { frozenContext: true },
+    let onChainCount: number;
+    if (typeof nonceAllocator === 'function') {
+      const res = await nonceAllocator(validatorAddress);
+      onChainCount = Number(res);
+      if (isNaN(onChainCount) || onChainCount < 0) {
+        throw new Error(`Injected nonceAllocator returned invalid nonce: ${res}`);
+      }
+    } else {
+      if (!publicClient || typeof publicClient.getTransactionCount !== 'function') {
+        throw new Error('PublicClient with getTransactionCount is required for nonce allocation');
+      }
+      const count = await publicClient.getTransactionCount({
+        address: validatorAddress as `0x${string}`,
+        blockTag: 'pending',
       });
-
-      for (const pj of pendingJobs) {
-        if (pj.frozenContext) {
-          try {
-            const parsed = JSON.parse(pj.frozenContext);
-            if (
-              parsed.identities?.validatorAddress?.toLowerCase() === validatorAddress.toLowerCase() &&
-              parsed.preparedResponse?.nonce !== undefined
-            ) {
-              const n = Number(parsed.preparedResponse.nonce);
-              if (!isNaN(n) && n > maxAllocatedNonce) {
-                maxAllocatedNonce = n;
-              }
-            }
-          } catch {}
-        }
+      onChainCount = Number(count);
+      if (isNaN(onChainCount) || onChainCount < 0) {
+        throw new Error(`Invalid on-chain transaction count for validator: ${count}`);
       }
-    } catch {}
-
-    return Math.max(isNaN(onChainCount) ? 0 : onChainCount, maxAllocatedNonce + 1);
-  } finally {
-    if (acquiredLock) {
-      try {
-        await prisma.$executeRawUnsafe(`SELECT pg_advisory_unlock(hashtext('validator_nonce:${validatorAddress.toLowerCase()}'))`);
-      } catch {}
     }
-  }
+
+    const activeJobs = await tx.validationJob.findMany({
+      where: { status: { in: ['RESPONSE_PENDING', 'LOCAL_EVALUATED'] } },
+      select: { frozenContext: true },
+    });
+
+    let maxAllocatedNonce = -1;
+    for (const pj of activeJobs) {
+      if (pj.frozenContext) {
+        try {
+          const parsed = JSON.parse(pj.frozenContext);
+          const jobVal = parsed.identities?.validatorAddress || parsed.validatorAddress;
+          if (jobVal && jobVal.toLowerCase() === valAddrLower) {
+            const n = parsed.preparedResponse?.nonce ?? parsed.reservedNonce;
+            if (typeof n === 'number' && !isNaN(n) && n > maxAllocatedNonce) {
+              maxAllocatedNonce = n;
+            }
+          }
+        } catch {}
+      }
+    }
+
+    return Math.max(onChainCount, maxAllocatedNonce + 1);
+  });
 }
 
 export interface StrictChainResponseParams {
@@ -1878,12 +1985,28 @@ export async function advanceValidationJob(
         } else {
           // Transaction not yet confirmed: rebroadcast EXACT stored rawTransaction bytes
           const broadcastClient = options.validatorWalletClient || publicClient;
+          if (typeof broadcastClient?.sendRawTransaction !== 'function') {
+            await updateJobWithLease(slug, leaseToken, {
+              status: 'RESPONSE_PENDING',
+              failureReason: 'Raw transaction transport (sendRawTransaction) unavailable on broadcast client',
+            });
+            await releaseJobLease(slug, leaseToken);
+            return {
+              bundle,
+              requestHash,
+              validationResult,
+              status: 'RESPONSE_PENDING',
+              isRegisteredOnChain: false,
+              requestTxHash,
+              responseTxHash,
+              failureReason: 'Raw transaction transport (sendRawTransaction) unavailable on broadcast client',
+            };
+          }
+
           try {
-            if (typeof broadcastClient.sendRawTransaction === 'function') {
-              await broadcastClient.sendRawTransaction({
-                serializedTransaction: prepared.rawTransaction,
-              });
-            }
+            await broadcastClient.sendRawTransaction({
+              serializedTransaction: prepared.rawTransaction,
+            });
           } catch (err: any) {
             const msg = err?.message || String(err);
             if (!/already known|nonce too low|known transaction/i.test(msg)) {
@@ -1954,8 +2077,34 @@ export async function advanceValidationJob(
           ],
         });
 
-        // Allocate serialized nonce for this validator wallet across jobs
-        const nonce = await allocateValidatorNonce(publicClient, validatorAddress);
+        // Durably reserve serialized nonce for this validator wallet across jobs
+        let nonce: number;
+        try {
+          nonce = await reserveValidatorNonce({
+            publicClient,
+            validatorAddress,
+            slug,
+            leaseToken,
+            nonceAllocator: options.nonceAllocator,
+          });
+        } catch (nonceErr: any) {
+          const msg = nonceErr?.message || String(nonceErr);
+          await updateJobWithLease(slug, leaseToken, {
+            status: 'RESPONSE_PENDING',
+            failureReason: `Validator nonce allocation failed: ${msg}`,
+          });
+          await releaseJobLease(slug, leaseToken);
+          return {
+            bundle,
+            requestHash,
+            validationResult,
+            status: 'RESPONSE_PENDING',
+            isRegisteredOnChain: false,
+            requestTxHash,
+            failureReason: `Validator nonce allocation failed: ${msg}`,
+          };
+        }
+        context.reservedNonce = nonce;
 
         let maxFeePerGas = 35_000_000_000n;
         let maxPriorityFeePerGas = 2_000_000_000n;
@@ -2019,29 +2168,30 @@ export async function advanceValidationJob(
 
         responseTxHash = realTxHash;
 
-        // Broadcast via raw transaction transport
+        // Broadcast via raw transaction transport ONLY (no writeContract fallback)
         const broadcastClient = options.validatorWalletClient || publicClient;
+        if (typeof broadcastClient?.sendRawTransaction !== 'function') {
+          await updateJobWithLease(slug, leaseToken, {
+            status: 'RESPONSE_PENDING',
+            failureReason: 'Raw transaction transport (sendRawTransaction) unavailable on broadcast client',
+          });
+          await releaseJobLease(slug, leaseToken);
+          return {
+            bundle,
+            requestHash,
+            validationResult,
+            status: 'RESPONSE_PENDING',
+            isRegisteredOnChain: false,
+            requestTxHash,
+            responseTxHash: realTxHash,
+            failureReason: 'Raw transaction transport (sendRawTransaction) unavailable on broadcast client',
+          };
+        }
+
         try {
-          if (typeof broadcastClient.sendRawTransaction === 'function') {
-            await broadcastClient.sendRawTransaction({
-              serializedTransaction: rawTransaction,
-            });
-          } else if (typeof (broadcastClient as any).writeContract === 'function') {
-            await (broadcastClient as any).writeContract({
-              address: registryAddress,
-              abi: VALIDATION_REGISTRY_ABI,
-              functionName: 'validationResponse',
-              args: [
-                requestHash,
-                validationResult.score,
-                responseURI,
-                responseHash,
-                validationResult.tag,
-              ],
-              chain: avalancheFuji,
-              account: validatorAccount,
-            });
-          }
+          await broadcastClient.sendRawTransaction({
+            serializedTransaction: rawTransaction,
+          });
         } catch (txErr: any) {
           const msg = txErr?.message || String(txErr);
           if (!/already known|nonce too low|known transaction/i.test(msg)) {

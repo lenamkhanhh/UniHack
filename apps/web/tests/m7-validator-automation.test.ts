@@ -39,7 +39,10 @@ import {
   renewJobLease,
   advanceValidationJob,
   buildFrozenValidationContext,
+  reserveValidatorNonce,
+  allocateValidatorNonce,
 } from '@/lib/validator-job';
+import { GET as missionGetGET } from '@/app/api/missions/[slug]/route';
 import { POST as creationReceiptPOST } from '@/app/api/missions/[slug]/creation-receipt/route';
 import { getPasskeyAuthorityAddress } from '@/lib/config';
 import { computeValidationRequestHash, validateBundleOnChain } from '@/lib/validation-bundle';
@@ -93,6 +96,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     return {
       getChainId: vi.fn().mockResolvedValue(43113),
       getBlockNumber: vi.fn().mockResolvedValue(60689770n),
+      getTransactionCount: vi.fn().mockResolvedValue(0n),
       readContract: vi.fn().mockImplementation(async ({ functionName }) => {
         if (functionName === 'anchoredMissionProofs') return head;
         if (functionName === 'missionPayeeRoot') return root;
@@ -510,7 +514,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     });
 
     const failingValidatorWallet = {
-      writeContract: vi.fn().mockRejectedValue(new Error('RPC_GAS_ESTIMATION_FAILED')),
+      sendRawTransaction: vi.fn().mockRejectedValue(new Error('RPC_GAS_ESTIMATION_FAILED')),
     } as any;
 
     const jobResult = await runMissionValidatorJob(mission.slug, {
@@ -1365,11 +1369,16 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       },
     });
 
+    const sentRawTxs: string[] = [];
     let writeContractCallCount = 0;
     const mockValidatorWallet = {
+      sendRawTransaction: vi.fn().mockImplementation(async ({ serializedTransaction }: any) => {
+        sentRawTxs.push(serializedTransaction);
+        return keccak256(serializedTransaction);
+      }),
       writeContract: vi.fn().mockImplementation(async () => {
         writeContractCallCount++;
-        return '0xfirstResponseTxHash1234567890123456789012345678901234567890123456789012';
+        return '0xfake';
       }),
     } as any;
 
@@ -1377,6 +1386,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     let receiptMined = false;
     const mockPublicClient = {
       getChainId: vi.fn().mockResolvedValue(43113),
+      getTransactionCount: vi.fn().mockResolvedValue(0n),
       readContract: vi.fn().mockImplementation(async ({ functionName }) => {
         if (functionName === 'isValidationComplete') return receiptMined;
         if (functionName === 'getValidationStatus') {
@@ -1405,9 +1415,10 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     expect(call1Result.status).toBe('RESPONSE_PENDING');
     expect(call1Result.responseTxHash).toBeDefined();
     expect(call1Result.responseTxHash).toMatch(/^0x[0-9a-fA-F]{64}$/);
-    expect(writeContractCallCount).toBe(1);
+    expect(sentRawTxs.length).toBe(1);
+    expect(writeContractCallCount).toBe(0); // ZERO writeContract fallback calls!
 
-    // Call 2: Retry / restart while still pending. Must NOT call writeContract again!
+    // Call 2: Retry / restart while still pending. Rebroadcasts exact same raw bytes; must NOT call writeContract!
     const call2Result = await runMissionValidatorJob(mission.slug, {
       publicClient: mockPublicClient,
       validatorWalletClient: mockValidatorWallet,
@@ -1417,7 +1428,9 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
 
     expect(call2Result.status).toBe('RESPONSE_PENDING');
     expect(call2Result.responseTxHash).toBe(call1Result.responseTxHash);
-    expect(writeContractCallCount).toBe(1); // ZERO double-spend!
+    expect(sentRawTxs.length).toBe(2);
+    expect(sentRawTxs[1]).toBe(sentRawTxs[0]); // EXACT same signed raw transaction bytes rebroadcast!
+    expect(writeContractCallCount).toBe(0); // ZERO writeContract fallback!
 
     // Call 3: Receipt is now mined on chain. Reconcile completes.
     receiptMined = true;
@@ -1430,7 +1443,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
 
     expect(call3Result.status).toBe('RESPONSE_CONFIRMED');
     expect(call3Result.isRegisteredOnChain).toBe(true);
-    expect(writeContractCallCount).toBe(1); // STILL exactly 1 call across all retries!
+    expect(writeContractCallCount).toBe(0); // STILL exactly 0 calls to writeContract!
   });
 
   // A4-22: Exact chain response: stored local 100 vs actual chain 37 displays/persists 37 as chainScore, with local 100 separately
@@ -2518,5 +2531,309 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     });
     expect(res3.status).toBe('STALE_CONTEXT');
     expect(res3.failureReason).toContain('STALE_CONTEXT: configured identities');
+  });
+
+  // A4-34: Raw transport unavailable (0 sends, status stays pending, hash unchanged)
+  it('M7-A4-34: raw transport unavailable: 0 sends, status stays RESPONSE_PENDING, persisted responseTxHash unchanged', async () => {
+    const { mission } = await createTestMission();
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const requestHash = computeValidationRequestHash(bundle);
+    const testValidatorKey = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const;
+    const testValidatorAccount = privateKeyToAccount(testValidatorKey);
+    const testResponseHash = '0x2222222222222222222222222222222222222222222222222222222222222222' as const;
+
+    const frozenCtx = buildFrozenValidationContext({
+      bundle,
+      ownerAddress: mission.ownerAddress,
+      validatorAddress: testValidatorAccount.address,
+    });
+    frozenCtx.evidence = {
+      evaluatedAt: new Date().toISOString(),
+      responseJsonString: '{}',
+      responseHash: testResponseHash,
+      score: 100,
+      tag: 'verified-full',
+      checks: {},
+      details: {},
+    };
+
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash,
+        status: 'RESPONSE_PENDING',
+        score: 100,
+        tag: 'verified-full',
+        frozenContext: serializeWithBigInt(frozenCtx),
+      },
+    });
+
+    const mockPublic = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      getTransactionCount: vi.fn().mockResolvedValue(0n),
+      estimateGas: vi.fn().mockResolvedValue(300000n),
+      estimateFeesPerGas: vi.fn().mockResolvedValue({
+        maxFeePerGas: 30000000000n,
+        maxPriorityFeePerGas: 1500000000n,
+      }),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return false;
+        if (functionName === 'getValidationStatus') {
+          return [testValidatorAccount.address, 294n, 100, testResponseHash, 'verified-full', 1700000000n];
+        }
+        return true;
+      }),
+    } as any;
+
+    let writeContractCalls = 0;
+    const clientWithoutRawTransport = {
+      writeContract: vi.fn().mockImplementation(async () => {
+        writeContractCalls++;
+        return '0xfakeWriteContractHash';
+      }),
+    } as any;
+
+    // Step 1: Initial attempt - signs transaction locally and persists responseTxHash, but fails closed on broadcast
+    const res1 = await advanceValidationJob(mission.slug, {
+      publicClient: mockPublic,
+      validatorWalletClient: clientWithoutRawTransport,
+      validatorPrivateKey: testValidatorKey,
+    });
+
+    expect(res1.status).toBe('RESPONSE_PENDING');
+    expect(res1.failureReason).toContain('Raw transaction transport (sendRawTransaction) unavailable');
+    expect(writeContractCalls).toBe(0); // ZERO writeContract calls!
+
+    const jobAfter1 = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+    expect(jobAfter1?.status).toBe('RESPONSE_PENDING');
+    expect(jobAfter1?.responseTxHash).toBeDefined();
+    const persistedHash1 = jobAfter1?.responseTxHash;
+    expect(persistedHash1).toMatch(/^0x[0-9a-fA-F]{64}$/);
+    expect(persistedHash1).not.toBe('0xfakeWriteContractHash');
+
+    // Step 2: Rebroadcast attempt with missing raw transport - MUST NOT call writeContract or change hash
+    const res2 = await advanceValidationJob(mission.slug, {
+      publicClient: mockPublic,
+      validatorWalletClient: clientWithoutRawTransport,
+      validatorPrivateKey: testValidatorKey,
+    });
+
+    expect(res2.status).toBe('RESPONSE_PENDING');
+    expect(res2.failureReason).toContain('Raw transaction transport (sendRawTransaction) unavailable');
+    expect(writeContractCalls).toBe(0); // STILL ZERO calls!
+
+    const jobAfter2 = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+    expect(jobAfter2?.responseTxHash).toBe(persistedHash1); // Persisted hash is unchanged!
+  });
+
+  // A4-35: Nonce serialization under pg_advisory_xact_lock & RPC count failure aborts signing
+  it('M7-A4-35: nonce allocation serialization: concurrent jobs acquire distinct nonces via pg_advisory_xact_lock, and RPC failure aborts signing', async () => {
+    const validatorAddress = '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5';
+
+    // Sub-case A: 2 concurrent jobs reserving nonces under advisory xact lock against real Postgres
+    const { mission: missionA } = await createTestMission({ slug: 'concurrent-nonce-mission-a' });
+    const { mission: missionB } = await createTestMission({ slug: 'concurrent-nonce-mission-b' });
+
+    const bundleA = await buildMissionValidationBundle(missionA.slug);
+    const bundleB = await buildMissionValidationBundle(missionB.slug);
+
+    const ctxA = buildFrozenValidationContext({ bundle: bundleA, ownerAddress: missionA.ownerAddress, validatorAddress });
+    const ctxB = buildFrozenValidationContext({ bundle: bundleB, ownerAddress: missionB.ownerAddress, validatorAddress });
+
+    const leaseUntil = new Date(Date.now() + 60_000);
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: missionA.slug,
+        missionId: missionA.missionId,
+        requestHash: computeValidationRequestHash(bundleA),
+        status: 'LOCAL_EVALUATED',
+        leaseToken: 'lease-a',
+        workerLeaseUntil: leaseUntil,
+        frozenContext: serializeWithBigInt(ctxA),
+      },
+    });
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: missionB.slug,
+        missionId: missionB.missionId,
+        requestHash: computeValidationRequestHash(bundleB),
+        status: 'LOCAL_EVALUATED',
+        leaseToken: 'lease-b',
+        workerLeaseUntil: leaseUntil,
+        frozenContext: serializeWithBigInt(ctxB),
+      },
+    });
+
+    const mockPublic = {
+      getTransactionCount: vi.fn().mockResolvedValue(10n),
+    };
+
+    // Concurrently reserve nonces
+    const [nonceA, nonceB] = await Promise.all([
+      reserveValidatorNonce({
+        publicClient: mockPublic,
+        validatorAddress,
+        slug: missionA.slug,
+        leaseToken: 'lease-a',
+      }),
+      reserveValidatorNonce({
+        publicClient: mockPublic,
+        validatorAddress,
+        slug: missionB.slug,
+        leaseToken: 'lease-b',
+      }),
+    ]);
+
+    // Distinct nonces allocated under transaction lock: 10 and 11
+    expect(nonceA).not.toBe(nonceB);
+    const nonces = [nonceA, nonceB].sort((a, b) => a - b);
+    expect(nonces[0]).toBe(10);
+    expect(nonces[1]).toBe(11);
+
+    // Verify persisted reservations in DB
+    const jobA = await prisma.validationJob.findUnique({ where: { missionSlug: missionA.slug } });
+    const jobB = await prisma.validationJob.findUnique({ where: { missionSlug: missionB.slug } });
+    const parsedCtxA = JSON.parse(jobA?.frozenContext || '{}');
+    const parsedCtxB = JSON.parse(jobB?.frozenContext || '{}');
+    expect(parsedCtxA.reservedNonce).toBe(nonceA);
+    expect(parsedCtxB.reservedNonce).toBe(nonceB);
+
+    // Sub-case B: RPC getTransactionCount failure aborts signing (fails closed, no fallback to nonce 0)
+    const testKeyC = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const;
+    const testAccountC = privateKeyToAccount(testKeyC);
+    const { mission: missionC } = await createTestMission({ slug: 'rpc-fail-nonce-mission-c' });
+    const bundleC = await buildMissionValidationBundle(missionC.slug);
+    const ctxC = buildFrozenValidationContext({ bundle: bundleC, ownerAddress: missionC.ownerAddress, validatorAddress: testAccountC.address });
+    ctxC.evidence = {
+      evaluatedAt: new Date().toISOString(),
+      responseJsonString: '{}',
+      responseHash: '0x2222222222222222222222222222222222222222222222222222222222222222',
+      score: 100,
+      tag: 'verified-full',
+      checks: {},
+      details: {},
+    };
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: missionC.slug,
+        missionId: missionC.missionId,
+        requestHash: computeValidationRequestHash(bundleC),
+        status: 'RESPONSE_PENDING',
+        score: 100,
+        tag: 'verified-full',
+        frozenContext: serializeWithBigInt(ctxC),
+      },
+    });
+
+    const throwingPublic = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      getTransactionCount: vi.fn().mockRejectedValue(new Error('RPC_NONCE_UNAVAILABLE')),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return false;
+        if (functionName === 'getValidationStatus') {
+          return [testAccountC.address, 294n, 0, '0x0', '', 1700000000n];
+        }
+        return true;
+      }),
+    } as any;
+
+    const resC = await advanceValidationJob(missionC.slug, {
+      publicClient: throwingPublic,
+      validatorPrivateKey: testKeyC,
+    });
+
+    expect(resC.status).toBe('RESPONSE_PENDING');
+    expect(resC.failureReason).toContain('RPC_NONCE_UNAVAILABLE');
+
+    // DB record must NOT have signed a transaction with nonce 0!
+    const jobC = await prisma.validationJob.findUnique({ where: { missionSlug: missionC.slug } });
+    expect(jobC?.status).toBe('RESPONSE_PENDING');
+    expect(jobC?.responseTxHash).toBeNull();
+    const parsedCtxC = JSON.parse(jobC?.frozenContext || '{}');
+    expect(parsedCtxC.preparedResponse).toBeUndefined();
+  });
+
+  // A4-36: Privacy boundary verification: raw transaction bytes and frozen context never leaked via API or logs
+  it('M7-A4-36: privacy boundary: raw transaction bytes and frozen context are never exposed via API endpoints or logs', async () => {
+    const SECRET_RAW_BYTES = '0x02f8deadbeefprivatebytes1234567890abcdef1234567890abcdef1234567890';
+    const { mission, spendToken } = await createTestMission({ publicPublished: true });
+    const bundle = await buildMissionValidationBundle(mission.slug);
+    const requestHash = computeValidationRequestHash(bundle);
+
+    const frozenCtx = buildFrozenValidationContext({
+      bundle,
+      ownerAddress: mission.ownerAddress,
+      validatorAddress: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+    });
+    frozenCtx.preparedResponse = {
+      preparedAt: new Date().toISOString(),
+      txHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+      rawTransaction: SECRET_RAW_BYTES as `0x${string}`,
+      nonce: 42,
+      to: DEFAULT_VALIDATION_REGISTRY,
+      data: '0x1234',
+      score: 100,
+      tag: 'verified-full',
+    };
+
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: mission.slug,
+        missionId: mission.missionId,
+        requestHash,
+        status: 'RESPONSE_PENDING',
+        score: 100,
+        tag: 'verified-full',
+        responseTxHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+        frozenContext: serializeWithBigInt(frozenCtx),
+      },
+    });
+
+    // 1. GET /api/verify/[missionId]
+    const reqVerify = new NextRequest(`http://localhost:3000/api/verify/${mission.slug}`, {
+      headers: { authorization: `Bearer ${spendToken}` },
+    });
+    const resVerify = await verifyRouteGET(reqVerify, { params: Promise.resolve({ missionId: mission.slug }) });
+    expect(resVerify.status).toBe(200);
+
+    const verifyBodyText = await resVerify.text();
+    expect(verifyBodyText).not.toContain(SECRET_RAW_BYTES);
+    expect(verifyBodyText).not.toContain('frozenContext');
+    expect(verifyBodyText).not.toContain('rawTransaction');
+
+    const verifyJson = JSON.parse(verifyBodyText);
+    expect(verifyJson.erc8004Validation?.rawTransaction).toBeUndefined();
+    expect(verifyJson.erc8004Validation?.frozenContext).toBeUndefined();
+
+    // 2. GET /api/missions/[slug]
+    const reqMission = new NextRequest(`http://localhost:3000/api/missions/${mission.slug}`, {
+      headers: { authorization: `Bearer ${spendToken}` },
+    });
+    const resMission = await missionGetGET(reqMission, { params: Promise.resolve({ slug: mission.slug }) });
+    expect(resMission.status).toBe(200);
+
+    const missionBodyText = await resMission.text();
+    expect(missionBodyText).not.toContain(SECRET_RAW_BYTES);
+    expect(missionBodyText).not.toContain('frozenContext');
+    expect(missionBodyText).not.toContain('rawTransaction');
+
+    // 3. Logger check: console.log and console.warn during inspection must not output rawTransaction
+    const consoleLogs: string[] = [];
+    const origLog = console.log;
+    const origWarn = console.warn;
+    console.log = (...args) => consoleLogs.push(args.map(String).join(' '));
+    console.warn = (...args) => consoleLogs.push(args.map(String).join(' '));
+
+    try {
+      const dbJob = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
+      expect(dbJob).toBeDefined();
+    } finally {
+      console.log = origLog;
+      console.warn = origWarn;
+    }
+
+    const allLogs = consoleLogs.join('\n');
+    expect(allLogs).not.toContain(SECRET_RAW_BYTES);
   });
 });
