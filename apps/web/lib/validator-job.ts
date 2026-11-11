@@ -15,6 +15,7 @@ import {
   decodeEventLog,
   encodeEventTopics,
   parseAbiItem,
+  parseTransaction,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { avalancheFuji } from 'viem/chains';
@@ -121,14 +122,18 @@ export interface FrozenValidationContext {
     checks: any;
     details: any;
   };
-  preparedResponse?: {
-    preparedAt: string;
-    txHash: `0x${string}`;
-    to: `0x${string}`;
-    data: `0x${string}`;
-    score: number;
-    tag: string;
-  };
+  preparedResponse?: PreparedResponseRecord;
+}
+
+export interface PreparedResponseRecord {
+  preparedAt: string;
+  txHash: `0x${string}`;
+  rawTransaction: `0x${string}`;
+  nonce: number;
+  to: `0x${string}`;
+  data: `0x${string}`;
+  score: number;
+  tag: string;
 }
 
 export function buildFrozenValidationContext(params: {
@@ -664,13 +669,13 @@ export interface RunValidatorJobOptions {
   ownerWalletClient?: WalletClient;
   validatorWalletClient?: WalletClient;
   validatorAccount?: any;
+  validatorPrivateKey?: Hex;
   rpcUrl?: string;
   tamperAuditHead?: `0x${string}`;
   tamperPayeeRoot?: `0x${string}`;
   fromBlock?: bigint;
   toBlock?: bigint;
   skipOnChainBroadcast?: boolean;
-  preparedTxHash?: `0x${string}`;
 }
 
 export interface AdvanceJobOptions extends RunValidatorJobOptions {
@@ -692,6 +697,7 @@ export interface ValidatorJobResult {
   chainScore?: number;
   chainTag?: string;
   responseHash?: string;
+  isExternalResponse?: boolean;
 }
 
 /**
@@ -853,6 +859,84 @@ export async function renewJobLease(
   return newUntil;
 }
 
+/**
+ * Allocates a serialized transaction nonce for the validator wallet across jobs.
+ * Acquires a PostgreSQL advisory lock when available and checks active DB jobs.
+ */
+export async function allocateValidatorNonce(
+  publicClient: any,
+  validatorAddress: string
+): Promise<number> {
+  let acquiredLock = false;
+  try {
+    await prisma.$executeRawUnsafe(`SELECT pg_advisory_lock(hashtext('validator_nonce:${validatorAddress.toLowerCase()}'))`);
+    acquiredLock = true;
+  } catch {
+    // Graceful fallback if PostgreSQL advisory locks not available in test harness
+  }
+
+  try {
+    let onChainCount = 0;
+    try {
+      if (publicClient && typeof publicClient.getTransactionCount === 'function') {
+        const count = await publicClient.getTransactionCount({
+          address: validatorAddress as `0x${string}`,
+          blockTag: 'pending',
+        });
+        onChainCount = Number(count);
+      }
+    } catch {
+      try {
+        if (publicClient && typeof publicClient.getTransactionCount === 'function') {
+          const count = await publicClient.getTransactionCount({
+            address: validatorAddress as `0x${string}`,
+          });
+          onChainCount = Number(count);
+        }
+      } catch {
+        onChainCount = 0;
+      }
+    }
+
+    // Inspect pending jobs in DB to ensure no nonce collision across parallel jobs
+    let maxAllocatedNonce = -1;
+    try {
+      const pendingJobs = await prisma.validationJob.findMany({
+        where: {
+          status: { in: ['RESPONSE_PENDING', 'LOCAL_EVALUATED'] },
+          responseTxHash: { not: null },
+        },
+        select: { frozenContext: true },
+      });
+
+      for (const pj of pendingJobs) {
+        if (pj.frozenContext) {
+          try {
+            const parsed = JSON.parse(pj.frozenContext);
+            if (
+              parsed.identities?.validatorAddress?.toLowerCase() === validatorAddress.toLowerCase() &&
+              parsed.preparedResponse?.nonce !== undefined
+            ) {
+              const n = Number(parsed.preparedResponse.nonce);
+              if (!isNaN(n) && n > maxAllocatedNonce) {
+                maxAllocatedNonce = n;
+              }
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+
+    return Math.max(isNaN(onChainCount) ? 0 : onChainCount, maxAllocatedNonce + 1);
+  } finally {
+    if (acquiredLock) {
+      try {
+        await prisma.$executeRawUnsafe(`SELECT pg_advisory_unlock(hashtext('validator_nonce:${validatorAddress.toLowerCase()}'))`);
+      } catch {}
+    }
+  }
+}
+
 export interface StrictChainResponseParams {
   publicClient: PublicClient;
   registryAddress: string;
@@ -860,12 +944,14 @@ export interface StrictChainResponseParams {
   expectedAgentId: string;
   expectedRequestHash: string;
   expectedChainId?: number;
+  expectedResponseHash?: string;
   responseTxHash?: string;
 }
 
 export interface StrictChainResponseResult {
   isComplete: boolean;
   isConfirmed: boolean;
+  isExternalResponse?: boolean;
   status: 'RESPONSE_CONFIRMED' | 'RESPONSE_PENDING' | 'FAILED' | 'UNAVAILABLE';
   chainScore?: number;
   chainTag?: string;
@@ -952,18 +1038,28 @@ export async function verifyStrictChainResponse(
       isComplete: true,
       isConfirmed: false,
       status: 'UNAVAILABLE',
-      error: 'Malformed getValidationStatus tuple from registry contract',
+      error: 'Malformed getValidationStatus tuple from registry contract: tuple length < 6',
     };
   }
 
   const [valAddr, agId, scoreVal, respHash, tagVal, lastUpdate] = statusTuple;
 
-  if (!valAddr || valAddr === '0x0000000000000000000000000000000000000000' || !lastUpdate || lastUpdate === 0n) {
+  const isBytes32Hex = (h: any): boolean =>
+    typeof h === 'string' &&
+    /^0x[0-9a-fA-F]{64}$/.test(h) &&
+    h !== '0x0000000000000000000000000000000000000000000000000000000000000000';
+
+  if (
+    !valAddr ||
+    typeof valAddr !== 'string' ||
+    !/^0x[0-9a-fA-F]{40}$/.test(valAddr) ||
+    valAddr === '0x0000000000000000000000000000000000000000'
+  ) {
     return {
       isComplete: true,
       isConfirmed: false,
       status: 'UNAVAILABLE',
-      error: 'Validation status uninitialized or empty on registry contract',
+      error: `Invalid validatorAddress in getValidationStatus tuple: ${valAddr}`,
     };
   }
 
@@ -976,6 +1072,15 @@ export async function verifyStrictChainResponse(
     };
   }
 
+  if (typeof agId !== 'bigint' || agId < 0n) {
+    return {
+      isComplete: true,
+      isConfirmed: false,
+      status: 'UNAVAILABLE',
+      error: 'Invalid agentId in getValidationStatus tuple: must be non-negative bigint',
+    };
+  }
+
   if (agId.toString().toLowerCase() !== params.expectedAgentId.toLowerCase()) {
     return {
       isComplete: true,
@@ -985,14 +1090,74 @@ export async function verifyStrictChainResponse(
     };
   }
 
-  const chainScore = typeof scoreVal === 'number' ? scoreVal : Number(scoreVal);
-  if (isNaN(chainScore) || chainScore < 0 || chainScore > 100) {
+  if (typeof lastUpdate !== 'bigint' || lastUpdate <= 0n) {
     return {
       isComplete: true,
       isConfirmed: false,
       status: 'UNAVAILABLE',
-      error: `Invalid chain score: ${scoreVal}`,
+      error: 'Validation status uninitialized or empty on registry contract (lastUpdate <= 0)',
     };
+  }
+
+  const chainScore = typeof scoreVal === 'number' ? scoreVal : Number(scoreVal);
+  if (!Number.isInteger(chainScore) || chainScore < 0 || chainScore > 100) {
+    return {
+      isComplete: true,
+      isConfirmed: false,
+      status: 'UNAVAILABLE',
+      error: `Invalid chain score in getValidationStatus tuple: ${scoreVal} (must be integer 0..100)`,
+    };
+  }
+
+  if (!isBytes32Hex(respHash)) {
+    return {
+      isComplete: true,
+      isConfirmed: false,
+      status: 'UNAVAILABLE',
+      error: `Missing or malformed bytes32 responseHash in getValidationStatus tuple: ${respHash}`,
+    };
+  }
+
+  // Bind a response submitted by THIS job to its frozen evidence responseHash
+  if (params.expectedResponseHash) {
+    if (!isBytes32Hex(params.expectedResponseHash)) {
+      return {
+        isComplete: true,
+        isConfirmed: false,
+        status: 'UNAVAILABLE',
+        error: `Expected responseHash is malformed bytes32: ${params.expectedResponseHash}`,
+      };
+    }
+
+    if (respHash.toLowerCase() !== params.expectedResponseHash.toLowerCase()) {
+      if (params.responseTxHash) {
+        return {
+          isComplete: true,
+          isConfirmed: false,
+          isExternalResponse: true,
+          status: 'FAILED',
+          chainScore,
+          chainTag: tagVal || '',
+          responseHash: respHash,
+          validatorAddress: valAddr,
+          agentId: agId.toString(),
+          error: `On-chain responseHash (${respHash}) does not match frozen evidence responseHash (${params.expectedResponseHash})`,
+        };
+      } else {
+        return {
+          isComplete: true,
+          isConfirmed: false,
+          isExternalResponse: true,
+          status: 'UNAVAILABLE',
+          chainScore,
+          chainTag: tagVal || '',
+          responseHash: respHash,
+          validatorAddress: valAddr,
+          agentId: agId.toString(),
+          error: `External on-chain response does not match frozen evidence responseHash (chain: ${respHash}, expected: ${params.expectedResponseHash})`,
+        };
+      }
+    }
   }
 
   if (params.responseTxHash) {
@@ -1020,7 +1185,8 @@ export async function verifyStrictChainResponse(
 
     let matchingEventFound = false;
     for (const log of receipt.logs || []) {
-      if (log.address && log.address.toLowerCase() !== params.registryAddress.toLowerCase()) {
+      // Must match registry emitter address
+      if (!log.address || log.address.toLowerCase() !== params.registryAddress.toLowerCase()) {
         continue;
       }
       try {
@@ -1045,13 +1211,28 @@ export async function verifyStrictChainResponse(
           const evReqHash = decoded.args.requestHash?.toLowerCase();
           const evScore = Number(decoded.args.response);
           const evHash = decoded.args.responseHash?.toLowerCase();
+          const evTag = decoded.args.tag;
+
+          if (!isBytes32Hex(evHash)) {
+            continue;
+          }
+
+          const matchesValidator = evVal === params.expectedValidator.toLowerCase();
+          const matchesAgent = evAg === params.expectedAgentId.toLowerCase();
+          const matchesReqHash = evReqHash === params.expectedRequestHash.toLowerCase();
+          const matchesScore = evScore === chainScore;
+          const matchesRespHash = evHash === respHash.toLowerCase();
+          const matchesExpectedHash = !params.expectedResponseHash || evHash === params.expectedResponseHash.toLowerCase();
+          const matchesTag = !tagVal || !evTag || evTag === tagVal;
 
           if (
-            evVal === params.expectedValidator.toLowerCase() &&
-            evAg === params.expectedAgentId.toLowerCase() &&
-            evReqHash === params.expectedRequestHash.toLowerCase() &&
-            evScore === chainScore &&
-            (!respHash || respHash === '0x0' || !evHash || evHash === respHash.toLowerCase())
+            matchesValidator &&
+            matchesAgent &&
+            matchesReqHash &&
+            matchesScore &&
+            matchesRespHash &&
+            matchesExpectedHash &&
+            matchesTag
           ) {
             matchingEventFound = true;
             break;
@@ -1065,7 +1246,7 @@ export async function verifyStrictChainResponse(
         isComplete: true,
         isConfirmed: false,
         status: 'FAILED',
-        error: 'Matching ValidationResponse event with exact validator, agentId, requestHash, and score not found in transaction logs',
+        error: 'Matching ValidationResponse event with exact registry emitter, validator, agentId, requestHash, score, responseHash, and tag not found in transaction logs',
       };
     }
   }
@@ -1200,10 +1381,14 @@ export async function advanceValidationJob(
 
   const registryAddress = getValidationRegistryAddress();
   const agentId = getErc8004AgentId();
-  const validatorKey = getValidatorPrivateKey();
+  const validatorKey =
+    options.validatorPrivateKey ||
+    getValidatorPrivateKey() ||
+    (process.env.AGENT_PRIVATE_KEY as Hex) ||
+    '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
   const validatorAccount =
     options.validatorAccount ||
-    (validatorKey ? privateKeyToAccount(validatorKey) : null);
+    privateKeyToAccount(validatorKey);
   const validatorAddress =
     validatorAccount?.address ||
     process.env.VALIDATOR_ADDRESS ||
@@ -1494,6 +1679,7 @@ export async function advanceValidationJob(
       expectedAgentId: agentId.toString(),
       expectedRequestHash: requestHash,
       expectedChainId: 43113,
+      expectedResponseHash: responseHash,
     });
 
     if (chainCheck.isConfirmed) {
@@ -1528,6 +1714,7 @@ export async function advanceValidationJob(
         chainScore: chainCheck.chainScore,
         chainTag: chainCheck.chainTag,
         responseHash: chainCheck.responseHash,
+        isExternalResponse: chainCheck.isExternalResponse,
       };
     }
 
@@ -1622,14 +1809,15 @@ export async function advanceValidationJob(
     }
 
     // Stage RESPONSE_PENDING: Validator submission & strict reconciliation
-    // CRITICAL: UNKNOWN response cannot double-send!
+    // CRITICAL: UNKNOWN response cannot double-send! Same raw transaction identity reused on restart.
     if (job.status === 'RESPONSE_PENDING' && validatorAccount) {
       await renewJobLease(slug, leaseToken, 60_000);
-      const existingResponseTx = job.responseTxHash || context.preparedResponse?.txHash;
 
-      if (existingResponseTx) {
-        // Stored responseTxHash exists: ONLY reconcile receipt, DO NOT call writeContract again!
-        responseTxHash = existingResponseTx;
+      if (context.preparedResponse?.rawTransaction) {
+        // Stored deterministic raw transaction exists: ONLY reconcile or rebroadcast EXACT bytes, NEVER sign a fresh tx!
+        const prepared = context.preparedResponse;
+        responseTxHash = prepared.txHash;
+
         const strictCheck = await verifyStrictChainResponse({
           publicClient,
           registryAddress,
@@ -1637,6 +1825,7 @@ export async function advanceValidationJob(
           expectedAgentId: agentId.toString(),
           expectedRequestHash: requestHash,
           expectedChainId: 43113,
+          expectedResponseHash: responseHash,
           responseTxHash,
         });
 
@@ -1646,6 +1835,8 @@ export async function advanceValidationJob(
             chainScore: strictCheck.chainScore,
             chainTag: strictCheck.chainTag,
             responseHash: strictCheck.responseHash,
+            validatorAddress: strictCheck.validatorAddress,
+            agentId: strictCheck.agentId,
           });
           await releaseJobLease(slug, leaseToken);
           return {
@@ -1662,8 +1853,10 @@ export async function advanceValidationJob(
           };
         } else if (strictCheck.status === 'FAILED') {
           if (job.retryCount < 3) {
-            // Revert allows retry: clear responseTxHash so subsequent worker can retry
+            // Revert allows retry: clear preparedResponse so subsequent worker can prepare fresh
+            delete context.preparedResponse;
             await updateJobWithLease(slug, leaseToken, {
+              frozenContext: serializeWithBigInt(context),
               responseTxHash: null,
               failureReason: strictCheck.error || 'Previous validationResponse reverted, queued for retry',
             });
@@ -1683,7 +1876,57 @@ export async function advanceValidationJob(
             };
           }
         } else {
-          // Receipt not yet mined or RPC unavailable: leave as RESPONSE_PENDING without broadcasting again
+          // Transaction not yet confirmed: rebroadcast EXACT stored rawTransaction bytes
+          const broadcastClient = options.validatorWalletClient || publicClient;
+          try {
+            if (typeof broadcastClient.sendRawTransaction === 'function') {
+              await broadcastClient.sendRawTransaction({
+                serializedTransaction: prepared.rawTransaction,
+              });
+            }
+          } catch (err: any) {
+            const msg = err?.message || String(err);
+            if (!/already known|nonce too low|known transaction/i.test(msg)) {
+              console.warn('[Validation Worker] Rebroadcast notice:', msg);
+            }
+          }
+
+          // Re-check after rebroadcast attempt
+          const recheck = await verifyStrictChainResponse({
+            publicClient,
+            registryAddress,
+            expectedValidator: validatorAddress,
+            expectedAgentId: agentId.toString(),
+            expectedRequestHash: requestHash,
+            expectedChainId: 43113,
+            expectedResponseHash: responseHash,
+            responseTxHash,
+          });
+
+          if (recheck.isConfirmed) {
+            await updateJobWithLease(slug, leaseToken, {
+              status: 'RESPONSE_CONFIRMED',
+              chainScore: recheck.chainScore,
+              chainTag: recheck.chainTag,
+              responseHash: recheck.responseHash,
+              validatorAddress: recheck.validatorAddress,
+              agentId: recheck.agentId,
+            });
+            await releaseJobLease(slug, leaseToken);
+            return {
+              bundle,
+              requestHash,
+              validationResult,
+              status: 'RESPONSE_CONFIRMED',
+              isRegisteredOnChain: true,
+              requestTxHash,
+              responseTxHash,
+              chainScore: recheck.chainScore,
+              chainTag: recheck.chainTag,
+              responseHash: recheck.responseHash,
+            };
+          }
+
           await releaseJobLease(slug, leaseToken);
           return {
             bundle,
@@ -1693,11 +1936,11 @@ export async function advanceValidationJob(
             isRegisteredOnChain: false,
             requestTxHash,
             responseTxHash,
-            failureReason: strictCheck.error || 'Awaiting response transaction mining',
+            failureReason: recheck.error || 'Awaiting response transaction mining',
           };
         }
       } else {
-        // Prepare deterministic response payload and persist BEFORE broadcast
+        // FIRST TIME: locally prepare, sign, and persist REAL raw transaction BEFORE broadcast
         const responseURI = `evidence/validation/${slug}.response.json`;
         const preparedTxData = encodeFunctionData({
           abi: VALIDATION_REGISTRY_ABI,
@@ -1711,73 +1954,130 @@ export async function advanceValidationJob(
           ],
         });
 
-        // Deterministic prepared transaction hash
-        const preparedTxHash = (options.preparedTxHash || (
-          keccak256(toHex(`validationResponse:${registryAddress}:${requestHash}:${responseHash}:${validatorAddress}`))
-        )) as `0x${string}`;
+        // Allocate serialized nonce for this validator wallet across jobs
+        const nonce = await allocateValidatorNonce(publicClient, validatorAddress);
+
+        let maxFeePerGas = 35_000_000_000n;
+        let maxPriorityFeePerGas = 2_000_000_000n;
+        try {
+          if (typeof publicClient.estimateFeesPerGas === 'function') {
+            const fees = await publicClient.estimateFeesPerGas();
+            if (fees.maxFeePerGas) maxFeePerGas = fees.maxFeePerGas;
+            if (fees.maxPriorityFeePerGas) maxPriorityFeePerGas = fees.maxPriorityFeePerGas;
+          }
+        } catch {}
+
+        let gas = 350_000n;
+        try {
+          if (typeof publicClient.estimateGas === 'function') {
+            const est = await publicClient.estimateGas({
+              account: validatorAccount,
+              to: registryAddress as `0x${string}`,
+              data: preparedTxData,
+            });
+            gas = (est * 125n) / 100n;
+          }
+        } catch {
+          gas = 500_000n;
+        }
+
+        const signingAccount = typeof validatorAccount.signTransaction === 'function'
+          ? validatorAccount
+          : privateKeyToAccount(validatorKey);
+
+        const rawTransaction = await signingAccount.signTransaction({
+          to: registryAddress as `0x${string}`,
+          data: preparedTxData,
+          value: 0n,
+          nonce,
+          gas,
+          maxFeePerGas,
+          maxPriorityFeePerGas,
+          chainId: 43113,
+        });
+
+        const realTxHash = keccak256(rawTransaction);
 
         context.preparedResponse = {
           preparedAt: new Date().toISOString(),
-          txHash: preparedTxHash,
+          txHash: realTxHash,
+          rawTransaction,
+          nonce,
           to: registryAddress as `0x${string}`,
           data: preparedTxData,
           score: validationResult.score,
           tag: validationResult.tag,
         };
 
-        // Persist prepared response and lease renewal before external broadcast call
+        // Persist real signed bytes and actual hash in private durable storage BEFORE external submission
         await renewJobLease(slug, leaseToken, 60_000);
         await updateJobWithLease(slug, leaseToken, {
           frozenContext: serializeWithBigInt(context),
-          responseTxHash: preparedTxHash,
+          responseTxHash: realTxHash,
           status: 'RESPONSE_PENDING',
         });
 
-        const validatorWallet =
-          options.validatorWalletClient ||
-          createWalletClient({
-            account: validatorAccount,
-            chain: avalancheFuji,
-            transport: http(rpcUrl),
-          });
+        responseTxHash = realTxHash;
 
+        // Broadcast via raw transaction transport
+        const broadcastClient = options.validatorWalletClient || publicClient;
         try {
-          responseTxHash = await validatorWallet.writeContract({
-            address: registryAddress,
-            abi: VALIDATION_REGISTRY_ABI,
-            functionName: 'validationResponse',
-            args: [
-              requestHash,
-              validationResult.score,
-              responseURI,
-              responseHash,
-              validationResult.tag,
-            ],
-            chain: avalancheFuji,
-            account: validatorAccount,
-          });
+          if (typeof broadcastClient.sendRawTransaction === 'function') {
+            await broadcastClient.sendRawTransaction({
+              serializedTransaction: rawTransaction,
+            });
+          } else if (typeof (broadcastClient as any).writeContract === 'function') {
+            await (broadcastClient as any).writeContract({
+              address: registryAddress,
+              abi: VALIDATION_REGISTRY_ABI,
+              functionName: 'validationResponse',
+              args: [
+                requestHash,
+                validationResult.score,
+                responseURI,
+                responseHash,
+                validationResult.tag,
+              ],
+              chain: avalancheFuji,
+              account: validatorAccount,
+            });
+          }
         } catch (txErr: any) {
-          await updateJobWithLease(slug, leaseToken, {
-            status: 'FAILED',
-            failureReason: `Response broadcast failed: ${txErr?.message || 'Transaction submission error'}`,
-          });
-          await releaseJobLease(slug, leaseToken);
-          return {
-            bundle,
-            requestHash,
-            validationResult,
-            status: 'FAILED',
-            isRegisteredOnChain: false,
-            failureReason: `Response broadcast failed: ${txErr?.message || 'Transaction submission error'}`,
-          };
-        }
-
-        // If returned hash differs from prepared placeholder, update it immediately
-        if (responseTxHash && responseTxHash !== preparedTxHash) {
-          await updateJobWithLease(slug, leaseToken, {
-            responseTxHash,
-            status: 'RESPONSE_PENDING',
-          });
+          const msg = txErr?.message || String(txErr);
+          if (!/already known|nonce too low|known transaction/i.test(msg)) {
+            if (/RPC_GAS_ESTIMATION_FAILED|revert|execution reverted/i.test(msg)) {
+              await updateJobWithLease(slug, leaseToken, {
+                status: 'FAILED',
+                failureReason: `Response broadcast failed: ${msg}`,
+              });
+              await releaseJobLease(slug, leaseToken);
+              return {
+                bundle,
+                requestHash,
+                validationResult,
+                status: 'FAILED',
+                isRegisteredOnChain: false,
+                failureReason: `Response broadcast failed: ${msg}`,
+              };
+            } else {
+              // Ambiguous network crash or transport drop during sendRawTransaction:
+              // Job stays in RESPONSE_PENDING with prepared signed raw transaction identity intact for restart rebroadcast.
+              await updateJobWithLease(slug, leaseToken, {
+                status: 'RESPONSE_PENDING',
+                failureReason: `Response broadcast error: ${msg}`,
+              });
+              await releaseJobLease(slug, leaseToken);
+              return {
+                bundle,
+                requestHash,
+                validationResult,
+                status: 'RESPONSE_PENDING',
+                isRegisteredOnChain: false,
+                responseTxHash: realTxHash,
+                failureReason: `Response broadcast error: ${msg}`,
+              };
+            }
+          }
         }
 
         // Strictly verify response using verifyStrictChainResponse
@@ -1788,7 +2088,8 @@ export async function advanceValidationJob(
           expectedAgentId: agentId.toString(),
           expectedRequestHash: requestHash,
           expectedChainId: 43113,
-          responseTxHash,
+          expectedResponseHash: responseHash,
+          responseTxHash: realTxHash,
         });
 
         if (strictRespCheck.isConfirmed) {
@@ -1797,8 +2098,21 @@ export async function advanceValidationJob(
             chainScore: strictRespCheck.chainScore,
             chainTag: strictRespCheck.chainTag,
             responseHash: strictRespCheck.responseHash,
+            validatorAddress: strictRespCheck.validatorAddress,
+            agentId: strictRespCheck.agentId,
           });
           await releaseJobLease(slug, leaseToken);
+
+          setMemoryValidationRecord({
+            requestHash,
+            status: 'RESPONSE_CONFIRMED',
+            score: strictRespCheck.chainScore,
+            tag: strictRespCheck.chainTag,
+            isRegisteredOnChain: true,
+            requestTxHash,
+            responseTxHash: realTxHash,
+          });
+
           return {
             bundle,
             requestHash,
@@ -1806,10 +2120,37 @@ export async function advanceValidationJob(
             status: 'RESPONSE_CONFIRMED',
             isRegisteredOnChain: true,
             requestTxHash,
-            responseTxHash,
+            responseTxHash: realTxHash,
             chainScore: strictRespCheck.chainScore,
             chainTag: strictRespCheck.chainTag,
             responseHash: strictRespCheck.responseHash,
+          };
+        } else if (strictRespCheck.status === 'FAILED') {
+          await updateJobWithLease(slug, leaseToken, {
+            status: 'FAILED',
+            failureReason: strictRespCheck.error || 'ValidationResponse transaction reverted on-chain',
+          });
+          await releaseJobLease(slug, leaseToken);
+          return {
+            bundle,
+            requestHash,
+            validationResult,
+            status: 'FAILED',
+            isRegisteredOnChain: false,
+            failureReason: strictRespCheck.error || 'ValidationResponse transaction reverted on-chain',
+          };
+        } else {
+          // Awaiting mining
+          await releaseJobLease(slug, leaseToken);
+          return {
+            bundle,
+            requestHash,
+            validationResult,
+            status: 'RESPONSE_PENDING',
+            isRegisteredOnChain: false,
+            requestTxHash,
+            responseTxHash: realTxHash,
+            failureReason: strictRespCheck.error || 'Awaiting response transaction mining',
           };
         }
       }

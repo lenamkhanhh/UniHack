@@ -7,6 +7,8 @@ import {
   parseAbiItem,
   encodeEventTopics,
   encodeAbiParameters,
+  parseTransaction,
+  keccak256,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { avalancheFuji } from 'viem/chains';
@@ -802,6 +804,22 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
 
     const bundle = await buildMissionValidationBundle(mission.slug);
     const requestHash = computeValidationRequestHash(bundle);
+    const testResponseHash = '0x2222222222222222222222222222222222222222222222222222222222222222';
+    const frozenCtx = buildFrozenValidationContext({
+      bundle,
+      ownerAddress: mission.ownerAddress,
+      validatorAddress: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+      agentId: '294',
+    });
+    frozenCtx.evidence = {
+      evaluatedAt: new Date().toISOString(),
+      responseJsonString: '{}',
+      responseHash: testResponseHash,
+      score: 100,
+      tag: 'verified-full',
+      checks: {},
+      details: {},
+    };
 
     await prisma.validationJob.create({
       data: {
@@ -813,6 +831,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
         tag: 'verified-full',
         validatorAddress: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
         agentId: '294',
+        frozenContext: serializeWithBigInt(frozenCtx),
       },
     });
 
@@ -854,7 +873,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
             '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
             294n,
             100,
-            '0x0',
+            testResponseHash,
             'verified-full',
             1700000000n,
           ];
@@ -1316,6 +1335,22 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
 
     const bundle = await buildMissionValidationBundle(mission.slug);
     const requestHash = computeValidationRequestHash(bundle);
+    const testResponseHash = '0x2222222222222222222222222222222222222222222222222222222222222222';
+    const frozenCtx = buildFrozenValidationContext({
+      bundle,
+      ownerAddress: mission.ownerAddress,
+      validatorAddress: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+      agentId: '294',
+    });
+    frozenCtx.evidence = {
+      evaluatedAt: new Date().toISOString(),
+      responseJsonString: '{}',
+      responseHash: testResponseHash,
+      score: 100,
+      tag: 'verified-full',
+      checks: {},
+      details: {},
+    };
 
     // Initial job in RESPONSE_PENDING with score already evaluated
     await prisma.validationJob.create({
@@ -1326,7 +1361,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
         status: 'RESPONSE_PENDING',
         score: 100,
         tag: 'verified-full',
-        frozenContext: serializeWithBigInt(bundle),
+        frozenContext: serializeWithBigInt(frozenCtx),
       },
     });
 
@@ -1345,7 +1380,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       readContract: vi.fn().mockImplementation(async ({ functionName }) => {
         if (functionName === 'isValidationComplete') return receiptMined;
         if (functionName === 'getValidationStatus') {
-          return ['0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5', 294n, 100, '0x0', 'verified-full', 1700000000n];
+          return ['0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5', 294n, 100, testResponseHash, 'verified-full', 1700000000n];
         }
         return true;
       }),
@@ -1368,7 +1403,8 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     });
 
     expect(call1Result.status).toBe('RESPONSE_PENDING');
-    expect(call1Result.responseTxHash).toBe('0xfirstResponseTxHash1234567890123456789012345678901234567890123456789012');
+    expect(call1Result.responseTxHash).toBeDefined();
+    expect(call1Result.responseTxHash).toMatch(/^0x[0-9a-fA-F]{64}$/);
     expect(writeContractCallCount).toBe(1);
 
     // Call 2: Retry / restart while still pending. Must NOT call writeContract again!
@@ -1380,6 +1416,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     });
 
     expect(call2Result.status).toBe('RESPONSE_PENDING');
+    expect(call2Result.responseTxHash).toBe(call1Result.responseTxHash);
     expect(writeContractCallCount).toBe(1); // ZERO double-spend!
 
     // Call 3: Receipt is now mined on chain. Reconcile completes.
@@ -1419,6 +1456,23 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       checks: { headMatchesOnChain: true, rootMatchesOnChain: true, payeesGenerateRoot: true, executedPayeesValid: true, totalSpendWithinCap: true, hasExecutions: true },
       details: {},
     };
+    const testRespHash = '0x3333333333333333333333333333333333333333333333333333333333333333';
+    const frozenCtx = buildFrozenValidationContext({
+      bundle,
+      ownerAddress: mission.ownerAddress,
+      validatorAddress: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+      agentId: '294',
+    });
+    frozenCtx.evidence = {
+      evaluatedAt: new Date().toISOString(),
+      responseJsonString: '{}',
+      responseHash: testRespHash,
+      score: 100,
+      tag: 'verified-full',
+      checks: {},
+      details: {},
+    };
+
     await prisma.validationJob.create({
       data: {
         missionSlug: mission.slug,
@@ -1428,7 +1482,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
         score: 100,
         tag: 'verified-full',
         evaluationResult: serializeWithBigInt(localEval),
-        frozenContext: serializeWithBigInt(bundle),
+        frozenContext: serializeWithBigInt(frozenCtx),
       },
     });
 
@@ -1442,7 +1496,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       }
       if (functionName === 'isValidationComplete') return true;
       if (functionName === 'getValidationStatus') {
-        return ['0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5', 294n, 37, '0x0', 'partial-override', 1700000000n];
+        return ['0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5', 294n, 37, testRespHash, 'partial-override', 1700000000n];
       }
       throw new Error(`Unexpected function: ${functionName}`);
     });
@@ -1884,7 +1938,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       readContract: vi.fn().mockImplementation(async ({ functionName }) => {
         if (functionName === 'isValidationComplete') return true;
         if (functionName === 'getValidationStatus') {
-          return ['0x9999999999999999999999999999999999999999', 294n, 100, '0x0', 'verified-full', 1700000000n];
+          return ['0x9999999999999999999999999999999999999999', 294n, 100, '0x2222222222222222222222222222222222222222222222222222222222222222', 'verified-full', 1700000000n];
         }
         throw new Error(`Unexpected call: ${functionName}`);
       }),
@@ -1907,7 +1961,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       readContract: vi.fn().mockImplementation(async ({ functionName }) => {
         if (functionName === 'isValidationComplete') return true;
         if (functionName === 'getValidationStatus') {
-          return [valAddress, 9999n, 100, '0x0', 'verified-full', 1700000000n];
+          return [valAddress, 9999n, 100, '0x2222222222222222222222222222222222222222222222222222222222222222', 'verified-full', 1700000000n];
         }
         throw new Error(`Unexpected call: ${functionName}`);
       }),
@@ -1997,27 +2051,30 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     expect(currentJob?.leaseToken).toBe(claim2.leaseToken);
   });
 
-  // A4-31: Deterministic prepared response before broadcast & crash recovery (no double spend)
-  it('M7-A4-31: Prepared response before broadcast & crash recovery: never submits a second transaction', async () => {
+  // A4-31: Durable locally signed raw transaction, same-byte restart/rebroadcast, and single transaction identity
+  it('M7-A4-31: Locally prepared and signed raw EVM transaction: hash matches keccak256(rawTx), same bytes rebroadcast on crash, single tx identity', async () => {
     const { mission } = await createTestMission();
     const bundle = await buildMissionValidationBundle(mission.slug);
     const requestHash = computeValidationRequestHash(bundle);
 
+    const testValidatorKey = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const;
+    const testValidatorAccount = privateKeyToAccount(testValidatorKey);
+    const expectedResponseHash = '0x2222222222222222222222222222222222222222222222222222222222222222' as const;
+
     const frozenCtx = buildFrozenValidationContext({
       bundle,
       ownerAddress: mission.ownerAddress,
+      validatorAddress: testValidatorAccount.address,
     });
     frozenCtx.evidence = {
       evaluatedAt: new Date().toISOString(),
       responseJsonString: '{}',
-      responseHash: '0x2222222222222222222222222222222222222222222222222222222222222222',
+      responseHash: expectedResponseHash,
       score: 100,
       tag: 'verified-full',
       checks: {},
       details: {},
     };
-
-    const deterministicTx = '0xd000000000000000000000000000000000000000000000000000000000000001' as const;
 
     await prisma.validationJob.create({
       data: {
@@ -2031,26 +2088,29 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       },
     });
 
-    let writeContractCallCount = 0;
-    const mockWallet = {
-      account: { address: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5' },
-      writeContract: vi.fn().mockImplementation(async () => {
-        writeContractCallCount++;
-        return deterministicTx;
-      }),
-    } as any;
-
+    const receivedRawTxs: `0x${string}`[] = [];
     let receiptMined = false;
+
     const mockPublic = {
       getChainId: vi.fn().mockResolvedValue(43113),
+      getTransactionCount: vi.fn().mockResolvedValue(0n),
+      estimateGas: vi.fn().mockResolvedValue(300000n),
+      estimateFeesPerGas: vi.fn().mockResolvedValue({
+        maxFeePerGas: 30000000000n,
+        maxPriorityFeePerGas: 1500000000n,
+      }),
+      sendRawTransaction: vi.fn().mockImplementation(async ({ serializedTransaction }) => {
+        receivedRawTxs.push(serializedTransaction);
+        return keccak256(serializedTransaction);
+      }),
       readContract: vi.fn().mockImplementation(async ({ functionName }) => {
         if (functionName === 'isValidationComplete') return receiptMined;
         if (functionName === 'getValidationStatus') {
           return [
-            '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+            testValidatorAccount.address,
             294n,
             100,
-            '0x2222222222222222222222222222222222222222222222222222222222222222',
+            expectedResponseHash,
             'verified-full',
             1700000000n,
           ];
@@ -2066,14 +2126,14 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
           abi: [validationResponseEventAbi],
           eventName: 'ValidationResponse',
           args: {
-            validatorAddress: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+            validatorAddress: testValidatorAccount.address,
             agentId: 294n,
             requestHash,
           },
         });
         const data = encodeAbiParameters(
           [{ type: 'uint8' }, { type: 'bytes32' }, { type: 'string' }],
-          [100, '0x2222222222222222222222222222222222222222222222222222222222222222', 'verified-full']
+          [100, expectedResponseHash, 'verified-full']
         );
         return {
           status: 'success',
@@ -2088,32 +2148,306 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       }),
     } as any;
 
-    // Run 1: Broadcasts transaction and saves prepared responseTxHash; receipt is still pending in mempool
+    // Run 1: Signs raw transaction locally, persists raw bytes and real hash in DB BEFORE sending
     const run1 = await advanceValidationJob(mission.slug, {
       publicClient: mockPublic,
-      validatorWalletClient: mockWallet,
-      validatorAccount: mockWallet.account,
-      preparedTxHash: deterministicTx,
+      validatorPrivateKey: testValidatorKey,
     });
-    expect(writeContractCallCount).toBe(1);
     expect(run1.status).toBe('RESPONSE_PENDING');
+    expect(receivedRawTxs.length).toBe(1);
+
+    // Verify raw transaction was decoded and is a valid EVM transaction
+    const decodedRaw = parseTransaction(receivedRawTxs[0]);
+    expect(decodedRaw.to?.toLowerCase()).toBe(DEFAULT_VALIDATION_REGISTRY.toLowerCase());
+    expect(decodedRaw.chainId).toBe(43113);
+    expect(decodedRaw.nonce).toBe(0);
+
+    // Verify computed hash equals persisted hash
+    const computedRealHash = keccak256(receivedRawTxs[0]);
+    expect(run1.responseTxHash).toBe(computedRealHash);
 
     const jobAfterSend = await prisma.validationJob.findUnique({ where: { missionSlug: mission.slug } });
-    expect(jobAfterSend?.responseTxHash).toBe(deterministicTx);
+    expect(jobAfterSend?.responseTxHash).toBe(computedRealHash);
 
-    // Simulate crash and worker restart: Run 2 executed with the same job
+    // Inspect persisted frozen context: has rawTransaction and real hash
+    const parsedContext = JSON.parse(jobAfterSend!.frozenContext!);
+    expect(parsedContext.preparedResponse.rawTransaction).toBe(receivedRawTxs[0]);
+    expect(parsedContext.preparedResponse.txHash).toBe(computedRealHash);
+
+    // Crash simulation 1: Crash just after node accepted before DB post-send update
+    // Worker restarts: Run 2 executed with the same job
     // Receipt mines in between
     receiptMined = true;
     const run2 = await advanceValidationJob(mission.slug, {
       publicClient: mockPublic,
-      validatorWalletClient: mockWallet,
-      validatorAccount: mockWallet.account,
+      validatorPrivateKey: testValidatorKey,
     });
 
-    // WriteContract was NOT called a second time!
-    expect(writeContractCallCount).toBe(1);
     expect(run2.status).toBe('RESPONSE_CONFIRMED');
-    expect(run2.responseTxHash).toBe(deterministicTx);
+    expect(run2.responseTxHash).toBe(computedRealHash);
+
+    // Crash simulation 2: Crash just before first send (prepared response saved, but network dropped)
+    // Create new mission where sendRawTransaction fails on first attempt
+    const { mission: missionB } = await createTestMission();
+    const bundleB = await buildMissionValidationBundle(missionB.slug);
+    const requestHashB = computeValidationRequestHash(bundleB);
+    const frozenCtxB = buildFrozenValidationContext({
+      bundle: bundleB,
+      ownerAddress: missionB.ownerAddress,
+      validatorAddress: testValidatorAccount.address,
+    });
+    frozenCtxB.evidence = {
+      evaluatedAt: new Date().toISOString(),
+      responseJsonString: '{}',
+      responseHash: expectedResponseHash,
+      score: 100,
+      tag: 'verified-full',
+      checks: {},
+      details: {},
+    };
+    await prisma.validationJob.create({
+      data: {
+        missionSlug: missionB.slug,
+        missionId: missionB.missionId,
+        requestHash: requestHashB,
+        status: 'RESPONSE_PENDING',
+        score: 100,
+        tag: 'verified-full',
+        frozenContext: serializeWithBigInt(frozenCtxB),
+      },
+    });
+
+    const rawTxsB: `0x${string}`[] = [];
+    let receiptMinedB = false;
+    let shouldFailSendFirstTime = true;
+    const mockPublicB = {
+      ...mockPublic,
+      sendRawTransaction: vi.fn().mockImplementation(async ({ serializedTransaction }) => {
+        rawTxsB.push(serializedTransaction);
+        if (shouldFailSendFirstTime) {
+          shouldFailSendFirstTime = false;
+          throw new Error('Network crash immediately during sendRawTransaction');
+        }
+        return keccak256(serializedTransaction);
+      }),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return receiptMinedB;
+        if (functionName === 'getValidationStatus') {
+          return [
+            testValidatorAccount.address,
+            294n,
+            100,
+            expectedResponseHash,
+            'verified-full',
+            1700000000n,
+          ];
+        }
+        throw new Error(`Unexpected call: ${functionName}`);
+      }),
+    };
+
+    // Attempt 1: Prepares raw tx, persists in DB, throws during send
+    await advanceValidationJob(missionB.slug, {
+      publicClient: mockPublicB as any,
+      validatorPrivateKey: testValidatorKey,
+    });
+
+    // Check DB has the prepared response even after network crash
+    const jobB = await prisma.validationJob.findUnique({ where: { missionSlug: missionB.slug } });
+    expect(jobB?.responseTxHash).toBeDefined();
+    const parsedCtxB = JSON.parse(jobB!.frozenContext!);
+    expect(parsedCtxB.preparedResponse.rawTransaction).toBe(rawTxsB[0]);
+
+    // Attempt 2: Restart after crash while unmined rebroadcasts the EXACT SAME raw bytes!
+    receiptMinedB = false;
+    const runB2 = await advanceValidationJob(missionB.slug, {
+      publicClient: mockPublicB as any,
+      validatorPrivateKey: testValidatorKey,
+    });
+    expect(runB2.status).toBe('RESPONSE_PENDING');
+    expect(rawTxsB.length).toBe(2);
+    expect(rawTxsB[1]).toBe(rawTxsB[0]); // EXACT same bytes string!
+
+    // Attempt 3: Once mined, completes confirmation with identical transaction hash
+    receiptMinedB = true;
+    const runB3 = await advanceValidationJob(missionB.slug, {
+      publicClient: mockPublicB as any,
+      validatorPrivateKey: testValidatorKey,
+    });
+    expect(runB3.status).toBe('RESPONSE_CONFIRMED');
+    expect(runB3.responseTxHash).toBe(keccak256(rawTxsB[0])); // EXACT same hash!
+  });
+
+  // A4-33: Strict chain response verification: tuple validation, event matching, and honest external-response distinction
+  it('M7-A4-33: Strict chain response verification: rejects malformed tuple hashes, absent event emitter, different event hash/tag, and distinguishes external response', async () => {
+    const registry = DEFAULT_VALIDATION_REGISTRY;
+    const validator = '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5';
+    const agentId = '294';
+    const requestHash = '0x1111111111111111111111111111111111111111111111111111111111111111';
+    const expectedResponseHash = '0x2222222222222222222222222222222222222222222222222222222222222222';
+
+    // Case 1: Malformed tuple responseHash (e.g. '0x0')
+    const clientMalformedHash = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return true;
+        if (functionName === 'getValidationStatus') {
+          return [validator, 294n, 100, '0x0', 'verified-full', 1700000000n];
+        }
+      }),
+    } as any;
+    const res1 = await verifyStrictChainResponse({
+      publicClient: clientMalformedHash,
+      registryAddress: registry,
+      expectedValidator: validator,
+      expectedAgentId: agentId,
+      expectedRequestHash: requestHash,
+      expectedChainId: 43113,
+      expectedResponseHash,
+    });
+    expect(res1.isConfirmed).toBe(false);
+    expect(res1.status).toBe('UNAVAILABLE');
+    expect(res1.error).toContain('Missing or malformed bytes32 responseHash');
+
+    // Case 2: Zero hash bytes32 in tuple
+    const clientZeroHash = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return true;
+        if (functionName === 'getValidationStatus') {
+          return [validator, 294n, 100, '0x0000000000000000000000000000000000000000000000000000000000000000', 'verified-full', 1700000000n];
+        }
+      }),
+    } as any;
+    const res2 = await verifyStrictChainResponse({
+      publicClient: clientZeroHash,
+      registryAddress: registry,
+      expectedValidator: validator,
+      expectedAgentId: agentId,
+      expectedRequestHash: requestHash,
+      expectedChainId: 43113,
+      expectedResponseHash,
+    });
+    expect(res2.isConfirmed).toBe(false);
+    expect(res2.status).toBe('UNAVAILABLE');
+
+    // Case 3: Absent / wrong event emitter (log.address != registryAddress)
+    const clientWrongEmitter = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return true;
+        if (functionName === 'getValidationStatus') {
+          return [validator, 294n, 100, expectedResponseHash, 'verified-full', 1700000000n];
+        }
+      }),
+      getTransactionReceipt: vi.fn().mockResolvedValue({
+        status: 'success',
+        logs: [
+          {
+            address: '0x9999999999999999999999999999999999999999', // Wrong emitter!
+            topics: encodeEventTopics({
+              abi: [parseAbiItem('event ValidationResponse(address indexed validatorAddress, uint256 indexed agentId, bytes32 indexed requestHash, uint8 response, bytes32 responseHash, string tag)')],
+              eventName: 'ValidationResponse',
+              args: { validatorAddress: validator, agentId: 294n, requestHash },
+            }),
+            data: encodeAbiParameters([{ type: 'uint8' }, { type: 'bytes32' }, { type: 'string' }], [100, expectedResponseHash, 'verified-full']),
+          },
+        ],
+      }),
+    } as any;
+    const res3 = await verifyStrictChainResponse({
+      publicClient: clientWrongEmitter,
+      registryAddress: registry,
+      expectedValidator: validator,
+      expectedAgentId: agentId,
+      expectedRequestHash: requestHash,
+      expectedChainId: 43113,
+      expectedResponseHash,
+      responseTxHash: '0xaaaa000000000000000000000000000000000000000000000000000000000001',
+    });
+    expect(res3.isConfirmed).toBe(false);
+    expect(res3.status).toBe('FAILED');
+    expect(res3.error).toContain('Matching ValidationResponse event with exact registry emitter');
+
+    // Case 4: Different event responseHash from tuple / expected
+    const clientDifferentEventHash = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return true;
+        if (functionName === 'getValidationStatus') {
+          return [validator, 294n, 100, expectedResponseHash, 'verified-full', 1700000000n];
+        }
+      }),
+      getTransactionReceipt: vi.fn().mockResolvedValue({
+        status: 'success',
+        logs: [
+          {
+            address: registry,
+            topics: encodeEventTopics({
+              abi: [parseAbiItem('event ValidationResponse(address indexed validatorAddress, uint256 indexed agentId, bytes32 indexed requestHash, uint8 response, bytes32 responseHash, string tag)')],
+              eventName: 'ValidationResponse',
+              args: { validatorAddress: validator, agentId: 294n, requestHash },
+            }),
+            data: encodeAbiParameters([{ type: 'uint8' }, { type: 'bytes32' }, { type: 'string' }], [100, '0x9999999999999999999999999999999999999999999999999999999999999999', 'verified-full']),
+          },
+        ],
+      }),
+    } as any;
+    const res4 = await verifyStrictChainResponse({
+      publicClient: clientDifferentEventHash,
+      registryAddress: registry,
+      expectedValidator: validator,
+      expectedAgentId: agentId,
+      expectedRequestHash: requestHash,
+      expectedChainId: 43113,
+      expectedResponseHash,
+      responseTxHash: '0xaaaa000000000000000000000000000000000000000000000000000000000001',
+    });
+    expect(res4.isConfirmed).toBe(false);
+    expect(res4.status).toBe('FAILED');
+
+    // Case 5: Honest external-response distinction (same validator & request, but different on-chain responseHash)
+    const clientExternalDiffHash = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      readContract: vi.fn().mockImplementation(async ({ functionName }) => {
+        if (functionName === 'isValidationComplete') return true;
+        if (functionName === 'getValidationStatus') {
+          return [validator, 294n, 85, '0x8888888888888888888888888888888888888888888888888888888888888888', 'partial-check', 1700000000n];
+        }
+      }),
+    } as any;
+    const res5 = await verifyStrictChainResponse({
+      publicClient: clientExternalDiffHash,
+      registryAddress: registry,
+      expectedValidator: validator,
+      expectedAgentId: agentId,
+      expectedRequestHash: requestHash,
+      expectedChainId: 43113,
+      expectedResponseHash, // '0x2222...' differs from '0x8888...'
+    });
+    expect(res5.isConfirmed).toBe(false);
+    expect(res5.isExternalResponse).toBe(true);
+    expect(res5.chainScore).toBe(85);
+    expect(res5.responseHash).toBe('0x8888888888888888888888888888888888888888888888888888888888888888');
+    expect(res5.status).toBe('UNAVAILABLE');
+
+    // Case 6: Status read RPC failure fails closed and returns UNAVAILABLE
+    const clientRpcFail = {
+      getChainId: vi.fn().mockResolvedValue(43113),
+      readContract: vi.fn().mockRejectedValue(new Error('Connection timeout to Avalanche Fuji RPC')),
+    } as any;
+    const res6 = await verifyStrictChainResponse({
+      publicClient: clientRpcFail,
+      registryAddress: registry,
+      expectedValidator: validator,
+      expectedAgentId: agentId,
+      expectedRequestHash: requestHash,
+      expectedChainId: 43113,
+      expectedResponseHash,
+    });
+    expect(res6.isConfirmed).toBe(false);
+    expect(res6.status).toBe('UNAVAILABLE');
+    expect(res6.error).toContain('RPC error');
   });
 
   // A4-32: Truly frozen evidence & identities
