@@ -20,7 +20,7 @@
 | **A7** | **P2** | **ACCEPTED** *(Reviewer đã accept)* | `fea5f20`<br>`dde044e` | `packages/guard/src/validator.ts`<br>`packages/guard/src/merkle.ts`<br>`packages/guard/src/guard.ts`<br>`packages/guard/tests/guard.test.ts`<br>`packages/guard/tests/parity.test.ts` | Đối chiếu canonical mission ID/slug; đối chiếu Merkle root từ payees; ưu tiên hard BLOCK trước soft QUEUE. 19/19 SDK tests pass. |
 | **A8** | **P2** | **ACCEPTED** *(Reviewer đã accept)* | `467e251`<br>`937f41a`<br>`b7da608` | `apps/web/lib/bounty.ts`<br>`apps/web/app/api/bounty/attempt/route.ts`<br>`apps/web/prisma/schema.prisma`<br>`apps/web/prisma/migrations/20261110120000_bounty_quota_reservation/`<br>`apps/web/tests/bounty.test.ts` | Atomic PostgreSQL reservation rate limiting: global advisory lock trước IP lock, tuần tự hóa nghiêm ngặt tại ngưỡng 299; bảo lưu khấu trừ hạn ngạch độc lập với kết quả/lease; DB down fail-closed; reverse proxy `TRUSTED_INGRESS` chống giả mạo header; offline simulation stub. 18/18 tests pass. |
 | **A9** | **P2** | **RESOLVED** | `63c1c8c` | `REPORT_REVIEW_AND_FIX_COMPLETION.md`<br>`DEPLOY_CHECKLIST.md` | Cập nhật đầy đủ bằng chứng kiểm thử Round 7 (41 unit tests M7, 29 bounty/relay tests, 7 browser Playwright tests); mô tả chi tiết giải pháp xóa fallback writeContract, cấp phát nonce nguyên tử bằng advisory xact lock, và kiểm chứng ranh giới quyền riêng tư của raw bytes; xác nhận không push public, không broadcast Fuji testnet, không commit secret; kê khai ranh giới `NOT_RUN` rõ ràng. |
-| **Round 8 (P2)** | **P2** | **RESOLVED** | Current (`feat/s1-app`) | `artifacts/submission-s1/deck-v2/build_deck.js`<br>`VIDEO_SCRIPT.md`<br>`artifacts/submission-s1/MissionPay-pitch-deck-v2.pptx`<br>`artifacts/submission-s1/MissionPay-pitch-deck-v2.pdf`<br>`artifacts/submission-s1/deck-shots/slide-9-benchmark.png` | Bổ sung số liệu replay AgentDojo ngoại tuyến được kiểm chứng (120/128 injection blocked, 8 misses tại user_task_15, false positive 3/16, Fuji fork 169/169 agree và 150/150 revert); giữ nguyên PayBench-ADI; không dùng số live incomplete; không dùng từ ngữ cấm ("SOTA", "first", "unique", "better than ProvGuard"); build lại PPTX, export PDF và chụp PNG Slide 9 kiểm tra 0 text overflow. |
+| **Round 8 (P2)** | **P2** | **RESOLVED** | `8f9a528`<br>Current (`feat/s1-app`) | `artifacts/submission-s1/deck-v2/build_deck.js`<br>`VIDEO_SCRIPT.md`<br>`artifacts/submission-s1/MissionPay-pitch-deck-v2.pptx`<br>`artifacts/submission-s1/MissionPay-pitch-deck-v2.pdf`<br>`artifacts/submission-s1/deck-shots/slide-9-benchmark.png` | Bổ sung số liệu replay AgentDojo ngoại tuyến được kiểm chứng (120/128 injection blocked, 8 misses tại user_task_15, false positive 3/16, Fuji fork 169/169 agree và 150/150 revert); giữ nguyên PayBench-ADI; không dùng số live incomplete; không dùng từ ngữ cấm ("SOTA", "first", "unique", "better than ProvGuard"); sửa triệt để R8-F1 (loại bỏ silent-skip trong `build_deck.js`, throw nếu thiếu `PPTX_SKILL`), áp dụng chuẩn theme `MissionPay Console` (accent1 `E84142`, accent2 `10B981`, accent3 `F59E0B` trong `theme1.xml`); export lại PDF và chụp PNG Slide 9 kiểm tra trực quan màu sắc và 0 text overflow. |
 
 ---
 
@@ -110,13 +110,27 @@
 - Cập nhật dòng placeholder M4 tại Mục Cập nhật sau PLAN_MAX:
   > **M4 (AgentDojo replay):** "On AgentDojo banking replay, MissionPay blocked 120 of 128 payment injections, and even with the attacker on the allowlist, the Avalanche contract rejected every off-mission payout." (Được đánh dấu là số đo replay mô hình ngoại tuyến, không phải live run).
 
-### 4.3 Tái tạo Artifacts & Kiểm tra Trực quan Không Tràn Văn Bản
-- **Lệnh tái tạo deck:** `node artifacts/submission-s1/deck-v2/build_deck.js`
+### 4.3 Tái tạo Artifacts, Khắc phục R8-F1 & Kiểm tra Trực quan
+- **Khắc phục R8-F1 (Theme Regression):**
+  - Trong `artifacts/submission-s1/deck-v2/build_deck.js`, loại bỏ hoàn toàn silent-skip. Nếu `PPTX_SKILL` không được cấu hình hoặc file `apply_theme.js` không tồn tại, script sẽ lập tức throw error fail-closed (`throw new Error(...)`).
+  - Thực thi build với biến môi trường `PPTX_SKILL` trỏ tới đường dẫn chính xác.
+  - Kiểm tra giải nén cấu trúc OOXML xác nhận `ppt/theme/theme1.xml`:
+    - Theme Name: `MissionPay Console`
+    - accent1: `E84142` (Đỏ)
+    - accent2: `10B981` (Xanh lục)
+    - accent3: `F59E0B` (Hổ phách)
+- **Lệnh tái tạo deck:**
+  ```powershell
+  $env:NODE_PATH = ".cache/deck-node/node_modules"
+  $env:PPTX_SKILL = "C:\Users\HP\AppData\Local\Claude-Data\claude_pzs8sxrjxfjjc\local-agent-mode-sessions\skills-plugin\1a4efcdf-66d0-4ec2-aba1-34fdce6abea2\4bd9a91f-693d-4e3e-8a7b-ce560c8d33a1\skills\pptx"
+  node artifacts/submission-s1/deck-v2/build_deck.js
+  ```
 - **Xuất bản:**
   - `artifacts/submission-s1/MissionPay-pitch-deck-v2.pptx` (856,742 bytes)
-  - `artifacts/submission-s1/MissionPay-pitch-deck-v2.pdf` (712,741 bytes)
-  - `artifacts/submission-s1/deck-shots/slide-9-benchmark.png` (96,658 bytes, độ phân giải 1920x1080)
+  - `artifacts/submission-s1/MissionPay-pitch-deck-v2.pdf` (713,217 bytes)
+  - `artifacts/submission-s1/deck-shots/slide-9-benchmark.png` (96,039 bytes, độ phân giải 1920x1080)
 - **Kiểm tra trực quan (Visual Inspection):**
+  - Màu sắc theme `MissionPay Console` khôi phục chuẩn xác: cột "No guard" màu đỏ (`E84142`), cột "Caps + allowlist" màu hổ phách (`F59E0B`), cột "MissionPay" màu xanh lục (`10B981`); số liệu stat card hiển thị chuẩn màu hổ phách và xanh lục.
   - Căn chỉnh biểu đồ: chiều cao `h: 4.35` (`y: 1.45`), thẻ stat card `h: 1.32`.
   - Dòng text AgentDojo replay tại `y: 5.92` (`h: 0.36`), khối PayBench-ADI tại `y: 6.32` (`h: 0.55`), mép trên footer tại `y: 7.05`.
   - **Kết quả:** Slide 9 hiển thị hoàn hảo, không có bất kỳ hiện tượng tràn dòng, đè chữ hay clipping nào.

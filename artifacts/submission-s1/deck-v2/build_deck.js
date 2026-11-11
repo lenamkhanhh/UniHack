@@ -427,10 +427,12 @@ async function main() {
   s.addNotes("Quay lại trang /bounty trước khi sang slide này: đọc N lượt thử, M lần LLM bị lừa, 0 đô ra ngoài (số đọc từ chain). Rồi nói câu chốt và dừng.");
 
   await pres.writeFile({ fileName: OUT });
-  if (process.env.PPTX_SKILL && fs.existsSync(process.env.PPTX_SKILL + "/scripts/apply_theme.js")) {
-    const { applyTheme } = require(process.env.PPTX_SKILL + "/scripts/apply_theme.js");
-    await applyTheme(OUT, THEME);
+  const themeScript = (process.env.PPTX_SKILL ? process.env.PPTX_SKILL.replace(/\\/g, "/") : "") + "/scripts/apply_theme.js";
+  if (!process.env.PPTX_SKILL || !fs.existsSync(themeScript)) {
+    throw new Error(`PPTX_SKILL invalid or apply_theme.js not found at: ${themeScript}`);
   }
+  const { applyTheme } = require(themeScript);
+  await applyTheme(OUT, THEME);
   console.log("wrote", OUT);
 }
 
