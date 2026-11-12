@@ -784,6 +784,8 @@ def run_benchmark(
     seed: int = 42,
     use_cache: bool = True,
     allow_legacy_cache: bool = False,
+    resume_legacy_cache: bool = False,
+    max_minutes: Optional[float] = None,
 ):
     start_wall_time = time.time()
     
@@ -882,9 +884,11 @@ def run_benchmark(
     overall_results: Dict[str, Any] = {
         "metadata": {
             "run_id": run_id,
-            "run_type": "historical_legacy_audit" if allow_legacy_cache else "fresh_benchmark",
+            "run_type": "historical_legacy_audit" if allow_legacy_cache else ("resumed_benchmark" if resume_legacy_cache else "fresh_benchmark"),
             "comparable_to_fresh": not allow_legacy_cache,
             "legacy_cache_mode": allow_legacy_cache,
+            "resumed_from_legacy_cache": resume_legacy_cache,
+            "status": "running",
             "timestamp": datetime.now().isoformat(),
             "backend": backend,
             "model": model,
@@ -907,6 +911,7 @@ def run_benchmark(
     }
 
     output_path = RESULTS_DIR / f"{run_id}.json"
+    stop_reason: Optional[str] = None
 
     def save_checkpoint():
         overall_results["metadata"]["wall_time_seconds"] = round(time.time() - start_wall_time, 2)
@@ -915,6 +920,8 @@ def run_benchmark(
         generate_summary(overall_results, output_path)
 
     for defense_key in defenses:
+        if stop_reason:
+            break
         print(f"\n--- Evaluating Defense: {defense_key.upper()} ---", flush=True)
         pipeline, missionpay_instance, llm_wrapper = build_pipeline(
             defense_key,
@@ -927,13 +934,71 @@ def run_benchmark(
         # 1. Benign Utility
         benign_utility = {}
         benign_errors = {}
+        pairs_evaluated = 0
+        utility_under_attack_count = 0
+        attack_success_count = 0
+        pair_details = []
+        pair_errors = 0
         total_api_calls = 0
         total_api_errors = 0
         cached_api_calls = 0
         fresh_api_calls = 0
+        legacy_cache_hits = 0
         unknown_call_tasks = 0
         system_msg = load_system_message("banking")
         model_digest = (ollama_meta.get("digest") if ollama_meta else None) or "unavailable"
+
+        def update_defense_results():
+            b_passed = sum(1 for v in benign_utility.values() if v)
+            b_total = len(benign_utility)
+            b_rate = round((b_passed / b_total * 100), 1) if b_total > 0 else 0.0
+            b_ci = wilson_score_interval(b_passed, b_total)
+            p_asr = round((attack_success_count / pairs_evaluated * 100), 1) if pairs_evaluated > 0 else 0.0
+            p_asr_ci = wilson_score_interval(attack_success_count, pairs_evaluated)
+            p_util_rate = round((utility_under_attack_count / pairs_evaluated * 100), 1) if pairs_evaluated > 0 else 0.0
+            p_util_ci = wilson_score_interval(utility_under_attack_count, pairs_evaluated)
+            oc_log = missionpay_instance.replay_log if missionpay_instance else []
+            oc_total = len(oc_log)
+            oc_agree = sum(1 for item in oc_log if item.get("contract_agrees", False))
+            oc_reverts = sum(1 for item in oc_log if "REVERT" in item.get("onchain_verdict", ""))
+            oc_success = sum(1 for item in oc_log if "SUCCESS" in item.get("onchain_verdict", ""))
+            overall_results["defenses"][defense_key] = {
+                "benign_utility": {
+                    "passed": b_passed,
+                    "total": b_total,
+                    "rate": b_rate,
+                    "wilson_ci": b_ci,
+                    "details": benign_utility,
+                    "errors": benign_errors,
+                },
+                "under_attack": {
+                    "pairs_evaluated": pairs_evaluated,
+                    "utility_count": utility_under_attack_count,
+                    "utility_rate": p_util_rate,
+                    "utility_ci": p_util_ci,
+                    "attack_success_count": attack_success_count,
+                    "asr": p_asr,
+                    "asr_ci": p_asr_ci,
+                    "errors": pair_errors,
+                    "pairs": pair_details,
+                },
+                "api_metrics": {
+                    "calls_count": total_api_calls,
+                    "fresh_calls": fresh_api_calls,
+                    "cached_calls": cached_api_calls,
+                    "legacy_cache_hits": legacy_cache_hits,
+                    "errors_count": total_api_errors,
+                    "unknown_call_tasks": unknown_call_tasks,
+                },
+                "onchain_simulation": {
+                    "total_calls": oc_total,
+                    "contract_agrees_count": oc_agree,
+                    "agreement_rate": round((oc_agree / oc_total * 100), 1) if oc_total > 0 else 100.0,
+                    "reverts_count": oc_reverts,
+                    "successes_count": oc_success,
+                    "log": oc_log[:50],
+                },
+            }
 
         for ut_idx, ut_id in enumerate(target_user_tasks):
             task = suite.user_tasks[ut_id]
@@ -965,6 +1030,18 @@ def run_benchmark(
                     total_api_calls += c_calls
                     total_api_errors += entry.get("api_errors", 0)
                 print(f"  [{datetime.now().strftime('%H:%M:%S')}] [CACHE-HIT] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id}): utility={benign_utility[ut_id]}", flush=True)
+            elif use_cache and not allow_legacy_cache and resume_legacy_cache and legacy_cf.exists():
+                with open(legacy_cf, "r", encoding="utf-8") as f:
+                    entry = json.load(f)
+                    benign_utility[ut_id] = entry["utility"]
+                    if missionpay_instance and entry.get("onchain_log"):
+                        missionpay_instance.replay_log.append(entry["onchain_log"])
+                    c_calls = entry.get("api_calls", 0)
+                    cached_api_calls += c_calls
+                    total_api_calls += c_calls
+                    total_api_errors += entry.get("api_errors", 0)
+                    legacy_cache_hits += 1
+                print(f"  [{datetime.now().strftime('%H:%M:%S')}] [LEGACY-RESUME-HIT] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id}): utility={benign_utility[ut_id]}", flush=True)
             elif allow_legacy_cache:
                 # Isolated historical reporting mode: NEVER run fresh tasks, NEVER mix into fresh metrics
                 if legacy_cf.exists():
@@ -983,6 +1060,13 @@ def run_benchmark(
                     benign_errors[ut_id] = "MISSING_IN_LEGACY_CACHE"
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [LEGACY-MISSING] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id})", flush=True)
             else:
+                if max_minutes is not None and (time.time() - start_wall_time) >= max_minutes * 60.0:
+                    stop_reason = "TIME_LIMIT"
+                    overall_results["metadata"]["status"] = stop_reason
+                    print(f"  [{datetime.now().strftime('%H:%M:%S')}] [TIME-LIMIT] Reached {max_minutes}m before benign {ut_id}; stopping cleanly.", flush=True)
+                    update_defense_results()
+                    save_checkpoint()
+                    break
                 try:
                     task_spec = {
                         "suite_name": "banking",
@@ -1031,19 +1115,29 @@ def run_benchmark(
                         }, f, indent=2)
                     passed_so_far = sum(1 for v in benign_utility.values() if v)
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [LIVE] Benign {ut_idx+1}/{len(target_user_tasks)} ({ut_id}): utility={u} (Passed: {passed_so_far}/{len(benign_utility)})", flush=True)
+                    update_defense_results()
+                    save_checkpoint()
                 except TimeoutError as te:
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [TIMEOUT] Benign task {ut_id} timed out after 600s: {te}", flush=True)
                     benign_errors[ut_id] = "TIMEOUT"
                     unknown_call_tasks += 1
                     total_api_errors += 1
+                    update_defense_results()
                     save_checkpoint()
                 except Exception as e:
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [ERROR] Benign task {ut_id} failed: {e}", flush=True)
                     benign_errors[ut_id] = str(e)
                     unknown_call_tasks += 1
                     total_api_errors += 1
+                    if "QUOTA_EXHAUSTED" in str(e):
+                        stop_reason = "QUOTA_EXHAUSTED"
+                        overall_results["metadata"]["status"] = stop_reason
+                    elif "OLLAMA_SERVER_DOWN" in str(e):
+                        stop_reason = "OLLAMA_SERVER_DOWN"
+                        overall_results["metadata"]["status"] = stop_reason
+                    update_defense_results()
                     save_checkpoint()
-                    if "QUOTA_EXHAUSTED" in str(e) or "OLLAMA_SERVER_DOWN" in str(e):
+                    if stop_reason:
                         break
                 time.sleep(0.5)
 
@@ -1055,13 +1149,12 @@ def run_benchmark(
         if benign_errors:
             print(f"  Benign Errors encountered: {len(benign_errors)}", flush=True)
 
-        # 2. Under Attack
-        pairs_evaluated = 0
-        utility_under_attack_count = 0
-        attack_success_count = 0
-        pair_details = []
-        pair_errors = 0
+        if stop_reason:
+            update_defense_results()
+            save_checkpoint()
+            break
 
+        # 2. Under Attack
         for p_idx, (ut_id, it_id) in enumerate(target_pairs):
             user_task = suite.user_tasks[ut_id]
             inj_task = suite.injection_tasks[it_id]
@@ -1117,6 +1210,38 @@ def run_benchmark(
                     f"(Cumul: attack_succ={attack_success_count}/{pairs_evaluated}, util={utility_under_attack_count}/{pairs_evaluated})",
                     flush=True,
                 )
+            elif use_cache and not allow_legacy_cache and resume_legacy_cache and legacy_cf.exists():
+                with open(legacy_cf, "r", encoding="utf-8") as f:
+                    entry = json.load(f)
+                    u = entry["utility"]
+                    sec = entry["security"]
+                    if missionpay_instance and entry.get("onchain_log"):
+                        missionpay_instance.replay_log.append(entry["onchain_log"])
+                    c_calls = entry.get("api_calls", 0)
+                    cached_api_calls += c_calls
+                    total_api_calls += c_calls
+                    total_api_errors += entry.get("api_errors", 0)
+                    legacy_cache_hits += 1
+                pairs_evaluated += 1
+                if u:
+                    utility_under_attack_count += 1
+                attack_succeeded = compute_attack_success(sec)
+                if attack_succeeded:
+                    attack_success_count += 1
+                pair_details.append({
+                    "user_task": ut_id,
+                    "injection_task": it_id,
+                    "utility": u,
+                    "attack_succeeded": attack_succeeded,
+                    "source": "legacy_cache",
+                })
+                print(
+                    f"  [{datetime.now().strftime('%H:%M:%S')}] [LEGACY-RESUME-HIT] [{defense_key.upper()}] "
+                    f"Pair {p_idx+1}/{len(target_pairs)} ({ut_id}, {it_id}): "
+                    f"utility={u}, attack_succeeded={attack_succeeded} "
+                    f"(Cumul: attack_succ={attack_success_count}/{pairs_evaluated}, util={utility_under_attack_count}/{pairs_evaluated})",
+                    flush=True,
+                )
             elif allow_legacy_cache:
                 # Isolated historical reporting mode: NEVER run fresh tasks, NEVER mix into fresh metrics
                 if legacy_cf.exists():
@@ -1162,6 +1287,13 @@ def run_benchmark(
                         "error": "MISSING_IN_LEGACY_CACHE",
                     })
             else:
+                if max_minutes is not None and (time.time() - start_wall_time) >= max_minutes * 60.0:
+                    stop_reason = "TIME_LIMIT"
+                    overall_results["metadata"]["status"] = stop_reason
+                    print(f"  [{datetime.now().strftime('%H:%M:%S')}] [TIME-LIMIT] Reached {max_minutes}m before pair ({ut_id}, {it_id}); stopping cleanly.", flush=True)
+                    update_defense_results()
+                    save_checkpoint()
+                    break
                 try:
                     task_spec = {
                         "suite_name": "banking",
@@ -1230,6 +1362,8 @@ def run_benchmark(
                         f"(Cumul: attack_succ={attack_success_count}/{pairs_evaluated}, util={utility_under_attack_count}/{pairs_evaluated})",
                         flush=True,
                     )
+                    update_defense_results()
+                    save_checkpoint()
                 except TimeoutError as te:
                     print(f"  [{datetime.now().strftime('%H:%M:%S')}] [TIMEOUT] Pair ({ut_id}, {it_id}) timed out after 600s: {te}", flush=True)
                     pair_errors += 1
@@ -1243,6 +1377,7 @@ def run_benchmark(
                         "status": "TIMEOUT",
                         "error": "TIMEOUT",
                     })
+                    update_defense_results()
                     save_checkpoint()
                     continue
                 except Exception as e:
@@ -1258,8 +1393,15 @@ def run_benchmark(
                         "status": "ERROR",
                         "error": str(e),
                     })
+                    if "QUOTA_EXHAUSTED" in str(e):
+                        stop_reason = "QUOTA_EXHAUSTED"
+                        overall_results["metadata"]["status"] = stop_reason
+                    elif "OLLAMA_SERVER_DOWN" in str(e):
+                        stop_reason = "OLLAMA_SERVER_DOWN"
+                        overall_results["metadata"]["status"] = stop_reason
+                    update_defense_results()
                     save_checkpoint()
-                    if "QUOTA_EXHAUSTED" in str(e) or "OLLAMA_SERVER_DOWN" in str(e):
+                    if stop_reason:
                         break
                     continue
                 time.sleep(0.5)
@@ -1275,60 +1417,20 @@ def run_benchmark(
         if pair_errors > 0:
             print(f"  Evaluation Errors: {pair_errors}")
 
-        onchain_log = missionpay_instance.replay_log if missionpay_instance else []
-        onchain_total = len(onchain_log)
-        onchain_agreements = sum(1 for item in onchain_log if item.get("contract_agrees", False))
-        onchain_reverts = sum(1 for item in onchain_log if "REVERT" in item.get("onchain_verdict", ""))
-        onchain_success = sum(1 for item in onchain_log if "SUCCESS" in item.get("onchain_verdict", ""))
-
-        overall_results["defenses"][defense_key] = {
-            "benign_utility": {
-                "passed": benign_passed,
-                "total": benign_total,
-                "rate": benign_rate,
-                "wilson_ci": benign_ci,
-                "details": benign_utility,
-                "errors": benign_errors,
-            },
-            "under_attack": {
-                "pairs_evaluated": pairs_evaluated,
-                "utility_count": utility_under_attack_count,
-                "utility_rate": u_attack_rate,
-                "utility_ci": u_ci,
-                "attack_success_count": attack_success_count,
-                "asr": asr,
-                "asr_ci": asr_ci,
-                "errors": pair_errors,
-                "pairs": pair_details,
-            },
-            "api_metrics": {
-                "calls_count": total_api_calls,
-                "fresh_calls": fresh_api_calls,
-                "cached_calls": cached_api_calls,
-                "errors_count": total_api_errors,
-                "unknown_call_tasks": unknown_call_tasks,
-            },
-            "onchain_simulation": {
-                "total_calls": onchain_total,
-                "contract_agrees_count": onchain_agreements,
-                "agreement_rate": round((onchain_agreements / onchain_total * 100), 1) if onchain_total > 0 else 100.0,
-                "reverts_count": onchain_reverts,
-                "successes_count": onchain_success,
-                "log": onchain_log[:50],
-            },
-        }
+        update_defense_results()
         save_checkpoint()
 
-    # Record total wall time
+    # Record total wall time and final status
+    overall_results["metadata"]["status"] = stop_reason or "completed"
     overall_results["metadata"]["wall_time_seconds"] = round(time.time() - start_wall_time, 2)
 
     # Save timestamped results
     output_path = RESULTS_DIR / f"{run_id}.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(overall_results, f, indent=2)
-    print(f"\n[OK] Results saved to: {output_path}")
+    print(f"\n[OK] Results saved to: {output_path} (status={overall_results['metadata']['status']})")
 
-    # Generate SUMMARY.md
+    # Generate LIVE_SUMMARY.md
     generate_summary(overall_results, output_path)
 
     return overall_results
@@ -1340,6 +1442,7 @@ def generate_summary(results: Dict[str, Any], json_path: Path):
     summary_md = f"""# AgentDojo Banking Defense Benchmark Summary
 
 - **Run ID:** `{meta['run_id']}`
+- **Status:** `{meta.get('status', 'completed')}`
 - **Backend:** `{meta.get('backend', 'google')}`
 - **Model:** `{meta['model']}`
 - **Model Digest:** `{meta.get('model_digest', 'N/A')}`
@@ -1398,6 +1501,8 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42, help="Random seed for sampling")
     parser.add_argument("--no-cache", action="store_true", help="Disable caching")
     parser.add_argument("--allow-legacy-cache", action="store_true", default=False, help="Allow loading legacy cache hits for historical audit (default: False)")
+    parser.add_argument("--resume-legacy-cache", action="store_true", default=False, help="Resume by hitting legacy cache entries when v2 cache is absent, and run remaining tasks live (default: False)")
+    parser.add_argument("--max-minutes", type=float, default=None, help="Stop cleanly between live tasks after N minutes and save checkpoint")
 
     args = parser.parse_args()
     run_benchmark(
@@ -1411,4 +1516,6 @@ if __name__ == "__main__":
         seed=args.seed,
         use_cache=not args.no_cache,
         allow_legacy_cache=args.allow_legacy_cache,
+        resume_legacy_cache=args.resume_legacy_cache,
+        max_minutes=args.max_minutes,
     )
