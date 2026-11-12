@@ -1,18 +1,18 @@
 # AgentDojo Banking Defense Benchmark Summary
 
-- **Run ID:** `agentdojo-banking-google-gemini-3.1-flash-lite-20261112-183143`
+- **Run ID:** `agentdojo-banking-google-gemini-3.1-flash-lite-20261112-190104`
 - **Status:** `TIME_LIMIT`
 - **Backend:** `google`
 - **Model:** `gemini-3.1-flash-lite`
 - **Model Digest:** `unavailable`
 - **Quantization:** `unavailable`
 - **Temperature:** `0.0` | **Seed:** `42`
-- **Wall Time:** `1719.4s`
+- **Wall Time:** `2190.91s`
 - **Evaluated Defenses:** c2_strict, c0
 - **Pair Set:** `provguard_16x3` (48 pairs)
 - **Sample Method:** fixed_provguard_16x3 (Seed: 42)
-- **Execution Date:** 2026-11-12T18:31:43.369164
-- **Canonical JSON:** [`agentdojo-banking-google-gemini-3.1-flash-lite-20261112-183143.json`](results/agentdojo-banking-google-gemini-3.1-flash-lite-20261112-183143.json)
+- **Execution Date:** 2026-11-12T19:01:04.381335
+- **Canonical JSON:** [`agentdojo-banking-google-gemini-3.1-flash-lite-20261112-190104.json`](results/agentdojo-banking-google-gemini-3.1-flash-lite-20261112-190104.json)
 
 ---
 
@@ -20,7 +20,7 @@
 
 | Defense Configuration | Benign Utility | Utility Under Attack | Attack Success Rate (ASR) | 95% Wilson CI (ASR) | Local Fuji Fork Agreement | API Calls / Errors |
 |---|---|---|---|---|---|---|
-| **C2_STRICT** | 4/16 (25.0%) | 12/40 (30.0%) | **0/40 (0.0%)** | [0.0%, 8.8%] | N/A | 91 / 0 |
+| **C2_STRICT** | 4/16 (25.0%) | 12/41 (29.3%) | **0/41 (0.0%)** | [0.0%, 8.6%] | N/A | 107 / 1 |
 
 ---
 

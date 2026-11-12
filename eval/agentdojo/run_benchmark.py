@@ -16,6 +16,7 @@ import json
 import time
 import random
 import hashlib
+import inspect
 import pickle
 import multiprocessing
 import argparse
@@ -216,7 +217,10 @@ def _execute_agentdojo_task_worker(child_conn: Any, task_spec: dict):
 
         google_client = None
         if backend == "google" and google_api_key:
-            google_client = genai.Client(api_key=google_api_key)
+            google_client = genai.Client(
+                api_key=google_api_key,
+                http_options=genai_types.HttpOptions(timeout=120_000),
+            )
 
         pipeline, missionpay_instance, llm_wrapper = build_pipeline(
             defense_key,
@@ -602,7 +606,7 @@ def get_task_suite_fingerprint(suite_name: str = "banking", suite_version: str =
             try:
                 tool_entry.append("code:" + inspect.getsource(t.run))
             except Exception:
-                tool_entry.append("code_repr:" + repr(t.run))
+                tool_entry.append("code_qualname:" + getattr(t.run, "__qualname__", str(type(t.run))))
         parts.append(";".join(tool_entry))
 
     raw = "\n---\n".join(parts)
