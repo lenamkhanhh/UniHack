@@ -212,7 +212,15 @@ test.describe('WOW-F18: High-Resolution 1920x1080 Deck Evidence Screenshots Suit
     await page.screenshot({ path: unconfirmedPath, fullPage: false });
     console.log(`Saved pv-f7-mission-unconfirmed-root.png to: ${unconfirmedPath}`);
 
-    // 2. Stage Console view
+    // 2. Stage Console view, unconfirmed-root state. The test DB may hold real missions whose root
+    // IS confirmed (e.g. seeded fuji-live-mission-s1c), so pin this state with a mocked list.
+    await page.route('/api/missions', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ missions: [{ slug: 'pv-f7-unconfirmed', status: 'PENDING', payeeRootConfirmedOnchain: false }] }),
+      });
+    });
     await page.goto('/stage');
     await expect(page.locator('[data-testid="stage-payee-root-badge"]')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('text=Payee root chưa lên chain')).toBeVisible();

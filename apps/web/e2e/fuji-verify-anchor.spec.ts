@@ -11,6 +11,15 @@ test.describe('S1-F7: Avalanche Fuji Verified Anchor Evidence Screenshot', () =>
   const deckShotsDir = path.resolve(process.cwd(), '../../artifacts/submission-s1/deck-shots');
   const webEvidenceDir = path.resolve(process.cwd(), 'evidence');
 
+  test.beforeAll(async () => {
+    const { prisma } = await import('../lib/db');
+    const { seedMissionAudit } = await import('../../../scripts/lib/mission-audit');
+    const doc = JSON.parse(
+      fs.readFileSync(path.resolve(process.cwd(), '../../evidence/missions/fuji-live-mission-s1c/audit.json'), 'utf8'),
+    );
+    await seedMissionAudit(prisma as any, doc);
+  });
+
   test.beforeEach(async ({ page }) => {
     // Pin UI language to English (lib/i18n.tsx reads missionpay_lang from localStorage)
     await page.addInitScript(() => localStorage.setItem('missionpay_lang', 'en'));
@@ -33,7 +42,7 @@ test.describe('S1-F7: Avalanche Fuji Verified Anchor Evidence Screenshot', () =>
   });
 
   test('Captures fuji-verify-anchor.png proving on-chain anchor matches client verification', async ({ page }) => {
-    await page.goto('/verify/fuji-live-mission-s1b');
+    await page.goto('/verify/fuji-live-mission-s1c');
 
     // S1-F10: Assert layout header reflects LIVE_FUJI and STAGE S2
     await expect(page.locator('header')).toContainText('LIVE_FUJI');
