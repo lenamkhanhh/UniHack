@@ -71,6 +71,21 @@ export default function LandingPage() {
           {t('landing.hero.subtitle')}
         </p>
 
+        {/* Large Judge Mode Hero CTA Button */}
+        <div className="pt-2 pb-1 flex justify-center">
+          <Link
+            href="/judge"
+            className="group relative inline-flex items-center justify-center gap-3 px-8 py-4 rounded-2xl font-black text-base sm:text-lg bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:via-teal-400 hover:to-cyan-400 text-slate-950 shadow-2xl shadow-emerald-500/30 hover:shadow-emerald-500/50 transition-all transform hover:-translate-y-1 focus:outline-none focus:ring-4 focus:ring-emerald-400/50"
+          >
+            <span className="text-xl sm:text-2xl">⚡</span>
+            <span>{t('landing.btn.judge')}</span>
+            <span className="text-xs sm:text-sm font-bold bg-slate-950/20 text-slate-950 px-2.5 py-0.5 rounded-full border border-slate-950/20">
+              Live Fuji
+            </span>
+            <span className="transition-transform group-hover:translate-x-1 font-mono font-bold">→</span>
+          </Link>
+        </div>
+
         {/* 3 Primary CTA Buttons */}
         <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
           <Link

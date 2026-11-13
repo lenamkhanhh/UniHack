@@ -14,6 +14,7 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
   en: {
     // Nav
     'nav.dashboard': 'Dashboard',
+    'nav.judge': 'Judge Mode',
     'nav.bounty': 'Hack Treasury',
     'nav.verify': 'Verify Proof',
     'nav.passkey': 'Passkey',
@@ -25,6 +26,8 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
     // Landing Page
     'landing.hero.title': 'Others stop strangers. We stop off-mission payees too.',
     'landing.hero.subtitle': 'Give your AI agent a mission and a budget. Avalanche contracts enforce the cap and the owner-signed payee set, and every step is anchored on-chain for an independent validator to re-check.',
+    'landing.btn.judge': 'Judge mode: verify in 30 seconds',
+    'landing.btn.judge_sub': 'Live Fuji receipts + Try it yourself without gas',
     'landing.btn.bounty': 'Hack the treasury',
     'landing.btn.verify': 'Verify a mission',
     'landing.btn.passkey': 'Approve with passkey',
@@ -125,6 +128,7 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
   vi: {
     // Nav
     'nav.dashboard': 'Bảng điều khiển',
+    'nav.judge': 'Chế độ Giám khảo',
     'nav.bounty': 'Tấn công ngân quỹ',
     'nav.verify': 'Kiểm chứng proof',
     'nav.passkey': 'Passkey',
@@ -136,6 +140,8 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
     // Landing Page
     'landing.hero.title': 'Người khác chặn kẻ lạ. Chúng tôi chặn cả người nhận ngoài nhiệm vụ.',
     'landing.hero.subtitle': 'Giao cho AI agent một nhiệm vụ và một ngân sách. Hợp đồng trên Avalanche áp hạn mức và danh sách người nhận do chủ ký; mọi bước được neo on-chain để validator độc lập kiểm lại.',
+    'landing.btn.judge': 'Chế độ Giám khảo: xác minh trong 30 giây',
+    'landing.btn.judge_sub': 'Receipt thực tế trên Fuji + Tự thử nghiệm không cần gas',
     'landing.btn.bounty': 'Thử hack ngân quỹ',
     'landing.btn.verify': 'Tự kiểm chứng mission',
     'landing.btn.passkey': 'Duyệt bằng passkey',

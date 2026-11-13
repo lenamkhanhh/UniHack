@@ -17,10 +17,11 @@ export default function AppHeader({
 
   const navLinks = [
     { href: '/', label: t('nav.dashboard') },
+    { href: '/judge', label: t('nav.judge') },
     { href: '/bounty', label: t('nav.bounty') },
     { href: '/verify/demo-seed', label: t('nav.verify') },
     { href: '/missions/new', label: t('nav.passkey') },
-    { href: '/arena/stage', label: t('nav.arena') },
+    { href: '/arena/twin', label: 'Twin Treasury' },
     { href: '/demo', label: t('nav.demo') },
   ];
 
