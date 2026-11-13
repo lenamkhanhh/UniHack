@@ -36,6 +36,7 @@ contract Handler is Test {
     bytes32[] public outflowMissions;
     uint256[] public outflowAmounts;
     bytes32[] public outflowRoots;
+    bool[] public outflowAllowlisted;
 
     uint256 public totalDeposited;
     uint256 public totalOutflow;
@@ -45,6 +46,7 @@ contract Handler is Test {
 
     uint256[] public queuedProposalIds;
     mapping(uint256 => bytes32) public proposalRoots;
+    mapping(uint256 => bool) public proposalAllowlisted;
 
     constructor(
         GuardedTreasury _treasury,
@@ -64,11 +66,12 @@ contract Handler is Test {
         totalDeposited = usdc.balanceOf(address(treasury));
     }
 
-    function recordOutflow(address to, bytes32 missionId, uint256 amount, bytes32 rootAtPayout) internal {
+    function recordOutflow(address to, bytes32 missionId, uint256 amount, bytes32 rootAtPayout, bool allowlisted) internal {
         outflowRecipients.push(to);
         outflowMissions.push(missionId);
         outflowAmounts.push(amount);
         outflowRoots.push(rootAtPayout);
+        outflowAllowlisted.push(allowlisted);
         totalOutflow += amount;
         if (missionId != bytes32(0)) {
             missionSpendGhost[missionId] += amount;
@@ -87,8 +90,8 @@ contract Handler is Test {
         return outflowRecipients.length;
     }
 
-    function getOutflow(uint256 index) external view returns (address, bytes32, uint256, bytes32) {
-        return (outflowRecipients[index], outflowMissions[index], outflowAmounts[index], outflowRoots[index]);
+    function getOutflow(uint256 index) external view returns (address, bytes32, uint256, bytes32, bool) {
+        return (outflowRecipients[index], outflowMissions[index], outflowAmounts[index], outflowRoots[index], outflowAllowlisted[index]);
     }
 
     // --- Action: Propose with Proof ---
@@ -133,15 +136,17 @@ contract Handler is Test {
 
         uint256 balBefore = usdc.balanceOf(address(treasury));
         bytes32 rootAtPayout = treasury.missionPayeeRoot(missionId);
+        bool allowlisted = treasury.recipientAllowlist(payee);
         vm_prank(actor);
         try treasury.proposeWithProof(opId, payee, amount, missionId, "proofProposal", proof) returns (uint256 pid) {
             uint256 balAfter = usdc.balanceOf(address(treasury));
             if (balAfter < balBefore) {
                 // Auto executed
-                recordOutflow(payee, missionId, balBefore - balAfter, rootAtPayout);
+                recordOutflow(payee, missionId, balBefore - balAfter, rootAtPayout, allowlisted);
             } else {
                 // Queued
                 proposalRoots[pid] = rootAtPayout;
+                proposalAllowlisted[pid] = allowlisted;
                 queuedProposalIds.push(pid);
             }
         } catch {
@@ -165,13 +170,15 @@ contract Handler is Test {
 
         uint256 balBefore = usdc.balanceOf(address(treasury));
         bytes32 rootAtPayout = treasury.missionPayeeRoot(missionId);
+        bool allowlisted = treasury.recipientAllowlist(payee);
         vm_prank(actor);
         try treasury.propose(opId, payee, amount, missionId, "legacyProposal") returns (uint256 pid) {
             uint256 balAfter = usdc.balanceOf(address(treasury));
             if (balAfter < balBefore) {
-                recordOutflow(payee, missionId, balBefore - balAfter, rootAtPayout);
+                recordOutflow(payee, missionId, balBefore - balAfter, rootAtPayout, allowlisted);
             } else {
                 proposalRoots[pid] = rootAtPayout;
+                proposalAllowlisted[pid] = allowlisted;
                 queuedProposalIds.push(pid);
             }
         } catch {
@@ -204,12 +211,13 @@ contract Handler is Test {
             vm_prank(owner);
             try treasury.approve(pid) {
                 uint256 balBefore = usdc.balanceOf(address(treasury));
-                bytes32 rootAtPayout = treasury.missionPayeeRoot(p.missionId);
+                bytes32 rootAtPayout = proposalRoots[pid];
+                bool allowlisted = proposalAllowlisted[pid];
                 vm_prank(owner);
                 try treasury.execute(pid) {
                     uint256 balAfter = usdc.balanceOf(address(treasury));
                     if (balAfter < balBefore) {
-                        recordOutflow(p.to, p.missionId, balBefore - balAfter, rootAtPayout);
+                        recordOutflow(p.to, p.missionId, balBefore - balAfter, rootAtPayout, allowlisted);
                     }
                 } catch {}
             } catch {}

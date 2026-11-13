@@ -90,12 +90,12 @@ contract GuardedTreasuryInvariantTest is Test {
     function invariant_payeeAlwaysInRoot() public view {
         uint256 count = handler.outflowCount();
         for (uint256 i = 0; i < count; i++) {
-            (address to, bytes32 mId, , bytes32 rootAtPayout) = handler.getOutflow(i);
+            (address to, bytes32 mId, , bytes32 rootAtPayout, bool allowlistedAtPayout) = handler.getOutflow(i);
             if (mId == missionWithRoot) {
                 if (rootAtPayout == handler.root1()) {
                     assertTrue(to == handler.payeeA() || to == handler.payeeB());
                 } else if (rootAtPayout == bytes32(0)) {
-                    assertTrue(to == handler.payeeA() || to == handler.payeeB() || to == handler.payeeOutside());
+                    assertTrue(allowlistedAtPayout);
                 } else {
                     revert("Unexpected outflow for unproven root");
                 }
