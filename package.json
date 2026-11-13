@@ -12,7 +12,8 @@
     "test": "npm --workspace=apps/web run test",
     "bench": "tsx scripts/attack-eval.ts",
     "verify-proof": "tsx scripts/verify-proof.ts",
-    "worker:validation": "npm --workspace=apps/web run worker:validation"
+    "worker:validation": "npm --workspace=apps/web run worker:validation",
+    "verify:all": "node scripts/verify-all.cjs"
   },
   "devDependencies": {
     "tsx": "^4.19.2",

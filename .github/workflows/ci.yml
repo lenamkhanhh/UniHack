@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feat/*, codex/*]
+  pull_request:
+    branches: [main, feat/*, codex/*]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: Foundry Contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Run Forge Tests
+        run: |
+          cd contracts
+          forge test --summary
+
+  guard:
+    name: Guard SDK (@missionpay/guard)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Guard SDK
+        run: npm --workspace=@missionpay/guard run build
+
+      - name: Run Guard Tests
+        run: npm --workspace=@missionpay/guard run test
+
+  web:
+    name: Next.js Web Application
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_test_password
+          POSTGRES_DB: unihack_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Guard SDK dependency
+        run: npm --workspace=@missionpay/guard run build
+
+      - name: Run Prisma Migrations
+        env:
+          DATABASE_URL: postgresql://postgres:postgres_test_password@127.0.0.1:55432/unihack_test
+          DIRECT_URL: postgresql://postgres:postgres_test_password@127.0.0.1:55432/unihack_test
+        run: npm --workspace=apps/web run prisma:migrate
+
+      - name: TypeScript Typecheck
+        run: npx tsc --noEmit -p apps/web/tsconfig.json
+
+      - name: Run Web Vitest Tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres_test_password@127.0.0.1:55432/unihack_test
+          DIRECT_URL: postgresql://postgres:postgres_test_password@127.0.0.1:55432/unihack_test
+          PAYMENT_MODE: MOCK
+          NEXT_PUBLIC_CHAIN_ID: "43113"
+          AVALANCHE_FUJI_RPC_URL: "https://api.avax-test.network/ext/bc/C/rpc"
+        run: npm --workspace=apps/web run test
+
+  benchmark:
+    name: AgentDojo Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run ProvGuard Pair Tests
+        run: python eval/agentdojo/test_provguard_pairs.py

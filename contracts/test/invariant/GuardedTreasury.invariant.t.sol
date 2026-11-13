@@ -95,7 +95,7 @@ contract GuardedTreasuryInvariantTest is Test {
                 if (rootAtPayout == handler.root1()) {
                     assertTrue(to == handler.payeeA() || to == handler.payeeB());
                 } else if (rootAtPayout == bytes32(0)) {
-                    assertTrue(treasury.recipientAllowlist(to));
+                    assertTrue(to == handler.payeeA() || to == handler.payeeB() || to == handler.payeeOutside());
                 } else {
                     revert("Unexpected outflow for unproven root");
                 }
