@@ -5,6 +5,22 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useI18n } from '@/lib/i18n';
 
+export function BrandMark({ size = 26 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 26 26" aria-hidden="true" className="flex-none">
+      <rect width="26" height="26" rx="7" fill="#E84142" />
+      <path
+        d="M7.5 13.5l3.6 3.6L18.7 9.5"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export default function AppHeader({
   paymentMode = 'MOCK',
   stage = 'S1',
@@ -26,26 +42,29 @@ export default function AppHeader({
   ];
 
   return (
-    <header className="border-b border-slate-800 bg-slate-950 px-4 md:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
-      <div className="flex items-center gap-4 md:gap-6 flex-wrap">
+    <header className="relative z-10 bg-paper">
+      <div className="wrap flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3 lg:h-16 lg:py-0">
         <Link
           href="/"
-          className="font-black text-lg md:text-xl text-emerald-400 tracking-tight flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-400 rounded px-1"
+          className="flex items-center gap-2.5 rounded text-lg font-bold tracking-[-0.02em] text-ink no-underline"
         >
-          <span>🛡️</span>
+          <BrandMark />
           <span>MissionPay</span>
         </Link>
-        <nav aria-label="Main navigation" className="flex items-center gap-2 md:gap-4 text-xs md:text-sm font-medium flex-wrap">
+
+        <nav
+          aria-label="Main navigation"
+          className="order-last -mx-1 flex w-full items-center gap-1 overflow-x-auto text-[14.5px] font-medium lg:order-none lg:mx-0 lg:ml-2 lg:w-auto lg:min-w-0 lg:flex-1"
+        >
           {navLinks.map((link) => {
             const isActive = pathname === link.href || (link.href !== '/' && pathname?.startsWith(link.href));
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-2.5 py-1.5 rounded transition focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
-                  isActive
-                    ? 'text-emerald-300 bg-emerald-950/60 font-semibold border border-emerald-800/80'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-900'
+                aria-current={isActive ? 'page' : undefined}
+                className={`whitespace-nowrap rounded-full px-2.5 py-1.5 no-underline transition-colors ${
+                  isActive ? 'bg-mist text-ink' : 'text-ink-2 hover:text-ink'
                 }`}
               >
                 {link.label}
@@ -53,46 +72,46 @@ export default function AppHeader({
             );
           })}
         </nav>
-      </div>
+        <div className="flex items-center gap-3">
+          {/* Language Switcher */}
+          <div
+            className="inline-flex rounded-full border border-rule-2 bg-card p-0.5"
+            role="group"
+            aria-label="Language selection"
+          >
+            <button
+              type="button"
+              onClick={() => setLang('en')}
+              aria-pressed={lang === 'en'}
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+                lang === 'en' ? 'bg-ink text-white' : 'text-ink-2 hover:text-ink'
+              }`}
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              onClick={() => setLang('vi')}
+              aria-pressed={lang === 'vi'}
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+                lang === 'vi' ? 'bg-ink text-white' : 'text-ink-2 hover:text-ink'
+              }`}
+            >
+              VI
+            </button>
+          </div>
 
-      <div className="flex items-center gap-3">
-        {/* Language Switcher */}
-        <div className="inline-flex rounded-lg bg-slate-900 p-0.5 border border-slate-800" role="group" aria-label="Language selection">
-          <button
-            type="button"
-            onClick={() => setLang('en')}
-            aria-pressed={lang === 'en'}
-            className={`px-2.5 py-1 text-xs font-bold rounded-md transition focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
-              lang === 'en'
-                ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                : 'text-slate-300 hover:text-white'
-            }`}
-          >
-            EN
-          </button>
-          <button
-            type="button"
-            onClick={() => setLang('vi')}
-            aria-pressed={lang === 'vi'}
-            className={`px-2.5 py-1 text-xs font-bold rounded-md transition focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
-              lang === 'vi'
-                ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                : 'text-slate-300 hover:text-white'
-            }`}
-          >
-            VI
-          </button>
+          {/* Network & Mode Badges */}
+          <div className="hidden items-center gap-1.5 sm:flex lg:hidden 2xl:flex">
+            <span className="tag-neutral font-mono text-[11px] font-semibold">{paymentMode}</span>
+            <span className="tag-neutral font-mono text-[11px] font-semibold">{stage}</span>
+          </div>
+
+          <Link href="/judge" className="btn-primary btn-sm hidden whitespace-nowrap font-semibold md:inline-flex">
+            Check it yourself
+          </Link>
         </div>
 
-        {/* Network & Mode Badges */}
-        <div className="hidden sm:flex items-center gap-2">
-          <span className="px-2 py-0.5 text-[11px] font-mono font-semibold rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-            {paymentMode}
-          </span>
-          <span className="px-2 py-0.5 text-[11px] font-mono font-semibold rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
-            {stage}
-          </span>
-        </div>
       </div>
     </header>
   );

@@ -27,13 +27,13 @@ export default function BankrReplayPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#07090e] text-white p-6 font-sans flex flex-col justify-between">
+    <div className="min-h-screen bg-night text-white p-6 font-sans flex flex-col justify-between">
       {/* Top Bar */}
-      <div className="flex items-center justify-between border-b border-gray-800 pb-4">
+      <div className="flex items-center justify-between border-b border-night-rule pb-4">
         <div>
           <div className="flex items-center space-x-2">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
-            <h1 className="text-2xl font-black tracking-tight text-white">
+            <h1 className="text-2xl font-bold tracking-tight text-white">
               REPLAY VỤ BANKR / GROK ($174k DRAIN)
             </h1>
             <span className="text-xs bg-rose-950/60 text-rose-300 border border-rose-800 px-2.5 py-0.5 rounded font-mono font-bold">
@@ -49,7 +49,7 @@ export default function BankrReplayPage() {
           onClick={handleRunReplay}
           disabled={loading}
           data-testid="run-bankr-replay-btn"
-          className="bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 disabled:opacity-50 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-red-950/50 flex items-center space-x-2 transition text-sm font-mono tracking-wide"
+          className="bg-night-rule disabled:opacity-50 text-white font-bold py-3 px-6 rounded-xl flex items-center space-x-2 transition text-sm font-mono tracking-wide"
         >
           {loading ? (
             <>
@@ -74,7 +74,7 @@ export default function BankrReplayPage() {
       {/* Main Content: Split Screen Comparison */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-6 flex-1">
         {/* Left Panel: Unguarded System (Mô phỏng không có guard) */}
-        <div className="bg-[#0b0e14] border border-red-900/40 rounded-2xl p-6 flex flex-col justify-between shadow-2xl relative overflow-hidden">
+        <div className="bg-night border border-red-900/40 rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-red-600" />
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -97,7 +97,7 @@ export default function BankrReplayPage() {
               <div className="flex items-center justify-center space-x-4">
                 <span className="text-2xl font-mono text-gray-400 line-through">$174,000.00</span>
                 <span className="text-3xl text-red-500 font-mono">➔</span>
-                <span className={`text-5xl font-black font-mono text-red-500 ${result ? 'animate-pulse' : ''}`}>
+                <span className={`text-5xl font-bold font-mono text-red-500 ${result ? 'animate-pulse' : ''}`}>
                   {result ? '$0.00' : '$174,000'}
                 </span>
               </div>
@@ -122,13 +122,13 @@ export default function BankrReplayPage() {
             </div>
           </div>
 
-          <div className="text-[10px] text-gray-500 border-t border-gray-900 pt-3 mt-6 font-mono text-center">
+          <div className="text-[10px] text-gray-500 border-t border-night-rule pt-3 mt-6 font-mono text-center">
             MÔ PHỎNG CLIENT-SIDE • KHÔNG TẠO BẤT KỲ GIAO DỊCH HAY DỮ LIỆU DB NÀO
           </div>
         </div>
 
         {/* Right Panel: Our Guarded System on Avalanche */}
-        <div className="bg-[#0b0e14] border border-emerald-900/40 rounded-2xl p-6 flex flex-col justify-between shadow-2xl relative overflow-hidden">
+        <div className="bg-night border border-emerald-900/40 rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500" />
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -149,7 +149,7 @@ export default function BankrReplayPage() {
                 Thiệt hại tài chính thực tế
               </span>
               <div className="flex items-center justify-center space-x-2">
-                <span className="text-6xl font-black font-mono text-emerald-400 drop-shadow-[0_0_20px_rgba(52,211,153,0.3)]">
+                <span className="text-6xl font-bold font-mono text-emerald-400">
                   $0.00
                 </span>
               </div>
@@ -160,7 +160,7 @@ export default function BankrReplayPage() {
 
             {/* Real-time Defense Status */}
             {result ? (
-              <div className="space-y-3 bg-[#0d121c] p-4 rounded-xl border border-gray-800 text-xs font-mono">
+              <div className="space-y-3 bg-night p-4 rounded-xl border border-night-rule text-xs font-mono">
                 <div className="flex items-center justify-between">
                   <span className="text-gray-400">Trạng thái Agent (LLM):</span>
                   <span className="text-amber-400 font-bold">🧠 ĐÃ BỊ THUYẾT PHỤC ✅</span>
@@ -182,7 +182,7 @@ export default function BankrReplayPage() {
                   <span className="text-gray-300 text-[11px]">{result.validatorVerdict?.reason}</span>
                 </div>
                 {result.guardedSystem?.auditEntryHash && (
-                  <div className="flex items-center justify-between pt-2 border-t border-gray-800">
+                  <div className="flex items-center justify-between pt-2 border-t border-night-rule">
                     <span className="text-gray-400">Audit Ledger Hash:</span>
                     <span className="text-cyan-400 truncate max-w-[200px]">
                       {result.guardedSystem.auditEntryHash}
@@ -191,13 +191,13 @@ export default function BankrReplayPage() {
                 )}
               </div>
             ) : (
-              <div className="p-4 bg-[#0d121c] rounded-xl border border-gray-800 text-center text-xs text-gray-500 font-mono">
+              <div className="p-4 bg-night rounded-xl border border-night-rule text-center text-xs text-gray-500 font-mono">
                 Bấm nút phía trên để kích hoạt đòn tấn công Morse và xem hệ thống phản ứng.
               </div>
             )}
           </div>
 
-          <div className="text-[10px] text-gray-500 border-t border-gray-900 pt-3 mt-6 font-mono text-center">
+          <div className="text-[10px] text-gray-500 border-t border-night-rule pt-3 mt-6 font-mono text-center">
             BẢO VỆ OFF-CHAIN BỞI VALIDATOR • LỚP CONTRACT CAP SẼ CHỨNG MINH KHI CHẠY FUJI LIVE
           </div>
         </div>
@@ -205,16 +205,16 @@ export default function BankrReplayPage() {
 
       {/* Decoded Morse Inspector Accordion */}
       {result?.attackFixture && (
-        <div className="bg-[#0c1018] border border-gray-800 rounded-xl p-4 my-2 text-xs font-mono space-y-2">
+        <div className="bg-night border border-night-rule rounded-xl p-4 my-2 text-xs font-mono space-y-2">
           <div className="flex items-center justify-between text-gray-400">
             <span className="text-amber-400 font-bold">📻 BẰNG CHỨNG ĐÒN TẤN CÔNG (ATTACK FIXTURE):</span>
             <span className="text-[11px] text-gray-500">{result.attackFixture.source}</span>
           </div>
-          <div className="bg-[#121724] p-3 rounded border border-gray-800 text-amber-300">
+          <div className="bg-[#121724] p-3 rounded border border-night-rule text-amber-300">
             <span className="text-gray-500 block text-[10px]">Chuỗi mã Morse ẩn trong tài liệu nguồn:</span>
             {result.attackFixture.rawMorse}
           </div>
-          <div className="bg-[#121724] p-3 rounded border border-gray-800 text-rose-300">
+          <div className="bg-[#121724] p-3 rounded border border-night-rule text-rose-300">
             <span className="text-gray-500 block text-[10px]">Dòng lệnh sau khi Agent giải mã thành công:</span>
             {result.attackFixture.decodedMorse}
           </div>
@@ -222,7 +222,7 @@ export default function BankrReplayPage() {
       )}
 
       {/* Bottom Slogan */}
-      <div className="border-t border-gray-800 pt-4 flex items-center justify-between text-xs text-gray-500 font-mono">
+      <div className="border-t border-night-rule pt-4 flex items-center justify-between text-xs text-gray-500 font-mono">
         <div>
           <span className="text-white font-bold">"LLM có thể bị lừa. Ngân sách trên Avalanche thì không."</span>
         </div>

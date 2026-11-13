@@ -354,105 +354,105 @@ export default function NewMissionPasskeyPage() {
     registeredKey.y.toLowerCase() === authorityConfig.passkeyY.toLowerCase();
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 md:p-12 font-sans">
+    <div className="min-h-screen bg-paper text-ink p-4 sm:p-6 md:p-12 font-sans">
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Header */}
-        <div className="border-b border-slate-800 pb-6 space-y-2">
+        <div className="border-b border-rule pb-6 space-y-2">
           <div className="flex flex-wrap items-center gap-2 mb-2">
-            <span className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+            <span className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded bg-tint-slate text-ink border border-rule-2">
               {t('passkey.tag.w4')}
             </span>
-            <span className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+            <span className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded bg-paid-bg text-paid border border-paid-rule">
               {t('passkey.tag.precompile')}
             </span>
-            <span className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+            <span className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded bg-tint-slate text-ink border border-rule-2">
               Chain ID: {authorityConfig.chainId}
             </span>
           </div>
           <h1
-            className="text-2xl sm:text-3xl font-bold tracking-tight text-white"
+            className="text-2xl sm:text-3xl font-bold tracking-tight text-ink"
             data-testid="passkey-page-header"
           >
             {t('passkey.hero.title')}
           </h1>
-          <p className="text-slate-300 text-xs sm:text-sm mt-1 leading-relaxed">
+          <p className="text-ink-2 text-xs sm:text-sm mt-1 leading-relaxed">
             {t('passkey.hero.desc')}
           </p>
         </div>
 
         {/* On-Chain Specs Card */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-            <div className="text-xs text-slate-300 uppercase font-medium">Precompile</div>
-            <div className="text-sm font-mono text-emerald-400 mt-1">0x0000...0100</div>
-            <div className="text-xs text-slate-400 mt-1">RIP-7212 secp256r1 Native</div>
+          <div className="p-4 rounded-xl bg-card border border-rule">
+            <div className="text-xs text-ink-2 uppercase font-medium">Precompile</div>
+            <div className="font-mono text-sm text-paid mt-1">0x0000...0100</div>
+            <div className="text-xs text-ink-2 mt-1">RIP-7212 secp256r1 Native</div>
           </div>
-          <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-            <div className="text-xs text-slate-300 uppercase font-medium">Authority Contract</div>
-            <div className="text-sm font-mono text-indigo-400 mt-1" title={authorityConfig.authorityAddress}>
+          <div className="p-4 rounded-xl bg-card border border-rule">
+            <div className="text-xs text-ink-2 uppercase font-medium">Authority Contract</div>
+            <div className="font-mono text-sm text-ink mt-1" title={authorityConfig.authorityAddress}>
               {authorityConfig.authorityAddress.slice(0, 6)}...{authorityConfig.authorityAddress.slice(-4)}
             </div>
-            <div className="text-xs text-slate-400 mt-1">Next Nonce: {authorityConfig.nextNonce}</div>
+            <div className="text-xs text-ink-2 mt-1">Next Nonce: {authorityConfig.nextNonce}</div>
           </div>
-          <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-            <div className="text-xs text-slate-300 uppercase font-medium">Guarded Treasury</div>
-            <div className="text-sm font-mono text-cyan-400 mt-1" title={authorityConfig.treasuryAddress}>
+          <div className="p-4 rounded-xl bg-card border border-rule">
+            <div className="text-xs text-ink-2 uppercase font-medium">Guarded Treasury</div>
+            <div className="font-mono text-sm text-ink mt-1" title={authorityConfig.treasuryAddress}>
               {authorityConfig.treasuryAddress.slice(0, 6)}...{authorityConfig.treasuryAddress.slice(-4)}
             </div>
-            <div className="text-xs text-slate-400 mt-1">Managed Treasury</div>
+            <div className="text-xs text-ink-2 mt-1">Managed Treasury</div>
           </div>
         </div>
 
         {/* Registered Passkey Status & Metadata */}
-        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
+        <div className="p-5 rounded-card bg-card border border-rule space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wider">
               Thiết Bị Passkey Xác Thực (Owner Credential)
             </h2>
             {registeredKey ? (
-              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-paid-bg text-paid border border-paid-rule">
                 Đã ghi nhận Passkey
               </span>
             ) : (
-              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
+              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-warn-bg text-warn border border-warn-rule">
                 Chưa đăng ký
               </span>
             )}
           </div>
 
           {registeredKey ? (
-            <div className="space-y-2 text-xs font-mono">
-              <div className="text-slate-300 break-all">
-                <span className="text-slate-400">Credential ID:</span> {registeredKey.id}
+            <div className="space-y-2 text-xs">
+              <div className="text-ink-2 break-all">
+                <span className="text-ink-2">Credential ID:</span> {registeredKey.id}
               </div>
-              <div className="text-slate-300 break-all">
-                <span className="text-slate-400">P-256 X:</span> {registeredKey.x}
+              <div className="text-ink-2 break-all">
+                <span className="text-ink-2">P-256 X:</span> {registeredKey.x}
               </div>
-              <div className="text-slate-300 break-all">
-                <span className="text-slate-400">P-256 Y:</span> {registeredKey.y}
+              <div className="text-ink-2 break-all">
+                <span className="text-ink-2">P-256 Y:</span> {registeredKey.y}
               </div>
 
               <div className="pt-2 flex flex-wrap items-center gap-3">
                 {isCoordinatesMatched ? (
-                  <span className="px-2 py-1 rounded bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-xs">
+                  <span className="px-2 py-1 rounded bg-paid-bg border border-paid-rule text-paid text-xs">
                     ✓ Khớp hoàn toàn với Passkey đăng ký trên Authority Contract
                   </span>
                 ) : (
-                  <span className="px-2 py-1 rounded bg-amber-950/60 border border-amber-500/30 text-amber-300 text-xs">
+                  <span className="px-2 py-1 rounded bg-warn-bg border border-warn-rule text-warn text-xs">
                     ℹ Tọa độ khác Authority on-chain hiện tại (Sử dụng nút xuất cấu hình bên dưới cho script deploy)
                   </span>
                 )}
                 <button
                   type="button"
                   onClick={handleCopyExport}
-                  className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs transition"
+                  className="px-3 py-1 rounded bg-mist hover:bg-mist-2 text-ink border border-rule text-xs transition"
                 >
                   {copiedExport ? 'Đã sao chép!' : 'Xuất tọa độ cho script deploy'}
                 </button>
               </div>
             </div>
           ) : (
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-ink-2">
               Nhấn nút &quot;{t('passkey.btn.register')}&quot; để khởi tạo cặp khóa P-256 phần cứng an toàn trên thiết bị (Touch ID, Face ID, Windows Hello). Không có private key nào được lưu trên máy chủ hay truyền qua mạng.
             </p>
           )}
@@ -464,13 +464,13 @@ export default function NewMissionPasskeyPage() {
             e.preventDefault();
             handleApproveMission();
           }}
-          className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-6"
+          className="p-6 rounded-card bg-card border border-rule space-y-6"
         >
-          <h2 className="text-lg font-semibold text-white">Mission Configuration & Caps</h2>
+          <h2 className="text-lg font-semibold text-ink">Mission Configuration & Caps</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="missionSlugInput" className="block text-xs font-semibold text-slate-300 mb-1">
+              <label htmlFor="missionSlugInput" className="block text-xs font-semibold text-ink-2 mb-1">
                 {t('passkey.field.slug')}
               </label>
               <input
@@ -480,12 +480,12 @@ export default function NewMissionPasskeyPage() {
                 value={missionSlug}
                 onChange={(e) => setMissionSlug(e.target.value)}
                 aria-describedby="missionSlugHelp"
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm font-mono text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-h-[44px]"
+                className="w-full px-3 py-2 rounded-lg bg-card border border-rule-2 text-sm font-mono text-ink focus:outline-none focus:ring-2 focus:ring-ink focus:border-ink min-h-[44px]"
               />
               <span id="missionSlugHelp" className="sr-only">Unique identifier for this mission</span>
             </div>
             <div>
-              <label htmlFor="agentAddressInput" className="block text-xs font-semibold text-slate-300 mb-1">
+              <label htmlFor="agentAddressInput" className="block text-xs font-semibold text-ink-2 mb-1">
                 {t('passkey.field.agent')}
               </label>
               <input
@@ -495,14 +495,14 @@ export default function NewMissionPasskeyPage() {
                 value={agentAddress}
                 onChange={(e) => setAgentAddress(e.target.value)}
                 aria-describedby="agentAddressHelp"
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm font-mono text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-h-[44px]"
+                className="w-full px-3 py-2 rounded-lg bg-card border border-rule-2 text-sm font-mono text-ink focus:outline-none focus:ring-2 focus:ring-ink focus:border-ink min-h-[44px]"
               />
               <span id="agentAddressHelp" className="sr-only">Avalanche address of the agent signer</span>
             </div>
           </div>
 
           <div>
-            <label htmlFor="payeeRootInput" className="block text-xs font-semibold text-slate-300 mb-1">
+            <label htmlFor="payeeRootInput" className="block text-xs font-semibold text-ink-2 mb-1">
               {t('passkey.field.payee_root')}
             </label>
             <input
@@ -512,14 +512,14 @@ export default function NewMissionPasskeyPage() {
               value={payeeRoot}
               onChange={(e) => setPayeeRoot(e.target.value)}
               aria-describedby="payeeRootHelp"
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm font-mono text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-h-[44px]"
+              className="w-full px-3 py-2 rounded-lg bg-card border border-rule-2 text-sm font-mono text-ink focus:outline-none focus:ring-2 focus:ring-ink focus:border-ink min-h-[44px]"
             />
             <span id="payeeRootHelp" className="sr-only">Owner-signed Merkle root of authorized payee addresses</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label htmlFor="capUsdcInput" className="block text-xs font-semibold text-slate-300 mb-1">
+              <label htmlFor="capUsdcInput" className="block text-xs font-semibold text-ink-2 mb-1">
                 {t('passkey.field.cap')}
               </label>
               <input
@@ -528,11 +528,11 @@ export default function NewMissionPasskeyPage() {
                 type="text"
                 value={capUsdc}
                 onChange={(e) => setCapUsdc(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm font-mono text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-h-[44px]"
+                className="w-full px-3 py-2 rounded-lg bg-card border border-rule-2 text-sm font-mono text-ink focus:outline-none focus:ring-2 focus:ring-ink focus:border-ink min-h-[44px]"
               />
             </div>
             <div>
-              <label htmlFor="toolCapUsdcInput" className="block text-xs font-semibold text-slate-300 mb-1">
+              <label htmlFor="toolCapUsdcInput" className="block text-xs font-semibold text-ink-2 mb-1">
                 {t('passkey.field.tool_cap')}
               </label>
               <input
@@ -541,11 +541,11 @@ export default function NewMissionPasskeyPage() {
                 type="text"
                 value={toolCapUsdc}
                 onChange={(e) => setToolCapUsdc(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm font-mono text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-h-[44px]"
+                className="w-full px-3 py-2 rounded-lg bg-card border border-rule-2 text-sm font-mono text-ink focus:outline-none focus:ring-2 focus:ring-ink focus:border-ink min-h-[44px]"
               />
             </div>
             <div>
-              <label htmlFor="durationHoursInput" className="block text-xs font-semibold text-slate-300 mb-1">
+              <label htmlFor="durationHoursInput" className="block text-xs font-semibold text-ink-2 mb-1">
                 {t('passkey.field.duration')}
               </label>
               <input
@@ -554,18 +554,18 @@ export default function NewMissionPasskeyPage() {
                 type="text"
                 value={durationHours}
                 onChange={(e) => setDurationHours(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm font-mono text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-h-[44px]"
+                className="w-full px-3 py-2 rounded-lg bg-card border border-rule-2 text-sm font-mono text-ink focus:outline-none focus:ring-2 focus:ring-ink focus:border-ink min-h-[44px]"
               />
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="pt-4 border-t border-slate-800 flex flex-wrap gap-4 items-center">
+          <div className="pt-4 border-t border-rule flex flex-wrap gap-4 items-center">
             <button
               type="button"
               onClick={handleRegisterPasskey}
               disabled={loading}
-              className="px-5 py-2.5 rounded-xl font-medium text-sm bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition focus:outline-none focus:ring-2 focus:ring-slate-400 min-h-[44px]"
+              className="px-5 py-2.5 rounded-xl font-medium text-sm bg-mist hover:bg-mist-2 text-ink border border-rule transition focus:outline-none focus:ring-2 focus:ring-ink min-h-[44px]"
               data-testid="register-passkey-btn"
             >
               {t('passkey.btn.register')}
@@ -576,8 +576,8 @@ export default function NewMissionPasskeyPage() {
               disabled={loading || !registeredKey}
               className={`px-6 py-2.5 rounded-xl font-semibold text-sm transition flex items-center space-x-2 focus:outline-none min-h-[44px] ${
                 !registeredKey || loading
-                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 focus:ring-2 focus:ring-indigo-400'
+                  ? 'bg-mist text-ink-3 cursor-not-allowed border border-rule'
+                  : 'bg-ink hover:bg-ink text-white focus:ring-2 focus:ring-ink'
               }`}
               data-testid="approve-passkey-btn"
             >
@@ -585,14 +585,14 @@ export default function NewMissionPasskeyPage() {
             </button>
 
             {loading && (
-              <span className="text-xs text-indigo-300 animate-pulse font-medium">Processing transaction...</span>
+              <span className="text-xs text-ink animate-pulse font-medium">Processing transaction...</span>
             )}
           </div>
 
           {/* Error Message */}
           {errorMessage && (
             <div
-              className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/30 text-xs font-mono text-rose-200"
+              className="p-3.5 rounded-xl bg-blocked-bg border border-blocked-rule text-xs text-blocked"
               role="alert"
               data-testid="passkey-error-alert"
             >
@@ -603,7 +603,7 @@ export default function NewMissionPasskeyPage() {
           {/* Status Message */}
           {status && (
             <div
-              className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono text-slate-200"
+              className="p-3.5 rounded-xl bg-paper border border-rule text-xs text-ink"
               role="status"
               aria-live="polite"
             >
@@ -615,36 +615,36 @@ export default function NewMissionPasskeyPage() {
         {/* Live Relay Results Card */}
         {relayResult && relayResult.status === 'CONFIRMED' && relayResult.txHash && relayResult.blockNumber && (
           <div
-            className="p-6 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 space-y-4"
+            className="p-6 rounded-card bg-paid-bg border border-paid-rule space-y-4"
             data-testid="passkey-confirmed-card"
           >
-            <div className="flex items-center space-x-2 text-emerald-300 font-semibold text-sm">
+            <div className="flex items-center space-x-2 text-paid font-semibold text-sm">
               <span>{t('passkey.success.title')}</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="break-all">
-                <span className="text-slate-300">Tx Hash:</span>{' '}
+                <span className="text-ink-2">Tx Hash:</span>{' '}
                 <a
                   href={relayResult.snowtraceUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-indigo-400 underline"
+                  className="text-ink underline"
                 >
                   {relayResult.txHash || 'N/A'}
                 </a>
               </div>
               <div>
-                <span className="text-slate-300">Gas Used:</span>{' '}
-                <span className="text-emerald-400 font-bold">{relayResult.gasUsed || 'N/A'}</span> (RIP-7212 Native)
+                <span className="text-ink-2">Gas Used:</span>{' '}
+                <span className="text-paid font-bold">{relayResult.gasUsed || 'N/A'}</span> (RIP-7212 Native)
               </div>
               <div>
-                <span className="text-slate-300">Block Number:</span>{' '}
-                <span className="text-white">{relayResult.blockNumber || 'N/A'}</span>
+                <span className="text-ink-2">Block Number:</span>{' '}
+                <span className="text-ink">{relayResult.blockNumber || 'N/A'}</span>
               </div>
               <div>
-                <span className="text-slate-300">Security Gate:</span>{' '}
-                <span className="text-white">Relayer Gasless · Zero Key on Device</span>
+                <span className="text-ink-2">Security Gate:</span>{' '}
+                <span className="text-ink">Relayer Gasless · Zero Key on Device</span>
               </div>
             </div>
           </div>
@@ -652,28 +652,28 @@ export default function NewMissionPasskeyPage() {
 
         {relayResult && relayResult.status === 'SIMULATION_SUCCESS' && (
           <div
-            className="p-6 rounded-2xl bg-cyan-950/20 border border-cyan-500/30 space-y-4"
+            className="p-6 rounded-card bg-tint-slate border border-rule-2 space-y-4"
             data-testid="passkey-simulation-card"
           >
-            <div className="flex items-center space-x-2 text-cyan-300 font-semibold text-sm">
-              <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-xs font-bold uppercase">
+            <div className="flex items-center space-x-2 text-ink font-semibold text-sm">
+              <span className="px-2 py-0.5 rounded bg-tint-slate text-ink text-xs font-bold uppercase">
                 Simulation Success
               </span>
               <span>Xác thực mô phỏng thành công (Chưa broadcast on-chain)</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
-                <span className="text-slate-300">Contract:</span>{' '}
-                <span className="text-indigo-300 break-all">{relayResult.authorityAddress}</span>
+                <span className="text-ink-2">Contract:</span>{' '}
+                <span className="text-ink break-all">{relayResult.authorityAddress}</span>
               </div>
               <div>
-                <span className="text-slate-300">Gas Estimated:</span>{' '}
-                <span className="text-cyan-400 font-bold">{relayResult.gasEstimated || 'N/A'}</span>
+                <span className="text-ink-2">Gas Estimated:</span>{' '}
+                <span className="text-ink font-bold">{relayResult.gasEstimated || 'N/A'}</span>
               </div>
               <div className="sm:col-span-2">
-                <span className="text-slate-300">Evidence Note:</span>{' '}
-                <span className="text-slate-400">{relayResult.message || 'Mô phỏng RPC đã xác minh chữ ký passkey thành công.'}</span>
+                <span className="text-ink-2">Evidence Note:</span>{' '}
+                <span className="text-ink-2">{relayResult.message || 'Mô phỏng RPC đã xác minh chữ ký passkey thành công.'}</span>
               </div>
             </div>
           </div>

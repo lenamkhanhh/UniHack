@@ -177,13 +177,13 @@ export default function TwinTreasuryPage() {
   const isNotRun = apiState.status === 'NOT_RUN';
 
   return (
-    <main className="min-h-screen bg-[#07090e] text-white p-4 md:p-8 font-sans flex flex-col items-center">
+    <main className="min-h-screen bg-paper text-ink p-4 md:p-8 font-sans flex flex-col items-center">
       <div className="w-full max-w-5xl flex flex-col space-y-6">
         {/* Navigation & Language Toggle */}
         <div className="flex items-center justify-between">
           <Link
             href="/"
-            className="text-xs text-gray-400 hover:text-white transition-colors flex items-center space-x-1 focus:ring-2 focus:ring-red-500 rounded px-2 py-1"
+            className="text-xs text-ink-2 hover:text-ink transition-colors flex items-center space-x-1 focus:ring-2 focus:ring-ink rounded px-2 py-1"
             aria-label="Back to Homepage"
           >
             <span>{t.backHome}</span>
@@ -196,7 +196,7 @@ export default function TwinTreasuryPage() {
                 localStorage.setItem('missionpay_lang', next);
               } catch {}
             }}
-            className="text-xs px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full font-mono transition-colors focus:ring-2 focus:ring-red-500"
+            className="text-xs px-3 py-1 bg-mist hover:bg-mist border border-rule rounded-full transition-colors focus:ring-2 focus:ring-ink"
             aria-label="Toggle language"
           >
             {t.switchLang}
@@ -204,50 +204,50 @@ export default function TwinTreasuryPage() {
         </div>
 
         {/* Header Banner */}
-        <div className="border border-white/10 bg-white/[0.02] rounded-2xl p-6 text-center space-y-3 relative overflow-hidden">
-          <div className="inline-flex items-center space-x-2 px-3 py-1 bg-red-500/10 text-red-400 text-xs font-mono font-semibold rounded-full border border-red-500/30">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+        <div className="border border-rule bg-mist rounded-card p-6 text-center space-y-3 relative overflow-hidden">
+          <div className="inline-flex items-center space-x-2 px-3 py-1 bg-blocked-bg text-blocked text-xs font-semibold rounded-[5px] border border-blocked-rule">
+            <span className="text-white w-2 h-2 rounded-full bg-blocked animate-pulse" />
             <span>{t.badge}</span>
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-ink">
             {t.title}
           </h1>
-          <p className="text-sm text-gray-300 max-w-2xl mx-auto">{t.subtitle}</p>
+          <p className="text-sm text-ink-2 max-w-2xl mx-auto">{t.subtitle}</p>
 
           {/* Status Badges */}
           <div className="pt-2">
             {isLive ? (
-              <span className="inline-block px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-lg text-xs font-mono font-bold">
+              <span className="inline-block px-3 py-1 bg-paid-bg text-paid border border-paid-rule rounded-lg text-xs font-bold">
                 {t.recordedBadge}
               </span>
             ) : isSimulated ? (
-              <div className="inline-block px-4 py-2 bg-amber-500/10 border border-amber-500/30 rounded-xl text-left max-w-2xl">
-                <div className="flex items-center space-x-2 text-amber-400 text-xs font-mono font-bold">
-                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+              <div className="inline-block px-4 py-2 bg-warn-bg border border-warn-rule rounded-xl text-left max-w-2xl">
+                <div className="flex items-center space-x-2 text-warn text-xs font-bold">
+                  <span className="text-white w-2 h-2 rounded-full bg-warn" />
                   <span>{t.simulatedBadge} • BLOCK #{evidence?.forkBlockNumber || 'N/A'}</span>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">{t.simulatedNotice}</p>
+                <p className="text-xs text-ink-2 mt-1">{t.simulatedNotice}</p>
               </div>
             ) : (
-              <div className="inline-block px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-xl text-left max-w-2xl">
-                <div className="flex items-center space-x-2 text-red-400 text-xs font-mono font-bold">
-                  <span className="w-2 h-2 rounded-full bg-red-500" />
+              <div className="inline-block px-4 py-2 bg-blocked-bg border border-blocked-rule rounded-xl text-left max-w-2xl">
+                <div className="flex items-center space-x-2 text-blocked text-xs font-bold">
+                  <span className="text-white w-2 h-2 rounded-full bg-blocked" />
                   <span>{t.notRunBadge}</span>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">{t.notRunNotice}</p>
+                <p className="text-xs text-ink-2 mt-1">{t.notRunNotice}</p>
               </div>
             )}
           </div>
         </div>
 
         {/* Precondition callout */}
-        <div className="border border-white/5 bg-white/[0.01] rounded-xl p-4 text-xs font-mono text-gray-400 flex items-center justify-between flex-wrap gap-2">
+        <div className="border border-rule bg-mist rounded-xl p-4 text-xs text-ink-2 flex items-center justify-between flex-wrap gap-2">
           <span>{t.vendorNotice}</span>
           <a
             href="https://testnet.snowtrace.io/address/0x20451c1e2dCD83F166B4f22868BAdECb5868d545"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-red-400 hover:text-red-300 underline focus:ring-1 focus:ring-red-400 rounded"
+            className="text-blocked hover:text-blocked underline focus:ring-1 focus:ring-ink rounded"
           >
             {t.viewContract} ↗
           </a>
@@ -257,19 +257,19 @@ export default function TwinTreasuryPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Column A: Global Allowlist Mode */}
           <div
-            className="border border-red-500/30 bg-red-950/10 rounded-2xl p-6 flex flex-col justify-between space-y-6"
+            className="border border-blocked-rule bg-blocked-bg rounded-card p-6 flex flex-col justify-between space-y-6"
             tabIndex={0}
             role="region"
             aria-label="Treasury A: Global Allowlist Mode"
           >
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-mono text-red-400 font-bold uppercase tracking-wider">
+                <span className="text-xs text-blocked font-bold uppercase tracking-wider">
                   MISSION A • twin.allowlist.v1
                 </span>
                 <span
                   id="twin-col-a-outcome"
-                  className="px-2 py-0.5 bg-red-500/20 text-red-400 border border-red-500/40 rounded text-[11px] font-mono"
+                  className="px-2 py-0.5 bg-blocked-bg text-blocked border border-blocked-rule rounded text-[11px]"
                 >
                   {evidence?.missionA?.balanceDeltaUsdc
                     ? `${t.colALeak} (${evidence.missionA.balanceDeltaUsdc})`
@@ -277,32 +277,32 @@ export default function TwinTreasuryPage() {
                 </span>
               </div>
               <div>
-                <h2 className="text-lg font-bold text-white">{t.colATitle}</h2>
-                <p className="text-xs text-gray-400 mt-1">{t.colADesc}</p>
+                <h2 className="text-lg font-bold text-ink">{t.colATitle}</h2>
+                <p className="text-xs text-ink-2 mt-1">{t.colADesc}</p>
               </div>
 
-              <div className="bg-black/40 border border-red-500/20 rounded-xl p-4 space-y-2 font-mono text-xs">
-                <div className="text-gray-400">
+              <div className="bg-card border border-blocked-rule rounded-xl p-4 space-y-2 font-mono text-xs break-all">
+                <div className="text-ink-2">
                   payeeRoot:{' '}
-                  <span className="text-white">
+                  <span className="text-ink">
                     {evidence?.missionA?.payeeRoot || '0x0000000000000000000000000000000000000000000000000000000000000000'}
                   </span>
                 </div>
-                <div className="text-gray-400">
+                <div className="text-ink-2">
                   recipientAllowlist(vendor):{' '}
-                  <span className="text-emerald-400">
+                  <span className="text-paid">
                     {evidence ? 'true (Globally Allowlisted)' : 'pending'}
                   </span>
                 </div>
-                <div className="text-gray-400">
+                <div className="text-ink-2">
                   call:{' '}
-                  <span className="text-red-300">
+                  <span className="text-blocked">
                     propose(opA, vendor, 10000, twin.allowlist.v1, reason)
                   </span>
                 </div>
-                <div className="text-gray-400 pt-2 border-t border-white/5">
+                <div className="text-ink-2 pt-2 border-t border-rule">
                   Result:{' '}
-                  <span className="text-red-400 font-bold">
+                  <span className="text-blocked font-bold">
                     {evidence
                       ? `${evidence.missionA.simulationOutcome} (Balance Delta: ${evidence.missionA.balanceDeltaUsdc})`
                       : 'NOT RUN'}
@@ -310,21 +310,21 @@ export default function TwinTreasuryPage() {
                 </div>
               </div>
 
-              <p className="text-xs text-gray-300 leading-relaxed">
+              <p className="text-xs text-ink-2 leading-relaxed">
                 {lang === 'vi'
                   ? 'Kẻ tấn công lừa agent bằng invoice giả mang địa chỉ vendor quen thuộc. Do hợp đồng chỉ kiểm tra danh sách cho phép chung và số tiền <= perTxCap, giao dịch tự động chuyển tiền ngay lập tức trong propose()!'
                   : 'The attacker tricks the agent with a poisoned invoice naming a recognized vendor. Because the contract only checks a global allowlist and the amount <= perTxCap, funds are immediately drained via safeTransfer in propose().'}
               </p>
             </div>
 
-            <div className="pt-4 border-t border-red-500/20 text-xs font-mono text-gray-400">
+            <div className="pt-4 border-t border-blocked-rule font-mono text-xs text-ink-2">
               {isLive && evidence?.missionA?.txHash ? (
                 <a
                   id="twin-col-a-tx"
                   href={`https://testnet.snowtrace.io/tx/${evidence.missionA.txHash}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-red-400 hover:underline"
+                  className="text-blocked hover:underline"
                 >
                   Tx: {evidence.missionA.txHash.slice(0, 16)}... ↗
                 </a>
@@ -338,41 +338,41 @@ export default function TwinTreasuryPage() {
 
           {/* Column B: Mission-Scoped Guard */}
           <div
-            className="border border-emerald-500/30 bg-emerald-950/10 rounded-2xl p-6 flex flex-col justify-between space-y-6"
+            className="border border-paid-rule bg-paid-bg rounded-card p-6 flex flex-col justify-between space-y-6"
             tabIndex={0}
             role="region"
             aria-label="Treasury B: Mission-Scoped Guard"
           >
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-mono text-emerald-400 font-bold uppercase tracking-wider">
+                <span className="text-xs text-paid font-bold uppercase tracking-wider">
                   MISSION B • twin.mission.v1
                 </span>
-                <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded text-[11px] font-mono">
+                <span className="px-2 py-0.5 bg-paid-bg text-paid border border-paid-rule rounded text-[11px]">
                   {t.colBBlock}
                 </span>
               </div>
               <div>
-                <h2 className="text-lg font-bold text-white">{t.colBTitle}</h2>
-                <p className="text-xs text-gray-400 mt-1">{t.colBDesc}</p>
+                <h2 className="text-lg font-bold text-ink">{t.colBTitle}</h2>
+                <p className="text-xs text-ink-2 mt-1">{t.colBDesc}</p>
               </div>
 
               {/* Negative Control Box */}
-              <div className="bg-black/40 border border-emerald-500/20 rounded-xl p-3 space-y-2 font-mono text-xs">
-                <div className="text-amber-400 font-semibold">{t.negControlTitle}</div>
-                <div className="text-gray-400">
+              <div className="bg-card border border-paid-rule rounded-xl p-3 space-y-2 font-mono text-xs break-all">
+                <div className="text-warn font-semibold">{t.negControlTitle}</div>
+                <div className="text-ink-2">
                   verifyMerkleProof(vendor in rootB):{' '}
-                  <span className="text-red-400 font-bold">false (Not a leaf)</span>
+                  <span className="text-blocked font-bold">false (Not a leaf)</span>
                 </div>
-                <div className="text-gray-400">
+                <div className="text-ink-2">
                   call:{' '}
-                  <span className="text-amber-300">
+                  <span className="text-warn">
                     proposeWithProof(opB1, vendor, 10000, twin.mission.v1, ..., [])
                   </span>
                 </div>
-                <div className="text-gray-400">
+                <div className="text-ink-2">
                   Result:{' '}
-                  <span id="twin-col-b-outcome" className="text-emerald-400 font-bold">
+                  <span id="twin-col-b-outcome" className="text-paid font-bold">
                     {evidence
                       ? `REVERT: "${evidence.missionB.negativeControl.revertReason}" (${evidence.missionB.negativeControl.balanceDeltaUsdc} leaked)`
                       : 'NOT RUN'}
@@ -381,21 +381,21 @@ export default function TwinTreasuryPage() {
               </div>
 
               {/* Positive Control Box */}
-              <div className="bg-black/40 border border-emerald-500/20 rounded-xl p-3 space-y-2 font-mono text-xs">
-                <div className="text-emerald-400 font-semibold">{t.posControlTitle}</div>
-                <div className="text-gray-400">
+              <div className="bg-card border border-paid-rule rounded-xl p-3 space-y-2 font-mono text-xs break-all">
+                <div className="text-paid font-semibold">{t.posControlTitle}</div>
+                <div className="text-ink-2">
                   verifyMerkleProof(Owner in rootB):{' '}
-                  <span className="text-emerald-400 font-bold">true (Valid proof)</span>
+                  <span className="text-paid font-bold">true (Valid proof)</span>
                 </div>
-                <div className="text-gray-400">
+                <div className="text-ink-2">
                   call:{' '}
-                  <span className="text-emerald-300">
+                  <span className="text-paid">
                     proposeWithProof(opB2, Owner, 10000, twin.mission.v1, ..., proof)
                   </span>
                 </div>
-                <div className="text-gray-400">
+                <div className="text-ink-2">
                   Result:{' '}
-                  <span id="twin-col-b-pos-outcome" className="text-emerald-400 font-bold">
+                  <span id="twin-col-b-pos-outcome" className="text-paid font-bold">
                     {evidence
                       ? `${evidence.missionB.positiveControl.simulationOutcome} (Auto-Payout: ${evidence.missionB.positiveControl.balanceDeltaUsdc} returned to Owner)`
                       : 'NOT RUN'}
@@ -403,14 +403,14 @@ export default function TwinTreasuryPage() {
                 </div>
               </div>
 
-              <p className="text-xs text-gray-300 leading-relaxed">
+              <p className="text-xs text-ink-2 leading-relaxed">
                 {lang === 'vi'
                   ? 'Khi kẻ tấn công cố chuyển tiền cho vendor ngoài mission, hợp đồng đối chiếu chữ ký Merkle root của mission và từ chối ngay lập tức (PayeeNotInMissionSet). Đồng thời, vendor chính thức của mission có Merkle proof hợp lệ vẫn được thanh toán bình thường.'
                   : 'When the attacker attempts to divert payment to a non-mission vendor, the contract validates the Merkle root on-chain and rejects the transaction with PayeeNotInMissionSet. Simultaneously, the authorized mission payee with valid proof is successfully paid.'}
               </p>
             </div>
 
-            <div className="pt-4 border-t border-emerald-500/20 text-xs font-mono text-gray-400">
+            <div className="pt-4 border-t border-paid-rule font-mono text-xs text-ink-2">
               {isLive &&
               evidence?.missionB?.negativeControl?.txHash &&
               evidence?.missionB?.positiveControl?.txHash ? (
@@ -420,7 +420,7 @@ export default function TwinTreasuryPage() {
                     href={`https://testnet.snowtrace.io/tx/${evidence.missionB.negativeControl.txHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-amber-400 hover:underline"
+                    className="text-warn hover:underline"
                   >
                     Revert Tx: {evidence.missionB.negativeControl.txHash.slice(0, 16)}... ↗
                   </a>
@@ -429,7 +429,7 @@ export default function TwinTreasuryPage() {
                     href={`https://testnet.snowtrace.io/tx/${evidence.missionB.positiveControl.txHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-emerald-400 hover:underline"
+                    className="text-paid hover:underline"
                   >
                     Payout Tx: {evidence.missionB.positiveControl.txHash.slice(0, 16)}... ↗
                   </a>
@@ -445,49 +445,49 @@ export default function TwinTreasuryPage() {
 
         {/* Planned Live Transactions Section */}
         {evidence?.plannedTransactions && evidence.plannedTransactions.length > 0 && (
-          <div className="border border-white/10 bg-white/[0.02] rounded-2xl p-6 space-y-4">
-            <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider">
+          <div className="border border-rule bg-mist rounded-card p-6 space-y-4">
+            <h3 className="text-sm font-bold text-ink uppercase tracking-wider">
               {t.txPlanTitle}
             </h3>
-            <div className="space-y-3 font-mono text-xs">
+            <div className="space-y-3 text-xs">
               {evidence.plannedTransactions.map((tx) => (
                 <div
                   key={tx.step}
-                  className="border border-white/5 bg-black/30 rounded-lg p-3 flex flex-col md:flex-row md:items-center justify-between gap-2"
+                  className="border border-rule bg-mist rounded-lg p-3 flex flex-col md:flex-row md:items-center justify-between gap-2"
                 >
                   <div>
                     <span
                       className={
                         tx.step <= 2 || tx.step === 9
-                          ? 'text-cyan-400 font-bold'
+                          ? 'text-ink font-bold'
                           : tx.step === 6
-                          ? 'text-red-400 font-bold'
-                          : 'text-emerald-400 font-bold'
+                          ? 'text-blocked font-bold'
+                          : 'text-paid font-bold'
                       }
                     >
                       Step {tx.step}:
                     </span>{' '}
                     <span>{tx.description}</span>
                   </div>
-                  <div className="text-gray-400">
+                  <div className="text-ink-2">
                     Signer: {tx.signer.split(' ')[0]} • Gas: {tx.gasLimit} ({tx.estimatedCostAvax})
                   </div>
                 </div>
               ))}
             </div>
-            <div className="text-xs text-gray-400 pt-2 flex justify-between items-center font-mono">
+            <div className="text-xs text-ink-2 pt-2 flex justify-between items-center">
               <span>Total Gas: {evidence.totalEstimatedGasAvax}</span>
-              <span className="text-emerald-400">Within Budget ({evidence.totalUsdcBudget} &le; 0.05 USDC)</span>
+              <span className="text-paid">Within Budget ({evidence.totalUsdcBudget} &le; 0.05 USDC)</span>
             </div>
           </div>
         )}
 
         {/* Conclusion / Takeaway */}
-        <div className="border border-white/10 bg-gradient-to-r from-red-950/20 via-black to-emerald-950/20 rounded-2xl p-6 text-center space-y-2">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+        <div className="bg-card border border-rule rounded-card p-6 text-center space-y-2">
+          <h3 className="text-sm font-bold text-ink uppercase tracking-wider">
             {t.conclusionTitle}
           </h3>
-          <p className="text-xs text-gray-300 max-w-3xl mx-auto leading-relaxed">
+          <p className="text-xs text-ink-2 max-w-3xl mx-auto leading-relaxed">
             {t.conclusionText}
           </p>
         </div>

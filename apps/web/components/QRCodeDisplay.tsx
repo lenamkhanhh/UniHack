@@ -65,7 +65,7 @@ export default function QRCodeDisplay({
       data-testid={testId}
       className={`flex flex-col items-center text-center ${className}`}
     >
-      <div className="bg-white p-3 rounded-2xl shadow-xl inline-block border border-gray-200">
+      <div className="bg-card p-3 rounded-card inline-block border border-rule">
         {dataUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -79,7 +79,7 @@ export default function QRCodeDisplay({
         ) : (
           <div
             style={{ width: `${size}px`, height: `${size}px` }}
-            className="flex items-center justify-center bg-gray-100 text-gray-400 text-xs font-mono rounded-lg animate-pulse"
+            className="flex items-center justify-center bg-mist text-ink-2 text-xs font-mono rounded-lg animate-pulse"
           >
             {error || 'Đang tạo QR...'}
           </div>
@@ -87,7 +87,7 @@ export default function QRCodeDisplay({
       </div>
 
       {showUrlText && url && (
-        <p className="mt-3 text-xs font-mono text-cyan-300 break-all select-all bg-[#0a0f18] px-3 py-1.5 rounded-lg border border-gray-800 max-w-full">
+        <p className="mt-3 text-xs font-mono text-ink break-all select-all bg-paper px-3 py-1.5 rounded-lg border border-rule max-w-full">
           {url}
         </p>
       )}

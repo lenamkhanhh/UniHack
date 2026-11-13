@@ -2,8 +2,121 @@
 @tailwind components;
 @tailwind utilities;
 
+/* v6 design tokens (artifacts/ui-mockup/index-v6.html). Colour carries meaning:
+   red = blocked / brand, green = paid / allowed. Always paired with text. */
+:root {
+  --paper: #F7F6F2;
+  --card: #FFFFFF;
+  --ink: #0F1115;
+  --ink-2: #454A53;
+  --ink-3: #6B717B; /* v6 #7C828C darkened to pass WCAG AA (4.5:1) on paper and white */
+  --rule: #E4E3DC;
+  --rule-2: #CFCEC7;
+  --mist: #EFEEE8;
+  --mist-2: #E2E1DA;
+  --chalk: #F3F2ED;
+  --brand: #E84142;
+  --brand-deep: #B8282F;
+  --paid: #0B7A4B;
+  --paid-bg: #E3F2EA;
+  --paid-rule: #B9DCC8;
+  --blocked: #D3102E;
+  --blocked-bg: #FCE8EB;
+  --blocked-rule: #F2BCC5;
+  --warn: #7A4E00;
+  --warn-bg: #FBF0D9;
+  --warn-rule: #EBD3A0;
+  --sand: #EFE9DD;
+  --night: #12151B;
+  --night-2: #191C22;
+  --night-rule: #2A2E36;
+  --tint-rose: #FBEDEA;
+  --tint-slate: #E7ECF2;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-geist), system-ui, sans-serif;
+  font-size: 15.5px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@layer components {
+  .wrap {
+    @apply mx-auto w-full max-w-[1240px] px-5 sm:px-8;
+  }
+
+  /* Pill buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-[18px] py-[11px] text-[15px] font-medium no-underline transition-colors;
+  }
+  .btn-primary {
+    @apply btn bg-ink text-white hover:bg-ink-2;
+  }
+  .btn-ghost {
+    @apply btn border border-rule-2 bg-card text-ink hover:bg-mist;
+  }
+  .btn-sm {
+    @apply px-3.5 py-2 text-sm;
+  }
+
+  /* Small tags: colour plus text, never colour alone */
+  .tag {
+    @apply inline-flex items-center whitespace-nowrap rounded-[5px] px-[9px] py-1 text-[12.5px] font-bold;
+  }
+  .tag-paid {
+    @apply tag bg-paid-bg text-paid;
+  }
+  .tag-blocked {
+    @apply tag bg-blocked-bg text-blocked;
+  }
+  .tag-neutral {
+    @apply tag bg-mist text-ink-2;
+  }
+  .tag-warn {
+    @apply tag bg-warn-bg text-warn;
+  }
+
+  .card {
+    @apply rounded-card border border-rule bg-card;
+  }
+
+  .sec-h {
+    @apply m-0 mb-2.5 max-w-[24ch] text-[30px] font-bold leading-[1.08] tracking-[-0.035em] sm:text-[38px];
+  }
+  .sec-p {
+    @apply m-0 mb-7 max-w-[60ch] text-[16.5px] text-ink-2;
+  }
+
+  /* Paper / Kaggle-style tables */
+  .tbl :where(table) {
+    @apply w-full border-collapse text-[14.5px];
+  }
+  .tbl :where(th) {
+    @apply border-b-[1.5px] border-ink pb-2.5 pr-3.5 text-left text-[13px] font-medium text-ink-3;
+  }
+  .tbl :where(td) {
+    @apply border-b border-rule py-[13px] pr-3.5 align-middle;
+  }
+  .tbl :where(.r) {
+    @apply text-right;
+  }
+  .tbl :where(.num) {
+    @apply whitespace-nowrap tabular-nums;
+  }
+  .tbl :where(figcaption) {
+    @apply mt-3 max-w-[90ch] text-[13.5px] text-ink-2;
+  }
 }

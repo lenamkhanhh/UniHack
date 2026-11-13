@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n';
+import AskContract from '@/components/AskContract';
 
 interface MissionSummary {
   slug: string;
@@ -19,6 +20,47 @@ interface MissionSummary {
   spentTreasury?: string;
   deliverableHash?: string;
 }
+
+const REPO = 'https://github.com/lenamkhanhh/UniHack';
+const REPO_BLOB = `${REPO}/blob/feat/s1-app`;
+const SNOWTRACE_TX = 'https://testnet.snowtrace.io/tx/';
+
+const RESOURCE_LINKS = [
+  { key: 'home.links.deck', href: `${REPO}/raw/feat/s1-app/artifacts/submission-s1/deck-v2/MissionPay_Deck_v2.pdf` },
+  { key: 'home.links.video', href: `${REPO_BLOB}/artifacts/submission-s1/demo.mp4` },
+  { key: 'home.links.code', href: REPO },
+  { key: 'home.links.evidence', href: `${REPO_BLOB}/artifacts/submission-s1/FUJI_EVIDENCE.md` },
+  { key: 'home.links.benchmark', href: `${REPO_BLOB}/eval/agentdojo/SUMMARY.md` },
+];
+
+function TxLink({ hash, dark = false }: { hash: string; dark?: boolean }) {
+  return (
+    <a
+      href={`${SNOWTRACE_TX}${hash}`}
+      target="_blank"
+      rel="noreferrer"
+      className={`font-mono text-[13px] underline underline-offset-2 ${dark ? 'text-[#C9CDD3] hover:text-white' : 'text-ink-2 hover:text-ink'}`}
+    >
+      {hash.slice(0, 10)}…{hash.slice(-4)}
+    </a>
+  );
+}
+
+function PasskeyIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" className="flex-none">
+      <path
+        d="M12 3a6 6 0 0 0-6 6v2M18 11V9a6 6 0 0 0-3-5.2M9 21c1.5-1.8 2-4 2-6.5V12a1 1 0 0 1 2 0v2.5c0 2.6-.6 5-2 7M6 15c0 2-.4 3.6-1.2 5M17.6 14c0 2.8-.5 5.2-1.6 7.2"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+const compCard = 'relative z-[1] rounded-card bg-card shadow-[0_30px_60px_-28px_rgba(15,17,21,.55)] lg:absolute';
 
 export default function LandingPage() {
   const { t } = useI18n();
@@ -48,161 +90,319 @@ export default function LandingPage() {
     loadMissions();
   }, []);
 
+  const twinRows = [
+    {
+      mission: 'twin.allowlist.v1',
+      rule: t('home.twin.rule_allowlist'),
+      paid: '0.01 USDC',
+      outcome: <span className="tag bg-[#3A1218] text-[#FF8593]">{t('home.twin.out_drained')}</span>,
+      tx: '0x548d1106a69626eed32d308088f188c6d2d71d8e2f61e495f637d9f04e367fc6',
+      hl: false,
+    },
+    {
+      mission: 'twin.mission.v1',
+      rule: t('home.twin.rule_mission'),
+      paid: '0.00 USDC',
+      outcome: <span className="tag bg-[#123A27] text-[#6FE0A8]">{t('home.twin.out_reverted')}</span>,
+      tx: '0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38',
+      hl: true,
+    },
+    {
+      mission: `twin.mission.v1 ${t('home.twin.control')}`,
+      rule: t('home.twin.rule_control'),
+      paid: t('home.twin.paid_control'),
+      outcome: <span className="tag bg-[#262A32] text-[#C9CDD3]">{t('home.twin.out_paid')}</span>,
+      tx: '0xcb7236d146a2c8e2789db8ec2a80358b17d65993fc7b07187802e34c48656315',
+      hl: false,
+    },
+  ];
+
+  const resultRows: { n: number; source: React.ReactNode }[] = [
+    { n: 1, source: <span className="font-mono text-[13px] text-ink-2">eval/agentdojo/SUMMARY.md</span> },
+    { n: 2, source: <span className="font-mono text-[13px] text-ink-2">eval/agentdojo/SUMMARY.md</span> },
+    { n: 3, source: <span className="font-mono text-[13px] text-ink-2">fuji_fork_replay.py</span> },
+    { n: 4, source: <span className="font-mono text-[13px] text-ink-2">fuji_fork_replay.py</span> },
+    { n: 5, source: <TxLink hash="0xa9f7faddb9e15f0efdb94349f49aed63a5af30666a9edeeffbb5fe8814af5ffa" /> },
+    { n: 6, source: <span className="font-mono text-[13px] text-ink-2">contracts/test</span> },
+  ];
+
   return (
-    <div className="space-y-12 py-4">
-      {/* Hero Section with Exact Positioning Sentence */}
-      <section aria-labelledby="hero-heading" className="text-center space-y-6 pt-4 pb-8 border-b border-slate-800/80">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 text-xs font-mono font-semibold">
-          <span className="flex h-2 w-2 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-          </span>
-          Avalanche Fuji (43113) · Defense in Depth
+    <div className="overflow-x-hidden">
+      {/* Hero */}
+      <section aria-labelledby="hero-heading" className="wrap grid items-center gap-10 pb-14 pt-6 lg:grid-cols-[.92fr_1.08fr]">
+        <div>
+          <h1
+            id="hero-heading"
+            className="m-0 mb-[18px] text-[40px] font-bold leading-none tracking-[-0.045em] sm:text-[46px] lg:text-[60px]"
+          >
+            {t('home.hero.title_a')} <span className="text-brand">{t('home.hero.title_b')}</span>
+          </h1>
+          <p className="m-0 mb-6 max-w-[46ch] text-[17.5px] text-ink-2">{t('home.hero.lede')}</p>
+          <div className="mb-5 flex flex-wrap gap-2.5">
+            <a href="#try" className="btn-primary">
+              {t('home.cta.ask')}
+            </a>
+            <Link href="/bounty" className="btn-ghost">
+              {t('home.cta.bounty')}
+            </Link>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {RESOURCE_LINKS.map((l) => (
+              <a
+                key={l.key}
+                href={l.href}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-full bg-[#ECEBE5] px-3 py-1.5 text-[13.5px] font-medium text-ink no-underline hover:bg-mist-2"
+              >
+                {t(l.key)}
+              </a>
+            ))}
+          </div>
         </div>
 
-        <h1
-          id="hero-heading"
-          className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tight text-white max-w-4xl mx-auto leading-tight"
+        <div
+          role="img"
+          aria-label={t('home.comp.aria')}
+          className="relative flex flex-col gap-3.5 overflow-hidden rounded-[18px] bg-brand p-[18px] lg:block lg:h-[520px] lg:p-0"
         >
-          {t('landing.hero.title')}
-        </h1>
+          <div aria-hidden="true" className="absolute -bottom-[120px] -right-20 h-[420px] w-[420px] rounded-full bg-brand-deep opacity-[.55]" />
 
-        <p className="text-slate-300 text-sm sm:text-base md:text-lg max-w-2xl mx-auto leading-relaxed">
-          {t('landing.hero.subtitle')}
-        </p>
+          <div className={`${compCard} p-[18px] lg:left-6 lg:top-6 lg:w-[262px]`}>
+            <div className="text-[13px] text-ink-3">{t('home.comp.mission_label')}</div>
+            <h4 className="mb-2.5 mt-0.5 text-[17px] font-semibold">{t('home.comp.mission_title')}</h4>
+            <div className="flex justify-between border-t border-rule py-[7px] text-sm">
+              <span>{t('home.comp.budget')}</span>
+              <span className="font-semibold tabular-nums">0.10 USDC</span>
+            </div>
+            <div className="flex justify-between border-t border-rule py-[7px] text-sm">
+              <span>{t('home.comp.payees')}</span>
+              <span className="font-semibold tabular-nums">{t('home.comp.payees_val')}</span>
+            </div>
+            <div className="mt-3 flex items-center gap-3 rounded-[10px] bg-ink px-3.5 py-3 text-[14.5px] font-semibold text-white">
+              <PasskeyIcon />
+              {t('home.comp.passkey')}
+            </div>
+          </div>
 
-        {/* Large Judge Mode Hero CTA Button */}
-        <div className="pt-2 pb-1 flex justify-center">
-          <Link
-            href="/judge"
-            className="group relative inline-flex items-center justify-center gap-3 px-8 py-4 rounded-2xl font-black text-base sm:text-lg bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:via-teal-400 hover:to-cyan-400 text-slate-950 shadow-2xl shadow-emerald-500/30 hover:shadow-emerald-500/50 transition-all transform hover:-translate-y-1 focus:outline-none focus:ring-4 focus:ring-emerald-400/50"
-          >
-            <span className="text-xl sm:text-2xl">⚡</span>
-            <span>{t('landing.btn.judge')}</span>
-            <span className="text-xs sm:text-sm font-bold bg-slate-950/20 text-slate-950 px-2.5 py-0.5 rounded-full border border-slate-950/20">
-              Live Fuji
-            </span>
-            <span className="transition-transform group-hover:translate-x-1 font-mono font-bold">→</span>
-          </Link>
-        </div>
+          <div className={`${compCard} py-2 lg:bottom-[34px] lg:right-6 lg:w-[390px]`}>
+            {[
+              { title: t('home.comp.q1_title'), sub: t('home.comp.q1_sub'), tag: <span className="tag-paid">{t('home.comp.q1_tag')}</span> },
+              { title: t('home.comp.q2_title'), sub: t('home.comp.q2_sub'), tag: <span className="tag-blocked">{t('home.comp.q2_tag')}</span> },
+              { title: t('home.comp.q3_title'), sub: t('home.comp.q3_sub'), tag: <span className="tag-paid">{t('home.comp.q3_tag')}</span> },
+            ].map((q, i) => (
+              <div key={i} className="grid grid-cols-[1fr_auto] items-center gap-2.5 border-b border-rule px-4 py-[11px] last:border-b-0">
+                <div>
+                  <b className="block text-sm font-semibold">{q.title}</b>
+                  <small className="text-[12.5px] text-ink-3">{q.sub}</small>
+                </div>
+                {q.tag}
+              </div>
+            ))}
+          </div>
 
-        {/* 3 Primary CTA Buttons */}
-        <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
-          <Link
-            href="/bounty"
-            className="px-6 py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-red-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white shadow-lg shadow-red-900/30 transition transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-amber-400 min-h-[44px] flex items-center justify-center gap-2"
-          >
-            <span>🎯</span>
-            <span>{t('landing.btn.bounty')}</span>
-          </Link>
+          <div className={`${compCard} border-l-[5px] border-blocked px-[18px] py-4 lg:right-6 lg:top-6 lg:w-[272px]`}>
+            <div className="text-base font-extrabold text-blocked">{t('home.comp.receipt_title')}</div>
+            <div className="mt-0.5 text-[12.5px] text-ink-3">GuardedTreasury · proposeWithProof</div>
+            <div className="mt-2.5 font-mono text-[12.5px] text-ink-2">
+              PayeeNotInMissionSet
+              <br />
+              tx 0x0ad53adc…3e38
+            </div>
+          </div>
 
-          <Link
-            href="/verify/demo-seed"
-            className="px-6 py-3 rounded-xl font-bold text-sm bg-slate-900 hover:bg-slate-800 text-emerald-300 border border-emerald-500/50 hover:border-emerald-400 shadow-lg shadow-emerald-950/40 transition transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-emerald-400 min-h-[44px] flex items-center justify-center gap-2"
-          >
-            <span>🔍</span>
-            <span>{t('landing.btn.verify')}</span>
-          </Link>
-
-          <Link
-            href="/missions/new"
-            className="px-6 py-3 rounded-xl font-bold text-sm bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-900/40 transition transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 min-h-[44px] flex items-center justify-center gap-2"
-          >
-            <span>🔑</span>
-            <span>{t('landing.btn.passkey')}</span>
-          </Link>
+          <div className="relative z-[1] self-start rounded-full bg-brand-deep px-2.5 py-1 text-xs font-medium text-white lg:absolute lg:bottom-3 lg:left-6">{t('home.comp.note')}</div>
         </div>
       </section>
 
-      {/* 3-Pillar Security Architecture Cards */}
-      <section aria-label="Security Architecture" className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="p-6 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-xl">
-            🧠
+      {/* Three objects */}
+      <section className="bg-sand" aria-labelledby="objects-heading">
+        <div className="wrap pb-16 pt-14">
+          <h2 id="objects-heading" className="sec-h">{t('home.objects.title')}</h2>
+          <p className="sec-p">{t('home.objects.desc')}</p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="overflow-hidden rounded-2xl border border-[#E2DACB] bg-card">
+              <div className="grid h-[168px] place-items-center bg-[#F7EBD3]">
+                <div className="w-[190px] rounded-[10px] bg-white p-3.5 text-[11.5px] shadow-[0_16px_30px_-18px_rgba(15,17,21,.5)]">
+                  <b className="text-[13px]">{t('home.objects.doc_title')}</b>
+                  <div className="flex justify-between border-b border-dashed border-rule py-[5px]"><span>{t('home.objects.doc_budget')}</span><span>0.10 USDC</span></div>
+                  <div className="flex justify-between border-b border-dashed border-rule py-[5px]"><span>{t('home.objects.doc_payees')}</span><span>1</span></div>
+                  <div className="flex justify-between py-[5px]"><span>{t('home.objects.doc_signer')}</span><span className="font-mono">0x4BC9…8F7c</span></div>
+                  <div className="mt-2 rounded-[5px] bg-paid-bg px-[7px] py-[5px] font-mono text-[10.5px] text-paid">root 0x3011ac81…71dd</div>
+                </div>
+              </div>
+              <div className="px-5 pb-5 pt-[18px]">
+                <h3 className="mb-1 mt-0 text-[17px] font-semibold">{t('home.objects.t1_title')}</h3>
+                <p className="m-0 text-[14.5px] text-ink-2">{t('home.objects.t1_desc')}</p>
+              </div>
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-[#E2DACB] bg-card">
+              <div className="grid h-[168px] place-items-center bg-[#E5ECF6]">
+                <div className="w-[210px] rounded-[10px] bg-white p-3.5 text-xs shadow-[0_16px_30px_-18px_rgba(15,17,21,.5)]">
+                  <span className="text-ink-3">{t('home.objects.prop_label')}</span>
+                  <div className="mb-2 mt-0.5 text-[22px] font-extrabold">0.01 USDC</div>
+                  <div className="rounded-[5px] bg-chalk px-[7px] py-1.5 font-mono text-[10.5px] leading-[1.45] text-ink-2">
+                    to 0x4BC9…8F7c
+                    <br />
+                    proof [ ] → root ✓
+                  </div>
+                </div>
+              </div>
+              <div className="px-5 pb-5 pt-[18px]">
+                <h3 className="mb-1 mt-0 text-[17px] font-semibold">{t('home.objects.t2_title')}</h3>
+                <p className="m-0 text-[14.5px] text-ink-2">{t('home.objects.t2_desc')}</p>
+              </div>
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-[#E2DACB] bg-card">
+              <div className="grid h-[168px] place-items-center bg-[#F6E1E1]">
+                <div className="flex gap-2.5">
+                  <div className="grid h-[120px] w-24 place-items-center rounded-[10px] bg-paid p-2 text-center text-[13px] font-extrabold text-white">
+                    <div>PAY<small className="mt-1 block text-[11px] font-medium opacity-90">{t('home.objects.gate_ok_sub')}</small></div>
+                  </div>
+                  <div className="grid h-[120px] w-24 place-items-center rounded-[10px] bg-blocked p-2 text-center text-[13px] font-extrabold text-white">
+                    <div>REVERT<small className="mt-1 block text-[11px] font-medium opacity-90">{t('home.objects.gate_no_sub')}</small></div>
+                  </div>
+                </div>
+              </div>
+              <div className="px-5 pb-5 pt-[18px]">
+                <h3 className="mb-1 mt-0 text-[17px] font-semibold">{t('home.objects.t3_title')}</h3>
+                <p className="m-0 text-[14.5px] text-ink-2">{t('home.objects.t3_desc')}</p>
+              </div>
+            </div>
           </div>
-          <h2 className="text-base font-bold text-white">{t('landing.card.planner_title')}</h2>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            {t('landing.card.planner_desc')}
-          </p>
         </div>
+      </section>
 
-        <div className="p-6 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-3">
-          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-xl">
-            🛡️
-          </div>
-          <h2 className="text-base font-bold text-white">{t('landing.card.guard_title')}</h2>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            {t('landing.card.guard_desc')}
-          </p>
+      {/* Table 1: twin treasury (dark band) */}
+      <section className="bg-night text-[#E9EAEC]" aria-labelledby="twin-heading">
+        <div className="wrap pb-16 pt-14">
+          <h2 id="twin-heading" className="sec-h text-white">{t('home.twin.title')}</h2>
+          <p className="sec-p text-[#A3A9B3]">{t('home.twin.desc')}</p>
+          <figure className="tbl m-0">
+            <div className="overflow-x-auto">
+              <table className="min-w-[720px]">
+                <thead>
+                  <tr>
+                    <th className="border-[#E9EAEC] text-[#8E95A0]">{t('home.twin.th_mission')}</th>
+                    <th className="border-[#E9EAEC] text-[#8E95A0]">{t('home.twin.th_rule')}</th>
+                    <th className="r border-[#E9EAEC] text-[#8E95A0]">{t('home.twin.th_paid')}</th>
+                    <th className="border-[#E9EAEC] text-[#8E95A0]">{t('home.twin.th_outcome')}</th>
+                    <th className="border-[#E9EAEC] text-[#8E95A0]">{t('home.twin.th_tx')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {twinRows.map((r) => (
+                    <tr key={r.mission} className={r.hl ? 'bg-[#16241D]' : undefined}>
+                      <td className="border-[#262A32]">{r.mission}</td>
+                      <td className="border-[#262A32]">{r.rule}</td>
+                      <td className="r num border-[#262A32]">{r.paid}</td>
+                      <td className="border-[#262A32]">{r.outcome}</td>
+                      <td className="border-[#262A32]"><TxLink hash={r.tx} dark /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <figcaption className="text-[#A3A9B3]">
+              <b>Table 1.</b> {t('home.twin.caption')}
+            </figcaption>
+          </figure>
         </div>
+      </section>
 
-        <div className="p-6 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-xl">
-            ⛓️
+      {/* Ask the contract */}
+      <section id="try" className="scroll-mt-4 bg-tint-rose" aria-label={t('home.try.title')}>
+        <AskContract />
+      </section>
+
+      {/* Table 2: results + known limits */}
+      <section className="bg-tint-slate" aria-labelledby="results-heading">
+        <div className="wrap pb-16 pt-14">
+          <h2 id="results-heading" className="sec-h">{t('home.results.title')}</h2>
+          <p className="sec-p">{t('home.results.desc')}</p>
+          <figure className="tbl m-0">
+            <div className="overflow-x-auto">
+              <table className="min-w-[720px]">
+                <thead>
+                  <tr>
+                    <th className="border-[#1C2633]">{t('home.results.th_eval')}</th>
+                    <th className="border-[#1C2633]">{t('home.results.th_setting')}</th>
+                    <th className="r border-[#1C2633]">{t('home.results.th_result')}</th>
+                    <th className="border-[#1C2633]">{t('home.results.th_source')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resultRows.map((r) => (
+                    <tr key={r.n}>
+                      <td className="border-[#D2DAE4]">{t(`home.results.r${r.n}_eval`)}</td>
+                      <td className="border-[#D2DAE4]">{t(`home.results.r${r.n}_setting`)}</td>
+                      <td className="r num border-[#D2DAE4]">{t(`home.results.r${r.n}_result`)}</td>
+                      <td className="border-[#D2DAE4]">{r.source}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <figcaption>
+              <b>Table 2.</b> {t('home.results.caption')}
+            </figcaption>
+          </figure>
+          <div className="mt-4 grid gap-5 rounded-card bg-[#DCE3EC] px-[22px] py-[18px] lg:grid-cols-[180px_1fr]">
+            <h3 className="m-0 text-[17px] font-bold">{t('home.limits.title')}</h3>
+            <ul className="m-0 list-disc pl-[18px] text-ink-2">
+              <li>{t('home.limits.l1')}</li>
+              <li>{t('home.limits.l2')}</li>
+              <li>{t('home.limits.l3')}</li>
+            </ul>
           </div>
-          <h2 className="text-base font-bold text-white">{t('landing.card.chain_title')}</h2>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            {t('landing.card.chain_desc')}
-          </p>
         </div>
       </section>
 
       {/* Active Missions Dashboard Section */}
-      <section aria-labelledby="active-missions-heading" className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-4">
+      <section aria-labelledby="active-missions-heading" className="wrap space-y-6 pb-16 pt-14">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div>
-            <h2 id="active-missions-heading" className="text-xl sm:text-2xl font-bold text-white">
+            <h2 id="active-missions-heading" className="sec-h max-w-none">
               {t('landing.section.missions')}
             </h2>
-            <p className="text-slate-400 text-xs sm:text-sm mt-0.5">
-              {t('landing.section.missions_desc')}
-            </p>
+            <p className="m-0 max-w-[60ch] text-[15px] text-ink-2">{t('landing.section.missions_desc')}</p>
           </div>
           <button
             onClick={loadMissions}
-            className="self-start sm:self-auto px-3 py-1.5 text-xs font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            className="btn-ghost btn-sm self-start font-semibold sm:self-auto"
             aria-label="Refresh mission list"
           >
-            ↻ Refresh
+            {t('home.missions.refresh')}
           </button>
         </div>
 
         {loading ? (
-          <div className="py-16 text-center space-y-3" role="status" aria-live="polite">
-            <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <p className="text-slate-400 text-sm">{t('landing.loading')}</p>
+          <div className="card py-16 text-center" role="status" aria-live="polite">
+            <div className="mx-auto mb-3 h-7 w-7 animate-spin rounded-full border-2 border-ink border-t-transparent"></div>
+            <p className="m-0 text-sm text-ink-2">{t('landing.loading')}</p>
           </div>
         ) : error ? (
-          <div className="bg-red-950/30 border border-red-500/40 rounded-xl p-6 text-center space-y-3">
-            <p className="text-red-300 text-sm font-semibold">Error: {error}</p>
-            <button
-              onClick={loadMissions}
-              className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-red-400"
-            >
+          <div className="rounded-card border border-blocked-rule bg-blocked-bg p-6 text-center">
+            <p className="mb-3 mt-0 text-sm font-semibold text-blocked">Error: {error}</p>
+            <button onClick={loadMissions} className="btn-primary btn-sm font-semibold">
               Retry Connection
             </button>
           </div>
         ) : missions.length === 0 ? (
-          <div className="bg-slate-950 border border-slate-800 rounded-2xl p-8 text-center space-y-4">
-            <p className="text-slate-300 text-sm">{t('landing.empty.title')}</p>
-            <p className="text-slate-400 text-xs">{t('landing.empty.desc')}</p>
-            <div className="flex flex-wrap justify-center gap-3 pt-2">
-              <Link
-                href="/demo"
-                className="inline-block bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs transition focus:outline-none focus:ring-2 focus:ring-emerald-400 min-h-[40px] flex items-center"
-              >
+          <div className="card space-y-3 p-8 text-center">
+            <p className="m-0 text-[15px] text-ink">{t('landing.empty.title')}</p>
+            <p className="m-0 text-sm text-ink-2">{t('landing.empty.desc')}</p>
+            <div className="flex flex-wrap justify-center gap-2.5 pt-2">
+              <Link href="/demo" className="btn-primary btn-sm font-semibold">
                 {t('landing.btn.demo')}
               </Link>
-              <Link
-                href="/bounty"
-                className="inline-block bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold px-4 py-2 rounded-lg text-xs transition border border-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400 min-h-[40px] flex items-center"
-              >
+              <Link href="/bounty" className="btn-ghost btn-sm font-semibold">
                 {t('landing.btn.bounty_cta')}
               </Link>
             </div>
           </div>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             {missions.map((m) => {
               const toolCap = BigInt(m.toolCap || '0');
               const spentTool = BigInt(m.spentTool || '0');
@@ -215,43 +415,26 @@ export default function LandingPage() {
               const treasuryOverBy = spentTreasury > treasuryCap ? spentTreasury - treasuryCap : 0n;
 
               return (
-                <div
-                  key={m.slug}
-                  className="bg-slate-950 border border-slate-800/90 rounded-2xl p-6 space-y-4 shadow-sm hover:border-slate-700 transition"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-sm font-bold text-emerald-400 truncate max-w-[200px] sm:max-w-xs">
+                <div key={m.slug} className="card space-y-4 p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="max-w-[200px] truncate font-mono text-sm font-semibold text-ink sm:max-w-xs">
                       {m.slug}
                     </span>
-                    <span
-                      className={`text-xs px-2.5 py-0.5 rounded font-semibold ${
-                        m.status === 'ACTIVE'
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                      }`}
-                    >
-                      {m.status}
-                    </span>
+                    <span className={m.status === 'ACTIVE' ? 'tag-paid' : 'tag-blocked'}>{m.status}</span>
                   </div>
 
-                  <div className="text-xs font-mono space-y-1 text-slate-300">
-                    <div className="truncate">Owner: {m.ownerAddress}</div>
-                    <div className="truncate">Agent: {m.agentAddress}</div>
+                  <div className="space-y-1 text-[13px] text-ink-2">
+                    <div className="truncate">Owner: <span className="font-mono">{m.ownerAddress}</span></div>
+                    <div className="truncate">Agent: <span className="font-mono">{m.agentAddress}</span></div>
                     <div>Expires: {new Date(m.expiresAt).toLocaleString()}</div>
                     {m.payeeRoot && (
                       <div className="pt-1">
                         {m.payeeRootConfirmedOnchain ? (
-                          <span
-                            data-testid="payee-root-onchain-badge"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-700/80"
-                          >
-                            {t('landing.card.payee_root_onchain')}: {m.payeeRoot.slice(0, 10)}...{m.payeeRoot.slice(-6)}
+                          <span data-testid="payee-root-onchain-badge" className="tag-paid">
+                            {t('landing.card.payee_root_onchain')}: <span className="ml-1 font-mono font-medium">{m.payeeRoot.slice(0, 10)}...{m.payeeRoot.slice(-6)}</span>
                           </span>
                         ) : (
-                          <span
-                            data-testid="payee-root-unconfirmed-badge"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-950/80 text-amber-300 border border-amber-700/80"
-                          >
+                          <span data-testid="payee-root-unconfirmed-badge" className="tag-warn">
                             {t('landing.card.payee_root_pending')}
                           </span>
                         )}
@@ -260,28 +443,28 @@ export default function LandingPage() {
                   </div>
 
                   {/* Two Separate Budgets */}
-                  <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-900">
-                    <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-                      <div className="text-xs text-slate-300 font-medium">{t('landing.card.tool_budget')}</div>
-                      <div className="text-lg font-bold font-mono text-slate-100 mt-1">
+                  <div className="grid grid-cols-2 gap-3 border-t border-rule pt-4">
+                    <div className="rounded-[10px] bg-paper p-3">
+                      <div className="text-xs font-medium text-ink-2">{t('landing.card.tool_budget')}</div>
+                      <div className="mt-1 text-lg font-bold tabular-nums text-ink">
                         {(Number(toolRemaining) / 1e6).toFixed(2)} USDC
                       </div>
-                      <div className="text-xs text-slate-400 mt-1 space-y-0.5">
+                      <div className="mt-1 space-y-0.5 text-xs tabular-nums text-ink-2">
                         <div>{t('landing.card.spent')}: {(Number(spentTool) / 1e6).toFixed(2)}</div>
                         <div>{t('landing.card.reserved')}: {(Number(reservedTool) / 1e6).toFixed(2)}</div>
                         <div>{t('landing.card.cap')}: {(Number(toolCap) / 1e6).toFixed(2)}</div>
                       </div>
                     </div>
 
-                    <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-                      <div className="text-xs text-slate-300 font-medium">{t('landing.card.treasury_budget')}</div>
-                      <div className="text-lg font-bold font-mono text-slate-100 mt-1">
+                    <div className="rounded-[10px] bg-paper p-3">
+                      <div className="text-xs font-medium text-ink-2">{t('landing.card.treasury_budget')}</div>
+                      <div className="mt-1 text-lg font-bold tabular-nums text-ink">
                         {(Number(treasuryRemaining) / 1e6).toFixed(2)} USDC
                       </div>
-                      <div className="text-xs text-slate-400 mt-1 space-y-0.5">
+                      <div className="mt-1 space-y-0.5 text-xs tabular-nums text-ink-2">
                         <div>{t('landing.card.cap')}: {(Number(treasuryCap) / 1e6).toFixed(2)}</div>
                         {treasuryOverBy > 0n && (
-                          <div className="text-amber-400">
+                          <div className="font-semibold text-warn">
                             {t('landing.card.over_by')}: {(Number(treasuryOverBy) / 1e6).toFixed(2)}
                           </div>
                         )}
@@ -290,22 +473,17 @@ export default function LandingPage() {
                   </div>
 
                   {m.deliverableHash && (
-                    <div className="text-xs bg-emerald-950/40 border border-emerald-900/50 p-2.5 rounded-lg font-mono text-emerald-300 break-all">
-                      Deliverable Hash: {m.deliverableHash}
+                    <div className="break-all rounded-[10px] bg-paid-bg p-2.5 text-xs text-paid">
+                      Deliverable Hash: <span className="font-mono">{m.deliverableHash}</span>
                     </div>
                   )}
 
-                  <div className="pt-2 flex items-center justify-between text-xs">
-                    <Link
-                      href={`/verify/${m.slug}`}
-                      className="text-emerald-400 hover:underline font-mono focus:outline-none focus:ring-1 focus:ring-emerald-400 rounded"
-                    >
+                  <div className="flex items-center justify-between pt-1 text-[13px]">
+                    <Link href={`/verify/${m.slug}`} className="font-medium text-ink underline underline-offset-2 hover:text-ink-2">
                       {t('landing.card.view_proof')}
                     </Link>
                     {new Date() >= new Date(m.expiresAt) && (
-                      <span className="text-slate-400 italic">
-                        {t('landing.card.expired')}
-                      </span>
+                      <span className="text-ink-3">{t('landing.card.expired')}</span>
                     )}
                   </div>
                 </div>
@@ -314,6 +492,10 @@ export default function LandingPage() {
           </div>
         )}
       </section>
+
+      <footer className="bg-night py-7 pb-14 text-sm text-[#8E95A0]">
+        <div className="wrap">{t('home.footer')}</div>
+      </footer>
     </div>
   );
 }

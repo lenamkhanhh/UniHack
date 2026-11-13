@@ -1,7 +1,11 @@
 import type { Metadata } from 'next';
+import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { I18nProvider } from '@/lib/i18n';
 import AppHeader from '@/components/AppHeader';
+
+const geist = Geist({ subsets: ['latin', 'latin-ext'], variable: '--font-geist', display: 'swap' });
+const geistMono = Geist_Mono({ subsets: ['latin', 'latin-ext'], variable: '--font-geist-mono', display: 'swap' });
 
 export const metadata: Metadata = {
   title: 'MissionPay — Avalanche Fuji',
@@ -17,11 +21,11 @@ export default function RootLayout({
   const stage = process.env.NEXT_PUBLIC_STAGE || 'S1';
 
   return (
-    <html lang="en">
-      <body className="bg-slate-950 text-slate-100 min-h-screen antialiased">
+    <html lang="en" className={`${geist.variable} ${geistMono.variable}`}>
+      <body className="bg-paper text-ink min-h-screen font-sans antialiased">
         <I18nProvider>
           <AppHeader paymentMode={paymentMode} stage={stage} />
-          <main className="p-4 md:p-6 max-w-7xl mx-auto">{children}</main>
+          <main>{children}</main>
         </I18nProvider>
       </body>
     </html>

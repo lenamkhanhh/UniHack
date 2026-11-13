@@ -129,12 +129,12 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
   }, [autoSimulate]);
 
   return (
-    <div className="w-full bg-[#0a0d14] border border-gray-800 rounded-2xl p-6 font-mono text-white flex flex-col justify-between">
+    <div className="w-full bg-night border border-night-rule rounded-2xl p-6 font-mono text-white flex flex-col justify-between">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-800 pb-3 mb-6 gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-night-rule pb-3 mb-6 gap-2">
         <div className="flex items-center space-x-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-          <h3 className="text-sm font-black tracking-wide text-white uppercase">
+          <h3 className="text-sm font-bold tracking-wide text-white uppercase">
             LIVING MONEY FLOW — LIÊN KẾT AUDIT LEDGER
           </h3>
         </div>
@@ -148,7 +148,7 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
               LIVE ON AVALANCHE FUJI
             </span>
           ) : (
-            <span className="text-[10px] bg-gray-800 text-gray-300 border border-gray-700 px-2.5 py-0.5 rounded font-bold">
+            <span className="text-[10px] bg-night-rule text-gray-300 border border-night-rule px-2.5 py-0.5 rounded font-bold">
               MOCK — chưa gửi lên chain
             </span>
           )}
@@ -163,10 +163,10 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
       )}
 
       {/* Visual Canvas of Architecture & Particles */}
-      <div className="relative py-8 px-4 bg-[#07090e] border border-gray-800/80 rounded-xl overflow-hidden min-h-[220px] flex items-center justify-between">
+      <div className="relative py-8 px-4 bg-night border border-night-rule rounded-xl overflow-hidden min-h-[220px] flex items-center justify-between">
         {/* Node 1: Guarded Treasury */}
         <div className="flex flex-col items-center z-10 w-28 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-cyan-950/60 border-2 border-cyan-500 flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.3)]">
+          <div className="w-14 h-14 rounded-2xl bg-cyan-950/60 border-2 border-cyan-500 flex items-center justify-center">
             <span className="text-2xl">🏛️</span>
           </div>
           <span className="text-xs font-bold text-cyan-300 mt-2">Treasury</span>
@@ -175,15 +175,15 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
         </div>
 
         {/* Path 1: Treasury -> Session Wallet */}
-        <div className="flex-1 h-0.5 bg-gradient-to-r from-cyan-500/50 to-emerald-500/50 relative mx-2">
+        <div className="bg-night-2 flex-1 h-0.5 relative mx-2">
           {animationState === 'FLOWING_VALID' && (
-            <div className="absolute top-1/2 -translate-y-1/2 left-0 w-3 h-3 rounded-full bg-cyan-400 shadow-[0_0_10px_#22d3ee] animate-pulse" />
+            <div className="absolute top-1/2 -translate-y-1/2 left-0 w-3 h-3 rounded-full bg-cyan-400 animate-pulse" />
           )}
         </div>
 
         {/* Node 2: Session Wallet */}
         <div className="flex flex-col items-center z-10 w-28 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-950/60 border-2 border-emerald-500 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-950/60 border-2 border-emerald-500 flex items-center justify-center">
             <span className="text-2xl">👛</span>
           </div>
           <span className="text-xs font-bold text-emerald-300 mt-2">Ví Phiên</span>
@@ -192,11 +192,11 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
         </div>
 
         {/* Path 2: Session Wallet -> Destination */}
-        <div className="flex-1 h-0.5 bg-gradient-to-r from-emerald-500/50 to-purple-500/50 relative mx-2">
+        <div className="bg-night-2 flex-1 h-0.5 relative mx-2">
           {/* Valid Flow Particle */}
           {animationState === 'FLOWING_VALID' && (
             <div
-              className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399] transition-all duration-1000 ease-in-out"
+              className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-emerald-400 transition-all duration-1000 ease-in-out"
               style={{ left: '80%' }}
             />
           )}
@@ -204,14 +204,14 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
           {/* Blocked Attack Particle Bouncing Back */}
           {animationState === 'FLOWING_BLOCKED' && (
             <div
-              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-red-500 shadow-[0_0_15px_#ef4444] transition-all duration-700 ease-in"
+              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-red-500 transition-all duration-700 ease-in"
               style={{ left: '75%' }}
             />
           )}
 
           {animationState === 'BOUNCED' && (
             <div
-              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-amber-400 shadow-[0_0_20px_#f59e0b] transition-all duration-1000 ease-out"
+              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-amber-400 transition-all duration-1000 ease-out"
               style={{ left: '20%' }}
             />
           )}
@@ -221,14 +221,14 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
             <div
               className={`w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
                 animationState === 'BOUNCED'
-                  ? 'bg-red-950 border-red-500 scale-125 shadow-[0_0_25px_#ef4444]'
-                  : 'bg-gray-900 border-gray-700'
+                  ? 'bg-red-950 border-red-500 scale-125'
+                  : 'bg-night-2 border-night-rule'
               }`}
             >
               <span className="text-sm">🛡️</span>
             </div>
             {animationState === 'BOUNCED' && (
-              <div className="absolute -top-10 whitespace-nowrap bg-red-950/90 border border-red-500 text-red-300 text-[9px] font-bold px-2 py-0.5 rounded shadow-lg animate-bounce">
+              <div className="absolute -top-10 whitespace-nowrap bg-red-950/90 border border-red-500 text-red-300 text-[9px] font-bold px-2 py-0.5 rounded animate-bounce">
                 BLOCK {blockedRule}
               </div>
             )}
@@ -288,7 +288,7 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
       </div>
 
       {/* Ledger Entries List (Derived dynamically from activeEntries, empty if no entries) */}
-      <div className="mt-4 pt-3 border-t border-gray-800">
+      <div className="mt-4 pt-3 border-t border-night-rule">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">
             Sổ Cái Ledger ({activeEntries.length} bản ghi):
@@ -297,7 +297,7 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
         </div>
 
         {activeEntries.length === 0 ? (
-          <div className="p-4 bg-[#07090e] border border-gray-800/80 rounded-xl text-center text-xs text-gray-500 font-mono">
+          <div className="p-4 bg-night border border-night-rule rounded-xl text-center text-xs text-gray-500 font-mono">
             Sổ cái ledger hiện chưa có giao dịch nào.
           </div>
         ) : (
@@ -308,7 +308,7 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
                 className={`flex items-center justify-between text-[11px] px-2.5 py-1 rounded border ${
                   e.status === 'BLOCKED'
                     ? 'bg-red-950/40 border-red-500/60 text-red-200'
-                    : 'bg-[#101420] border-gray-800 text-gray-300'
+                    : 'bg-[#101420] border-night-rule text-gray-300'
                 }`}
               >
                 <div className="flex items-center space-x-2 truncate pr-2">

@@ -207,13 +207,13 @@ export default function StageConsolePage() {
     <div
       data-testid="stage-console-root"
       data-hydrated={mounted ? 'true' : 'false'}
-      className="min-h-screen bg-[#05070b] text-white flex flex-col justify-between font-sans selection:bg-cyan-500/30"
+      className="min-h-screen bg-night text-white flex flex-col justify-between font-sans selection:bg-cyan-500/30"
     >
       {/* Top Bar for Stage Control */}
-      <header className="border-b border-gray-800 bg-[#070a10]/90 backdrop-blur px-6 py-3 flex items-center justify-between z-30">
+      <header className="border-b border-night-rule bg-[#070a10]/90 px-6 py-3 flex items-center justify-between z-30">
         <div className="flex items-center space-x-3">
           <div className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse" />
-          <span className="font-mono text-sm font-black tracking-widest text-cyan-400 uppercase">
+          <span className="font-mono text-sm font-bold tracking-widest text-cyan-400 uppercase">
             MISSIONPAY // STAGE CONSOLE
           </span>
           <span className="text-xs text-gray-500 font-mono hidden md:inline">
@@ -222,7 +222,7 @@ export default function StageConsolePage() {
         </div>
 
         {/* Scene Navigation Buttons */}
-        <div className="flex items-center space-x-1.5 bg-gray-900/80 border border-gray-800 rounded-xl p-1 font-mono text-xs">
+        <div className="flex items-center space-x-1.5 bg-night-2 border border-night-rule rounded-xl p-1 font-mono text-xs">
           {[
             { id: 1, label: '0:00 Hook' },
             { id: 2, label: '0:15 Bankr Replay' },
@@ -236,8 +236,8 @@ export default function StageConsolePage() {
               data-testid={`scene-btn-${s.id}`}
               className={`px-3 py-1.5 rounded-lg transition font-bold flex items-center space-x-1 ${
                 currentScene === s.id
-                  ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/30'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  ? 'bg-cyan-500 text-black'
+                  : 'text-gray-400 hover:text-white hover:bg-night-rule'
               }`}
             >
               <span className="text-[10px] opacity-75">{s.id}.</span>
@@ -292,7 +292,7 @@ export default function StageConsolePage() {
               VỤ TẤN CÔNG ĐIỂN HÌNH THÁNG 5/2026
             </div>
 
-            <h1 className="text-5xl md:text-7xl lg:text-8xl font-black font-mono tracking-tight text-white leading-none">
+            <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold font-mono tracking-tight text-white leading-none">
               $174,000
             </h1>
 
@@ -308,7 +308,7 @@ export default function StageConsolePage() {
             <div className="pt-6 flex items-center space-x-4">
               <button
                 onClick={() => setCurrentScene(2)}
-                className="bg-cyan-500 hover:bg-cyan-400 text-black font-mono font-black px-6 py-3 rounded-xl shadow-xl shadow-cyan-500/20 transition flex items-center space-x-2"
+                className="bg-cyan-500 hover:bg-cyan-400 text-black font-mono font-bold px-6 py-3 rounded-xl transition flex items-center space-x-2"
               >
                 <span>BẤM PHÍM [2] ĐỂ CHẠY LẠI VỤ TẤN CÔNG</span>
                 <span>→</span>
@@ -323,12 +323,12 @@ export default function StageConsolePage() {
         {currentScene === 2 && (
           <div data-testid="scene-2-container" className="w-full space-y-6 animate-fadeIn">
             {/* Header / Trigger */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-800 pb-4 gap-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-night-rule pb-4 gap-4">
               <div>
                 <span className="text-xs font-mono font-bold text-red-400 uppercase tracking-widest block">
                   WOW-0 // ĐỐI CHỨNG THỰC TẾ
                 </span>
-                <h2 className="text-2xl md:text-3xl font-black text-white">
+                <h2 className="text-2xl md:text-3xl font-bold text-white">
                   REPLAY VỤ BANKR $170K TRONG 30 GIÂY
                 </h2>
               </div>
@@ -337,7 +337,7 @@ export default function StageConsolePage() {
                 onClick={runBankrReplay}
                 disabled={bankrRunning}
                 data-testid="run-bankr-stage-btn"
-                className="bg-red-600 hover:bg-red-500 text-white font-mono font-black text-sm px-6 py-3 rounded-xl shadow-lg shadow-red-900/40 transition disabled:opacity-50 flex items-center space-x-2"
+                className="bg-red-600 hover:bg-red-500 text-white font-mono font-bold text-sm px-6 py-3 rounded-xl transition disabled:opacity-50 flex items-center space-x-2"
               >
                 <span>{bankrRunning ? '⏳ ĐANG TẤN CÔNG...' : '⚡ CHẠY LẠI VỤ BANKR $170K'}</span>
               </button>
@@ -361,7 +361,7 @@ export default function StageConsolePage() {
                     <span className="text-xs font-mono text-gray-500 uppercase block mb-1">
                       Số Dư Tài Khoản Ví Nóng
                     </span>
-                    <span className="text-5xl md:text-6xl font-black font-mono text-red-500">
+                    <span className="text-5xl md:text-6xl font-bold font-mono text-red-500">
                       ${bankrDrainBalance.toLocaleString()}
                     </span>
                     {bankrDrainBalance === 0 && (
@@ -378,7 +378,7 @@ export default function StageConsolePage() {
               </div>
 
               {/* Right Side: MissionPay on Avalanche */}
-              <div className="bg-[#081210] border-2 border-emerald-600/60 rounded-2xl p-6 flex flex-col justify-between shadow-[0_0_30px_rgba(16,185,129,0.15)]">
+              <div className="bg-night border-2 border-emerald-600/60 rounded-2xl p-6 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-xs font-mono font-bold text-emerald-400">
@@ -390,23 +390,23 @@ export default function StageConsolePage() {
                   </div>
 
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between p-3 bg-[#0a1814] rounded-xl border border-emerald-900/60 font-mono text-xs">
+                    <div className="flex items-center justify-between p-3 bg-night rounded-xl border border-emerald-900/60 font-mono text-xs">
                       <span className="text-gray-400">Tâm trí LLM:</span>
                       <span className="text-amber-400 font-bold">🧠 ĐÃ BỊ THUYẾT PHỤC ✅</span>
                     </div>
 
-                    <div className="flex items-center justify-between p-3 bg-[#0a1814] rounded-xl border border-emerald-900/60 font-mono text-xs">
+                    <div className="flex items-center justify-between p-3 bg-night rounded-xl border border-emerald-900/60 font-mono text-xs">
                       <span className="text-gray-400">Thực thi Validator:</span>
                       <span className="text-red-400 font-bold">
                         🛡️ {bankrResult?.verdict?.status || 'BLOCK'} RECIPIENT_NOT_ALLOWLISTED
                       </span>
                     </div>
 
-                    <div className="text-center py-4 bg-[#0a1814] rounded-xl border border-emerald-900/80">
+                    <div className="text-center py-4 bg-night rounded-xl border border-emerald-900/80">
                       <span className="text-xs font-mono text-gray-400 uppercase block mb-1">
                         💸 Số Tiền Thất Thoát Thực Tế
                       </span>
-                      <span className="text-5xl md:text-6xl font-black font-mono text-emerald-400">
+                      <span className="text-5xl md:text-6xl font-bold font-mono text-emerald-400">
                         $0.00
                       </span>
                     </div>
@@ -421,7 +421,7 @@ export default function StageConsolePage() {
             </div>
 
             {/* Morse Code Decoder Inspector */}
-            <div className="p-4 bg-[#090d14] border border-gray-800 rounded-xl font-mono text-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="p-4 bg-night border border-night-rule rounded-xl font-mono text-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div>
                 <span className="text-gray-500 block text-[10px] uppercase font-bold">
                   Dòng mã Morse bị giấu trong fixture:
@@ -451,7 +451,7 @@ export default function StageConsolePage() {
               <span className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-widest block">
                 FREYSA MẤT $45K VÌ GUARD NẰM TRONG LLM
               </span>
-              <h2 className="text-3xl md:text-5xl font-black text-white">
+              <h2 className="text-3xl md:text-5xl font-bold text-white">
                 THỬ LỪA AGENT NÀY XEM
               </h2>
               <p className="text-xs md:text-sm text-gray-400 max-w-xl mx-auto">
@@ -461,29 +461,29 @@ export default function StageConsolePage() {
 
             {/* The 3 Big KPI Numbers */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-[#0b0e14] border border-gray-800 rounded-2xl p-6 text-center">
+              <div className="bg-night border border-night-rule rounded-2xl p-6 text-center">
                 <span className="text-xs font-mono text-gray-500 uppercase font-bold block mb-1">
                   Đòn Tấn Công Của Khán Giả
                 </span>
-                <span className="text-5xl md:text-6xl font-black font-mono text-cyan-400">
+                <span className="text-5xl md:text-6xl font-bold font-mono text-cyan-400">
                   {arenaStats.totalAttacks}
                 </span>
               </div>
 
-              <div className="bg-[#0b0e14] border border-gray-800 rounded-2xl p-6 text-center">
+              <div className="bg-night border border-night-rule rounded-2xl p-6 text-center">
                 <span className="text-xs font-mono text-gray-500 uppercase font-bold block mb-1">
                   Agent Bị Thuyết Phục (LLM Thua)
                 </span>
-                <span className="text-5xl md:text-6xl font-black font-mono text-amber-400">
+                <span className="text-5xl md:text-6xl font-bold font-mono text-amber-400">
                   {arenaStats.convincedAttacks}
                 </span>
               </div>
 
-              <div className="bg-[#081510] border-2 border-emerald-500/80 rounded-2xl p-6 text-center shadow-[0_0_35px_rgba(16,185,129,0.2)]">
+              <div className="bg-night border-2 border-emerald-500/80 rounded-2xl p-6 text-center">
                 <span className="text-xs font-mono text-emerald-400 uppercase font-bold block mb-1">
                   Tiền Ra Ngoài Phạm Vi Cho Phép
                 </span>
-                <span className="text-5xl md:text-6xl font-black font-mono text-emerald-300">
+                <span className="text-5xl md:text-6xl font-bold font-mono text-emerald-300">
                   ${formatUsdc(arenaStats.totalLossUsdc, '0.00')}
                 </span>
                 <div className="mt-2 text-xs font-mono text-gray-400 flex flex-col items-center space-y-0.5">
@@ -494,10 +494,10 @@ export default function StageConsolePage() {
             </div>
 
             {/* Sandbox Budget Remaining Bar & Presenter Reset Control (WOW-F11) */}
-            <div className="bg-[#0b0e14] border border-gray-800 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between font-mono text-xs space-y-3 md:space-y-0">
+            <div className="bg-night border border-night-rule rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between font-mono text-xs space-y-3 md:space-y-0">
               <div className="flex items-center space-x-3">
                 <span className="text-gray-400 font-bold">Ngân sách sandbox còn lại:</span>
-                <span className="text-emerald-400 font-black text-sm">
+                <span className="text-emerald-400 font-bold text-sm">
                   ${formatUsdc(arenaStats.remainingTreasuryUsdc, '10.00')} / ${formatUsdc(arenaStats.treasuryCapUsdc, '10.00')}
                 </span>
                 <span className="text-gray-500 text-[11px]">
@@ -506,7 +506,7 @@ export default function StageConsolePage() {
               </div>
 
               <div className="flex items-center space-x-4 w-full md:w-auto justify-end">
-                <div className="w-48 bg-gray-900 rounded-full h-2.5 overflow-hidden border border-gray-800">
+                <div className="w-48 bg-night-2 rounded-full h-2.5 overflow-hidden border border-night-rule">
                   <div
                     className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500"
                     style={{
@@ -537,7 +537,7 @@ export default function StageConsolePage() {
             {/* QR Code and Live Ticker Split */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
               {/* Real Scannable QR Code (WOW-F15) */}
-              <div className="bg-[#0b0e14] border border-gray-800 rounded-2xl p-6 flex flex-col items-center justify-center text-center">
+              <div className="bg-night border border-night-rule rounded-2xl p-6 flex flex-col items-center justify-center text-center">
                 <QRCodeDisplay url={arenaUrl} size={150} showUrlText={false} />
                 <span className="font-mono text-sm font-bold text-cyan-400 mt-2">
                   QUÉT QR ĐỂ HACK AGENT
@@ -548,8 +548,8 @@ export default function StageConsolePage() {
               </div>
 
               {/* Real-time Attack Feed */}
-              <div className="lg:col-span-2 bg-[#0b0e14] border border-gray-800 rounded-2xl p-6 flex flex-col justify-between">
-                <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-3">
+              <div className="lg:col-span-2 bg-night border border-night-rule rounded-2xl p-6 flex flex-col justify-between">
+                <div className="flex items-center justify-between border-b border-night-rule pb-3 mb-3">
                   <span className="text-xs font-mono font-bold text-gray-400 uppercase">
                     FEED CÁC ĐÒN TẤN CÔNG REAL-TIME
                   </span>
@@ -562,7 +562,7 @@ export default function StageConsolePage() {
                   {(arenaStats.recentAttacks || []).map((atk) => (
                     <div
                       key={atk.id}
-                      className="p-3 bg-[#101420] border border-gray-800 rounded-xl flex items-center justify-between"
+                      className="p-3 bg-[#101420] border border-night-rule rounded-xl flex items-center justify-between"
                     >
                       <div className="truncate pr-4">
                         <span className="text-[10px] text-gray-500 block">{atk.category}</span>
@@ -589,12 +589,12 @@ export default function StageConsolePage() {
         {/* ======================================================== */}
         {currentScene === 4 && (
           <div data-testid="scene-4-container" className="w-full space-y-6 animate-fadeIn">
-            <div className="flex items-center justify-between border-b border-gray-800 pb-4">
+            <div className="flex items-center justify-between border-b border-night-rule pb-4">
               <div>
                 <span className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-widest block">
                   WOW-3 & WOW-2 // BẢO CHỨNG BẰNG MÃ TOÁN VÀ BLOCKCHAIN
                 </span>
-                <h2 className="text-2xl md:text-3xl font-black text-white">
+                <h2 className="text-2xl md:text-3xl font-bold text-white">
                   3 LỚP PHÒNG THỦ & LIVING MONEY FLOW
                 </h2>
               </div>
@@ -613,21 +613,21 @@ export default function StageConsolePage() {
 
             {/* Architecture 3 Layers Explanation Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-xs">
-              <div className="p-4 bg-[#0a0e16] border border-gray-800 rounded-xl">
+              <div className="p-4 bg-night border border-night-rule rounded-xl">
                 <span className="text-cyan-400 font-bold block mb-1">TẦNG 1: VALIDATOR</span>
                 <p className="text-gray-400 text-[11px] leading-relaxed">
                   Lớp code độc lập kiểm tra Recipient Allowlist và Spending Caps. Hoàn toàn tách biệt khỏi tâm trí LLM.
                 </p>
               </div>
 
-              <div className="p-4 bg-[#0a0e16] border border-gray-800 rounded-xl">
+              <div className="p-4 bg-night border border-night-rule rounded-xl">
                 <span className="text-emerald-400 font-bold block mb-1">TẦNG 2: SMART CONTRACT</span>
                 <p className="text-gray-400 text-[11px] leading-relaxed">
                   GuardedTreasury trên Avalanche Fuji khóa cứng ngân sách. Dù server bị chiếm cũng không thể chi quá mức.
                 </p>
               </div>
 
-              <div className="p-4 bg-[#0a0e16] border border-gray-800 rounded-xl">
+              <div className="p-4 bg-night border border-night-rule rounded-xl">
                 <span className="text-purple-400 font-bold block mb-1">TẦNG 3: VÍ PHIÊN (SESSION)</span>
                 <p className="text-gray-400 text-[11px] leading-relaxed">
                   Sinh ví EOA riêng cho từng nhiệm vụ. Thiệt hại tối đa khi lộ key chỉ bằng đúng khoản tiền đã cấp cho task đó.
@@ -646,34 +646,34 @@ export default function StageConsolePage() {
             className="flex flex-col items-center justify-center text-center space-y-10 animate-fadeIn py-12"
           >
             {/* Arena Final Score Recap */}
-            <div className="p-4 bg-[#0b0e14] border border-gray-800 rounded-2xl flex items-center space-x-6 font-mono text-sm">
+            <div className="p-4 bg-night border border-night-rule rounded-2xl flex items-center space-x-6 font-mono text-sm">
               <div>
                 <span className="text-gray-500 text-xs block">TỔNG ĐÒN TẤN CÔNG</span>
-                <span className="text-2xl font-black text-cyan-400">{arenaStats.totalAttacks}</span>
+                <span className="text-2xl font-bold text-cyan-400">{arenaStats.totalAttacks}</span>
               </div>
-              <div className="w-px h-8 bg-gray-800" />
+              <div className="w-px h-8 bg-night-rule" />
               <div>
                 <span className="text-gray-500 text-xs block">AGENT BỊ LỪA</span>
-                <span className="text-2xl font-black text-amber-400">{arenaStats.convincedAttacks}</span>
+                <span className="text-2xl font-bold text-amber-400">{arenaStats.convincedAttacks}</span>
               </div>
-              <div className="w-px h-8 bg-gray-800" />
+              <div className="w-px h-8 bg-night-rule" />
               <div>
                 <span className="text-gray-500 text-xs block">TIỀN RA NGOÀI PHẠM VI</span>
-                <span className="text-2xl font-black text-emerald-400">${arenaStats.totalLossUsdc}</span>
+                <span className="text-2xl font-bold text-emerald-400">${arenaStats.totalLossUsdc}</span>
               </div>
-              <div className="w-px h-8 bg-gray-800" />
+              <div className="w-px h-8 bg-night-rule" />
               <div>
                 <span className="text-gray-500 text-xs block">CHI TRONG NGÂN SÁCH</span>
-                <span className="text-2xl font-black text-white">${arenaStats.spentWithinBudgetUsdc || (0).toFixed(2)}</span>
+                <span className="text-2xl font-bold text-white">${arenaStats.spentWithinBudgetUsdc || (0).toFixed(2)}</span>
               </div>
             </div>
 
             {/* Grand Punchline */}
             <div className="space-y-4 max-w-4xl">
-              <h1 className="text-4xl md:text-6xl lg:text-7xl font-black font-mono tracking-tight text-white leading-tight">
+              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold font-mono tracking-tight text-white leading-tight">
                 LLM CÓ THỂ BỊ LỪA.
                 <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-amber-400 to-emerald-400">
+                <span className="text-white">
                   NGÂN SÁCH TRÊN AVALANCHE THÌ KHÔNG.
                 </span>
               </h1>
@@ -706,7 +706,7 @@ export default function StageConsolePage() {
       </main>
 
       {/* Footer Navigation Hints */}
-      <footer className="border-t border-gray-800 bg-[#070a10] px-6 py-3 flex items-center justify-between font-mono text-xs text-gray-500 z-30">
+      <footer className="border-t border-night-rule bg-night px-6 py-3 flex items-center justify-between font-mono text-xs text-gray-500 z-30">
         <div>
           <span>Phím tắt: [1] Hook · [2] Bankr · [3] Arena · [4] Money Flow · [5] Punchline</span>
         </div>

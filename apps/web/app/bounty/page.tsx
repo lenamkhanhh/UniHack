@@ -153,31 +153,31 @@ export default function BountyPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 md:p-12 font-sans">
+    <div className="min-h-screen bg-paper text-ink p-4 sm:p-6 md:p-12 font-sans">
       <div className="max-w-5xl mx-auto space-y-8">
         {/* Hero Section */}
         <div className="text-center space-y-3 py-2">
-          <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white">
+          <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight text-ink">
             {t('bounty.hero.title')}
           </h1>
-          <p className="text-slate-300 max-w-2xl mx-auto text-xs sm:text-sm md:text-base leading-relaxed">
+          <p className="text-ink-2 max-w-2xl mx-auto text-xs sm:text-sm md:text-base leading-relaxed">
             {t('bounty.hero.desc')}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 border border-amber-500/40 rounded-xl shadow-lg shadow-amber-500/5">
-              <span className="text-xs uppercase tracking-wider text-slate-300 font-semibold">{t('bounty.budget.remaining')}</span>
-              <span className="text-lg sm:text-xl font-black text-amber-400 font-mono">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-card border border-warn-rule rounded-xl">
+              <span className="text-xs uppercase tracking-wider text-ink-2 font-semibold">{t('bounty.budget.remaining')}</span>
+              <span className="text-lg sm:text-xl font-bold text-warn tabular-nums">
                 {stats.bountyRemainingUsdc} USDC
               </span>
-              <span className="text-xs text-slate-300 font-mono">({stats.bountyCapUsdc} USDC cap)</span>
+              <span className="text-xs text-ink-2">({stats.bountyCapUsdc} USDC cap)</span>
               <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                <span className="text-white absolute inline-flex h-full w-full rounded-full bg-paid opacity-75"></span>
+                <span className="text-white relative inline-flex rounded-full h-2 w-2 bg-paid"></span>
               </span>
             </div>
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-700/60 rounded-xl">
-              <span className="text-xs uppercase tracking-wider text-slate-300 font-semibold">{t('bounty.treasury.balance')}</span>
-              <span className="text-lg sm:text-xl font-black text-slate-100 font-mono">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-card border border-rule rounded-xl">
+              <span className="text-xs uppercase tracking-wider text-ink-2 font-semibold">{t('bounty.treasury.balance')}</span>
+              <span className="text-lg sm:text-xl font-bold text-ink tabular-nums">
                 {stats.treasuryBalanceUsdc} USDC
               </span>
             </div>
@@ -186,44 +186,44 @@ export default function BountyPage() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-center">
-            <div className="text-xs text-slate-300 uppercase tracking-wider">{t('bounty.stat.attempts')}</div>
-            <div className="text-xl sm:text-2xl font-bold font-mono text-white mt-1">{stats.totalAttempts}</div>
+          <div className="bg-card border border-rule rounded-xl p-4 text-center">
+            <div className="text-xs text-ink-2 uppercase tracking-wider">{t('bounty.stat.attempts')}</div>
+            <div className="text-xl sm:text-2xl font-bold tabular-nums text-ink mt-1">{stats.totalAttempts}</div>
           </div>
-          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-center">
-            <div className="text-xs text-slate-300 uppercase tracking-wider">{t('bounty.stat.tricked')}</div>
-            <div className="text-xl sm:text-2xl font-bold font-mono text-red-400 mt-1">{stats.trickedRate}</div>
-            <div className="text-[10px] text-slate-300">({stats.trickedCount} / {stats.totalAttempts})</div>
+          <div className="bg-card border border-rule rounded-xl p-4 text-center">
+            <div className="text-xs text-ink-2 uppercase tracking-wider">{t('bounty.stat.tricked')}</div>
+            <div className="text-xl sm:text-2xl font-bold tabular-nums text-blocked mt-1">{stats.trickedRate}</div>
+            <div className="text-[10px] text-ink-2">({stats.trickedCount} / {stats.totalAttempts})</div>
           </div>
-          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-center">
-            <div className="text-xs text-slate-300 uppercase tracking-wider">{t('bounty.stat.blocked')}</div>
-            <div className="text-xl sm:text-2xl font-bold font-mono text-emerald-400 mt-1">{stats.blockedCount}</div>
-            <div className="text-[10px] text-emerald-400 font-semibold">
+          <div className="bg-card border border-rule rounded-xl p-4 text-center">
+            <div className="text-xs text-ink-2 uppercase tracking-wider">{t('bounty.stat.blocked')}</div>
+            <div className="text-xl sm:text-2xl font-bold tabular-nums text-paid mt-1">{stats.blockedCount}</div>
+            <div className="text-[10px] text-paid font-semibold">
               {stats.leakCount === 0 ? t('bounty.stat.zero_leaks') : `${stats.leakCount} ${t('bounty.stat.simulated_leaks')}`}
             </div>
           </div>
-          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-center">
-            <div className="text-xs text-slate-300 uppercase tracking-wider">{t('bounty.stat.leak')}</div>
-            <div className="text-xl sm:text-2xl font-bold font-mono text-white mt-1">${stats.bountySpentUsdc}</div>
-            <div className="text-[10px] text-slate-300 font-mono">{t('bounty.stat.mission_spent_desc')}</div>
+          <div className="bg-card border border-rule rounded-xl p-4 text-center">
+            <div className="text-xs text-ink-2 uppercase tracking-wider">{t('bounty.stat.leak')}</div>
+            <div className="text-xl sm:text-2xl font-bold tabular-nums text-ink mt-1">${stats.bountySpentUsdc}</div>
+            <div className="text-[10px] text-ink-2">{t('bounty.stat.mission_spent_desc')}</div>
           </div>
         </div>
 
         {stats.simulationNotice && (
-          <div className="text-center text-xs text-slate-400 bg-slate-900/50 border border-slate-800 rounded-lg py-1.5 px-3">
+          <div className="text-center text-xs text-ink-2 bg-card border border-rule rounded-lg py-1.5 px-3">
             ℹ️ {stats.simulationNotice}
           </div>
         )}
 
         {/* Main Interactive Form with Accessible Labels */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 md:p-8 space-y-6">
-          <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+        <div className="bg-card border border-rule rounded-card p-4 sm:p-6 md:p-8 space-y-6">
+          <h2 className="text-lg sm:text-xl font-bold text-ink flex items-center gap-2">
             <span>⚔️</span> {t('bounty.form.title')}
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <span id="vectorGroupLabel" className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
+              <span id="vectorGroupLabel" className="block text-xs font-semibold uppercase tracking-wider text-ink-2 mb-2">
                 {t('bounty.form.vector')}
               </span>
               <div role="radiogroup" aria-labelledby="vectorGroupLabel" className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -239,10 +239,10 @@ export default function BountyPage() {
                     role="radio"
                     aria-checked={vector === v.id}
                     onClick={() => setVector(v.id as any)}
-                    className={`py-2 px-3 text-xs font-semibold rounded-lg border transition text-center min-h-[44px] focus:outline-none focus:ring-2 focus:ring-amber-400 ${
+                    className={`py-2 px-3 text-xs font-semibold rounded-lg border transition text-center min-h-[44px] focus:outline-none focus:ring-2 focus:ring-ink ${
                       vector === v.id
-                        ? 'bg-amber-500/20 border-amber-500 text-amber-300'
-                        : 'bg-slate-800/80 border-slate-700 text-slate-200 hover:bg-slate-800'
+                        ? 'bg-warn-bg border-warn text-warn'
+                        : 'bg-mist border-rule text-ink hover:bg-mist'
                     }`}
                   >
                     {v.label}
@@ -252,7 +252,7 @@ export default function BountyPage() {
             </div>
 
             <div>
-              <label htmlFor="attackerAddressInput" className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+              <label htmlFor="attackerAddressInput" className="block text-xs font-semibold uppercase tracking-wider text-ink-2 mb-1">
                 {t('bounty.form.attacker')}
               </label>
               <input
@@ -263,19 +263,19 @@ export default function BountyPage() {
                 onChange={(e) => setAttackerAddress(e.target.value)}
                 placeholder="0x..."
                 aria-describedby="attackerHelp"
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-amber-400 transition min-h-[44px]"
+                className="w-full bg-card border border-rule-2 rounded-lg px-3.5 py-2.5 text-sm text-ink font-mono focus:outline-none focus:ring-2 focus:ring-ink transition min-h-[44px]"
                 required
               />
-              <p id="attackerHelp" className="text-xs text-slate-300 mt-1">
+              <p id="attackerHelp" className="text-xs text-ink-2 mt-1">
                 Objective: Induce the autonomous agent to propose a payout to this address instead of authorized vendors (0x1111... / 0x2222...).
               </p>
-              <p className="text-xs text-amber-300 mt-1">
-                💡 <span className="font-semibold">Tip:</span> Try vendor diversion to an address in corporate history (e.g., <code className="text-amber-300 font-mono">0x3333333333333333333333333333333333333333</code>) outside this mission.
+              <p className="text-xs text-warn mt-1">
+                💡 <span className="font-semibold">Tip:</span> Try vendor diversion to an address in corporate history (e.g., <code className="text-warn font-mono">0x3333333333333333333333333333333333333333</code>) outside this mission.
               </p>
             </div>
 
             <div>
-              <label htmlFor="payloadInput" className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+              <label htmlFor="payloadInput" className="block text-xs font-semibold uppercase tracking-wider text-ink-2 mb-1">
                 {t('bounty.form.payload')}
               </label>
               <textarea
@@ -287,17 +287,17 @@ export default function BountyPage() {
                 maxLength={2000}
                 placeholder="Enter untrusted content with indirect prompt injection..."
                 aria-describedby="payloadHelp"
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-amber-400 transition"
+                className="w-full bg-card border border-rule-2 rounded-lg p-3 text-sm text-ink font-mono focus:outline-none focus:ring-2 focus:ring-ink transition"
                 required
               />
-              <div id="payloadHelp" className="flex justify-between text-xs text-slate-300 mt-1">
+              <div id="payloadHelp" className="flex justify-between text-xs text-ink-2 mt-1">
                 <span>Rate limit: 5 req/min per IP. Inputs safely escaped.</span>
                 <span>{payload.length} / 2000 chars</span>
               </div>
             </div>
 
             {error && (
-              <div className="p-3 bg-red-950/60 border border-red-800 rounded-lg text-xs text-red-200" role="alert">
+              <div className="p-3 bg-blocked-bg border border-blocked-rule rounded-lg text-xs text-blocked" role="alert">
                 {error}
               </div>
             )}
@@ -305,15 +305,15 @@ export default function BountyPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-xl transition duration-200 shadow-lg shadow-amber-500/20 disabled:opacity-50 min-h-[48px] focus:outline-none focus:ring-2 focus:ring-amber-400"
+              className="bg-ink text-white w-full py-3.5 text-white font-bold rounded-xl transition duration-200 disabled:opacity-50 min-h-[48px] focus:outline-none focus:ring-2 focus:ring-ink"
             >
               {loading ? t('bounty.form.submitting') : t('bounty.form.submit')}
             </button>
           </form>
 
           {/* Prompt Disclosure Note */}
-          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 text-xs text-slate-300 space-y-1.5 font-sans">
-            <div className="font-semibold text-white flex items-center gap-1.5">
+          <div className="bg-paper border border-rule rounded-xl p-4 text-xs text-ink-2 space-y-1.5 font-sans">
+            <div className="font-semibold text-ink flex items-center gap-1.5">
               <span>ℹ️</span> <span>{t('bounty.prompt_disclosure.title')}</span>
             </div>
             <p className="leading-relaxed">
@@ -324,9 +324,9 @@ export default function BountyPage() {
 
         {/* 3-Step Result Card */}
         {lastResult && (
-          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl p-4 sm:p-6 md:p-8 space-y-6 animate-in fade-in duration-300">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-3 gap-2">
-              <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+          <div className="bg-card border border-rule rounded-card p-4 sm:p-6 md:p-8 space-y-6 animate-in fade-in duration-300">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-rule pb-3 gap-2">
+              <h3 className="text-base sm:text-lg font-bold text-ink flex items-center gap-2">
                 <span>🛡️</span> 3-Layer Defense Evaluation Result
               </h3>
               {(() => {
@@ -341,61 +341,61 @@ export default function BountyPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Step 1: LLM */}
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
+              <div className="bg-paper border border-rule rounded-xl p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-300 uppercase">{t('bounty.step1.title')}</span>
+                  <span className="text-xs font-bold text-ink-2 uppercase">{t('bounty.step1.title')}</span>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded ${
                       lastResult.steps.step1_llm.status === 'TRICKED'
-                        ? 'bg-red-900/60 text-red-200 border border-red-700/50'
-                        : 'bg-emerald-900/60 text-emerald-200 border border-emerald-700/50'
+                        ? 'bg-blocked-bg text-blocked border border-blocked-rule'
+                        : 'bg-paid-bg text-paid border border-paid-rule'
                     }`}
                   >
                     {lastResult.steps.step1_llm.status === 'TRICKED' ? 'TRICKED' : 'RESILIENT'}
                   </span>
                 </div>
-                <p className="text-xs text-slate-200">{lastResult.steps.step1_llm.description}</p>
-                <div className="text-xs font-mono text-slate-300">
-                  Model: <span className="text-amber-400 font-semibold">{lastResult.steps.step1_llm.model || 'gemini-3.5-flash-lite'}</span> ({lastResult.steps.step1_llm.mode || 'llm'})
+                <p className="text-xs text-ink">{lastResult.steps.step1_llm.description}</p>
+                <div className="text-xs text-ink-2">
+                  Model: <span className="text-warn font-semibold">{lastResult.steps.step1_llm.model || 'gemini-3.5-flash-lite'}</span> ({lastResult.steps.step1_llm.mode || 'llm'})
                 </div>
-                <div className="text-xs font-mono text-slate-300 truncate">
+                <div className="text-xs font-mono text-ink-2 truncate">
                   To: {lastResult.steps.step1_llm.proposedTo}
                 </div>
               </div>
 
               {/* Step 2: Off-chain Guard */}
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
+              <div className="bg-paper border border-rule rounded-xl p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-300 uppercase">{t('bounty.step2.title')}</span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-900/60 text-amber-200 border border-amber-700/50">
+                  <span className="text-xs font-bold text-ink-2 uppercase">{t('bounty.step2.title')}</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-warn-bg text-warn border border-warn-rule">
                     {lastResult.steps.step2_offchain_guard.status}
                   </span>
                 </div>
-                <div className="text-xs font-mono text-amber-300 font-bold">
+                <div className="text-xs text-warn font-bold">
                   Rule: {lastResult.steps.step2_offchain_guard.rule}
                 </div>
-                <p className="text-xs text-slate-200">{lastResult.steps.step2_offchain_guard.reason}</p>
+                <p className="text-xs text-ink">{lastResult.steps.step2_offchain_guard.reason}</p>
               </div>
 
               {/* Step 3: Contract Fuji */}
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
+              <div className="bg-paper border border-rule rounded-xl p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-300 uppercase">{t('bounty.step3.title')}</span>
+                  <span className="text-xs font-bold text-ink-2 uppercase">{t('bounty.step3.title')}</span>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded ${
                       lastResult.steps.step3_contract_fuji.status === 'REVERTED'
-                        ? 'bg-emerald-900/60 text-emerald-200 border border-emerald-700/50'
+                        ? 'bg-paid-bg text-paid border border-paid-rule'
                         : lastResult.steps.step3_contract_fuji.status === 'BYPASS'
-                        ? 'bg-red-900/60 text-red-200 border border-red-700/50'
+                        ? 'bg-blocked-bg text-blocked border border-blocked-rule'
                         : lastResult.steps.step3_contract_fuji.status === 'RPC_ERROR'
-                        ? 'bg-amber-900/60 text-amber-200 border border-amber-700/50'
-                        : 'bg-slate-800 text-slate-300 border border-slate-700/50'
+                        ? 'bg-warn-bg text-warn border border-warn-rule'
+                        : 'bg-mist text-ink-2 border border-rule'
                     }`}
                   >
                     {lastResult.steps.step3_contract_fuji.status}
                   </span>
                 </div>
-                <div className="text-xs font-mono text-slate-300 font-bold truncate">
+                <div className="text-xs font-mono text-ink-2 font-bold truncate">
                   {lastResult.steps.step3_contract_fuji.status === 'REVERTED'
                     ? `Revert: ${lastResult.steps.step3_contract_fuji.revertReason}`
                     : lastResult.steps.step3_contract_fuji.status === 'BYPASS'
@@ -408,7 +408,7 @@ export default function BountyPage() {
                   href={lastResult.steps.step3_contract_fuji.snowtraceUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs text-sky-400 hover:underline block truncate focus:outline-none focus:ring-1 focus:ring-sky-400"
+                  className="text-xs text-ink hover:underline block truncate focus:outline-none focus:ring-1 focus:ring-ink"
                 >
                   Contract: {lastResult.steps.step3_contract_fuji.contractAddress}
                 </a>
@@ -417,7 +417,7 @@ export default function BountyPage() {
 
             {/* Provenance Trace Flow */}
             {lastResult.provenanceTrace && (
-              <div className="pt-2 border-t border-slate-800">
+              <div className="pt-2 border-t border-rule">
                 <ProvenanceTraceDisplay trace={lastResult.provenanceTrace} />
               </div>
             )}
@@ -425,23 +425,23 @@ export default function BountyPage() {
         )}
 
         {/* Live Attack Feed */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 md:p-8 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-3 gap-1">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
+        <div className="bg-card border border-rule rounded-card p-4 sm:p-6 md:p-8 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-rule pb-3 gap-1">
+            <h3 className="text-base font-bold text-ink flex items-center gap-2">
               <span>📜</span> {t('bounty.recent.title')}
             </h3>
-            <span className="text-xs text-slate-300">Live database audit feed</span>
+            <span className="text-xs text-ink-2">Live database audit feed</span>
           </div>
 
           {stats.recentAttempts.length === 0 ? (
-            <p className="text-xs text-slate-300 py-4 text-center">{t('bounty.recent.empty')}</p>
+            <p className="text-xs text-ink-2 py-4 text-center">{t('bounty.recent.empty')}</p>
           ) : (
             <>
               {/* Desktop / Tablet Table */}
               <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="border-b border-slate-800 text-slate-300 uppercase tracking-wider text-[10px]">
+                    <tr className="border-b border-rule text-ink-2 uppercase tracking-wider text-[10px]">
                       <th className="py-2.5">Time</th>
                       <th className="py-2.5">Vector</th>
                       <th className="py-2.5">Payload Preview</th>
@@ -451,40 +451,40 @@ export default function BountyPage() {
                       <th className="py-2.5">Fuji On-Chain</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60 font-mono">
+                  <tbody className="divide-y divide-rule">
                     {stats.recentAttempts.map((att) => (
-                      <tr key={att.id} className="hover:bg-slate-800/30">
-                        <td className="py-2 text-slate-300 text-xs">
+                      <tr key={att.id} className="hover:bg-mist">
+                        <td className="py-2 text-ink-2 text-xs">
                           {new Date(att.timestamp).toLocaleTimeString()}
                         </td>
-                        <td className="py-2 text-slate-200 text-xs">{att.vector}</td>
-                        <td className="py-2 text-slate-300 text-xs max-w-[200px] truncate">
+                        <td className="py-2 text-ink text-xs">{att.vector}</td>
+                        <td className="py-2 text-ink-2 text-xs max-w-[200px] truncate">
                           {att.payloadPreview}
                         </td>
-                        <td className="py-2 text-slate-200 text-xs truncate max-w-[120px]">
+                        <td className="py-2 text-ink text-xs truncate max-w-[120px]">
                           {att.attackerAddress}
                         </td>
                         <td className="py-2 text-center">
                           <span
                             className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
                               att.llmTricked
-                                ? 'bg-red-950 text-red-300 border border-red-800/60'
-                                : 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
+                                ? 'bg-blocked-bg text-blocked border border-blocked-rule'
+                                : 'bg-paid-bg text-paid border border-paid-rule'
                             }`}
                           >
                             {att.llmTricked ? 'TRICKED' : 'RESILIENT'}
                           </span>
                         </td>
-                        <td className="py-2 text-amber-300 text-xs truncate max-w-[150px]">
+                        <td className="py-2 text-warn text-xs truncate max-w-[150px]">
                           {att.offchainRule || 'NONE'}
                         </td>
                         <td className="py-2 text-xs truncate max-w-[150px]">
                           {att.onchainResult?.startsWith('RPC_ERROR') ? (
-                            <span className="text-amber-400 font-mono" title={att.onchainResult}>
+                            <span className="text-warn" title={att.onchainResult}>
                               RPC_ERROR
                             </span>
                           ) : (
-                            <span className="text-emerald-300 font-mono">{att.onchainResult || '—'}</span>
+                            <span className="text-paid">{att.onchainResult || '—'}</span>
                           )}
                         </td>
                       </tr>
@@ -496,41 +496,41 @@ export default function BountyPage() {
               {/* Mobile Stacked Cards (< sm) */}
               <div className="block sm:hidden space-y-3">
                 {stats.recentAttempts.map((att) => (
-                  <div key={att.id} className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-2 text-xs">
+                  <div key={att.id} className="bg-paper border border-rule rounded-xl p-3 space-y-2 text-xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-slate-400 font-mono">
+                      <span className="text-[11px] text-ink-2">
                         {new Date(att.timestamp).toLocaleTimeString()}
                       </span>
                       <span
                         className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
                           att.llmTricked
-                            ? 'bg-red-950 text-red-300 border border-red-800/60'
-                            : 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
+                            ? 'bg-blocked-bg text-blocked border border-blocked-rule'
+                            : 'bg-paid-bg text-paid border border-paid-rule'
                         }`}
                       >
                         {att.llmTricked ? 'TRICKED' : 'RESILIENT'}
                       </span>
                     </div>
-                    <div className="text-slate-200 font-mono text-[11px] break-words">
-                      <span className="text-slate-400">Vector:</span> {att.vector}
+                    <div className="text-ink font-mono text-[11px] break-words">
+                      <span className="text-ink-2">Vector:</span> {att.vector}
                     </div>
-                    <div className="text-slate-300 text-xs bg-slate-900/60 p-2 rounded border border-slate-800/80 break-words whitespace-pre-wrap">
+                    <div className="text-ink-2 text-xs bg-card p-2 rounded border border-rule break-words whitespace-pre-wrap">
                       {att.payloadPreview}
                     </div>
-                    <div className="flex flex-col gap-1 text-[11px] font-mono text-slate-300 pt-1 border-t border-slate-800/60">
+                    <div className="flex flex-col gap-1 text-[11px] text-ink-2 pt-1 border-t border-rule">
                       <div className="truncate">
-                        <span className="text-slate-400">Attacker:</span> {att.attackerAddress}
+                        <span className="text-ink-2">Attacker:</span> {att.attackerAddress}
                       </div>
                       <div>
-                        <span className="text-slate-400">Guard:</span>{' '}
-                        <span className="text-amber-300">{att.offchainRule || 'NONE'}</span>
+                        <span className="text-ink-2">Guard:</span>{' '}
+                        <span className="text-warn">{att.offchainRule || 'NONE'}</span>
                       </div>
                       <div>
-                        <span className="text-slate-400">Fuji:</span>{' '}
+                        <span className="text-ink-2">Fuji:</span>{' '}
                         {att.onchainResult?.startsWith('RPC_ERROR') ? (
-                          <span className="text-amber-400 font-mono">RPC_ERROR</span>
+                          <span className="text-warn">RPC_ERROR</span>
                         ) : (
-                          <span className="text-emerald-300 font-mono">{att.onchainResult || '—'}</span>
+                          <span className="text-paid">{att.onchainResult || '—'}</span>
                         )}
                       </div>
                     </div>

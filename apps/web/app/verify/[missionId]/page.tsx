@@ -285,17 +285,17 @@ export default function VerifyMissionProofPage() {
 
   if (notFound) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white p-4 sm:p-6 font-mono flex flex-col items-center justify-center text-center">
-        <div className="p-8 bg-red-950/40 border border-red-500 rounded-2xl max-w-md space-y-4">
+      <div className="min-h-screen bg-paper text-ink p-4 sm:p-6 flex flex-col items-center justify-center text-center">
+        <div className="p-8 bg-blocked-bg border border-blocked rounded-card max-w-md space-y-4">
           <span className="text-4xl block" aria-hidden="true">🔍</span>
-          <h1 className="text-xl font-bold text-red-300">{t('verify.not_found.title')}</h1>
-          <p className="text-xs text-slate-300">
+          <h1 className="text-xl font-bold text-blocked">{t('verify.not_found.title')}</h1>
+          <p className="text-xs text-ink-2">
             {t('verify.not_found.desc')} ("{missionId}")
           </p>
           <div className="pt-2">
             <Link
               href="/verify/demo-seed"
-              className="inline-block px-4 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-300 rounded-lg text-xs font-bold border border-slate-700 transition focus:outline-none focus:ring-2 focus:ring-emerald-400 min-h-[44px] flex items-center justify-center"
+              className="inline-block px-4 py-2 bg-mist hover:bg-mist-2 text-paid rounded-lg text-xs font-bold border border-rule transition focus:outline-none focus:ring-2 focus:ring-ink min-h-[44px] flex items-center justify-center"
             >
               {t('verify.not_found.cta')}
             </Link>
@@ -306,20 +306,20 @@ export default function VerifyMissionProofPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-4 sm:p-6 font-sans flex flex-col justify-between space-y-6">
+    <div className="wrap min-h-screen bg-paper text-ink py-6 font-sans flex flex-col justify-between space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800 pb-4 gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-rule pb-4 gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" aria-hidden="true" />
-            <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white">
+            <span className="text-white w-2.5 h-2.5 rounded-full bg-ink" aria-hidden="true" />
+            <h1 className="text-2xl sm:text-[34px] font-bold tracking-[-0.03em] text-ink">
               {t('verify.hero.title')}
             </h1>
-            <span className="text-xs bg-cyan-950/80 text-cyan-300 border border-cyan-800 px-2.5 py-0.5 rounded font-mono font-bold">
+            <span className="text-xs bg-tint-slate text-ink border border-rule-2 px-2.5 py-0.5 rounded font-bold">
               {t('verify.tag')}
             </span>
           </div>
-          <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+          <p className="text-sm text-ink-2 mt-1 max-w-2xl leading-relaxed">
             {t('verify.hero.desc')}
           </p>
         </div>
@@ -330,7 +330,7 @@ export default function VerifyMissionProofPage() {
             <button
               onClick={handleTamperOneByte}
               data-testid="tamper-one-byte-btn"
-              className="bg-red-600/20 hover:bg-red-600/30 border border-red-500/60 text-red-200 hover:text-white font-mono text-xs font-bold py-2.5 px-4 rounded-xl shadow-lg transition flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-red-400 min-h-[44px]"
+              className="bg-blocked-bg hover:bg-blocked-bg border border-blocked-rule text-blocked text-xs font-bold py-2.5 px-4 rounded-full transition flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ink min-h-[44px]"
             >
               <span>{t('verify.btn.tamper')}</span>
             </button>
@@ -338,7 +338,7 @@ export default function VerifyMissionProofPage() {
             <button
               onClick={handleResetOriginal}
               data-testid="reset-original-btn"
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-bold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-900/50 transition flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-emerald-400 min-h-[44px]"
+              className="bg-paid hover:bg-[#096640] text-white text-xs font-bold py-2.5 px-4 rounded-full transition flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ink min-h-[44px]"
             >
               <span>{t('verify.btn.reset')}</span>
             </button>
@@ -350,7 +350,7 @@ export default function VerifyMissionProofPage() {
       {isSeededDemo && (
         <div
           data-testid="demo-seed-banner"
-          className="my-2 p-3 bg-amber-950/80 border-2 border-amber-500 rounded-xl text-center font-bold text-amber-200 text-xs font-mono"
+          className="my-2 p-3 bg-warn-bg border-2 border-warn rounded-xl text-center font-bold text-warn text-xs"
         >
           ⚠️ DEMO SEED — NOT REAL TRANSACTIONS (Offline Auditorium Simulation)
         </div>
@@ -360,21 +360,21 @@ export default function VerifyMissionProofPage() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Verification Status Card */}
         <div
-          className={`lg:col-span-3 rounded-2xl p-4 sm:p-6 border transition-all duration-300 ${
+          className={`lg:col-span-3 rounded-card p-4 sm:p-6 border transition-all duration-300 ${
             verification.valid
-              ? 'bg-emerald-950/20 border-emerald-600/40 shadow-[0_0_30px_rgba(16,185,129,0.15)]'
-              : 'bg-red-950/30 border-red-500 shadow-[0_0_35px_rgba(239,68,68,0.25)]'
+              ? 'bg-paid-bg border-paid-rule'
+              : 'bg-blocked-bg border-blocked'
           }`}
         >
           <div className="flex flex-wrap items-center justify-between mb-3 gap-2">
-            <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-300">
+            <span className="text-xs font-bold uppercase tracking-wider text-ink-2">
               {t('verify.result.title')}
             </span>
             <span
-              className={`font-mono text-xs font-bold px-3 py-1 rounded-full ${
+              className={` text-xs font-bold px-3 py-1 rounded-full ${
                 verification.valid
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                  : 'bg-red-500/20 text-red-200 border border-red-500/50 animate-pulse'
+                  ? 'bg-paid-bg text-paid border border-paid-rule'
+                  : 'bg-blocked-bg text-blocked border border-blocked-rule animate-pulse'
               }`}
             >
               {verification.valid ? t('verify.result.valid') : t('verify.result.invalid')}
@@ -382,31 +382,31 @@ export default function VerifyMissionProofPage() {
           </div>
 
           <div className="flex flex-col md:flex-row md:items-baseline justify-between gap-2">
-            <div className="text-xl sm:text-2xl md:text-3xl font-black font-mono">
+            <div className="text-xl sm:text-2xl md:text-3xl font-bold tabular-nums">
               {verification.valid ? (
-                <span className="text-emerald-400">ALL ENTRIES MATCH CRYPTOGRAPHICALLY</span>
+                <span className="text-paid">ALL ENTRIES MATCH CRYPTOGRAPHICALLY</span>
               ) : (
-                <span className="text-red-400">HASH CHAIN CORRUPTION DETECTED</span>
+                <span className="text-blocked">HASH CHAIN CORRUPTION DETECTED</span>
               )}
             </div>
-            <div className="text-xs font-mono text-slate-300">
-              Total blocks: <span className="text-white font-bold">{currentEntries.length}</span> entries
+            <div className="text-xs text-ink-2">
+              Total blocks: <span className="text-ink font-bold">{currentEntries.length}</span> entries
             </div>
           </div>
 
           {/* Anchor Status */}
-          <div className="mt-4 pt-3 border-t border-slate-800 flex flex-col space-y-2 text-xs font-mono">
+          <div className="mt-4 pt-3 border-t border-rule flex flex-col space-y-2 text-xs">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-slate-300">On-Chain Anchor Status:</span>
+                <span className="text-ink-2">On-Chain Anchor Status:</span>
                 <span
                   data-testid="anchor-status-badge"
                   className={`px-2.5 py-0.5 rounded border font-bold ${
                     isHeadMatch
-                      ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/40'
+                      ? 'bg-paid-bg text-paid border-paid-rule'
                       : isHeadMismatch
-                      ? 'bg-red-500/20 text-red-200 border-red-500/50'
-                      : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                      ? 'bg-blocked-bg text-blocked border-blocked-rule'
+                      : 'bg-warn-bg text-warn border-warn-rule'
                   }`}
                 >
                   {isHeadMatch
@@ -419,7 +419,7 @@ export default function VerifyMissionProofPage() {
                 {isHeadMatch && (
                   <span
                     data-testid="anchor-match-badge"
-                    className="bg-emerald-950 text-emerald-300 border border-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold"
+                    className="bg-paid-bg text-paid border border-paid-rule px-2 py-0.5 rounded text-[10px] font-bold"
                   >
                     MATCH
                   </span>
@@ -427,7 +427,7 @@ export default function VerifyMissionProofPage() {
                 {isHeadMismatch && (
                   <span
                     data-testid="anchor-mismatch-badge"
-                    className="bg-red-950 text-red-300 border border-red-700 px-2 py-0.5 rounded text-[10px] font-bold"
+                    className="bg-blocked-bg text-blocked border border-blocked-rule px-2 py-0.5 rounded text-[10px] font-bold"
                   >
                     MISMATCH
                   </span>
@@ -440,7 +440,7 @@ export default function VerifyMissionProofPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   data-testid="anchor-tx-link"
-                  className="text-cyan-400 hover:text-cyan-300 underline inline-flex items-center space-x-1 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                  className="text-ink hover:text-ink underline inline-flex items-center space-x-1 text-xs focus:outline-none focus:ring-1 focus:ring-ink"
                 >
                   <span>View Anchor Tx on Snowtrace ↗</span>
                 </a>
@@ -449,22 +449,22 @@ export default function VerifyMissionProofPage() {
 
             {/* Display on-chain head & client head when anchored */}
             {isAnchored && (
-              <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-2 text-xs mt-2">
+              <div className="bg-card border border-rule p-3 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-2 text-xs mt-2">
                 <div>
-                  <span className="text-slate-300 block text-[10px]">{t('verify.card.onchain_head')}:</span>
+                  <span className="text-ink-2 block text-[10px]">{t('verify.card.onchain_head')}:</span>
                   <span
                     data-testid="onchain-head"
-                    className="font-mono text-cyan-300 break-all select-all font-bold"
+                    className="font-mono text-ink break-all select-all font-bold"
                   >
                     {onchainHead}
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-300 block text-[10px]">{t('verify.card.head')}:</span>
+                  <span className="text-ink-2 block text-[10px]">{t('verify.card.head')}:</span>
                   <span
                     data-testid="client-head"
                     className={`font-mono break-all select-all font-bold ${
-                      isHeadMatch ? 'text-emerald-300' : 'text-red-400'
+                      isHeadMatch ? 'text-paid' : 'text-blocked'
                     }`}
                   >
                     {clientHead}
@@ -473,28 +473,28 @@ export default function VerifyMissionProofPage() {
               </div>
             )}
 
-            <div className="text-xs text-slate-300">
+            <div className="text-xs text-ink-2">
               {anchorStatus?.note || 'Strict cryptographic verification against verified receipts.'}
             </div>
           </div>
 
           {/* ERC-8004 Independent Validation Card */}
-          <div className="mt-4 pt-3 border-t border-slate-800 flex flex-col space-y-2 text-xs font-mono">
+          <div className="mt-4 pt-3 border-t border-rule flex flex-col space-y-2 text-xs">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-slate-300">ERC-8004 Validation:</span>
+                <span className="text-ink-2">ERC-8004 Validation:</span>
                 <span
                   data-testid="erc8004-status-badge"
                   className={`px-2.5 py-0.5 rounded border font-bold ${
                     ercValidation?.isComplete
-                      ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/40'
+                      ? 'bg-paid-bg text-paid border-paid-rule'
                       : ercValidation?.status === 'REQUEST_PENDING'
-                      ? 'bg-amber-500/10 text-amber-300 border-amber-500/40'
+                      ? 'bg-warn-bg text-warn border-warn-rule'
                       : ercValidation?.status === 'LOCAL_EVALUATED'
-                      ? 'bg-sky-500/10 text-sky-300 border-sky-500/40'
+                      ? 'bg-tint-slate text-ink border-rule-2'
                       : ercValidation?.status === 'FAILED'
-                      ? 'bg-red-500/10 text-red-300 border-red-500/40'
-                      : 'bg-zinc-800/60 text-zinc-300 border-zinc-700/50'
+                      ? 'bg-blocked-bg text-blocked border-blocked-rule'
+                      : 'bg-mist text-ink-2 border-rule'
                   }`}
                 >
                   {ercValidation?.isComplete
@@ -512,7 +512,7 @@ export default function VerifyMissionProofPage() {
                 {(ercValidation?.isComplete || ercValidation?.status === 'LOCAL_EVALUATED') && (
                   <span
                     data-testid="erc8004-tag-badge"
-                    className="bg-cyan-950 text-cyan-300 border border-cyan-700 px-2 py-0.5 rounded text-[10px] font-bold"
+                    className="bg-tint-slate text-ink border border-rule-2 px-2 py-0.5 rounded text-[10px] font-bold"
                   >
                     {ercValidation.tag || 'verified-full'}
                   </span>
@@ -525,7 +525,7 @@ export default function VerifyMissionProofPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   data-testid="erc8004-tx-link"
-                  className="text-cyan-400 hover:text-cyan-300 underline inline-flex items-center space-x-1 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                  className="text-ink hover:text-ink underline inline-flex items-center space-x-1 text-xs focus:outline-none focus:ring-1 focus:ring-ink"
                 >
                   <span>Snowtrace Validation Response ↗</span>
                 </a>
@@ -533,21 +533,21 @@ export default function VerifyMissionProofPage() {
             </div>
 
             {(ercValidation?.isComplete || ercValidation?.status === 'LOCAL_EVALUATED') && (
-              <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-2 text-xs mt-2">
+              <div className="bg-card border border-rule p-3 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-2 text-xs mt-2">
                 <div>
-                  <span className="text-slate-300 block text-[10px]">Independent Validator EOA:</span>
+                  <span className="text-ink-2 block text-[10px]">Independent Validator EOA:</span>
                   <span
                     data-testid="erc8004-validator-address"
-                    className="font-mono text-emerald-300 break-all select-all font-bold"
+                    className="font-mono text-paid break-all select-all font-bold"
                   >
                     {ercValidation.validatorAddress}
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-300 block text-[10px]">ERC-8004 Agent ID:</span>
+                  <span className="text-ink-2 block text-[10px]">ERC-8004 Agent ID:</span>
                   <span
                     data-testid="erc8004-agent-id"
-                    className="font-mono text-cyan-300 break-all select-all font-bold"
+                    className="font-mono text-ink break-all select-all font-bold"
                   >
                     #{ercValidation.agentId || '294'}
                   </span>
@@ -556,29 +556,29 @@ export default function VerifyMissionProofPage() {
             )}
 
             {ercValidation?.status === 'REQUEST_PENDING' && ercValidation?.unsignedRequest && (
-              <div className="bg-amber-950/40 border border-amber-600/60 p-3 rounded-xl space-y-2 text-xs mt-2" data-testid="owner-unsigned-request-box">
-                <span className="font-bold text-amber-300 block">Owner Action Required: Submit On-Chain Validation Request</span>
-                <p className="text-slate-300 text-[11px]">
+              <div className="bg-warn-bg border border-warn-rule p-3 rounded-xl space-y-2 text-xs mt-2" data-testid="owner-unsigned-request-box">
+                <span className="font-bold text-warn block">Owner Action Required: Submit On-Chain Validation Request</span>
+                <p className="text-ink-2 text-[11px]">
                   Backend does not hold owner private key. Sign this transaction with the mission owner wallet to request independent validator verification.
                 </p>
-                <div className="font-mono text-[10px] text-slate-300 bg-black/40 p-2 rounded">
-                  <div>Registry: <span className="text-amber-200">{ercValidation.unsignedRequest.to}</span></div>
-                  <div>RequestHash: <span className="text-cyan-200">{ercValidation.unsignedRequest.requestHash}</span></div>
+                <div className="font-mono text-[10px] text-ink-2 bg-mist p-2 rounded">
+                  <div>Registry: <span className="text-warn">{ercValidation.unsignedRequest.to}</span></div>
+                  <div>RequestHash: <span className="text-ink">{ercValidation.unsignedRequest.requestHash}</span></div>
                 </div>
                 <button
                   type="button"
                   data-testid="sign-validation-request-button"
                   onClick={handleOwnerSignAndBroadcast}
                   disabled={walletSubmitting}
-                  className="w-full py-1.5 px-3 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-black font-bold rounded-lg text-xs transition-colors"
+                  className="w-full py-1.5 px-3 bg-warn hover:bg-warn disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-colors"
                 >
                   {walletSubmitting ? 'Signing in Wallet...' : 'Sign & Broadcast Request via MetaMask'}
                 </button>
                 {walletError && (
-                  <div className="text-red-400 text-[11px] font-bold mt-1">⚠️ {walletError}</div>
+                  <div className="text-blocked text-[11px] font-bold mt-1">⚠️ {walletError}</div>
                 )}
                 {reconcileSuccess && (
-                  <div className="text-emerald-400 text-[11px] font-bold mt-1">✓ {reconcileSuccess}</div>
+                  <div className="text-paid text-[11px] font-bold mt-1">✓ {reconcileSuccess}</div>
                 )}
               </div>
             )}
@@ -586,8 +586,8 @@ export default function VerifyMissionProofPage() {
 
           {/* Error messages if tampered */}
           {!verification.valid && (
-            <div className="mt-4 p-3 bg-red-950/60 border border-red-600 rounded-xl space-y-1 font-mono text-xs text-red-200">
-              <span className="font-bold block text-red-300">{t('verify.tamper_alert')}</span>
+            <div className="mt-4 p-3 bg-blocked-bg border border-blocked rounded-xl space-y-1 text-xs text-blocked">
+              <span className="font-bold block text-blocked">{t('verify.tamper_alert')}</span>
               {verification.errors.map((err, i) => (
                 <div key={i} className="text-xs">
                   • {err}
@@ -598,12 +598,12 @@ export default function VerifyMissionProofPage() {
         </div>
 
         {/* Audience QR Mobile Access */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col items-center justify-between text-center space-y-3">
+        <div className="bg-card border border-rule rounded-card p-5 flex flex-col items-center justify-between text-center space-y-3">
           <div>
-            <span className="text-[10px] font-mono text-cyan-400 font-bold uppercase tracking-widest block mb-1">
+            <span className="text-[10px] text-ink font-bold uppercase tracking-widest block mb-1">
               OPEN ON MOBILE
             </span>
-            <p className="text-xs text-slate-300 font-medium mb-3">
+            <p className="text-xs text-ink-2 font-medium mb-3">
               Scan QR to test 1-byte modification on your personal device
             </p>
 
@@ -614,19 +614,19 @@ export default function VerifyMissionProofPage() {
             />
           </div>
 
-          <span className="text-[10px] font-mono text-slate-300 break-all select-all mt-2 max-w-full">
+          <span className="text-[10px] font-mono text-ink-2 break-all select-all mt-2 max-w-full">
             {verifyUrl || `/verify/${missionId}`}
           </span>
         </div>
       </div>
 
       {/* Visual Hash Chain Timeline */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 flex-1 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-3 gap-1">
-          <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-300">
+      <div className="bg-card border border-rule rounded-card p-4 sm:p-6 flex-1 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-rule pb-3 gap-1">
+          <span className="text-xs font-bold uppercase tracking-wider text-ink-2">
             Keccak-256 Hash Chain Structure
           </span>
-          <span className="text-xs font-mono text-slate-300">
+          <span className="text-xs text-ink-2">
             {isTampered ? '⚠️ STATE: CORRUPTED DATA DETECTED' : '🔒 STATE: INTEGRITY PRESERVED'}
           </span>
         </div>
@@ -641,18 +641,18 @@ export default function VerifyMissionProofPage() {
               <div
                 key={entry.sourceKey || idx}
                 data-testid={`chain-block-${idx}`}
-                className={`p-4 rounded-xl border transition-all duration-300 font-mono text-xs ${
+                className={`p-4 rounded-xl border transition-all duration-300 text-xs ${
                   isEntryTampered
-                    ? 'bg-red-950/40 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)] animate-pulse'
+                    ? 'bg-blocked-bg border-blocked animate-pulse'
                     : isDownstreamBroken
-                    ? 'bg-red-950/20 border-red-900/60 opacity-80'
-                    : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                    ? 'bg-blocked-bg border-blocked-rule opacity-80'
+                    : 'bg-paper border-rule hover:border-rule'
                 }`}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="font-bold text-slate-300">Block #{idx}</span>
-                    <span className="bg-slate-800 text-slate-200 px-2 py-0.5 rounded text-[10px]">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex min-w-0 items-center space-x-2">
+                    <span className="font-bold text-ink-2">Block #{idx}</span>
+                    <span className="min-w-0 break-all bg-mist font-mono text-ink px-2 py-0.5 rounded text-[10px]">
                       {entry.sourceKey}
                     </span>
                   </div>
@@ -660,10 +660,10 @@ export default function VerifyMissionProofPage() {
                   <span
                     className={`text-[10px] font-bold px-2.5 py-0.5 rounded ${
                       isEntryTampered
-                        ? 'bg-red-500 text-white'
+                        ? 'bg-blocked text-white'
                         : isDownstreamBroken
-                        ? 'bg-red-950 text-red-300 border border-red-800'
-                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        ? 'bg-blocked-bg text-blocked border border-blocked-rule'
+                        : 'bg-paid-bg text-paid border border-paid-rule'
                     }`}
                   >
                     {isEntryTampered
@@ -674,21 +674,21 @@ export default function VerifyMissionProofPage() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-300">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-ink-2">
                   <div>
-                    <span className="text-slate-400 block text-[10px]">prevHash:</span>
-                    <span className="break-all block font-mono text-slate-200">{entry.prevHash}</span>
+                    <span className="text-ink-2 block text-[10px]">prevHash:</span>
+                    <span className="break-all block font-mono text-ink">{entry.prevHash}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[10px]">entryHash:</span>
-                    <span className="break-all block font-mono text-cyan-300">{entry.entryHash}</span>
+                    <span className="text-ink-2 block text-[10px]">entryHash:</span>
+                    <span className="break-all block font-mono text-ink">{entry.entryHash}</span>
                   </div>
                 </div>
 
                 {/* Canonical payload summary */}
-                <div className="mt-2 pt-2 border-t border-slate-800/80 text-xs text-slate-300 break-all">
-                  <span className="text-slate-400 mr-2">canonicalJson:</span>
-                  <span className={isEntryTampered ? 'text-red-300 font-bold' : 'text-slate-200'}>
+                <div className="mt-2 pt-2 border-t border-rule text-xs text-ink-2 break-all">
+                  <span className="text-ink-2 mr-2">canonicalJson:</span>
+                  <span className={isEntryTampered ? 'text-blocked font-bold' : 'text-ink'}>
                     {entry.canonicalJson}
                   </span>
                 </div>
@@ -699,9 +699,9 @@ export default function VerifyMissionProofPage() {
       </div>
 
       {/* Footer */}
-      <div className="border-t border-slate-800 pt-4 mt-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400 font-mono">
+      <div className="border-t border-rule pt-4 mt-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-ink-2">
         <div>
-          <span className="text-white font-semibold">"Tamper 1 byte and the chain breaks. Cryptographically verifiable by anyone."</span>
+          <span className="text-ink font-semibold">"Tamper 1 byte and the chain breaks. Cryptographically verifiable by anyone."</span>
         </div>
         <div>
           <span>MissionPay · Avalanche Fuji</span>

@@ -116,13 +116,13 @@ export default function ArenaStagePage() {
   const budgetPercent = Math.min(100, Math.max(0, (remainingNum / capNum) * 100));
 
   return (
-    <div className="min-h-screen bg-[#06080d] text-white p-6 font-sans flex flex-col justify-between">
+    <div className="min-h-screen bg-night text-white p-6 font-sans flex flex-col justify-between">
       {/* Top Banner */}
-      <div className="flex items-center justify-between border-b border-gray-800 pb-4">
+      <div className="flex items-center justify-between border-b border-night-rule pb-4">
         <div className="flex items-center space-x-3">
           <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
           <div>
-            <h1 className="text-2xl font-black tracking-tight text-white flex items-center space-x-2">
+            <h1 className="text-2xl font-bold tracking-tight text-white flex items-center space-x-2">
               <span>FREYSA ARENA</span>
               <span className="text-xs bg-red-500/20 text-red-400 border border-red-500/40 px-2 py-0.5 rounded font-mono">
                 STAGE LIVE
@@ -143,7 +143,7 @@ export default function ArenaStagePage() {
       </div>
 
       {/* Live Fuji Realtime Balances (WOW-W5) */}
-      <div className="bg-[#0c1018] border border-gray-800 rounded-xl px-4 py-2.5 my-3 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+      <div className="bg-night border border-night-rule rounded-xl px-4 py-2.5 my-3 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
         <div className="flex items-center space-x-2">
           {fujiBalances?.mode === 'LIVE_FUJI' ? (
             <>
@@ -184,24 +184,24 @@ export default function ArenaStagePage() {
       {/* Main KPI Counters - 3 BIG NUMBERS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 my-6">
         {/* N: Total Attacks */}
-        <div className="bg-[#0c1018] border border-gray-800 rounded-2xl p-6 flex flex-col items-center justify-center text-center shadow-lg relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 to-blue-500" />
+        <div className="bg-night border border-night-rule rounded-2xl p-6 flex flex-col items-center justify-center text-center relative overflow-hidden group">
+          <div className="bg-night-rule absolute top-0 left-0 w-full h-1" />
           <span className="text-xs font-mono font-bold uppercase tracking-widest text-cyan-400 mb-2">
             Đòn tấn công từ khán giả
           </span>
-          <span className="text-6xl font-black font-mono text-white tracking-tight">
+          <span className="text-6xl font-bold font-mono text-white tracking-tight">
             {stats.totalAttacks}
           </span>
           <span className="text-xs text-gray-400 mt-2">Tổng số lượt gửi từ điện thoại</span>
         </div>
 
         {/* M: Convinced Attacks */}
-        <div className="bg-[#0c1018] border border-amber-900/40 rounded-2xl p-6 flex flex-col items-center justify-center text-center shadow-lg relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 to-orange-500" />
+        <div className="bg-night border border-amber-900/40 rounded-2xl p-6 flex flex-col items-center justify-center text-center relative overflow-hidden group">
+          <div className="bg-night-rule absolute top-0 left-0 w-full h-1" />
           <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-400 mb-2">
             Agent bị thuyết phục
           </span>
-          <span className="text-6xl font-black font-mono text-amber-300 tracking-tight">
+          <span className="text-6xl font-bold font-mono text-amber-300 tracking-tight">
             {stats.convincedAttacks}
           </span>
           <span className="text-xs text-amber-400/80 mt-2 font-medium">
@@ -210,12 +210,12 @@ export default function ArenaStagePage() {
         </div>
 
         {/* Out-of-scope Loss: dynamic from API (WOW-F4) */}
-        <div className="bg-[#0c1018] border border-emerald-900/40 rounded-2xl p-6 flex flex-col items-center justify-center text-center shadow-lg relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-400" />
+        <div className="bg-night border border-emerald-900/40 rounded-2xl p-6 flex flex-col items-center justify-center text-center relative overflow-hidden group">
+          <div className="bg-night-rule absolute top-0 left-0 w-full h-1" />
           <span className="text-xs font-mono font-bold uppercase tracking-widest text-emerald-400 mb-2">
             Tiền ra ngoài phạm vi cho phép
           </span>
-          <span className="text-6xl font-black font-mono text-emerald-400 tracking-tight drop-shadow-[0_0_20px_rgba(52,211,153,0.3)]">
+          <span className="text-6xl font-bold font-mono text-emerald-400 tracking-tight">
             ${lossUsdc}
           </span>
           <div className="mt-2 text-xs font-mono text-gray-400 flex flex-col items-center space-y-0.5">
@@ -228,17 +228,17 @@ export default function ArenaStagePage() {
       </div>
 
       {/* Sandbox Budget Remaining Bar (WOW-F11) */}
-      <div className="bg-[#0c1018] border border-gray-800 rounded-2xl p-4 mb-6 flex flex-col md:flex-row items-center justify-between font-mono text-xs">
+      <div className="bg-night border border-night-rule rounded-2xl p-4 mb-6 flex flex-col md:flex-row items-center justify-between font-mono text-xs">
         <div className="flex items-center space-x-3 mb-2 md:mb-0">
           <span className="text-gray-400 font-bold">Ngân sách sandbox còn lại:</span>
-          <span className="text-emerald-400 font-black text-sm">
+          <span className="text-emerald-400 font-bold text-sm">
             ${remainingUsdc} / ${capUsdc}
           </span>
           <span className="text-slate-300 text-[11px]">
             (Đã chi: ${spentBudgetUsdc})
           </span>
         </div>
-        <div className="w-full md:w-72 bg-gray-900 rounded-full h-2.5 overflow-hidden border border-gray-800">
+        <div className="w-full md:w-72 bg-night-2 rounded-full h-2.5 overflow-hidden border border-night-rule">
           <div
             className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500"
             style={{
@@ -251,7 +251,7 @@ export default function ArenaStagePage() {
       {/* Center Layout: QR Code + Live Feed */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1">
         {/* Left: QR Code & Audience Participation */}
-        <div className="lg:col-span-1 bg-[#0b0f17] border border-gray-800 rounded-2xl p-6 flex flex-col items-center justify-between text-center">
+        <div className="lg:col-span-1 bg-night border border-night-rule rounded-2xl p-6 flex flex-col items-center justify-between text-center">
           <div className="w-full">
             <span className="text-xs font-mono font-bold text-red-400 uppercase tracking-widest block mb-1">
               THỬ THÁCH KHÁN GIẢ
@@ -271,8 +271,8 @@ export default function ArenaStagePage() {
         </div>
 
         {/* Right: Live Feed of Attacks */}
-        <div className="lg:col-span-3 bg-[#0b0f17] border border-gray-800 rounded-2xl p-6 flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-3">
+        <div className="lg:col-span-3 bg-night border border-night-rule rounded-2xl p-6 flex flex-col justify-between">
+          <div className="flex items-center justify-between border-b border-night-rule pb-3 mb-3">
             <div className="flex items-center space-x-2">
               <span className="text-xs font-mono font-bold uppercase tracking-wider text-gray-400">
                 Nhật ký đòn tấn công trực tiếp (Live Attack Feed)
@@ -291,7 +291,7 @@ export default function ArenaStagePage() {
               data.recentAttacks.map((atk: any) => (
                 <div
                   key={atk.id}
-                  className="bg-[#101522] border border-gray-800 rounded-xl p-4 space-y-2 hover:border-gray-700 transition"
+                  className="bg-[#101522] border border-night-rule rounded-xl p-4 space-y-2 hover:border-night-rule transition"
                 >
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center space-x-2">
@@ -354,7 +354,7 @@ export default function ArenaStagePage() {
                   )}
 
                   {/* Defense Verdict Details */}
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-800/60">
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-night-rule">
                     <div className="flex items-center space-x-3">
                       <span className="text-gray-400 text-[11px] truncate max-w-[280px]">
                         {atk.verdict?.reason || atk.agentThought}
@@ -377,7 +377,7 @@ export default function ArenaStagePage() {
 
                   {/* Provenance Trace Flow for Stage View (W5-F3) */}
                   {(expandedTraceId === atk.id || (atk.provenanceTrace && atk.id === data.recentAttacks[0]?.id)) && atk.provenanceTrace && (
-                    <div className="pt-2 border-t border-gray-800 animate-in fade-in duration-200">
+                    <div className="pt-2 border-t border-night-rule animate-in fade-in duration-200">
                       <ProvenanceTraceDisplay trace={atk.provenanceTrace} />
                     </div>
                   )}
@@ -397,7 +397,7 @@ export default function ArenaStagePage() {
       </div>
 
       {/* Bottom Bar: Key Slogan */}
-      <div className="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between text-xs text-slate-300 font-mono">
+      <div className="mt-4 pt-4 border-t border-night-rule flex items-center justify-between text-xs text-slate-300 font-mono">
         <div>
           <span className="text-white font-bold">"LLM có thể bị lừa. Ngân sách trên Avalanche thì không."</span>
         </div>
