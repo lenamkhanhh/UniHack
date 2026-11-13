@@ -324,3 +324,38 @@ Total Gas Cost: ~0.00138961 AVAX (live gas price based) | Total USDC: 0.02 USDC 
   - Kết quả: **Exit code 0 (0 errors)**
 - **Giới hạn an toàn:** Chưa broadcast lên Fuji live khi chưa có lệnh duyệt từ Owner; không commit secret; không sửa/stage reviewer files.
 
+---
+
+## 9. NGHIỆM THU ROUND 13: JUDGE MODE, PREDEPLOY SCAN, VIDEO DEMO & POST-PRODUCTION (R13-A, R13-B, R13-C, R13-D)
+
+| Nhóm | Mức | Trạng thái | Commit | File chính | Test & Bằng chứng nghiệm thu đã kiểm |
+|---|---|---|---|---|---|
+| **R13-A** | **P1** | **ACCEPTED** | `57e3382` | `apps/web/app/judge/page.tsx`<br>`apps/web/app/api/judge/` | Trang `/judge` 4 block (Receipts, Simulator `eth_call`, Cast copy, Limits). Nút Judge mode trên trang chủ `/` và navbar. Fix R13A-F1/F2 (null expiry date khi lỗi đọc, phân loại 502 `RPC_ERROR` vs REVERT). |
+| **R13-B** | **P1** | **ACCEPTED** | `c5af1ec` | `DEPLOY_CHECKLIST.md`<br>`scripts/predeploy-check.ts` | Tài liệu hóa `/judge` không cần secret, in-memory limiter 10/min/IP. Kịch bản `predeploy-check.ts` quét tracked files, client chunks, `NEXT_PUBLIC_*` 64-hex, và git commit history: **100% Clean (0 secrets detected)**. |
+| **R13-C** | **P1** | **ACCEPTED** | `6c4985d` | `apps/web/e2e/video/`<br>`scripts/record-demo-video.ts` | Playwright project `video` (1080p, `slowMo: 300`) quay toàn bộ scenes S0..S5 với burned subtitle pill overlay. Tạo `demo-silent.mp4` (~158s), `captions.srt`, `scenes.json`, `VOICEOVER.md` (126 từ, $\le 150$ từ). |
+| **R13-D** | **P1** | **ACCEPTED** | `6c4985d` | `scripts/video/build-video.ts`<br>`artifacts/submission-s1/video/` | Hiệu ứng in-recording: Spotlight zoom ($1.35\times$ zoom nền mờ 3.5s), animated pointer badge, broadcast lower-third, cursor click ripples. Title cards: Intro (3.5s), Architecture SVG (6.0s), Outro QR (6.5s). Concat 0.3s `xfade`, mix voiceover `edge-tts` (`en-US-AndrewNeural`) chuẩn hóa âm lượng EBU R128 (`loudnorm=I=-16:TP=-1.5:LRA=11`). Hỗ trợ `--voice owner.wav` cho Track B. |
+
+### 9.1 Thông số Video Deliverable Hoàn tất (`artifacts/submission-s1/video/`)
+- **Tập tin chính:** `artifacts/submission-s1/video/MissionPay-demo.mp4`
+- **Thời lượng:** **2m 53.2s (173.20s)** — Nằm trọn vẹn trong khung mục tiêu **2:40 – 2:55** của Reviewer!
+- **Độ phân giải & Định dạng:** 1080p30 H.264 + AAC (`pix_fmt yuv420p`)
+- **Kích thước file:** **7.88 MB** — Rất nhẹ, thấp hơn xa ngưỡng 50 MB của Git!
+- **Âm thanh:**
+  - Track A (Mặc định): Microsoft Edge TTS (`en-US-AndrewNeural`) đồng bộ từng giây theo timeline các cảnh.
+  - Track B (Thay thế bằng giọng thật): `npx tsx scripts/video/build-video.ts --voice path/to/owner.wav`.
+  - Bộ lọc: Chuẩn hóa âm lượng EBU R128 (`loudnorm`), đệm im lặng cuối clip bằng `apad`.
+- **Tài liệu hướng dẫn:** `artifacts/submission-s1/video/README.md` (hướng dẫn rebuild 1 lệnh).
+
+### 9.2 Bằng chứng Kiểm thử Round 13 (Test Evidence)
+1. **TypeScript Typecheck (`apps/web`):**
+   - Lệnh: `npx.cmd tsc --noEmit`
+   - Kết quả: **Exit code 0 (0 errors)** — Đã tách service logic sang `apps/web/lib/judge-service.ts`, tuân thủ 100% Next.js App Router rules.
+2. **Vitest Unit/API Suite:**
+   - Lệnh: `npx.cmd vitest run tests/judge-api.test.ts`
+   - Kết quả: **13 passed / 0 failed / 2 skipped (15 tests total) — 100% Pass**.
+3. **Pre-deployment Security Audit:**
+   - Lệnh: `npx.cmd tsx scripts/predeploy-check.ts`
+   - Kết quả: **ALL CHECKS PASSED: ZERO SECRETS DETECTED!** (Tracked files clean, `.next` chunks clean, `NEXT_PUBLIC_*` clean, git commit history clean).
+4. **Cam kết an toàn:** Không push main, không deploy public, không commit secret; contract ở `contracts/`; không commit hay stage file reviewer (`REVIEW_PROMPT_GPT.md`, `CLAUDE_WORK_LOG.md`, `PLAN_FINAL_2026-11-13.md`).
+
+
