@@ -60,6 +60,11 @@ export const MISSION_B_ID: Hex = padHex(toHex('twin.mission.v1'), {
   dir: 'right',
 });
 
+// Dry-run uses fork-only mission ids: the live ids already exist on Fuji since the 13/11 broadcast,
+// so re-creating them on a fork would revert. Same cap, same root, same contract logic.
+export const DRY_MISSION_A_ID: Hex = padHex(toHex('twin.allowlist.dry'), { size: 32, dir: 'right' });
+export const DRY_MISSION_B_ID: Hex = padHex(toHex('twin.mission.dry'), { size: 32, dir: 'right' });
+
 export const MISSION_CAP = 20_000n; // 0.02 USDC (6 decimals)
 export const POISONED_PAYOUT_AMOUNT = 10_000n; // 0.01 USDC (6 decimals)
 export const LEGIT_PAYOUT_AMOUNT = 10_000n; // 0.01 USDC (6 decimals)
@@ -931,7 +936,7 @@ export async function runTwinTreasury(
       address: FUJI_GUARDED_TREASURY_ADDRESS,
       abi: TREASURY_ABI,
       functionName: 'createMission',
-      args: [MISSION_A_ID, accounts.agentAddress, MISSION_CAP, 86400n * 30n],
+      args: [DRY_MISSION_A_ID, accounts.agentAddress, MISSION_CAP, 86400n * 30n],
     });
     const rc3 = await forkClient.waitForTransactionReceipt({ hash: tx3 });
     if (rc3.status !== 'success') throw new Error(`Step 3 failed: status = ${rc3.status}`);
@@ -949,7 +954,7 @@ export async function runTwinTreasury(
       address: FUJI_GUARDED_TREASURY_ADDRESS,
       abi: TREASURY_ABI,
       functionName: 'createMission',
-      args: [MISSION_B_ID, accounts.agentAddress, MISSION_CAP, 86400n * 30n],
+      args: [DRY_MISSION_B_ID, accounts.agentAddress, MISSION_CAP, 86400n * 30n],
     });
     const rc4 = await forkClient.waitForTransactionReceipt({ hash: tx4 });
     if (rc4.status !== 'success') throw new Error(`Step 4 failed: status = ${rc4.status}`);
@@ -967,7 +972,7 @@ export async function runTwinTreasury(
       address: FUJI_GUARDED_TREASURY_ADDRESS,
       abi: TREASURY_ABI,
       functionName: 'setMissionPayeeRoot',
-      args: [MISSION_B_ID, rootB],
+      args: [DRY_MISSION_B_ID, rootB],
     });
     const rc5 = await forkClient.waitForTransactionReceipt({ hash: tx5 });
     if (rc5.status !== 'success') throw new Error(`Step 5 failed: status = ${rc5.status}`);
@@ -997,7 +1002,7 @@ export async function runTwinTreasury(
         opA,
         accounts.controlledVendorAddress,
         POISONED_PAYOUT_AMOUNT,
-        MISSION_A_ID,
+        DRY_MISSION_A_ID,
         'Poisoned invoice to allowlisted vendor',
       ],
     });
@@ -1056,7 +1061,7 @@ export async function runTwinTreasury(
             opB1,
             accounts.controlledVendorAddress,
             POISONED_PAYOUT_AMOUNT,
-            MISSION_B_ID,
+            DRY_MISSION_B_ID,
             'Poisoned invoice to off-mission vendor',
             [],
           ],
@@ -1088,7 +1093,7 @@ export async function runTwinTreasury(
         opB1,
         accounts.controlledVendorAddress,
         POISONED_PAYOUT_AMOUNT,
-        MISSION_B_ID,
+        DRY_MISSION_B_ID,
         'Poisoned invoice to off-mission vendor',
         [],
       ],
@@ -1138,7 +1143,7 @@ export async function runTwinTreasury(
         opB2,
         accounts.legitPayeeAddress,
         LEGIT_PAYOUT_AMOUNT,
-        MISSION_B_ID,
+        DRY_MISSION_B_ID,
         'Legitimate mission payee payment',
         [],
       ],
@@ -1238,7 +1243,7 @@ export async function runTwinTreasury(
     autoPayoutRule:
       'On deployed bytecode (0x2045...d545), amounts <= perTxCap execute immediate safeTransfer inside propose/proposeWithProof. No separate approve/execute transaction needed.',
     missionA: {
-      id: MISSION_A_ID,
+      id: DRY_MISSION_A_ID,
       name: 'Global Allowlist Mode',
       description: 'This contract in global-allowlist mode (payee root = 0x0)',
       capUsdc: '0.02 USDC',
@@ -1250,7 +1255,7 @@ export async function runTwinTreasury(
       balanceDeltaUsdc: balanceDeltaVendorA,
     },
     missionB: {
-      id: MISSION_B_ID,
+      id: DRY_MISSION_B_ID,
       name: 'Mission-Scoped Guard',
       description: 'Owner-signed Merkle payee set',
       capUsdc: '0.02 USDC',
