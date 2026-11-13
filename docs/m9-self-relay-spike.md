@@ -19,9 +19,9 @@ The mechanism utilizes:
 3. **Access-List Delivery on Fuji**: The caller (our self-hosted relayer script) submits an EIP-2930 access-list transaction directly to `TeleporterMessenger.receiveCrossChainMessage(messageIndex, relayerRewardAddress)` on Fuji C-Chain, packing the signed Warp message into the transaction access list for cryptographic validation by Fuji's native Warp precompile.
 
 ### Funding & Prerequisite Requirements for Owner
-1. **Dispatch Gas Faucet (5 minutes)**: Owner must claim testnet `DISPATCH` tokens from the Builder Hub / Core Faucet (`https://core.app/tools/testnet-faucet/?subnet=dispatch`) for ví Owner (`0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c`) and ví Agent (`0x84fEE0570b5C158866B599bA905a39626DfeF217`).
+1. **Dispatch Gas Faucet (5 minutes)**: Owner must claim testnet `DISPATCH` tokens from the Builder Hub / Core Faucet (`https://core.app/tools/testnet-faucet/?subnet=dispatch`) for ví Owner (`0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c`) and ví Agent (`0x374b8A126FDb9e5deEc8307da385076155Af3D72`, derived dynamically at runtime from `process.env.AGENT_PRIVATE_KEY`).
 2. **Fuji Gas (Already Funded)**: Ví Relayer (`0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA`) has `0.02 AVAX` on Fuji, sufficient for ~20 delivery transactions.
-3. **Glacier API Key (Free Tier)**: Generate a free Glacier API Key on [AvaCloud Portal](https://avacloud.io) or [Avalanche Builder Hub](https://build.avax.network) to authorize requests to `glacier-api.avax.network`.
+3. **Glacier API Key NOT Required**: Verified live by Claude and probe tests: `POST https://glacier-api.avax.network/v1/signatureAggregator/fuji/aggregateSignatures` successfully aggregates signatures with HTTP 201 without requiring any API key or authorization header. Owner does NOT need to create a Glacier API key.
 
 ---
 
@@ -136,13 +136,14 @@ x-glacier-api-key: <OWNER_GLACIER_KEY>
 In Avalanche Subnet-EVM, signed Warp messages are passed to destination smart contracts via the standard EIP-2930 `accessList`.
 
 ### 5.1 Packing Algorithm
-The Avalanche Subnet-EVM precompile parses the access list targeting `0x0200000000000000000000000000000000000005`. The raw `signedMessage` bytes are serialized into 32-byte storage keys:
-1. First storage key (`storageKeys[0]`): contains the 4-byte big-endian message length followed by initial bytes.
-2. Subsequent storage keys: contain consecutive 32-byte slices of the remaining payload.
+The Avalanche Subnet-EVM precompile parses the access list targeting `0x0200000000000000000000000000000000000005`. The raw `signedMessage` bytes are serialized into 32-byte storage keys using the `0xff` end-padding rule:
+1. Append `0xff` delimiter byte to the end of the signed message payload.
+2. Pad the buffer with `0x00` bytes to a 32-byte boundary.
+3. Total 32-byte storage keys count = `Math.ceil((signedMessageLen + 1) / 32)`.
 
 ### 5.2 TypeScript Implementation (`viem`)
 ```typescript
-import { Hex, Address, pad, toHex } from 'viem';
+import { Hex, Address } from 'viem';
 
 export const WARP_PRECOMPILE_ADDRESS: Address =
   '0x0200000000000000000000000000000000000005';
@@ -154,29 +155,25 @@ export interface AccessListEntry {
 
 /**
  * Packs raw signed Avalanche Warp message bytes into EIP-2930 storage keys
- * expected by the Avalanche Warp precompile.
+ * using the 0xff delimiter end-padding rule expected by the Avalanche Warp precompile.
  */
 export function packWarpMessageToAccessList(signedMessageHex: Hex): AccessListEntry[] {
   const cleanHex = signedMessageHex.startsWith('0x')
     ? signedMessageHex.slice(2)
     : signedMessageHex;
   const messageBytes = Buffer.from(cleanHex, 'hex');
-  const length = messageBytes.length;
+  const len = messageBytes.length;
 
-  // Header key: 4-byte length prefix + first 28 bytes
-  const headerBuf = Buffer.alloc(32);
-  headerBuf.writeUInt32BE(length, 0);
-  messageBytes.copy(headerBuf, 4, 0, Math.min(28, length));
+  const totalWithDelimiter = len + 1;
+  const chunkCount = Math.ceil(totalWithDelimiter / 32);
+  const paddedBuffer = Buffer.alloc(chunkCount * 32, 0);
+  messageBytes.copy(paddedBuffer, 0);
+  paddedBuffer[len] = 0xff; // delimiter
 
-  const storageKeys: Hex[] = [(`0x${headerBuf.toString('hex')}`) as Hex];
-
-  // Remaining chunks (32 bytes each)
-  let offset = 28;
-  while (offset < length) {
-    const chunk = Buffer.alloc(32);
-    messageBytes.copy(chunk, 0, offset, Math.min(offset + 32, length));
-    storageKeys.push((`0x${chunk.toString('hex')}`) as Hex);
-    offset += 32;
+  const storageKeys: Hex[] = [];
+  for (let i = 0; i < chunkCount; i++) {
+    const chunk = paddedBuffer.subarray(i * 32, (i + 1) * 32);
+    storageKeys.push(`0x${chunk.toString('hex')}` as Hex);
   }
 
   return [
@@ -185,6 +182,28 @@ export function packWarpMessageToAccessList(signedMessageHex: Hex): AccessListEn
       storageKeys,
     },
   ];
+}
+
+/**
+ * Reconstructs original signed message bytes from 0xff-delimited storage keys.
+ */
+export function unpackWarpMessagePredicate(storageKeys: Hex[]): Hex {
+  const buffers = storageKeys.map(k => {
+    const h = k.startsWith('0x') ? k.slice(2) : k;
+    return Buffer.from(h, 'hex');
+  });
+  const concatenated = Buffer.concat(buffers);
+  let delimiterIndex = -1;
+  for (let i = concatenated.length - 1; i >= 0; i--) {
+    if (concatenated[i] === 0xff) {
+      delimiterIndex = i;
+      break;
+    }
+  }
+  if (delimiterIndex === -1) {
+    throw new Error('Delimiter 0xff not found in storage keys');
+  }
+  return `0x${concatenated.subarray(0, delimiterIndex).toString('hex')}` as Hex;
 }
 ```
 
