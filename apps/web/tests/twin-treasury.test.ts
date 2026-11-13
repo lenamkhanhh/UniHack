@@ -3,6 +3,7 @@ import { GET } from '../app/api/arena/twin/route';
 import {
   FUJI_GUARDED_TREASURY_ADDRESS,
   FUJI_USDC_ADDRESS,
+  OWNER_ADDRESS,
   MISSION_A_ID,
   MISSION_B_ID,
   POISONED_PAYOUT_AMOUNT,
@@ -11,12 +12,13 @@ import {
   hashLeaf,
   verifyMerkle,
   runTwinTreasury,
+  generateOwnerCalldataList,
 } from '../../../scripts/twin-treasury';
 import fs from 'fs';
 import path from 'path';
 
-describe('Twin Treasury Verification & Route Tests (Round 10)', () => {
-  it('verifies constant architecture parameters and derived accounts', () => {
+describe('Twin Treasury Verification & Route Tests (Round 11)', () => {
+  it('verifies constant architecture parameters and derived accounts (R11-F3)', () => {
     expect(FUJI_GUARDED_TREASURY_ADDRESS.toLowerCase()).toBe(
       '0x20451c1e2dCD83F166B4f22868BAdECb5868d545'.toLowerCase()
     );
@@ -29,23 +31,19 @@ describe('Twin Treasury Verification & Route Tests (Round 10)', () => {
     expect(LEGIT_PAYOUT_AMOUNT).toBe(10_000n); // 0.01 USDC
 
     const accounts = getDerivedAccounts();
-    expect(accounts.ownerAddress.toLowerCase()).toBe(
-      '0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c'.toLowerCase()
+    expect(accounts.ownerAddress.toLowerCase()).toBe(OWNER_ADDRESS.toLowerCase());
+    expect(accounts.legitPayeeAddress.toLowerCase()).toBe(OWNER_ADDRESS.toLowerCase()); // R11-F3: Owner is legit payee
+    expect(accounts.controlledVendorAddress.toLowerCase()).toBe(
+      '0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA'.toLowerCase()
     );
     expect(accounts.agentAddress.toLowerCase()).toBe(
       '0x374b8A126FDb9e5deEc8307da385076155Af3D72'.toLowerCase()
     );
-    expect(accounts.controlledVendorAddress.toLowerCase()).toBe(
-      '0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA'.toLowerCase()
-    );
-    expect(accounts.legitPayeeAddress.toLowerCase()).toBe(
-      '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5'.toLowerCase()
-    );
   });
 
-  it('R10-F1: verifies mathematical Merkle disjunction between controlled vendor and rootB', () => {
+  it('verifies mathematical Merkle disjunction between controlled vendor and rootB (R11-F1)', () => {
     const accounts = getDerivedAccounts();
-    const rootB = hashLeaf(accounts.legitPayeeAddress);
+    const rootB = hashLeaf(accounts.legitPayeeAddress); // leaf of Owner
     const vendorLeaf = hashLeaf(accounts.controlledVendorAddress);
 
     // Negative control: Vendor leaf cannot verify against rootB
@@ -56,12 +54,27 @@ describe('Twin Treasury Verification & Route Tests (Round 10)', () => {
     expect(verifyMerkle([], rootB, hashLeaf(accounts.legitPayeeAddress))).toBe(true);
   });
 
-  it('R10-F4 & R10-F5: runs Anvil fork simulation on Fuji bytecode and verifies balance deltas', async () => {
-    // Run fork simulation on isolated port 8558
-    const report = await runTwinTreasury({ dryRun: true, forkPort: 8558 });
+  it('R11-F5: generates owner calldata list with all 6 prerequisite and cleanup transactions', () => {
+    const calldataList = generateOwnerCalldataList();
+    expect(calldataList).toHaveLength(6);
+    expect(calldataList.map((c) => c.step)).toEqual([1, 2, 3, 4, 5, 9]);
+
+    // Check Step 1: setRecipient(vendor, true)
+    expect(calldataList[0].functionName).toBe('setRecipient');
+    expect(calldataList[0].calldata).toMatch(/^0xb33480ca/);
+
+    // Check Step 9: setRecipient(vendor, false) (R11-F4)
+    expect(calldataList[5].functionName).toBe('setRecipient');
+    expect(calldataList[5].calldata).toMatch(/^0xb33480ca/);
+    expect(calldataList[5].args[1]).toBe(false);
+  });
+
+  it('R11-F1: runs Anvil fork simulation on Fuji bytecode and asserts exact balance deltas and 9 steps', async () => {
+    const report = await runTwinTreasury({ dryRun: true, forkPort: 8562 });
 
     expect(report.mode).toBe('dry-run');
     expect(report.forkBlockNumber).toBeGreaterThan(60_000_000);
+    expect(report.perTxCapUsdc).toContain('5 USDC');
 
     // Mission A: Allowlist mode -> Drained
     expect(report.missionA.simulationOutcome).toBe('SUCCESS');
@@ -72,42 +85,79 @@ describe('Twin Treasury Verification & Route Tests (Round 10)', () => {
     expect(report.missionB.negativeControl.revertReason).toContain('PayeeNotInMissionSet');
     expect(report.missionB.negativeControl.balanceDeltaUsdc).toBe('0 USDC');
 
-    // Mission B Positive Control: Legit payee paid -> +0.01 USDC
+    // Mission B Positive Control: Legit payee paid -> +0.01 USDC (returned to Owner)
     expect(report.missionB.positiveControl.simulationOutcome).toBe('SUCCESS');
     expect(report.missionB.positiveControl.balanceDeltaUsdc).toBe('+0.01 USDC');
 
-    // Planned transactions check
-    expect(report.plannedTransactions).toHaveLength(8);
+    // Planned transactions check (9 transactions total per R11-F4)
+    expect(report.plannedTransactions).toHaveLength(9);
     expect(report.totalUsdcBudget).toBe('0.02 USDC');
   }, 45000);
 
-  it('verifies /api/arena/twin returns NOT_RUN when no evidence file exists', async () => {
-    const evidencePath = path.resolve(process.cwd(), '../../evidence/twin/twin.json');
-    const localEvidencePath = path.resolve(process.cwd(), 'evidence/twin/twin.json');
-    const fileExisted = fs.existsSync(evidencePath) || fs.existsSync(localEvidencePath);
+  it('R11-F1 (fail test): throws critical error if Mission B negative control unexpectedly succeeds', async () => {
+    await expect(
+      runTwinTreasury({
+        dryRun: true,
+        forkPort: 8563,
+        mockNegativeSuccessForTest: true,
+      })
+    ).rejects.toThrow('CRITICAL FAILURE: Mission B negative control did NOT revert!');
+  }, 45000);
 
-    if (!fileExisted) {
+  it('R11-F2: verifies /api/arena/twin returns NOT_RUN when neither live nor dry-run file exists', async () => {
+    const dryRunPath = path.resolve(process.cwd(), '../../evidence/twin/twin.dryrun.json');
+    const livePath = path.resolve(process.cwd(), '../../evidence/twin/twin.live.json');
+    const localDryRun = path.resolve(process.cwd(), 'evidence/twin/twin.dryrun.json');
+    const localLive = path.resolve(process.cwd(), 'evidence/twin/twin.live.json');
+
+    // Backup any files if they exist
+    const dryRunBackup = fs.existsSync(dryRunPath)
+      ? fs.readFileSync(dryRunPath, 'utf8')
+      : null;
+    const liveBackup = fs.existsSync(livePath)
+      ? fs.readFileSync(livePath, 'utf8')
+      : null;
+
+    try {
+      if (fs.existsSync(dryRunPath)) fs.unlinkSync(dryRunPath);
+      if (fs.existsSync(livePath)) fs.unlinkSync(livePath);
+      if (fs.existsSync(localDryRun)) fs.unlinkSync(localDryRun);
+      if (fs.existsSync(localLive)) fs.unlinkSync(localLive);
+
       const response = await GET();
       expect(response.status).toBe(200);
       const json = await response.json();
-      expect(json.exists).toBe(false);
       expect(json.status).toBe('NOT_RUN');
+      expect(json.isLive).toBe(false);
+    } finally {
+      if (dryRunBackup) fs.writeFileSync(dryRunPath, dryRunBackup, 'utf8');
+      if (liveBackup) fs.writeFileSync(livePath, liveBackup, 'utf8');
     }
   });
 
-  it('verifies /api/arena/twin returns RECORDED data when evidence file is present', async () => {
-    const tempDir = path.resolve(process.cwd(), '../../evidence/twin');
-    const tempFile = path.join(tempDir, 'twin.json');
-    const hadTempFile = fs.existsSync(tempFile);
+  it('R11-F2: verifies dry-run file returns SIMULATED and NEVER yields the live badge', async () => {
+    const dryRunPath = path.resolve(process.cwd(), '../../evidence/twin/twin.dryrun.json');
+    const livePath = path.resolve(process.cwd(), '../../evidence/twin/twin.live.json');
+    const dryRunBackup = fs.existsSync(dryRunPath)
+      ? fs.readFileSync(dryRunPath, 'utf8')
+      : null;
+    const liveBackup = fs.existsSync(livePath)
+      ? fs.readFileSync(livePath, 'utf8')
+      : null;
 
     try {
-      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+      if (fs.existsSync(livePath)) fs.unlinkSync(livePath);
+
+      // Ensure dry-run file exists
+      if (!fs.existsSync(path.dirname(dryRunPath))) {
+        fs.mkdirSync(path.dirname(dryRunPath), { recursive: true });
+      }
       fs.writeFileSync(
-        tempFile,
+        dryRunPath,
         JSON.stringify({
-          contractAddress: FUJI_GUARDED_TREASURY_ADDRESS,
-          mode: 'mock-test',
-          status: 'TEST_RECORD',
+          mode: 'dry-run',
+          forkBlockNumber: 60995458,
+          status: 'SIMULATED_TEST',
         }),
         'utf8'
       );
@@ -115,12 +165,60 @@ describe('Twin Treasury Verification & Route Tests (Round 10)', () => {
       const response = await GET();
       expect(response.status).toBe(200);
       const json = await response.json();
-      expect(json.exists).toBe(true);
-      expect(json.status).toBe('RECORDED');
-      expect(json.data.status).toBe('TEST_RECORD');
+      expect(json.status).toBe('SIMULATED');
+      expect(json.isLive).toBe(false); // MUST be false
+      expect(json.data.forkBlockNumber).toBe(60995458);
     } finally {
-      if (!hadTempFile && fs.existsSync(tempFile)) {
-        fs.unlinkSync(tempFile);
+      if (dryRunBackup) fs.writeFileSync(dryRunPath, dryRunBackup, 'utf8');
+      if (liveBackup) fs.writeFileSync(livePath, liveBackup, 'utf8');
+    }
+  });
+
+  it('R11-F2: verifies live badge requires mode=broadcast AND 3 real transaction hashes', async () => {
+    const livePath = path.resolve(process.cwd(), '../../evidence/twin/twin.live.json');
+    const liveBackup = fs.existsSync(livePath) ? fs.readFileSync(livePath, 'utf8') : null;
+
+    try {
+      if (!fs.existsSync(path.dirname(livePath))) {
+        fs.mkdirSync(path.dirname(livePath), { recursive: true });
+      }
+
+      // Case 1: missing hashes -> NOT LIVE
+      fs.writeFileSync(
+        livePath,
+        JSON.stringify({
+          mode: 'broadcast',
+          missionA: {},
+          missionB: { negativeControl: {}, positiveControl: {} },
+        }),
+        'utf8'
+      );
+      let response = await GET();
+      let json = await response.json();
+      expect(json.isLive).toBe(false);
+
+      // Case 2: all 3 real hashes present -> LIVE
+      fs.writeFileSync(
+        livePath,
+        JSON.stringify({
+          mode: 'broadcast',
+          missionA: { txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' },
+          missionB: {
+            negativeControl: { txHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890' },
+            positiveControl: { txHash: '0x9999999999abcdef1234567890abcdef1234567890abcdef1234567890abcdef' },
+          },
+        }),
+        'utf8'
+      );
+      response = await GET();
+      json = await response.json();
+      expect(json.status).toBe('LIVE');
+      expect(json.isLive).toBe(true);
+    } finally {
+      if (liveBackup) {
+        fs.writeFileSync(livePath, liveBackup, 'utf8');
+      } else if (fs.existsSync(livePath)) {
+        fs.unlinkSync(livePath);
       }
     }
   });
