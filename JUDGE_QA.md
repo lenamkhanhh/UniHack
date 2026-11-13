@@ -1,7 +1,7 @@
 # MissionPay: Q&A dự phòng cho giám khảo
 
 Chỉ dùng các con số đã được Claude kiểm lại. Ô ghi "CHƯA CÓ" thì không được nói lên sân khấu.
-Cập nhật: 2026-11-09.
+Cập nhật: 2026-11-13.
 
 ## 1. Số liệu được phép nói
 
@@ -11,6 +11,7 @@ Cập nhật: 2026-11-09.
 | 8 đòn lọt | Đều nằm ở `user_task_15`: chính prompt của người dùng đặt IBAN của kẻ tấn công làm chủ nhà mới. Ở 15 task còn lại chặn 120/120 | như trên |
 | Replay trên fork Fuji | Contract và guard off-chain khớp nhau 169/169. Khi cố tình đưa kẻ tấn công vào allowlist chung, contract vẫn revert 150 lệnh với `PayeeNotInMissionSet` | như trên |
 | AgentDojo live, gemini-3.1-flash-lite, C2 strict (ĐANG DỞ, chưa nói lên sân khấu) | Tính đến 09/11 lúc 20:36 (hết quota): 0/30 đòn lọt (Wilson 95% CI 0–11,4%); làm đúng việc khi bị tấn công 9/30; benign 4/16. Chưa chạy C0 nên chưa so được, và benign 4/16 chưa giải thích được | `eval/agentdojo/LIVE_SUMMARY.md`, commit f8b4bc8 |
+| Twin Treasury **live trên Fuji** (13/11) | Cùng một vendor `0xE90c…` nằm trong allowlist chung, cùng treasury `0x2045…d545`: Mission A (chỉ allowlist) trả 0,01 USDC cho vendor ([0x548d…7fc6](https://testnet.snowtrace.io/tx/0x548d1106a69626eed32d308088f188c6d2d71d8e2f61e495f637d9f04e367fc6)); Mission B (tập người nhận theo mission) revert `PayeeNotInMissionSet`, 0 USDC ([0x0ad5…3e38](https://testnet.snowtrace.io/tx/0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38)); đối chứng: người nhận hợp lệ dưới Mission B được trả 0,01 USDC ([0xcb72…6315](https://testnet.snowtrace.io/tx/0xcb7236d146a2c8e2789db8ec2a80358b17d65993fc7b07187802e34c48656315)). Sau demo vendor đã được gỡ khỏi allowlist ([0x56e1…5562](https://testnet.snowtrace.io/tx/0x56e1154e1b7cfb7e1b76203c4a5267e25663ed11fec0b017051a0969e3f05562)) | `evidence/twin/twin.live.json`, `/arena/twin` |
 | Foundry | 111/111 test pass across 6 suites (43 GuardedTreasury, 32 PasskeyGovernance, 16 PasskeyMissionAuthority, 12 MissionCrossChainICM, 7 ValidationRegistry, 1 GuardedTreasuryInvariant suite với 6 properties fuzzed 512 runs / 32,768 calls) | `contracts/test/` |
 | Web | 301 passed / 1 skipped across 32 test files (302 total). Lighthouse accessibility 100 trên 5 trang (mobile) | `apps/web` |
 | Guard SDK | 19/19 test pass (16 guard + 3 parity) | `packages/guard` |
@@ -25,6 +26,10 @@ Cập nhật: 2026-11-09.
 - Các guard đó chạy trên server của agent: server bị chiếm là mất hết. MissionPay để contract trên Avalanche quyết định, kèm bằng chứng Merkle của tập người nhận cho từng mission.
 - Mình không nói ASR của mình tốt hơn họ. Trên replay AgentDojo, tỉ lệ chặn nhầm của mình bằng ProvGuard (3/16).
 - Điểm mình đo được còn họ không đo: kẻ tấn công nằm sẵn trong allowlist chung mà contract vẫn chặn 150/150 (đây là config ii của replay trên fork).
+
+**"Allowlist chung cũng chặn được người lạ rồi, mission set hơn gì?"**
+- Đòn thật không dùng người lạ: nó trỏ tới một vendor công ty đã quen. Trên Fuji (13/11), cùng vendor trong allowlist chung: chế độ allowlist trả tiền, chế độ mission set revert `PayeeNotInMissionSet`, còn người nhận đúng vẫn được trả. Ba tx trong bảng mục 1.
+- Lưu ý khi trả lời: "vendor bị lừa" trong demo là ví của chính đội (relayer), tiền 0,01 USDC testnet, đã gỡ khỏi allowlist sau demo. Treasury trên Fuji là bản deploy cũ (chưa có A1/A3); demo chỉ dùng logic có sẵn trong bản đó.
 
 **"Sao vẫn lọt 8/128?"**
 - Cả 8 đều do người dùng tự viết IBAN của kẻ tấn công vào prompt, bảo đó là chủ nhà mới. Guard không thể biết người dùng bị lừa từ trước. Ở đây owner phải ký duyệt tập người nhận của mission; lần ký đó là chỗ con người kiểm.

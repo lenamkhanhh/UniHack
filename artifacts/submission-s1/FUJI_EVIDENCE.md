@@ -172,3 +172,16 @@ Bằng chứng thực thi giao dịch thanh toán tài nguyên AI theo chuẩn g
    - Kết quả: Hoạt động bình thường; relayer `0xc6699d2aada6c36dfea5c248dd70f9cb0235cb63` broadcast thành công giao dịch `0x7e3b18eea005f6b1cfa6b9ec4008998629be595f0e1046988d81f55d95fbbe19` (block `#60751475`, gasUsed: `92,372`).
 3. **Self-Hosted Fallback Facilitator (`apps/web/lib/facilitator-fallback.ts`)**:
    - Dự án đã chuẩn bị sẵn module facilitator tự host sử dụng ví relayer riêng `FACILITATOR_PRIVATE_KEY` (`0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA` đã nạp 0.02 AVAX) gọi trực tiếp hàm `transferWithAuthorization` của USDC Fuji (`0x5425890298aed601595a70AB815c96711a31Bc65`), sẵn sàng fallback tự động nếu cả hai facilitator công khai gặp sự cố kết nối.
+
+## Twin Treasury (13/11/2026, live on Fuji)
+
+The same vendor (`0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA`, our relayer wallet) is on the global allowlist of GuardedTreasury `0x20451c1e2dCD83F166B4f22868BAdECb5868d545`.
+
+| Step | Result | Tx |
+|---|---|---|
+| Mission A `twin.allowlist.v1` (allowlist only) pays vendor 0.01 USDC | success, vendor +0.01 USDC | [0x548d1106…7fc6](https://testnet.snowtrace.io/tx/0x548d1106a69626eed32d308088f188c6d2d71d8e2f61e495f637d9f04e367fc6) |
+| Mission B `twin.mission.v1` (owner-signed payee set) pays the same vendor | reverted `PayeeNotInMissionSet`, 0 USDC | [0x0ad53adc…3e38](https://testnet.snowtrace.io/tx/0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38) |
+| Mission B pays the approved payee (owner) with proof | success, +0.01 USDC | [0xcb7236d1…6315](https://testnet.snowtrace.io/tx/0xcb7236d146a2c8e2789db8ec2a80358b17d65993fc7b07187802e34c48656315) |
+| Cleanup: vendor removed from the allowlist | success | [0x56e1154e…5562](https://testnet.snowtrace.io/tx/0x56e1154e1b7cfb7e1b76203c4a5267e25663ed11fec0b017051a0969e3f05562) |
+
+Owner setup tx: [allowlist vendor](https://testnet.snowtrace.io/tx/0x602d2adb6f2bb664becd0aa80ecea4d0cce5495937e4581f079a24fe84e0ad49), [allowlist owner](https://testnet.snowtrace.io/tx/0xe199f2d2299518442db9deefd59a8d89c9bf9317ce48e19d7bfbe52d874bb192), [create A](https://testnet.snowtrace.io/tx/0xa4df3ea95537dd1f18fc20625593f729957bba557a3612ad95967efd41220dd5), [create B](https://testnet.snowtrace.io/tx/0xb74522d3772d544ddc262c10cf76896ac0d93d4f75751f2191b94806fe1b459f), [set root B](https://testnet.snowtrace.io/tx/0xf6034287255bf4f8d73c692f17a32914339a02656c62158fb729ecdc0e18f8a0). Report: `evidence/twin/twin.live.json`. Script: `scripts/twin-treasury.ts`.
