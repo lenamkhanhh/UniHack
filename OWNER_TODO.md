@@ -7,7 +7,7 @@
 
 ## 1. YÊU CẦU CẦN OWNER HỖ TRỢ TRƯỚC KHI BROADCAST M9 (DỪNG CHỜ OWNER)
 
-Theo chỉ thị an toàn từ Reviewer và spec `PLAN_MAX_2026-11-08.md` Bước 0:  
+Theo chỉ thị an toàn từ Reviewer và spec `docs/review-history/PLAN_MAX_2026-11-08.md` Bước 0:  
 > *"Nếu cần owner xin faucet → ghi rõ trong report và DỪNG chờ owner; trong lúc chờ, test bằng tmpnet/local hoặc dừng M9."*  
 > *"M9 can faucet hay vi moi thi dung lai va ghi vao OWNER_TODO, khong tu tao vi, khong tieu Fuji vuot ngan sach 0.15 AVAX / 3 USDC. Khong copy gia tri .env vao code."*
 
