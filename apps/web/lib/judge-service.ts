@@ -83,6 +83,25 @@ export function getTwinLiveEvidence(): any {
   return FALLBACK_TWIN_EVIDENCE;
 }
 
+
+// Measured USDC outflow from the treasury, read from the receipt's Transfer logs (never typed in).
+const FUJI_USDC = '0x5425890298aed601595a70ab815c96711a31bc65';
+const TREASURY = '0x20451c1e2dcd83f166b4f22868badecb5868d545';
+const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+export function measuredOutflowAtomic(receipt: { logs: readonly { address: string; topics: readonly string[]; data: string }[] }): bigint {
+  let total = 0n;
+  for (const log of receipt.logs ?? []) {
+    if (log.address.toLowerCase() !== FUJI_USDC || log.topics[0]?.toLowerCase() !== TRANSFER_TOPIC) continue;
+    const from = '0x' + (log.topics[1] || '').slice(26).toLowerCase();
+    if (from === TREASURY) total += BigInt(log.data);
+  }
+  return total;
+}
+function outflowLabel(atomic: bigint, en: string, vi: string): { outflow: string; outflowVi: string } {
+  const usdc = atomic === 0n ? '0' : `-${formatUnits(atomic, 6)}`;
+  return { outflow: `${usdc} USDC (${en})`, outflowVi: `${usdc} USDC (${vi})` };
+}
+
 export async function fetchLiveReceipts(
   client?: PublicClient,
   overrideEvidence?: any
@@ -115,16 +134,16 @@ export async function fetchLiveReceipts(
 
   const results: JudgeReceiptItem[] = [];
 
-  // Tx A1: Global Allowlist Attack Drain ($5.00)
+  // Tx A1: Global Allowlist mission pays the vendor (amount measured from logs)
   if (txA1Hash) {
     const rA1 = await publicClient.getTransactionReceipt({ hash: txA1Hash });
     results.push({
       id: 'missionA',
-      step: 4,
+      step: 6,
       label: 'Twin A (Global Allowlist)',
       labelVi: 'Twin A (Danh sách toàn cục)',
-      description: 'Attacker prompt injection drained 5.00 USDC',
-      descriptionVi: 'Kẻ tấn công inject prompt rút 5.00 USDC',
+      description: 'Poisoned invoice paid an allowlisted vendor outside the mission',
+      descriptionVi: 'Hoá đơn bị cài lệnh trả cho vendor có trong allowlist chung, ngoài mission',
       txHash: txA1Hash,
       status: rA1.status === 'success' ? 'success' : 'reverted',
       blockNumber: Number(rA1.blockNumber),
@@ -134,8 +153,7 @@ export async function fetchLiveReceipts(
         : undefined,
       from: rA1.from,
       to: rA1.to ?? undefined,
-      outflow: '-5.000000 USDC (DRAINED)',
-      outflowVi: '-5.000000 USDC (BỊ THẤT THOÁT)',
+      ...outflowLabel(measuredOutflowAtomic(rA1), 'DRAINED', 'BỊ RÚT'),
       snowtraceUrl: `https://testnet.snowtrace.io/tx/${txA1Hash}`,
     });
   }
@@ -151,8 +169,8 @@ export async function fetchLiveReceipts(
       description: 'Execution strictly reverted on-chain with PayeeNotInMissionSet',
       descriptionVi: 'Giao dịch bị Revert on-chain với lỗi PayeeNotInMissionSet',
       txHash: txB1Hash,
-      status: rB1.status === 'reverted' ? 'reverted' : 'reverted',
-      revertReason: 'PayeeNotInMissionSet',
+      status: rB1.status === 'success' ? 'success' : 'reverted',
+      revertReason: rB1.status === 'reverted' ? 'PayeeNotInMissionSet' : undefined,
       blockNumber: Number(rB1.blockNumber),
       gasUsed: rB1.gasUsed.toString(),
       effectiveGasPriceGwei: rB1.effectiveGasPrice
@@ -160,8 +178,7 @@ export async function fetchLiveReceipts(
         : undefined,
       from: rB1.from,
       to: rB1.to ?? undefined,
-      outflow: '$0.000000 USDC (PROTECTED)',
-      outflowVi: '$0.000000 USDC (ĐƯỢC BẢO VỆ)',
+      ...outflowLabel(measuredOutflowAtomic(rB1), 'PROTECTED', 'ĐƯỢC BẢO VỆ'),
       snowtraceUrl: `https://testnet.snowtrace.io/tx/${txB1Hash}`,
     });
   }
@@ -185,8 +202,7 @@ export async function fetchLiveReceipts(
         : undefined,
       from: rB2.from,
       to: rB2.to ?? undefined,
-      outflow: '-0.010000 USDC (AUTHORIZED)',
-      outflowVi: '-0.010000 USDC (ĐÃ PHÊ DUYỆT)',
+      ...outflowLabel(measuredOutflowAtomic(rB2), 'AUTHORIZED', 'ĐÃ PHÊ DUYỆT'),
       snowtraceUrl: `https://testnet.snowtrace.io/tx/${txB2Hash}`,
     });
   }
