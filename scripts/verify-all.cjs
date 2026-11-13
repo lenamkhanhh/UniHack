@@ -32,19 +32,25 @@ const suites = [
     cwd: rootDir,
   },
   {
-    name: '3. Web TypeScript Typecheck (tsc --noEmit)',
+    name: '3. Generate Prisma Client (prisma generate)',
+    cmd: npmCmd,
+    args: ['--workspace=apps/web', 'run', 'prisma:generate'],
+    cwd: rootDir,
+  },
+  {
+    name: '4. Web TypeScript Typecheck (tsc --noEmit)',
     cmd: npxCmd,
     args: ['tsc', '--noEmit', '-p', 'apps/web/tsconfig.json'],
     cwd: rootDir,
   },
   {
-    name: '4. Web Vitest Suite (apps/web)',
+    name: '5. Web Vitest Suite (apps/web)',
     cmd: npmCmd,
     args: ['--workspace=apps/web', 'run', 'test'],
     cwd: rootDir,
   },
   {
-    name: '5. AgentDojo ProvGuard Pair Suite',
+    name: '6. AgentDojo ProvGuard Pair Suite',
     cmd: pythonBin,
     args: [path.join(rootDir, 'eval', 'agentdojo', 'test_provguard_pairs.py')],
     cwd: rootDir,
