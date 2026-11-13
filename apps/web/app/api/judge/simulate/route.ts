@@ -64,7 +64,7 @@ export interface SimulateResult {
   amountAtomic: number;
   amountUsdc: string;
   revertReason?: string;
-  missionBExpiry: string;
+  missionBExpiry: string | null;
   message: string;
 }
 
@@ -97,8 +97,8 @@ export async function runJudgeSimulation(
       transport: http(rpcUrl),
     });
 
-  // 1. Read Mission B state & expiry from live Fuji
-  let missionBExpiryIso = '2026-12-13T11:44:08.000Z'; // fallback approx if read fails
+  // 1. Read Mission B state & expiry from live Fuji (R13A-F1: Never hardcode date fallback)
+  let missionBExpiryIso: string | null = null;
   try {
     const missionBData = await publicClient.readContract({
       address: GUARDED_TREASURY_ADDRESS,
@@ -106,10 +106,14 @@ export async function runJudgeSimulation(
       functionName: 'missions',
       args: [MISSION_B_ID],
     });
-    const expiresAtSec = Number(missionBData[3]);
-    missionBExpiryIso = new Date(expiresAtSec * 1000).toISOString();
+    if (missionBData && missionBData[3]) {
+      const expiresAtSec = Number(missionBData[3]);
+      if (expiresAtSec > 0) {
+        missionBExpiryIso = new Date(expiresAtSec * 1000).toISOString();
+      }
+    }
   } catch (err: any) {
-    // If readContract fails completely with network error, bubble up
+    // If read fails, keep missionBExpiryIso as null (never use typed-in date)
     if (
       err.name === 'HttpRequestError' ||
       err.message?.includes('fetch failed') ||
@@ -152,24 +156,49 @@ export async function runJudgeSimulation(
         'Simulation succeeded! The Fuji GuardedTreasury contract accepts this recipient under Mission B policy and would transfer funds.',
     };
   } catch (err: any) {
-    // Check if network error
-    if (
-      err.name === 'HttpRequestError' ||
-      err.message?.includes('fetch failed') ||
-      err.message?.includes('ECONNREFUSED')
-    ) {
-      throw new Error('RPC_ERROR: Unable to reach Avalanche Fuji RPC node');
+    // R13A-F2: Classify as REVERT ONLY when viem error chain explicitly contains
+    // ContractFunctionRevertedError or an execution reverted message.
+    let isRevert = false;
+    let revertReason = '';
+
+    if (typeof err?.walk === 'function') {
+      const revertErr = err.walk((e: any) =>
+        e?.name === 'ContractFunctionRevertedError' ||
+        e?.message?.includes('execution reverted') ||
+        e?.message?.includes('PayeeNotInMissionSet')
+      );
+      if (revertErr) {
+        isRevert = true;
+        revertReason =
+          revertErr.data?.errorName ||
+          revertErr.shortMessage?.match(/reason:\s*([A-Za-z0-9_]+)/)?.[1] ||
+          (revertErr.message?.includes('PayeeNotInMissionSet') ? 'PayeeNotInMissionSet' : '') ||
+          revertErr.shortMessage ||
+          'ExecutionReverted';
+      }
     }
 
-    // Extract revert reason
-    let revertReason =
-      err.shortMessage?.match(/reason:\s*([A-Za-z0-9_]+)/)?.[1] ||
-      (err.message?.includes('PayeeNotInMissionSet') ? 'PayeeNotInMissionSet' : '') ||
-      (err.message?.includes('NotAllowlisted') ? 'NotAllowlisted' : '') ||
-      (err.message?.includes('DailyCapExceeded') ? 'DailyCapExceeded' : '') ||
-      err.shortMessage ||
-      err.message ||
-      'ExecutionReverted';
+    if (!isRevert) {
+      const msg = err?.message || '';
+      const shortMsg = err?.shortMessage || '';
+      if (
+        msg.includes('execution reverted') ||
+        shortMsg.includes('execution reverted') ||
+        msg.includes('PayeeNotInMissionSet')
+      ) {
+        isRevert = true;
+        revertReason =
+          shortMsg.match(/reason:\s*([A-Za-z0-9_]+)/)?.[1] ||
+          (msg.includes('PayeeNotInMissionSet') ? 'PayeeNotInMissionSet' : '') ||
+          'ExecutionReverted';
+      }
+    }
+
+    // If it's NOT an explicit EVM revert (e.g. HTTP 429, 500, network error, timeout, RPC node error),
+    // fail closed with RPC_ERROR so the route returns 502, NOT a fake REVERT!
+    if (!isRevert) {
+      throw new Error(`RPC_ERROR: ${err?.message || 'RPC communication error'}`);
+    }
 
     if (revertReason.includes('PayeeNotInMissionSet')) {
       revertReason = 'PayeeNotInMissionSet';

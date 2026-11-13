@@ -28,7 +28,7 @@ interface SimulateResult {
   amountAtomic: number;
   amountUsdc: string;
   revertReason?: string;
-  missionBExpiry: string;
+  missionBExpiry: string | null;
   message: string;
 }
 
@@ -441,7 +441,11 @@ export default function JudgePage() {
                   {isVi ? 'Thời hạn hiệu lực Mission B (đọc từ contract):' : 'Mission B Expiry (read on-chain):'}
                 </div>
                 <div className="text-cyan-300">
-                  {new Date(simResult.missionBExpiry).toLocaleString()} (Valid through Demo Day Nov 30)
+                  {simResult.missionBExpiry
+                    ? `${new Date(simResult.missionBExpiry).toLocaleString()} (Valid through Demo Day Nov 30)`
+                    : isVi
+                    ? 'Không thể xác định (RPC read unavailable)'
+                    : 'Unknown (RPC read unavailable)'}
                 </div>
               </div>
             </div>

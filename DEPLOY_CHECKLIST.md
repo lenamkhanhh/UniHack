@@ -54,6 +54,19 @@ Mọi biến môi trường dưới đây phải được cấu hình bằng gi�
    - Đã cấu hình trần toàn cục 60 requests/phút cho `/api/arena/attack` để chống tràn màn hình sân khấu.
    - Đã cấu hình atomic PostgreSQL reservation rate limit: 5 requests/phút cho mỗi IP và 300 requests/ngày toàn cục tại `/api/bounty/attempt`. Database failure tự động fail-closed (từ chối suy luận đắt tiền).
    - Các route quản trị (`resetArenaAction`) sử dụng so sánh `timingSafeEqual` với biến môi trường `ARENA_PRESENTER_KEY`.
+   - **Judge Mode Rate Limiting (`/api/judge/simulate`):**
+     - Sử dụng bộ đếm trượt in-memory (10 requests/phút cho mỗi IP) độc lập trên mỗi serverless instance.
+     - Vì lệnh `eth_call` là mô phỏng read-only, không phát sóng giao dịch và không tiêu tốn phí gas (0 gas / $0 cost), cơ chế in-memory giúp bảo vệ hạn mức rate limit của node RPC công khai mà không đòi hỏi kết nối PostgreSQL.
+     - Payload được kiểm duyệt nghiêm ngặt: địa chỉ người nhận bắt buộc là định dạng 20-byte Ethereum hợp lệ, số tiền bị giới hạn cứng từ 1 đến 10,000 atomic units ($\le 0.01$ USDC), lý do mô phỏng cố định để ngăn chặn việc lạm dụng bộ nhớ hay RPC.
+
+4. **Yêu Cầu Môi Trường Cho Triển Khai Công Khai (Public Deploy Matrix):**
+   - **Chế độ Giám Khảo Công Khai (Judge Mode: `/judge`, `/api/judge/receipts`, `/api/judge/simulate`):**
+     - Hoạt động độc lập và hoàn toàn an toàn mà **KHÔNG CẦN BẤT KỲ PRIVATE KEY NÀO** và **KHÔNG CẦN DATABASE**.
+     - Chỉ yêu cầu biến duy nhất: `AVALANCHE_FUJI_RPC_URL` (nếu không cung cấp, hệ thống tự động fallback về endpoint RPC công khai của Ava Labs `https://api.avax-test.network/ext/bc/C/rpc`).
+     - Tất cả các địa chỉ hợp đồng (`0x2045...d545`), agent (`0x374b...3D72`), owner (`0x4BC9...8F7c`), và mission ID là thông tin công khai đã được xác minh trên Fuji testnet.
+   - **Chế độ Đầy Đủ Ứng Dụng (Full App: Dashboard, Passkey, Bounty, Validator M7):**
+     - Yêu cầu cấu hình đầy đủ bảng biến môi trường tại Mục 1 (`DATABASE_URL`, `DIRECT_URL`, `MISSION_TOKEN_SECRET`, `SESSION_WALLET_SEED`, `AGENT_PRIVATE_KEY`, `VALIDATOR_PRIVATE_KEY`, `RELAYER_PRIVATE_KEY`, `LLM_API_KEY`).
+     - Tuân thủ quy định: Không bao giờ deploy lên domain public hay push main khi chưa có sự phê duyệt bằng văn bản từ Owner.
 
 ---
 

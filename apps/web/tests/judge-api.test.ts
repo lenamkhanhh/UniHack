@@ -239,6 +239,35 @@ describe('Judge Mode API Routes (Round 13)', () => {
         runJudgeSimulation(OWNER_ADDRESS, 10000, mockNetworkErrorClient)
       ).rejects.toThrow('RPC_ERROR');
     });
+
+    it('R13A-F2: RPC 429/500 rate limit / node errors throw RPC_ERROR and result in 502, NOT REVERT', async () => {
+      // Mock an RPC node throwing HTTP 429 Too Many Requests
+      const mockRpcRateLimitClient: any = {
+        readContract: vi.fn().mockResolvedValue([
+          MISSION_B_ID,
+          AGENT_ADDRESS,
+          20000n,
+          1797162248n,
+          true,
+        ]),
+        call: vi.fn().mockRejectedValue(new Error('HTTP 429 Too Many Requests: Rate limit exceeded on Avalanche RPC node')),
+      };
+
+      await expect(
+        runJudgeSimulation(OWNER_ADDRESS, 10000, mockRpcRateLimitClient)
+      ).rejects.toThrow('RPC_ERROR');
+    });
+
+    it('R13A-F1: returns missionBExpiry null when contract read fails, never returning typed date', async () => {
+      const mockFailingExpiryClient: any = {
+        readContract: vi.fn().mockRejectedValue(new Error('Unknown read error')),
+        call: vi.fn().mockResolvedValue('0x0000000000000000000000000000000000000000000000000000000000000008'),
+      };
+
+      const res = await runJudgeSimulation(OWNER_ADDRESS, 10000, mockFailingExpiryClient);
+      expect(res.success).toBe(true);
+      expect(res.missionBExpiry).toBeNull();
+    });
   });
 
   describe('Live Fuji RPC Integration (gated by FUJI_LIVE_TEST=1)', () => {
