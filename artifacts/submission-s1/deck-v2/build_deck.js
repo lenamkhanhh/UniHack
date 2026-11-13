@@ -141,6 +141,10 @@ async function main() {
   s.addText("May 2026: one line of Morse code moved $174,000", { placeholder: "title" });
   T(s, "$174,000", { x: MX, y: 1.6, w: 6.6, h: 1.5, fontSize: 96, bold: true, color: RED, fontFace: "Arial", objectName: "big stat" });
   T(s, "drained from a Grok-linked Bankr wallet on Base. The attacker hid an instruction in Morse code; the AI decoded it and the wallet obeyed.", { x: MX, y: 3.2, w: 6.2, h: 1.2, fontSize: 18, color: TXT, objectName: "stat caption" });
+  T(s, [
+    { text: "Losses already exceed sampled volume. ", options: { bold: true, color: AMBER } },
+    { text: "BeInCrypto's State of AI Agent Payments 2026 counts $281,200 sent to attackers in two agent incidents, while the 6.4M x402 payments it sampled over 35 days moved $119,947 in total.", options: { color: TXT } },
+  ], { x: MX, y: 4.6, w: 6.2, h: 1.45, fontSize: 15, valign: "top", objectName: "loss vs volume" });
   const facts = [
     [fa.FaKey, "No private key was stolen"],
     [fa.FaFileContract, "No smart contract was exploited"],
@@ -157,7 +161,7 @@ async function main() {
     { text: "Not a one-off. ", options: { bold: true, color: AMBER } },
     { text: "Jul 2026: hidden web text made 4 of 26 models pay a scammer (Zscaler). Oct 2026: 9 of 10 models raised their own spending caps (Cornell/Yale).", options: { color: TXT } },
   ], { x: 7.6, y: 5.05, w: 4.95, h: 1.05, fontSize: 14, valign: "middle", objectName: "freysa text" });
-  T(s, "Sources: Cointelegraph Magazine (May 13, 2026); OECD.AI incident 2026-05-04; MetaMask Security Report May 2026; Zscaler ThreatLabz (Jul 2026); CoinDesk (Nov 1, 2026). Reported loss ranges from $155k to $204k by source.", { x: MX, y: 6.35, w: W - 2 * MX, h: 0.5, fontSize: 10, color: MUTED, objectName: "sources" });
+  T(s, "Sources: Cointelegraph Magazine (May 13, 2026); OECD.AI incident 2026-05-04; MetaMask Security Report May 2026; Zscaler ThreatLabz (Jul 2026); CoinDesk (Nov 1, 2026); BeInCrypto Intelligence, State of AI Agent Payments 2026 (Oct 6, 2026, via Yahoo Finance). Reported loss ranges from $155k to $204k by source.", { x: MX, y: 6.35, w: W - 2 * MX, h: 0.5, fontSize: 10, color: MUTED, objectName: "sources" });
   s.addNotes("Hook trong 20 giây. Nhấn mạnh: không lộ key, không hack contract. Agent chỉ ĐỌC một bài đăng. Zscaler và Cornell cho thấy đây là quy luật, và còn rất mới: tuần trước 9/10 model tự nâng hạn mức của chính nó.");
 
   // ===== 3. Why filters fail (ADI research) =====
