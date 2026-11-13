@@ -187,7 +187,10 @@ class MissionPayDefense(ToolsExecutor):
                 res, error = runtime.run_function(
                     env, tool_call.function, dict(tool_call.args)
                 )
-                res_str = self.tool_output_formatter(res)
+                # agentdojo's ToolsExecutor stores the formatter as `output_formatter`.
+                # (The old `self.tool_output_formatter` raised AttributeError, so every
+                # non-financial tool returned an error string and the agent never saw tool output.)
+                res_str = self.output_formatter(res)
                 tool_call_results.append(
                     ChatToolResultMessage(
                         role="tool",
