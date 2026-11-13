@@ -69,7 +69,7 @@ interface TwinEvidence {
 }
 
 export default function TwinTreasuryPage() {
-  const [lang, setLang] = useState<'vi' | 'en'>('vi');
+  const [lang, setLang] = useState<'vi' | 'en'>('en');
   const [loading, setLoading] = useState(true);
   const [apiState, setApiState] = useState<{
     status: 'LIVE' | 'SIMULATED' | 'NOT_RUN';
@@ -79,6 +79,15 @@ export default function TwinTreasuryPage() {
     status: 'NOT_RUN',
     isLive: false,
   });
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('missionpay_lang');
+      if (saved === 'vi' || saved === 'en') {
+        setLang(saved);
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     fetch('/api/arena/twin')
@@ -180,7 +189,13 @@ export default function TwinTreasuryPage() {
             <span>{t.backHome}</span>
           </Link>
           <button
-            onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')}
+            onClick={() => {
+              const next = lang === 'vi' ? 'en' : 'vi';
+              setLang(next);
+              try {
+                localStorage.setItem('missionpay_lang', next);
+              } catch {}
+            }}
             className="text-xs px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full font-mono transition-colors focus:ring-2 focus:ring-red-500"
             aria-label="Toggle language"
           >
@@ -252,7 +267,10 @@ export default function TwinTreasuryPage() {
                 <span className="text-xs font-mono text-red-400 font-bold uppercase tracking-wider">
                   MISSION A • twin.allowlist.v1
                 </span>
-                <span className="px-2 py-0.5 bg-red-500/20 text-red-400 border border-red-500/40 rounded text-[11px] font-mono">
+                <span
+                  id="twin-col-a-outcome"
+                  className="px-2 py-0.5 bg-red-500/20 text-red-400 border border-red-500/40 rounded text-[11px] font-mono"
+                >
                   {evidence?.missionA?.balanceDeltaUsdc
                     ? `${t.colALeak} (${evidence.missionA.balanceDeltaUsdc})`
                     : t.colALeak}
@@ -302,6 +320,7 @@ export default function TwinTreasuryPage() {
             <div className="pt-4 border-t border-red-500/20 text-xs font-mono text-gray-400">
               {isLive && evidence?.missionA?.txHash ? (
                 <a
+                  id="twin-col-a-tx"
                   href={`https://testnet.snowtrace.io/tx/${evidence.missionA.txHash}`}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -353,7 +372,7 @@ export default function TwinTreasuryPage() {
                 </div>
                 <div className="text-gray-400">
                   Result:{' '}
-                  <span className="text-emerald-400 font-bold">
+                  <span id="twin-col-b-outcome" className="text-emerald-400 font-bold">
                     {evidence
                       ? `REVERT: "${evidence.missionB.negativeControl.revertReason}" (${evidence.missionB.negativeControl.balanceDeltaUsdc} leaked)`
                       : 'NOT RUN'}
@@ -376,7 +395,7 @@ export default function TwinTreasuryPage() {
                 </div>
                 <div className="text-gray-400">
                   Result:{' '}
-                  <span className="text-emerald-400 font-bold">
+                  <span id="twin-col-b-pos-outcome" className="text-emerald-400 font-bold">
                     {evidence
                       ? `${evidence.missionB.positiveControl.simulationOutcome} (Auto-Payout: ${evidence.missionB.positiveControl.balanceDeltaUsdc} returned to Owner)`
                       : 'NOT RUN'}
@@ -397,6 +416,7 @@ export default function TwinTreasuryPage() {
               evidence?.missionB?.positiveControl?.txHash ? (
                 <div className="flex flex-col space-y-1">
                   <a
+                    id="twin-col-b-revert-tx"
                     href={`https://testnet.snowtrace.io/tx/${evidence.missionB.negativeControl.txHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -405,6 +425,7 @@ export default function TwinTreasuryPage() {
                     Revert Tx: {evidence.missionB.negativeControl.txHash.slice(0, 16)}... ↗
                   </a>
                   <a
+                    id="twin-col-b-pos-tx"
                     href={`https://testnet.snowtrace.io/tx/${evidence.missionB.positiveControl.txHash}`}
                     target="_blank"
                     rel="noopener noreferrer"

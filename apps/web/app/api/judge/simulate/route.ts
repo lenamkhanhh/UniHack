@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
   try {
     const simResult = await runJudgeSimulation(recipient, amountAtomic);
     return NextResponse.json({
-      success: true,
+      ...simResult,
       simulation: simResult,
     });
   } catch (err: any) {

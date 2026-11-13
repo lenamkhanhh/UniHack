@@ -85,9 +85,26 @@
       box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
     }
 
+    .qr-placeholder {
+      width: 100px;
+      height: 100px;
+      border-radius: 16px;
+      border: 1px solid #334155;
+      background: #0B0F17;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .card-icon {
+      width: 44px;
+      height: 44px;
+    }
+
     .qr-img {
-      width: 110px;
-      height: 110px;
+      width: 100px;
+      height: 100px;
       border-radius: 12px;
       border: 1px solid #334155;
       background: #0B0F17;
@@ -142,9 +159,13 @@
   </div>
 
   <div class="cards-row">
-    <!-- QR Card 1: Judge Mode -->
+    <!-- Card 1: Judge Mode -->
     <div class="qr-card">
-      <img id="qr-judge" class="qr-img" alt="Judge Mode QR" />
+      <div id="qr-judge-container" class="qr-placeholder">
+        <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+        </svg>
+      </div>
       <div class="qr-info">
         <h4 style="color: #F8FAFC;">Verify in 30 Seconds</h4>
         <p>Live Fuji Receipts & Simulator</p>
@@ -152,9 +173,13 @@
       </div>
     </div>
 
-    <!-- QR Card 2: Bounty Arena -->
+    <!-- Card 2: Bounty Arena -->
     <div class="qr-card">
-      <img id="qr-bounty" class="qr-img" alt="Bounty Arena QR" />
+      <div id="qr-bounty-container" class="qr-placeholder">
+        <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+      </div>
       <div class="qr-info">
         <h4 style="color: #10B981;">Bounty Challenge</h4>
         <p>Test Prompt Injections Live</p>
@@ -175,8 +200,14 @@
     fetch('qr-data.json')
       .then(r => r.json())
       .then(data => {
-        document.getElementById('qr-judge').src = data.judgeQR;
-        document.getElementById('qr-bounty').src = data.bountyQR;
+        if (data && data.judgeQR) {
+          const el = document.getElementById('qr-judge-container');
+          if (el) el.innerHTML = `<img src="${data.judgeQR}" class="qr-img" alt="Judge QR" />`;
+        }
+        if (data && data.bountyQR) {
+          const el = document.getElementById('qr-bounty-container');
+          if (el) el.innerHTML = `<img src="${data.bountyQR}" class="qr-img" alt="Bounty QR" />`;
+        }
       })
       .catch(() => {});
   </script>

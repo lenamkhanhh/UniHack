@@ -12,6 +12,7 @@ const FINAL_OUTPUT = path.join(VIDEO_DIR, 'MissionPay-demo.mp4');
 const args = process.argv.slice(2);
 let customVoicePath: string | null = null;
 let skipRecord = false;
+let publicUrl: string | null = null;
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--voice' && args[i + 1]) {
@@ -19,11 +20,33 @@ for (let i = 0; i < args.length; i++) {
     i++;
   } else if (args[i] === '--skip-record') {
     skipRecord = true;
+  } else if (args[i] === '--public-url' && args[i + 1]) {
+    publicUrl = args[i + 1].replace(/\/+$/, '');
+    i++;
   }
 }
 
 async function renderCardScreenshots() {
   console.log('[1/5] Rendering Title and Illustration cards with Playwright (1920x1080)...');
+
+  // Handle QR codes for outro card
+  const qrDataPath = path.join(CARDS_DIR, 'qr-data.json');
+  if (publicUrl) {
+    console.log(`  - Generating QR codes for public URL: ${publicUrl}`);
+    const QRCode = require('qrcode');
+    const judgeQR = await QRCode.toDataURL(`${publicUrl}/judge`, {
+      margin: 1,
+      color: { dark: '#FFFFFF', light: '#0B0F17' },
+    });
+    const bountyQR = await QRCode.toDataURL(`${publicUrl}/bounty`, {
+      margin: 1,
+      color: { dark: '#FFFFFF', light: '#0B0F17' },
+    });
+    fs.writeFileSync(qrDataPath, JSON.stringify({ judgeQR, bountyQR }));
+  } else if (fs.existsSync(qrDataPath)) {
+    fs.unlinkSync(qrDataPath);
+  }
+
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 
@@ -117,18 +140,26 @@ async function main() {
     process.exit(1);
   }
 
+  const rawDur = getDuration(demoSilentMp4);
+  const durIntro = getDuration(cards.introMp4);
+  const durDiagram = getDuration(cards.diagramMp4);
+  const durOutro = getDuration(cards.outroMp4);
+  const cardsNetDur = durIntro + durDiagram + durOutro - 0.9; // 3 x 0.3s xfade
+
+  // Target total video duration: 172.0s (~2m 52s), comfortably in 2:40–2:55 range
+  const targetTotalDur = 172.0;
+  const targetDemoDur = Math.max(145.0, targetTotalDur - cardsNetDur);
+  const ptsRatio = rawDur > targetDemoDur + 2 ? (targetDemoDur / rawDur).toFixed(4) : '1.0';
+
   // Ensure demoSilent is 30fps and 1920x1080
   const normalizedDemo = path.join(VIDEO_DIR, 'demo-norm30.mp4');
-  console.log('[3/5] Normalizing demo recording to 1080p30...');
+  console.log(`[3/5] Normalizing demo recording to 1080p30 (raw: ${rawDur.toFixed(2)}s, target: ${targetDemoDur.toFixed(2)}s, pts: ${ptsRatio})...`);
   execSync(
-    `ffmpeg -y -i "${demoSilentMp4}" -r 30 -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -pix_fmt yuv420p "${normalizedDemo}"`,
+    `ffmpeg -y -i "${demoSilentMp4}" -r 30 -vf "setpts=${ptsRatio}*PTS,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -pix_fmt yuv420p "${normalizedDemo}"`,
     { stdio: 'pipe' }
   );
 
-  const durIntro = getDuration(cards.introMp4);
-  const durDiagram = getDuration(cards.diagramMp4);
   const durDemo = getDuration(normalizedDemo);
-  const durOutro = getDuration(cards.outroMp4);
 
   console.log(`\nClip Durations:`);
   console.log(`  - Intro Card:   ${durIntro.toFixed(2)}s`);

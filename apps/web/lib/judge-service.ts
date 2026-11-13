@@ -41,9 +41,34 @@ export interface JudgeReceiptItem {
   snowtraceUrl: string;
 }
 
+export const FALLBACK_TWIN_EVIDENCE = {
+  contractAddress: '0x20451c1e2dCD83F166B4f22868BAdECb5868d545',
+  chainId: 43113,
+  mode: 'broadcast',
+  controlledVendorAddress: '0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA',
+  legitPayeeAddress: '0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c',
+  agentAddress: '0x374b8A126FDb9e5deEc8307da385076155Af3D72',
+  ownerAddress: '0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c',
+  missionA: {
+    txHash: '0x548d1106a69626eed32d308088f188c6d2d71d8e2f61e495f637d9f04e367fc6',
+    blockNumber: 61001944,
+  },
+  missionB: {
+    negativeControl: {
+      txHash: '0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38',
+      blockNumber: 61001947,
+    },
+    positiveControl: {
+      txHash: '0xcb7236d146a2c8e2789db8ec2a80358b17d65993fc7b07187802e34c48656315',
+      blockNumber: 61001949,
+    },
+  },
+};
+
 export function getTwinLiveEvidence(): any {
   const possiblePaths = [
     path.resolve(process.cwd(), '../evidence/twin/twin.live.json'),
+    path.resolve(process.cwd(), '../../evidence/twin/twin.live.json'),
     path.resolve(process.cwd(), 'evidence/twin/twin.live.json'),
     path.resolve(__dirname, '../../../evidence/twin/twin.live.json'),
     path.resolve(__dirname, '../../evidence/twin/twin.live.json'),
@@ -55,7 +80,7 @@ export function getTwinLiveEvidence(): any {
       } catch {}
     }
   }
-  return null;
+  return FALLBACK_TWIN_EVIDENCE;
 }
 
 export async function fetchLiveReceipts(

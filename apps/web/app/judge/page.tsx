@@ -113,7 +113,13 @@ export default function JudgePage() {
         throw new Error(data.message || `Error ${res.status}`);
       }
 
-      setSimResult(data);
+      const sim = data.simulation || data;
+      setSimResult({
+        ...sim,
+        outcome: sim.outcome,
+        message: isVi ? (sim.detailsVi || sim.details || sim.message) : (sim.details || sim.message || ''),
+        amountUsdc: sim.amountUsdc || `${(Number(sim.amountAtomic) / 1_000_000).toFixed(6)} USDC`,
+      });
     } catch (err: any) {
       setSimError(err.message || 'Simulation error');
     } finally {
@@ -197,12 +203,13 @@ export default function JudgePage() {
             <p className="text-xs font-mono text-red-300">{receiptsError}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div id="judge-receipts-grid" className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {receipts.map((rc) => {
               const isSuccess = rc.status === 'success';
               return (
                 <div
                   key={rc.id}
+                  id={`receipt-card-${rc.id}`}
                   className={`p-5 rounded-2xl border transition-all flex flex-col justify-between space-y-4 ${
                     isSuccess
                       ? 'bg-slate-900/80 border-emerald-500/30 shadow-lg shadow-emerald-950/20'
@@ -387,6 +394,8 @@ export default function JudgePage() {
 
         {simResult && (
           <div
+            id="simulation-result-card"
+            data-outcome={simResult.outcome}
             className={`p-5 rounded-2xl border transition-all space-y-3 ${
               simResult.outcome === 'REVERT'
                 ? 'bg-red-950/30 border-red-500/50'

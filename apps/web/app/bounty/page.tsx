@@ -143,7 +143,7 @@ export default function BountyPage() {
         throw new Error(json.error || 'Failed to submit attack proposal');
       }
 
-      setLastResult(json.result);
+      setLastResult(json.result || json);
       fetchStats();
     } catch (err: any) {
       setError(err.message || 'Submission error');
