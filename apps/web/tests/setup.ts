@@ -36,6 +36,14 @@ process.env.PAYMENT_MODE = process.env.PAYMENT_MODE || 'MOCK';
 process.env.SELLER_ADDRESS = process.env.SELLER_ADDRESS || sellerAddress;
 
 export async function clearDatabase() {
+  // Safety: tests wipe every table. Refuse unless the target DB is a *_test database,
+  // so a dev/demo DB (e.g. unihack_dev with real Fuji mission audit rows) is never wiped.
+  const dbName = (() => {
+    try { return new URL(process.env.DATABASE_URL || '').pathname.replace(/^\//, ''); } catch { return ''; }
+  })();
+  if (process.env.DATABASE_URL && !dbName.endsWith('_test')) {
+    throw new Error(`clearDatabase refused: DATABASE_URL points at "${dbName}", expected a *_test database`);
+  }
   await prisma.auditEntry.deleteMany({});
   await prisma.toolOperation.deleteMany({});
   await prisma.toolSession.deleteMany({});
