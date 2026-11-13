@@ -1,0 +1,307 @@
+{
+  "version": "MissionPay-mission-run-v1",
+  "network": "fuji",
+  "chainId": 43113,
+  "rpc": "https://api.avax-test.network/ext/bc/C/rpc",
+  "slug": "fuji-live-mission-s1c",
+  "startedAt": "2026-11-13T15:30:42.646Z",
+  "finishedAt": "2026-11-13T15:31:39.964Z",
+  "params": {
+    "treasuryCap": "100000",
+    "toolCap": "20000",
+    "payout": "10000",
+    "durationSeconds": 604800,
+    "skipX402": true,
+    "resume": false
+  },
+  "addresses": {
+    "treasury": "0x20451c1e2dCD83F166B4f22868BAdECb5868d545",
+    "usdc": "0x5425890298aed601595a70AB815c96711a31Bc65",
+    "owner": "0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c",
+    "agent": "0x374b8A126FDb9e5deEc8307da385076155Af3D72",
+    "validator": "0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5",
+    "validationRegistry": "0x4c5ccda2a630Cd1Cb706799DEAdcc8483d06697E",
+    "sessionWallet": "0xa86b9cce62104989d850df34ccc075a58b8df4bf",
+    "seller": "0xd4ce6B645ACd77BefA0E2693D26B50482426dEcB",
+    "missionId": "0x7ca63fa6dca87866cb82b55af0c48f462f5f1fe08c3fa4e9dcd78885e982f850",
+    "payeeRoot": "0x3011ac814b7ad5d2788091d9bf42b719e566fdf9ebe5c18dd3ea556dee6b71dd",
+    "agentId": "294"
+  },
+  "preflight": {
+    "rpcClientVersion": "avalanchego/1.15.3 [database=v1.4.5, rpcchainvm=47, commit=983815fd993acf846a27749b598f0fea4d876a75, go=1.26.10]",
+    "gasPriceWei": "160",
+    "liveFujiGasPriceWei": "160",
+    "owner": {
+      "avax": "0.399999997556759248",
+      "neededAvax": "0.000000000216"
+    },
+    "agent": {
+      "avax": "0.049999999294296421",
+      "neededAvax": "0.000000000084"
+    },
+    "validator": {
+      "avax": "0.029999999981635718",
+      "neededAvax": "0.00000000006"
+    },
+    "treasury": {
+      "usdc": "5.78",
+      "neededUsdc": "0.03",
+      "perTxCap": "5",
+      "dailyCap": "20",
+      "spentToday": "0.02",
+      "dailyRemaining": "19.98",
+      "paused": false
+    },
+    "cheapestTool": {
+      "id": "tool:talkmeter",
+      "priceAtomic": "50000"
+    },
+    "missionExistsOnChain": false,
+    "missionExistsInDb": false
+  },
+  "steps": [
+    {
+      "step": "1",
+      "name": "createMission",
+      "status": "PASSED",
+      "detail": "cap 100000",
+      "txHash": "0x14b457e8eb99500c028e69c0508051a20f132b21c90ae98e3d3152bd10d1f231"
+    },
+    {
+      "step": "2",
+      "name": "setRecipient(owner)",
+      "status": "SKIPPED_ALREADY_DONE",
+      "detail": "owner already allowlisted"
+    },
+    {
+      "step": "3",
+      "name": "POST /api/missions (EIP-191 challenge)",
+      "status": "PASSED",
+      "detail": "creationBlock 61010471 (DIRECT_TREASURY_RECEIPT)"
+    },
+    {
+      "step": "4",
+      "name": "setMissionToolCap",
+      "status": "PASSED",
+      "detail": "toolCap 20000",
+      "txHash": "0x2815c7df79b7a0bb5f9191d2efaa33c7873f6773d45ab34e6420edf9b2d5277c"
+    },
+    {
+      "step": "5",
+      "name": "fundMissionWallet",
+      "status": "PASSED",
+      "detail": "20000 -> session wallet 0xa86b9cce62104989d850df34ccc075a58b8df4bf",
+      "txHash": "0x16271ac9185e9d25dd70a0313e9b1d9342509e04285b4552f3c2fcbde24a3769"
+    },
+    {
+      "step": "6",
+      "name": "setMissionPayeeRoot",
+      "status": "PASSED",
+      "detail": "root 0x3011ac814b7ad5d2788091d9bf42b719e566fdf9ebe5c18dd3ea556dee6b71dd (payees = [owner])",
+      "txHash": "0x23e98b65209aa8470e137d82d4cd11d8f6e65747c4ec66da56990b08ebb103b1"
+    },
+    {
+      "step": "7",
+      "name": "POST /api/missions/<slug>/activate (app verifies funding + payee-root receipts)",
+      "status": "PASSED",
+      "detail": "session wallet FUNDED, payee root PAYEE_ROOT_SET"
+    },
+    {
+      "step": "8",
+      "name": "x402 tool purchase",
+      "status": "SKIPPED",
+      "detail": "--skip-x402 (not a success)"
+    },
+    {
+      "step": "9",
+      "name": "proposeWithProof payout -> owner",
+      "status": "PASSED",
+      "detail": "10000 executed (Executed event)",
+      "txHash": "0x7514dc40f1c054df683f2a000b928a6a65be596e5b8220ec4f594a04144ee7f6"
+    },
+    {
+      "step": "10",
+      "name": "anchorMissionProof(real DB head)",
+      "status": "PASSED",
+      "detail": "head 0xb6383cfec46d06ac2f6ba3c83b122baa48cf9bcd8b748cc4e2c6c7ad40814158",
+      "txHash": "0xeaa2b191dede374d002770a22ca3a6d867123bce34f6fc83c01802daea87aabd"
+    },
+    {
+      "step": "11",
+      "name": "ERC-8004 validationRequest (owner)",
+      "status": "PASSED",
+      "detail": "requestHash 0x8430523349ee30bb0e86be6540397404ee7043cf0d30daed9ff36a163fd156ca",
+      "txHash": "0xbc446fac45207d3cc7b633c8e9f951da1c23fec29aac837703cf3c290e2b033e"
+    },
+    {
+      "step": "12",
+      "name": "ERC-8004 validationResponse (validator)",
+      "status": "PASSED",
+      "detail": "score 100 tag verified-full",
+      "txHash": "0xa9f7faddb9e15f0efdb94349f49aed63a5af30666a9edeeffbb5fe8814af5ffa"
+    }
+  ],
+  "txs": [
+    {
+      "step": "1",
+      "label": "createMission",
+      "from": "0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c",
+      "to": "0x20451c1e2dCD83F166B4f22868BAdECb5868d545",
+      "hash": "0x14b457e8eb99500c028e69c0508051a20f132b21c90ae98e3d3152bd10d1f231",
+      "status": "success",
+      "blockNumber": "61010471",
+      "gasUsed": "145137",
+      "effectiveGasPrice": "160",
+      "feeWei": "23221920",
+      "paidBy": "owner"
+    },
+    {
+      "step": "4",
+      "label": "setMissionToolCap",
+      "from": "0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c",
+      "to": "0x20451c1e2dCD83F166B4f22868BAdECb5868d545",
+      "hash": "0x2815c7df79b7a0bb5f9191d2efaa33c7873f6773d45ab34e6420edf9b2d5277c",
+      "status": "success",
+      "blockNumber": "61010477",
+      "gasUsed": "50788",
+      "effectiveGasPrice": "160",
+      "feeWei": "8126080",
+      "paidBy": "owner"
+    },
+    {
+      "step": "5",
+      "label": "fundMissionWallet",
+      "from": "0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c",
+      "to": "0x20451c1e2dCD83F166B4f22868BAdECb5868d545",
+      "hash": "0x16271ac9185e9d25dd70a0313e9b1d9342509e04285b4552f3c2fcbde24a3769",
+      "status": "success",
+      "blockNumber": "61010483",
+      "gasUsed": "129586",
+      "effectiveGasPrice": "160",
+      "feeWei": "20733760",
+      "paidBy": "owner"
+    },
+    {
+      "step": "6",
+      "label": "setMissionPayeeRoot",
+      "from": "0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c",
+      "to": "0x20451c1e2dCD83F166B4f22868BAdECb5868d545",
+      "hash": "0x23e98b65209aa8470e137d82d4cd11d8f6e65747c4ec66da56990b08ebb103b1",
+      "status": "success",
+      "blockNumber": "61010487",
+      "gasUsed": "59605",
+      "effectiveGasPrice": "160",
+      "feeWei": "9536800",
+      "paidBy": "owner"
+    },
+    {
+      "step": "9",
+      "label": "proposeWithProof",
+      "from": "0x374b8A126FDb9e5deEc8307da385076155Af3D72",
+      "to": "0x20451c1e2dCD83F166B4f22868BAdECb5868d545",
+      "hash": "0x7514dc40f1c054df683f2a000b928a6a65be596e5b8220ec4f594a04144ee7f6",
+      "status": "success",
+      "blockNumber": "61010491",
+      "gasUsed": "454279",
+      "effectiveGasPrice": "160",
+      "feeWei": "72684640",
+      "paidBy": "agent"
+    },
+    {
+      "step": "10",
+      "label": "anchorMissionProof",
+      "from": "0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c",
+      "to": "0x20451c1e2dCD83F166B4f22868BAdECb5868d545",
+      "hash": "0xeaa2b191dede374d002770a22ca3a6d867123bce34f6fc83c01802daea87aabd",
+      "status": "success",
+      "blockNumber": "61010497",
+      "gasUsed": "50787",
+      "effectiveGasPrice": "160",
+      "feeWei": "8125920",
+      "paidBy": "owner"
+    },
+    {
+      "step": "11",
+      "label": "validationRequest",
+      "from": "0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c",
+      "to": "0x4c5ccda2a630Cd1Cb706799DEAdcc8483d06697E",
+      "hash": "0xbc446fac45207d3cc7b633c8e9f951da1c23fec29aac837703cf3c290e2b033e",
+      "status": "success",
+      "blockNumber": "61010502",
+      "gasUsed": "168567",
+      "effectiveGasPrice": "160",
+      "feeWei": "26970720",
+      "paidBy": "owner"
+    },
+    {
+      "step": "12",
+      "label": "validationResponse",
+      "from": "0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5",
+      "to": "0x4c5ccda2a630Cd1Cb706799DEAdcc8483d06697E",
+      "hash": "0xa9f7faddb9e15f0efdb94349f49aed63a5af30666a9edeeffbb5fe8814af5ffa",
+      "status": "success",
+      "blockNumber": "61010509",
+      "gasUsed": "127883",
+      "effectiveGasPrice": "160",
+      "feeWei": "20461280",
+      "paidBy": "validator"
+    }
+  ],
+  "state": {
+    "createMissionTx": "0x14b457e8eb99500c028e69c0508051a20f132b21c90ae98e3d3152bd10d1f231",
+    "fundingTx": "0x16271ac9185e9d25dd70a0313e9b1d9342509e04285b4552f3c2fcbde24a3769",
+    "payeeRootTx": "0x23e98b65209aa8470e137d82d4cd11d8f6e65747c4ec66da56990b08ebb103b1",
+    "payoutTx": "0x7514dc40f1c054df683f2a000b928a6a65be596e5b8220ec4f594a04144ee7f6",
+    "anchorTx": "0xeaa2b191dede374d002770a22ca3a6d867123bce34f6fc83c01802daea87aabd",
+    "requestHash": "0x8430523349ee30bb0e86be6540397404ee7043cf0d30daed9ff36a163fd156ca",
+    "requestTx": "0xbc446fac45207d3cc7b633c8e9f951da1c23fec29aac837703cf3c290e2b033e",
+    "responseTx": "0xa9f7faddb9e15f0efdb94349f49aed63a5af30666a9edeeffbb5fe8814af5ffa"
+  },
+  "x402": {
+    "status": "SKIPPED",
+    "reason": "--skip-x402",
+    "cheapestTool": "tool:talkmeter",
+    "priceAtomic": "50000"
+  },
+  "summary": {
+    "stepsPassed": [
+      "1",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "9",
+      "10",
+      "11",
+      "12"
+    ],
+    "x402": "SKIPPED",
+    "gasUsedTotal": "1186632",
+    "gasUsedByPayer": {
+      "owner": "604470",
+      "agent": "454279",
+      "validator": "127883",
+      "facilitator": "0"
+    },
+    "feeAvaxThisNetwork": "0.00000000018986112",
+    "liveFujiGasPriceWei": "160",
+    "estAvaxAtLiveFujiGasPrice": "0.00000000018986112",
+    "usdcMovedPerAddress": {
+      "treasury (0x20451c1e2dCD83F166B4f22868BAdECb5868d545)": "-0.03",
+      "sessionWallet (0xA86b9Cce62104989d850DF34CCC075a58b8df4bf)": "0.02",
+      "owner (0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c)": "0.01"
+    },
+    "auditEntries": 3,
+    "auditHead": "0xb6383cfec46d06ac2f6ba3c83b122baa48cf9bcd8b748cc4e2c6c7ad40814158",
+    "requestHash": "0x8430523349ee30bb0e86be6540397404ee7043cf0d30daed9ff36a163fd156ca",
+    "validation": {
+      "score": 100,
+      "tag": "verified-full",
+      "complete": true
+    },
+    "verifyUrl": "/verify/fuji-live-mission-s1c"
+  },
+  "forkGuardBlockedRequests": [],
+  "error": null
+}

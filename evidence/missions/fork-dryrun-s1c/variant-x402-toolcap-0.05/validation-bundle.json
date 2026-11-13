@@ -1,0 +1,16 @@
+{
+  "version": "MissionPay-validation-v1",
+  "missionId": "0xd99efb71ad65b53de2b089b7327dc535f9f04bdbb0723dc4988d02d639e7a633",
+  "missionSlug": "fork-dryrun-s1c",
+  "payeeRoot": "0x3011ac814b7ad5d2788091d9bf42b719e566fdf9ebe5c18dd3ea556dee6b71dd",
+  "auditHead": "0xc75e8602352e130023de678a71466d77ead55069a6546bc02be9ed49b827976b",
+  "anchorTxHash": "0x24acdfe0d37ccf0ae8e99f5d2cf1eb02ec543d1405884788efda973a1f5896fa",
+  "chainId": 43113,
+  "treasury": "0x20451c1e2dCD83F166B4f22868BAdECb5868d545",
+  "payees": [
+    "0x4bc93356c180ba2dd13a4a1cf43405bd0eb58f7c"
+  ],
+  "cap": "100000",
+  "ownerAddress": "0x4bc93356c180ba2dd13a4a1cf43405bd0eb58f7c",
+  "creationBlock": "61009945"
+}
