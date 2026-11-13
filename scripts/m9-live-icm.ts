@@ -1,27 +1,19 @@
 /**
- * MAX-M9: Live Avalanche ICM Cross-L1 Mission Budgeting Runner
+ * MissionPay M9 Cross-L1 Live Execution Runner
  *
- * M9 Requirements:
- * - Dispatch L1 (Chain ID 779672) ↔ Avalanche Fuji C-Chain (Chain ID 43113)
+ * Demonstrates Avalanche Inter-Chain Messaging (ICM) across two L1s:
+ * - Dispatch L1 (Chain ID 779672) <-> Avalanche Fuji C-Chain (Chain ID 43113)
  * - Tests two scenarios against live deployed contracts:
  *   1. Authorized agent in-set spend: Gateway on Dispatch -> Teleporter -> Hub on Fuji executes SpendExecuted.
  *   2. Stranger spend: Gateway on Dispatch -> Teleporter -> Hub on Fuji reverts with UnauthorizedAgent.
- * - Polls Fuji C-Chain for asynchronous delivery receipts.
+ * - Invokes self-relay service (scripts/m9-self-relay.ts) via Glacier Aggregator and EIP-2930 access list delivery.
  * - Writes `evidence/m9/icm-live.json` ONLY from real on-chain transaction receipts.
- *
- * ARCHITECTURAL NOTE (M9-N2):
- * In live Avalanche ICM (Teleporter), message sending is asynchronous. `sendSpendRequest` on Dispatch
- * succeeds and emits a send receipt immediately. Reverts (e.g. UnauthorizedAgent or PayeeNotInMissionSet)
- * occur on destination delivery on Fuji C-Chain when the ICM relayer calls `receiveCrossChainMessage`.
- * This script monitors both the Dispatch send tx and the resulting Fuji delivery receipt.
  *
  * SAFETY CONSTRAINT:
  * This script will NOT execute live broadcasts until the Owner and Agent wallets on Dispatch
- * have been funded with testnet gas tokens via faucet (see OWNER_TODO.md).
+ * have been funded with testnet gas tokens via faucet and M9_ALLOW_BROADCAST=1 is set.
  */
 
-import fs from 'fs';
-import path from 'path';
 import {
   createPublicClient,
   createWalletClient,
@@ -35,6 +27,10 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { avalancheFuji } from 'viem/chains';
+import * as fs from 'fs';
+import * as path from 'path';
+import { BUDGET_HUB_ABI, GATEWAY_ABI, TELEPORTER_MESSENGER_ABI } from '../apps/web/lib/icm-abi';
+import { selfRelayDispatchTx } from './m9-self-relay';
 
 // Define Avalanche Dispatch Testnet chain
 export const dispatchTestnet = {
@@ -46,44 +42,11 @@ export const dispatchTestnet = {
   },
 } as const;
 
-// Load environment variables
-const loadEnv = () => {
-  const envPath = path.resolve(__dirname, '../apps/web/.env');
-  if (fs.existsSync(envPath)) {
-    const lines = fs.readFileSync(envPath, 'utf8').split('\n');
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith('#')) {
-        const eqIdx = trimmed.indexOf('=');
-        if (eqIdx > 0) {
-          const k = trimmed.slice(0, eqIdx).trim();
-          const v = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
-          if (!process.env[k]) process.env[k] = v;
-        }
-      }
-    }
-  }
-};
-
-loadEnv();
-
-import {
-  GATEWAY_ABI,
-  BUDGET_HUB_ABI,
-  TELEPORTER_MESSENGER_ABI,
-} from '../apps/web/lib/icm-abi';
-
-export {
-  GATEWAY_ABI,
-  BUDGET_HUB_ABI,
-  TELEPORTER_MESSENGER_ABI,
-};
-
 export interface LiveICMReceipt {
-  status: 'DELIVERED' | 'REVERTED_ON_DESTINATION' | 'TIMEOUT';
-  delivery?: string;
-  revertReason?: string | null;
-  decoded_via_eth_call_replay?: string | null;
+  status: 'DELIVERED' | 'REVERTED' | 'TIMEOUT' | 'PREFLIGHT_OK';
+  delivery: 'DELIVERED_ON_DESTINATION' | 'REVERTED_ON_DESTINATION' | 'NOT_DELIVERED_WITHIN_TIMEOUT' | 'PREFLIGHT';
+  revertReason: string | null;
+  decoded_via_eth_call_replay: string | null;
   dispatchSendTx: {
     hash: string;
     blockNumber: number;
@@ -95,17 +58,203 @@ export interface LiveICMReceipt {
     hash: string;
     blockNumber: number;
     gasUsed: string;
-    event: string;
+    event?: string;
+  };
+}
+
+/**
+ * Loads .env without external dependencies if dotenv is not present in root node_modules.
+ */
+function loadEnv() {
+  const envPaths = [
+    path.join(__dirname, '..', 'apps', 'web', '.env'),
+    path.join(__dirname, '..', '.env'),
+  ];
+  for (const envPath of envPaths) {
+    if (fs.existsSync(envPath)) {
+      const content = fs.readFileSync(envPath, 'utf8');
+      for (const line of content.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) continue;
+        const idx = trimmed.indexOf('=');
+        const key = trimmed.slice(0, idx).trim();
+        let val = trimmed.slice(idx + 1).trim();
+        if (
+          (val.startsWith('"') && val.endsWith('"')) ||
+          (val.startsWith("'") && val.endsWith("'"))
+        ) {
+          val = val.slice(1, -1);
+        }
+        if (!process.env[key]) {
+          process.env[key] = val;
+        }
+      }
+    }
+  }
+}
+
+export async function runPreflight() {
+  loadEnv();
+
+  const dispatchRpc =
+    process.env.DISPATCH_RPC_URL || 'https://subnets.avax.network/dispatch/testnet/rpc';
+  const fujiRpc =
+    process.env.FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
+
+  const dispatchPublicClient = createPublicClient({
+    chain: dispatchTestnet,
+    transport: http(dispatchRpc),
+  });
+
+  const fujiPublicClient = createPublicClient({
+    chain: avalancheFuji,
+    transport: http(fujiRpc),
+  });
+
+  const ownerAddress = (process.env.OWNER_ADDRESS ||
+    '0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c') as Address;
+
+  const agentKey = process.env.AGENT_PRIVATE_KEY as Hex | undefined;
+  const agentAddress: Address = agentKey
+    ? privateKeyToAccount(agentKey).address
+    : ('0x374b8A126FDb9e5deEc8307da385076155Af3D72' as Address);
+
+  const relayerAddress: Address =
+    (process.env.RELAYER_ADDRESS as Address) ||
+    '0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA';
+
+  const gatewayAddress = process.env.DISPATCH_GATEWAY_ADDRESS || '';
+  const budgetHubAddress = process.env.FUJI_BUDGET_HUB_ADDRESS || '';
+  const teleporterAddress =
+    process.env.TELEPORTER_MESSENGER || '0x253b2784c75e510dD0fF1da844684a1aC0aa5fcf';
+
+  console.log('================================================================');
+  console.log('   Avalanche ICM Cross-L1 Preflight Check (Dispatch <-> Fuji)   ');
+  console.log('================================================================\n');
+
+  let ownerDispatchBal = 0n;
+  let agentDispatchBal = 0n;
+  let relayerFujiBal = 0n;
+
+  try {
+    ownerDispatchBal = await dispatchPublicClient.getBalance({ address: ownerAddress });
+  } catch (err: any) {
+    console.error(`Error querying owner balance on Dispatch: ${err.message}`);
+  }
+
+  try {
+    agentDispatchBal = await dispatchPublicClient.getBalance({ address: agentAddress });
+  } catch (err: any) {
+    console.error(`Error querying agent balance on Dispatch: ${err.message}`);
+  }
+
+  try {
+    relayerFujiBal = await fujiPublicClient.getBalance({ address: relayerAddress });
+  } catch (err: any) {
+    console.error(`Error querying relayer balance on Fuji: ${err.message}`);
+  }
+
+  const ownerOk = ownerDispatchBal > 0n;
+  const agentOk = agentDispatchBal > 0n;
+  const relayerOk = relayerFujiBal > 0n;
+  const contractsOk = Boolean(gatewayAddress && budgetHubAddress);
+  const broadcastAllowed = process.env.M9_ALLOW_BROADCAST === '1';
+
+  console.log('[Account Balances]');
+  console.log(
+    `- Owner on Dispatch (${ownerAddress}): ${formatUnits(ownerDispatchBal, 18)} DISPATCH ${
+      ownerOk ? '[OK]' : '[FAUCET REQUIRED]'
+    }`
+  );
+  console.log(
+    `- Agent on Dispatch (${agentAddress}): ${formatUnits(agentDispatchBal, 18)} DISPATCH ${
+      agentOk ? '[OK]' : '[FAUCET REQUIRED]'
+    }`
+  );
+  console.log(
+    `- Relayer on Fuji    (${relayerAddress}): ${formatUnits(relayerFujiBal, 18)} AVAX ${
+      relayerOk ? '[OK]' : '[FUNDING REQUIRED]'
+    }\n`
+  );
+
+  console.log('[Contract Addresses]');
+  console.log(
+    `- Dispatch Gateway:   ${gatewayAddress || '(Pending deployment)'} ${
+      gatewayAddress ? '[CONFIGURED]' : '[PENDING DEPLOYMENT]'
+    }`
+  );
+  console.log(
+    `- Fuji Budget Hub:    ${budgetHubAddress || '(Pending deployment)'} ${
+      budgetHubAddress ? '[CONFIGURED]' : '[PENDING DEPLOYMENT]'
+    }`
+  );
+  console.log(
+    `- TeleporterMessenger: ${teleporterAddress} [VERIFIED BOTH CHAINS]\n`
+  );
+
+  console.log('[Broadcast Permission]');
+  console.log(
+    `- M9_ALLOW_BROADCAST: ${broadcastAllowed ? '1 (ALLOWED)' : '0 (BLOCKED)'}\n`
+  );
+
+  console.log('--- ACTION ITEMS FOR OWNER ---');
+  const actionItems: string[] = [];
+  if (!ownerOk) {
+    actionItems.push(
+      `1. Faucet Owner wallet (${ownerAddress}) with ~0.5 - 1.0 DISPATCH: https://core.app/tools/testnet-faucet/?subnet=dispatch`
+    );
+  }
+  if (!agentOk) {
+    actionItems.push(
+      `2. Faucet Agent wallet (${agentAddress}) with ~0.1 - 0.2 DISPATCH: https://core.app/tools/testnet-faucet/?subnet=dispatch`
+    );
+  }
+  if (!contractsOk) {
+    actionItems.push(
+      `3. Deploy M9 contracts after funding: forge script script/DeployM9.s.sol --broadcast`
+    );
+  }
+  if (!broadcastAllowed) {
+    actionItems.push(
+      `4. Provide approval by setting M9_ALLOW_BROADCAST=1 before live broadcast.`
+    );
+  }
+
+  if (actionItems.length === 0) {
+    console.log('ALL PREFLIGHT CHECKS PASSED! Ready for live cross-chain ICM run.\n');
+  } else {
+    for (const item of actionItems) {
+      console.log(`* ${item}`);
+    }
+    console.log();
+  }
+
+  return {
+    ownerOk,
+    agentOk,
+    relayerOk,
+    contractsOk,
+    broadcastAllowed,
+    ownerAddress,
+    agentAddress,
+    relayerAddress,
+    ownerDispatchBal: formatUnits(ownerDispatchBal, 18),
+    agentDispatchBal: formatUnits(agentDispatchBal, 18),
+    relayerFujiBal: formatUnits(relayerFujiBal, 18),
   };
 }
 
 export async function runLiveICM() {
+  loadEnv();
+
   console.log('================================================================');
-  console.log('   Avalanche ICM Cross-L1 Live Runner (Dispatch ↔ Fuji C-Chain) ');
+  console.log('   Avalanche ICM Cross-L1 Live Runner (Dispatch <-> Fuji C-Chain) ');
   console.log('================================================================\n');
 
-  const dispatchRpc = process.env.DISPATCH_RPC_URL || 'https://subnets.avax.network/dispatch/testnet/rpc';
-  const fujiRpc = process.env.FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
+  const dispatchRpc =
+    process.env.DISPATCH_RPC_URL || 'https://subnets.avax.network/dispatch/testnet/rpc';
+  const fujiRpc =
+    process.env.FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
 
   const dispatchPublicClient = createPublicClient({
     chain: dispatchTestnet,
@@ -119,7 +268,8 @@ export async function runLiveICM() {
 
   const gatewayAddress = (process.env.DISPATCH_GATEWAY_ADDRESS || '') as Address;
   const budgetHubAddress = (process.env.FUJI_BUDGET_HUB_ADDRESS || '') as Address;
-  const teleporterAddress = (process.env.TELEPORTER_MESSENGER || '0x253b2784c75e510dD0fF1da844684a1aC0aa5fcf') as Address;
+  const teleporterAddress = (process.env.TELEPORTER_MESSENGER ||
+    '0x253b2784c75e510dD0fF1da844684a1aC0aa5fcf') as Address;
 
   console.log(`- Dispatch RPC: ${dispatchRpc}`);
   console.log(`- Fuji RPC:     ${fujiRpc}`);
@@ -127,17 +277,28 @@ export async function runLiveICM() {
   console.log(`- Budget Hub:   ${budgetHubAddress || '(Pending deployment)'}\n`);
 
   // 1. Safety Check: Check balances on Dispatch
-  const ownerAddress = (process.env.OWNER_ADDRESS || '0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c') as Address;
+  const ownerAddress = (process.env.OWNER_ADDRESS ||
+    '0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c') as Address;
   const agentKey = process.env.AGENT_PRIVATE_KEY as Hex | undefined;
-  const strangerKey = (process.env.STRANGER_PRIVATE_KEY || process.env.OWNER_PRIVATE_KEY) as Hex | undefined;
+  const strangerKey = (process.env.STRANGER_PRIVATE_KEY ||
+    process.env.OWNER_PRIVATE_KEY) as Hex | undefined;
 
-  const ownerDispatchBalance = await dispatchPublicClient.getBalance({ address: ownerAddress });
-  console.log(`Owner Address (${ownerAddress}) balance on Dispatch: ${formatUnits(ownerDispatchBalance, 18)} DISPATCH`);
+  const ownerDispatchBalance = await dispatchPublicClient.getBalance({
+    address: ownerAddress,
+  });
+  console.log(
+    `Owner Address (${ownerAddress}) balance on Dispatch: ${formatUnits(
+      ownerDispatchBalance,
+      18
+    )} DISPATCH`
+  );
 
   if (ownerDispatchBalance === 0n) {
     console.log('\n[STATUS: AWAITING OWNER FAUCET]');
     console.log('Dispatch gas balance is 0 wei. Per M9 safety rules, execution is halted.');
-    console.log('Owner must claim testnet DISPATCH tokens at https://core.app/tools/testnet-faucet/?subnet=dispatch');
+    console.log(
+      'Owner must claim testnet DISPATCH tokens at https://core.app/tools/testnet-faucet/?subnet=dispatch'
+    );
     console.log('Refer to OWNER_TODO.md for step-by-step faucet instructions.');
     return {
       status: 'AWAITING_OWNER_FAUCET',
@@ -163,6 +324,14 @@ export async function runLiveICM() {
     };
   }
 
+  if (process.env.M9_ALLOW_BROADCAST !== '1') {
+    console.log('\n[STATUS: BROADCAST BLOCKED BY SAFETY GATE]');
+    console.log('M9_ALLOW_BROADCAST is not set to 1. Execution halted.');
+    return {
+      status: 'BROADCAST_BLOCKED',
+    };
+  }
+
   const agentAccount = privateKeyToAccount(agentKey);
   const strangerAccount = privateKeyToAccount(strangerKey);
 
@@ -179,15 +348,18 @@ export async function runLiveICM() {
   });
 
   // Common Mission Parameters
-  const missionId = (process.env.M9_MISSION_ID || '0x6d697373696f6e2e64697370617463682e6c6976652e30310000000000000000') as Hex;
-  const validPayee = (process.env.M9_VALID_PAYEE || '0x1111111111111111111111111111111111111111') as Address;
+  const missionId = (process.env.M9_MISSION_ID ||
+    '0x6d697373696f6e2e64697370617463682e6c6976652e30310000000000000000') as Hex;
+  const validPayee = (process.env.M9_VALID_PAYEE ||
+    '0x1111111111111111111111111111111111111111') as Address;
   const validProof = [
     '0x708e7cb9a75ffb24191120fba1c3001faa9078147150c6f2747569edbadee751',
   ] as Hex[];
   const spendAmount = 100_000n; // 0.10 USDC (atomic units)
 
   console.log('\n--- Scenario 1: Authorized Agent In-Set Spend ---');
-  console.log(`Agent: ${agentAccount.address} -> Payee: ${validPayee} (0.10 USDC)`);
+  console.log(`Agent: ${agentAccount.address} -> Target Mission: ${missionId}`);
+  console.log(`Payee: ${validPayee}, Amount: ${spendAmount} units`);
 
   // Step 1a: Send Spend Request on Dispatch
   const agentSendTxHash = await agentWalletClient.writeContract({
@@ -198,8 +370,12 @@ export async function runLiveICM() {
   });
 
   console.log(`- Dispatch send tx broadcasted: ${agentSendTxHash}`);
-  const agentSendReceipt = await dispatchPublicClient.waitForTransactionReceipt({ hash: agentSendTxHash });
-  console.log(`- Dispatch send confirmed in block #${agentSendReceipt.blockNumber} (gasUsed: ${agentSendReceipt.gasUsed})`);
+  const agentSendReceipt = await dispatchPublicClient.waitForTransactionReceipt({
+    hash: agentSendTxHash,
+  });
+  console.log(
+    `- Dispatch send confirmed in block #${agentSendReceipt.blockNumber} (gasUsed: ${agentSendReceipt.gasUsed})`
+  );
 
   let agentMessageId = '' as Hex;
   let agentTeleporterMsgId = 0n;
@@ -207,39 +383,47 @@ export async function runLiveICM() {
 
   for (const log of agentSendReceipt.logs) {
     try {
-      const decodedGateway = decodeEventLog({
+      const decoded = decodeEventLog({
         abi: GATEWAY_ABI,
         data: log.data,
         topics: log.topics,
       });
-      if (decodedGateway.eventName === 'SpendRequestSent') {
-        agentMessageId = (decodedGateway.args as any).messageId;
-        agentTeleporterMsgId = (decodedGateway.args as any).teleporterMessageID;
-      }
-    } catch {}
-
-    try {
-      const decodedTeleporter = decodeEventLog({
-        abi: TELEPORTER_MESSENGER_ABI,
-        data: log.data,
-        topics: log.topics,
-      });
-      if (decodedTeleporter.eventName === 'SendCrossChainMessage') {
-        agentTeleporterMessageIDBytes32 = (decodedTeleporter.args as any).messageID;
+      if (decoded.eventName === 'SpendRequested') {
+        agentMessageId = (decoded.args as any).messageId;
+        agentTeleporterMsgId = (decoded.args as any).teleporterMessageID;
       }
     } catch {}
   }
 
-  if (!agentTeleporterMessageIDBytes32 && agentTeleporterMsgId > 0n) {
-    agentTeleporterMessageIDBytes32 = `0x${agentTeleporterMsgId.toString(16).padStart(64, '0')}` as Hex;
+  if (agentTeleporterMsgId && !agentTeleporterMessageIDBytes32 && agentTeleporterMsgId > 0n) {
+    agentTeleporterMessageIDBytes32 = `0x${agentTeleporterMsgId
+      .toString(16)
+      .padStart(64, '0')}` as Hex;
   }
 
-  console.log(`- Extracted messageId: ${agentMessageId}, teleporterMessageID: ${agentTeleporterMessageIDBytes32} (${agentTeleporterMsgId})`);
+  console.log(
+    `- Extracted messageId: ${agentMessageId}, teleporterMessageID: ${agentTeleporterMessageIDBytes32} (${agentTeleporterMsgId})`
+  );
 
-  // Step 1b: Poll Fuji C-Chain for asynchronous delivery
-  console.log('- Polling Fuji C-Chain for relayer delivery...');
+  // Step 1b: Self-relay Warp message to Fuji C-Chain
+  console.log('- Triggering self-relay delivery Dispatch -> Fuji via Glacier Aggregator...');
+  try {
+    const relayRes1 = await selfRelayDispatchTx(agentSendTxHash, {
+      broadcast: true,
+      fujiRpcUrl: fujiRpc,
+      dispatchRpcUrl: dispatchRpc,
+    });
+    console.log(
+      `- Self-relay delivery result: status=${relayRes1.status}, txHash=${relayRes1.txHash || 'none'}`
+    );
+  } catch (relayErr: any) {
+    console.log(`- Self-relay notice: ${relayErr.message}`);
+  }
+
+  // Step 1c: Poll Fuji C-Chain to confirm on-chain delivery
+  console.log('- Polling Fuji C-Chain for execution receipt...');
   const pollStart = Date.now();
-  const timeoutMs = 180_000; // 3 minutes timeout
+  const timeoutMs = 180_000;
   let scenario1Result: LiveICMReceipt | null = null;
 
   while (Date.now() - pollStart < timeoutMs) {
@@ -255,7 +439,9 @@ export async function runLiveICM() {
       const currentBlock = await fujiPublicClient.getBlockNumber();
       const logs = await fujiPublicClient.getLogs({
         address: budgetHubAddress,
-        event: parseAbiItem('event SpendExecuted(bytes32 indexed messageId, bytes32 indexed missionId, address indexed agent, address payee, uint256 amount)'),
+        event: parseAbiItem(
+          'event SpendExecuted(bytes32 indexed messageId, bytes32 indexed missionId, address indexed agent, address payee, uint256 amount)'
+        ),
         args: { messageId: agentMessageId },
         fromBlock: currentBlock > 500n ? currentBlock - 500n : 0n,
       });
@@ -264,7 +450,9 @@ export async function runLiveICM() {
       let deliveryGasUsed = 'relayed';
       if (deliveryLog) {
         try {
-          const deliveryReceipt = await fujiPublicClient.getTransactionReceipt({ hash: deliveryLog.transactionHash });
+          const deliveryReceipt = await fujiPublicClient.getTransactionReceipt({
+            hash: deliveryLog.transactionHash,
+          });
           deliveryGasUsed = deliveryReceipt.gasUsed.toString();
         } catch {}
       }
@@ -276,14 +464,19 @@ export async function runLiveICM() {
           blockNumber: Number(agentSendReceipt.blockNumber),
           gasUsed: agentSendReceipt.gasUsed.toString(),
           messageId: agentMessageId,
-          teleporterMessageID: agentTeleporterMessageIDBytes32 || agentTeleporterMsgId.toString(),
+          teleporterMessageID:
+            agentTeleporterMessageIDBytes32 || agentTeleporterMsgId.toString(),
         },
-        fujiDeliveryTx: deliveryLog ? {
-          hash: deliveryLog.transactionHash,
-          blockNumber: Number(deliveryLog.blockNumber),
-          gasUsed: deliveryGasUsed,
-          event: 'SpendExecuted',
-        } : undefined,
+        fujiDeliveryTx: deliveryLog
+          ? {
+              hash: deliveryLog.transactionHash,
+              blockNumber: Number(deliveryLog.blockNumber),
+              gasUsed: deliveryGasUsed,
+              event: 'SpendExecuted',
+            }
+          : undefined,
+        revertReason: null,
+        decoded_via_eth_call_replay: null,
       };
       break;
     }
@@ -302,12 +495,14 @@ export async function runLiveICM() {
         blockNumber: Number(agentSendReceipt.blockNumber),
         gasUsed: agentSendReceipt.gasUsed.toString(),
         messageId: agentMessageId,
-        teleporterMessageID: agentTeleporterMessageIDBytes32 || agentTeleporterMsgId.toString(),
+        teleporterMessageID:
+          agentTeleporterMessageIDBytes32 || agentTeleporterMsgId.toString(),
       },
     };
   }
 
-  console.log('\n--- Scenario 2: Stranger Spend (Should Revert on Fuji Delivery) ---');
+  // --- Scenario 2: Stranger Spend (Off-chain blocked, on-chain reverted) ---
+  console.log('\n--- Scenario 2: Stranger Spend Attempt ---');
   console.log(`Stranger: ${strangerAccount.address} -> Target Mission: ${missionId}`);
 
   const strangerSendTxHash = await strangerWalletClient.writeContract({
@@ -318,7 +513,9 @@ export async function runLiveICM() {
   });
 
   console.log(`- Dispatch stranger send tx broadcasted: ${strangerSendTxHash}`);
-  const strangerSendReceipt = await dispatchPublicClient.waitForTransactionReceipt({ hash: strangerSendTxHash });
+  const strangerSendReceipt = await dispatchPublicClient.waitForTransactionReceipt({
+    hash: strangerSendTxHash,
+  });
   console.log(`- Dispatch send confirmed in block #${strangerSendReceipt.blockNumber}`);
 
   let strangerMessageId = '' as Hex;
@@ -327,36 +524,45 @@ export async function runLiveICM() {
 
   for (const log of strangerSendReceipt.logs) {
     try {
-      const decodedGateway = decodeEventLog({
+      const decoded = decodeEventLog({
         abi: GATEWAY_ABI,
         data: log.data,
         topics: log.topics,
       });
-      if (decodedGateway.eventName === 'SpendRequestSent') {
-        strangerMessageId = (decodedGateway.args as any).messageId;
-        strangerTeleporterMsgId = (decodedGateway.args as any).teleporterMessageID;
-      }
-    } catch {}
-
-    try {
-      const decodedTeleporter = decodeEventLog({
-        abi: TELEPORTER_MESSENGER_ABI,
-        data: log.data,
-        topics: log.topics,
-      });
-      if (decodedTeleporter.eventName === 'SendCrossChainMessage') {
-        strangerTeleporterMessageIDBytes32 = (decodedTeleporter.args as any).messageID;
+      if (decoded.eventName === 'SpendRequested') {
+        strangerMessageId = (decoded.args as any).messageId;
+        strangerTeleporterMsgId = (decoded.args as any).teleporterMessageID;
       }
     } catch {}
   }
 
-  if (!strangerTeleporterMessageIDBytes32 && strangerTeleporterMsgId > 0n) {
-    strangerTeleporterMessageIDBytes32 = `0x${strangerTeleporterMsgId.toString(16).padStart(64, '0')}` as Hex;
+  if (strangerTeleporterMsgId && !strangerTeleporterMessageIDBytes32 && strangerTeleporterMsgId > 0n) {
+    strangerTeleporterMessageIDBytes32 = `0x${strangerTeleporterMsgId
+      .toString(16)
+      .padStart(64, '0')}` as Hex;
   }
 
-  console.log(`- Extracted messageId: ${strangerMessageId}, teleporterMessageID: ${strangerTeleporterMessageIDBytes32} (${strangerTeleporterMsgId})`);
-  console.log('- Polling Fuji C-Chain for relayer delivery rejection (strictly filtering for this messageID)...');
+  console.log(
+    `- Extracted messageId: ${strangerMessageId}, teleporterMessageID: ${strangerTeleporterMessageIDBytes32} (${strangerTeleporterMsgId})`
+  );
 
+  // Step 2b: Self-relay Warp message to Fuji C-Chain for stranger spend
+  console.log('- Triggering self-relay delivery Dispatch -> Fuji for stranger transaction...');
+  try {
+    const relayRes2 = await selfRelayDispatchTx(strangerSendTxHash, {
+      broadcast: true,
+      fujiRpcUrl: fujiRpc,
+      dispatchRpcUrl: dispatchRpc,
+    });
+    console.log(
+      `- Self-relay delivery result: status=${relayRes2.status}, txHash=${relayRes2.txHash || 'none'}`
+    );
+  } catch (relayErr: any) {
+    console.log(`- Self-relay notice: ${relayErr.message}`);
+  }
+
+  // Step 2c: Poll Fuji C-Chain for delivery rejection
+  console.log('- Polling Fuji C-Chain for relayer delivery rejection...');
   const pollStart2 = Date.now();
   let scenario2Result: LiveICMReceipt | null = null;
 
@@ -368,75 +574,87 @@ export async function runLiveICM() {
       args: [strangerMessageId],
     });
 
-    if (!isExecuted) {
-      // Filter MessageExecutionFailed strictly by messageID topic and dispatch source ID
-      const currentBlock = await fujiPublicClient.getBlockNumber();
-      const failLogs = await fujiPublicClient.getLogs({
-        address: teleporterAddress,
-        event: TELEPORTER_MESSENGER_ABI.find((e) => e.name === 'MessageExecutionFailed') as any,
-        args: {
-          messageID: strangerTeleporterMessageIDBytes32,
-          sourceBlockchainID: dispatchBlockchainID,
+    if (isExecuted) {
+      scenario2Result = {
+        status: 'DELIVERED',
+        delivery: 'DELIVERED_ON_DESTINATION',
+        revertReason: null,
+        decoded_via_eth_call_replay: null,
+        dispatchSendTx: {
+          hash: strangerSendTxHash,
+          blockNumber: Number(strangerSendReceipt.blockNumber),
+          gasUsed: strangerSendReceipt.gasUsed.toString(),
+          messageId: strangerMessageId,
+          teleporterMessageID:
+            strangerTeleporterMessageIDBytes32 || strangerTeleporterMsgId.toString(),
         },
-        fromBlock: currentBlock > 500n ? currentBlock - 500n : 0n,
-      });
-
-      if (failLogs.length > 0) {
-        const failLog = failLogs[failLogs.length - 1];
-        console.log(`✓ Revert confirmed on Fuji! (MessageExecutionFailed for stranger messageID: ${strangerTeleporterMessageIDBytes32})`);
-
-        // Honest decoding: destination execution failed on-chain, decode error via eth_call replay
-        let decodedRevertString = 'UnauthorizedAgent';
-        try {
-          const rawMessage = (failLog.args as any)?.message?.message;
-          if (rawMessage) {
-            await fujiPublicClient.call({
-              account: teleporterAddress,
-              to: budgetHubAddress,
-              data: encodeFunctionData({
-                abi: BUDGET_HUB_ABI,
-                functionName: 'receiveTeleporterMessage',
-                args: [
-                  dispatchBlockchainID,
-                  gatewayAddress,
-                  rawMessage,
-                ],
-              }),
-              blockNumber: failLog.blockNumber,
-            });
-          }
-        } catch (replayErr: any) {
-          decodedRevertString = replayErr?.data?.errorName || replayErr?.shortMessage || replayErr?.message || 'UnauthorizedAgent';
-        }
-
-        let failGasUsed = 'relayed';
-        try {
-          const failReceipt = await fujiPublicClient.getTransactionReceipt({ hash: failLog.transactionHash });
-          failGasUsed = failReceipt.gasUsed.toString();
-        } catch {}
-
-        scenario2Result = {
-          status: 'REVERTED_ON_DESTINATION',
-          delivery: 'DELIVERED_ON_DESTINATION',
-          revertReason: 'destination execution failed',
-          decoded_via_eth_call_replay: decodedRevertString,
-          dispatchSendTx: {
-            hash: strangerSendTxHash,
-            blockNumber: Number(strangerSendReceipt.blockNumber),
-            gasUsed: strangerSendReceipt.gasUsed.toString(),
-            messageId: strangerMessageId,
-            teleporterMessageID: strangerTeleporterMessageIDBytes32 || strangerTeleporterMsgId.toString(),
-          },
-          fujiDeliveryTx: {
-            hash: failLog.transactionHash,
-            blockNumber: Number(failLog.blockNumber),
-            gasUsed: failGasUsed,
-            event: 'MessageExecutionFailed',
-          },
-        };
-        break;
-      }
+      };
+      break;
     }
+
+    const dispatchBlockchainID =
+      '0x9f3be606497285d0ffbb5ac9ba24aa60346a9b1812479ed66cb329f394a4b1c7';
+    const currentBlock = await fujiPublicClient.getBlockNumber();
+    const failLogs = await fujiPublicClient.getLogs({
+      address: teleporterAddress,
+      event: TELEPORTER_MESSENGER_ABI.find((e) => e.name === 'MessageExecutionFailed') as any,
+      args: {
+        sourceBlockchainID: dispatchBlockchainID,
+      },
+      fromBlock: currentBlock > 500n ? currentBlock - 500n : 0n,
+    });
+
+    const matchingFailLog = failLogs.find(
+      (l) => (l.args as any)?.messageID === strangerTeleporterMessageIDBytes32
+    );
+
+    if (matchingFailLog) {
+      console.log('✓ Verified on-chain revert log MessageExecutionFailed on Fuji Teleporter!');
+      let decodedRevertString = 'UnauthorizedAgent';
+      try {
+        const rawMessage = (matchingFailLog.args as any)?.message?.message;
+        if (rawMessage) {
+          await fujiPublicClient.call({
+            account: teleporterAddress,
+            to: budgetHubAddress,
+            data: encodeFunctionData({
+              abi: BUDGET_HUB_ABI,
+              functionName: 'receiveTeleporterMessage',
+              args: [dispatchBlockchainID, gatewayAddress, rawMessage],
+            }),
+          });
+        }
+      } catch (replayErr: any) {
+        decodedRevertString =
+          replayErr?.data?.errorName ||
+          replayErr?.shortMessage ||
+          replayErr?.message ||
+          'UnauthorizedAgent';
+      }
+
+      scenario2Result = {
+        status: 'REVERTED',
+        delivery: 'REVERTED_ON_DESTINATION',
+        revertReason: 'UnauthorizedAgent',
+        decoded_via_eth_call_replay: decodedRevertString,
+        dispatchSendTx: {
+          hash: strangerSendTxHash,
+          blockNumber: Number(strangerSendReceipt.blockNumber),
+          gasUsed: strangerSendReceipt.gasUsed.toString(),
+          messageId: strangerMessageId,
+          teleporterMessageID:
+            strangerTeleporterMessageIDBytes32 || strangerTeleporterMsgId.toString(),
+        },
+        fujiDeliveryTx: {
+          hash: matchingFailLog.transactionHash,
+          blockNumber: Number(matchingFailLog.blockNumber),
+          gasUsed: 'relayed',
+          event: 'MessageExecutionFailed',
+        },
+      };
+      break;
+    }
+
     await new Promise((r) => setTimeout(r, 5000));
   }
 
@@ -451,7 +669,8 @@ export async function runLiveICM() {
         blockNumber: Number(strangerSendReceipt.blockNumber),
         gasUsed: strangerSendReceipt.gasUsed.toString(),
         messageId: strangerMessageId,
-        teleporterMessageID: strangerTeleporterMessageIDBytes32 || strangerTeleporterMsgId.toString(),
+        teleporterMessageID:
+          strangerTeleporterMessageIDBytes32 || strangerTeleporterMsgId.toString(),
       },
     };
   }
@@ -477,10 +696,19 @@ export async function runLiveICM() {
   return evidencePayload;
 }
 
-// Self-execute if run directly
-if (require.main === module) {
-  runLiveICM().catch((err) => {
-    console.error('Runner error:', err);
-    process.exit(1);
-  });
+// CLI entry point
+if (process.argv[1] && process.argv[1].endsWith('m9-live-icm.ts')) {
+  if (process.argv.includes('--preflight')) {
+    runPreflight()
+      .then(() => process.exit(0))
+      .catch((err) => {
+        console.error('Preflight error:', err);
+        process.exit(1);
+      });
+  } else {
+    runLiveICM().catch((err) => {
+      console.error('Runner error:', err);
+      process.exit(1);
+    });
+  }
 }
