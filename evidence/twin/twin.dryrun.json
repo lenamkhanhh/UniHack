@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-11-13T09:32:35.841Z",
+  "timestamp": "2026-11-13T10:11:57.647Z",
   "contractAddress": "0x20451c1e2dCD83F166B4f22868BAdECb5868d545",
   "chainId": 43113,
   "mode": "dry-run",
-  "forkBlockNumber": 60996374,
+  "forkBlockNumber": 60998116,
   "controlledVendorAddress": "0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA",
   "legitPayeeAddress": "0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c",
   "agentAddress": "0x374b8A126FDb9e5deEc8307da385076155Af3D72",

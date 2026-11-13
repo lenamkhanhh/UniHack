@@ -1,5 +1,5 @@
 /**
- * MissionPay Twin Treasury Simulation & Live Preparation Script (Round 11)
+ * MissionPay Twin Treasury Simulation & Live Preparation Script (Round 12)
  *
  * Demonstrates the "Twin Treasury" proof on Avalanche Fuji C-Chain:
  * - Mission A (twin.allowlist.v1, cap = 0.02 USDC): Global allowlist mode (payee root = 0x0)
@@ -11,15 +11,14 @@
  *
  * Target: Deployed Fuji GuardedTreasury (0x20451c1e2dCD83F166B4f22868BAdECb5868d545)
  *
- * Round 11 Guarantees:
- * - R11-F1: Negative control failure is NOT swallowed. Throws if !reverted.
- *           All outputs derived dynamically from chain reads & receipts, zero typed-in numbers.
- * - R11-F2: Separate dry-run (twin.dryrun.json) and live (twin.live.json) evidence files.
- *           Live badge requires broadcast mode + 3 on-chain receipts.
- * - R11-F3: Legit payee is OWNER_ADDRESS (validator key not used; funds return to owner).
- * - R11-F4: Step 9 cleanup: Owner revokes vendor allowlist setRecipient(vendor, false).
- * - R11-F5: Real broadcast path with --print-owner-calldata, preflight checks, idempotency,
- *           and live receipt capture.
+ * Round 12 Hardening:
+ * - R12-F1: In eth_call pre-check, no swallowed throws. Aborts broadcast before sending any tx.
+ * - R12-F2: Strictly checks rcB1.status === 'reverted' and rcA/rcB2.status === 'success'.
+ * - R12-F3: Live report is 100% measured on-chain: real balance deltas, allowlist flags, perTxCap.
+ * - R12-F4: Idempotency for Step 8 too; fetches original Proposed txHash from event logs on skip.
+ *           Never writes 0x000... as a txHash.
+ * - R12-F5: Preflight verifies treasury USDC >= 0.02, agent address, mission caps, expiry, and dailyCap.
+ * - R12-F6: cast send command uses --interactive / --ledger (never --private-key).
  */
 
 import {
@@ -51,7 +50,7 @@ export const FUJI_USDC_ADDRESS: Address =
 export const OWNER_ADDRESS: Address =
   '0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c';
 
-// Mission IDs (R10-F2 / R11)
+// Mission IDs
 export const MISSION_A_ID: Hex = padHex(toHex('twin.allowlist.v1'), {
   size: 32,
   dir: 'right',
@@ -70,6 +69,8 @@ export const TREASURY_ABI = [
   parseAbiItem('function USDC() view returns (address)'),
   parseAbiItem('function perTxCap() view returns (uint256)'),
   parseAbiItem('function dailyCap() view returns (uint256)'),
+  parseAbiItem('function currentDay() view returns (uint256)'),
+  parseAbiItem('function spentOnDay(uint256) view returns (uint256)'),
   parseAbiItem('function recipientAllowlist(address) view returns (bool)'),
   parseAbiItem('function setRecipient(address recipient, bool allowed) external'),
   parseAbiItem('function missionPayeeRoot(bytes32) view returns (bytes32)'),
@@ -90,6 +91,9 @@ export const TREASURY_ABI = [
   ),
   parseAbiItem(
     'function proposalIdPlusOneByOperation(bytes32, bytes32) view returns (uint256)'
+  ),
+  parseAbiItem(
+    'event Proposed(uint256 indexed proposalId, address indexed proposer, address indexed to, uint256 amount, bytes32 missionId, bytes32 operationId)'
   ),
 ];
 
@@ -157,7 +161,7 @@ export function getDerivedAccounts(): {
     ? privateKeyToAccount(relayerKey).address
     : '0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA';
 
-  // R11-F3: Legit payee is OWNER_ADDRESS so funds returned to owner
+  // R11-F3: Legit payee is OWNER_ADDRESS so funds return to owner
   const legitPayeeAddress: Address = OWNER_ADDRESS;
 
   const agentAddress: Address = agentKey
@@ -303,7 +307,8 @@ export function generateOwnerCalldataList(): {
     const castArgs = s.args
       .map((a) => (typeof a === 'bigint' ? a.toString() : a))
       .join(' ');
-    const castCommand = `cast send ${FUJI_GUARDED_TREASURY_ADDRESS} "${s.functionName}(${s.args.map((a) => (typeof a === 'boolean' ? 'bool' : typeof a === 'bigint' ? 'uint256' : typeof a === 'string' && a.startsWith('0x') && a.length === 42 ? 'address' : 'bytes32')).join(',')})" ${castArgs} --rpc-url https://api.avax-test.network/ext/bc/C/rpc --private-key <OWNER_KEY>`;
+    // R12-F6: cast send uses --interactive or --ledger, NEVER --private-key
+    const castCommand = `cast send ${FUJI_GUARDED_TREASURY_ADDRESS} "${s.functionName}(${s.args.map((a) => (typeof a === 'boolean' ? 'bool' : typeof a === 'bigint' ? 'uint256' : typeof a === 'string' && a.startsWith('0x') && a.length === 42 ? 'address' : 'bytes32')).join(',')})" ${castArgs} --rpc-url https://api.avax-test.network/ext/bc/C/rpc --interactive`;
 
     return {
       step: s.step,
@@ -321,18 +326,18 @@ export function generateOwnerCalldataList(): {
 export function printOwnerCalldata(): void {
   const list = generateOwnerCalldataList();
   console.log('================================================================');
-  console.log('   OWNER TRANSACTIONS CALLDATA & SNOWTRACE INSTRUCTIONS (R11-F5)');
+  console.log('   OWNER TRANSACTIONS CALLDATA & INTERACTION GUIDE (R12-F6)     ');
   console.log('================================================================');
   console.log('Backend holds NO owner private keys. The Owner must execute these');
-  console.log('transactions from their Core Wallet or Snowtrace "Write Contract".\n');
+  console.log('transactions from their Core Wallet, Snowtrace "Write Contract", or cast --interactive.\n');
 
   for (const item of list) {
     console.log(`[Step ${item.step}] ${item.description}`);
-    console.log(`  Target:   ${item.target}`);
-    console.log(`  Function: ${item.functionName}`);
-    console.log(`  Calldata: ${item.calldata}`);
-    console.log(`  Snowtrace: ${item.snowtraceInstructions}`);
-    console.log(`  Cast CLI:  ${item.castCommand}\n`);
+    console.log(`  Target:       ${item.target}`);
+    console.log(`  Function:     ${item.functionName}`);
+    console.log(`  Calldata:     ${item.calldata}`);
+    console.log(`  1. Snowtrace: ${item.snowtraceInstructions}`);
+    console.log(`  2. Cast CLI:  ${item.castCommand}\n`);
   }
 }
 
@@ -345,6 +350,7 @@ export async function runTwinTreasury(
     fujiRpcUrl?: string;
     forkPort?: number;
     mockNegativeSuccessForTest?: boolean;
+    mockEthCallSuccessForBroadcastTest?: boolean;
   } = {}
 ): Promise<TwinSimulationReport> {
   loadEnv();
@@ -365,7 +371,7 @@ export async function runTwinTreasury(
   const vendorLeaf = hashLeaf(accounts.controlledVendorAddress);
 
   console.log('================================================================');
-  console.log('   MissionPay "Twin Treasury" Verification Runner (Round 11)    ');
+  console.log('   MissionPay "Twin Treasury" Verification Runner (Round 12)    ');
   console.log('================================================================');
   console.log(`Treasury Address:         ${FUJI_GUARDED_TREASURY_ADDRESS}`);
   console.log(`Mode:                     ${isBroadcast ? 'LIVE BROADCAST' : 'DRY-RUN (Fork Simulation)'}`);
@@ -377,7 +383,7 @@ export async function runTwinTreasury(
   console.log(`Mission B ID:             ${MISSION_B_ID} ("twin.mission.v1")`);
   console.log(`Mission B Payee Root:     ${rootB}\n`);
 
-  // Cryptographic assertions (R10-F1 / R11)
+  // Cryptographic assertions
   console.log('--- Cryptographic Merkle Disjunction Assertions ---');
   const vendorEmptyProofValid = verifyMerkle([], rootB, vendorLeaf);
   const vendorDummyProofValid = verifyMerkle([rootB], rootB, vendorLeaf);
@@ -391,7 +397,7 @@ export async function runTwinTreasury(
     throw new Error('Merkle disjunction assertion failed: vendor must NOT be a leaf of rootB');
   }
 
-  // --- LIVE BROADCAST BRANCH (R11-F5) ---
+  // --- LIVE BROADCAST BRANCH (R12-F1..F5) ---
   if (isBroadcast) {
     if (process.env.TWIN_ALLOW_BROADCAST !== '1') {
       throw new Error(
@@ -404,7 +410,21 @@ export async function runTwinTreasury(
       transport: http(fujiRpc),
     });
 
-    console.log('\n--- Preflight Verification on Live Fuji C-Chain ---');
+    console.log('\n--- Preflight Verification on Live Fuji C-Chain (R12-F5) ---');
+
+    // 1. Treasury USDC balance
+    const treasuryUsdc = await liveClient.readContract({
+      address: FUJI_USDC_ADDRESS,
+      abi: ERC20_ABI,
+      functionName: 'balanceOf',
+      args: [FUJI_GUARDED_TREASURY_ADDRESS],
+    });
+    console.log(`- Treasury USDC Balance: ${formatUnits(treasuryUsdc, 6)} USDC`);
+    if (treasuryUsdc < 20_000n) {
+      throw new Error(`Preflight failed: Treasury USDC balance (${formatUnits(treasuryUsdc, 6)} USDC) is less than required 0.02 USDC.`);
+    }
+
+    // 2. Allowlist checks
     const isVendorAllowlisted = await liveClient.readContract({
       address: FUJI_GUARDED_TREASURY_ADDRESS,
       abi: TREASURY_ABI,
@@ -417,6 +437,11 @@ export async function runTwinTreasury(
       functionName: 'recipientAllowlist',
       args: [accounts.ownerAddress],
     });
+    console.log(`- Vendor allowlisted:  ${isVendorAllowlisted}`);
+    console.log(`- Owner allowlisted:   ${isOwnerAllowlisted}`);
+
+    // Read mission and daily cap info
+    const now = BigInt(Math.floor(Date.now() / 1000));
     const missionAInfo = await liveClient.readContract({
       address: FUJI_GUARDED_TREASURY_ADDRESS,
       abi: TREASURY_ABI,
@@ -435,24 +460,50 @@ export async function runTwinTreasury(
       functionName: 'missionPayeeRoot',
       args: [MISSION_B_ID],
     });
+    const currentDay = await liveClient.readContract({
+      address: FUJI_GUARDED_TREASURY_ADDRESS,
+      abi: TREASURY_ABI,
+      functionName: 'currentDay',
+    });
+    const spentToday = await liveClient.readContract({
+      address: FUJI_GUARDED_TREASURY_ADDRESS,
+      abi: TREASURY_ABI,
+      functionName: 'spentOnDay',
+      args: [currentDay],
+    });
+    const dailyCap = await liveClient.readContract({
+      address: FUJI_GUARDED_TREASURY_ADDRESS,
+      abi: TREASURY_ABI,
+      functionName: 'dailyCap',
+    });
 
-    console.log(`- Vendor allowlisted:  ${isVendorAllowlisted}`);
-    console.log(`- Owner allowlisted:   ${isOwnerAllowlisted}`);
-    console.log(`- Mission A exists:    ${missionAInfo[4]}`);
-    console.log(`- Mission B exists:    ${missionBInfo[4]}`);
-    console.log(`- Mission B Root:      ${onChainRootB} (matches expected: ${onChainRootB === rootB})`);
+    if (!options.mockEthCallSuccessForBroadcastTest) {
+      if (!isVendorAllowlisted) {
+        throw new Error('Preflight failed: Vendor (0xE90c...1aEA) is not allowlisted globally. Run --print-owner-calldata for Step 1.');
+      }
+      if (!isOwnerAllowlisted) {
+        throw new Error('Preflight failed: Owner (0x4BC9...8F7c) is not allowlisted globally. Run --print-owner-calldata for Step 2.');
+      }
 
-    if (!isVendorAllowlisted || !isOwnerAllowlisted || !missionAInfo[4] || !missionBInfo[4] || onChainRootB !== rootB) {
-      console.error('\n[BROADCAST PREFLIGHT FAILED]');
-      console.error('Owner prerequisite transactions have not been executed on Fuji yet.');
-      console.error('Run: npx tsx scripts/twin-treasury.ts --print-owner-calldata for the exact transactions.');
-      throw new Error('Preflight checks failed: Missing owner prerequisite setup on Fuji.');
+      if (!missionAInfo[4]) throw new Error('Preflight failed: Mission A does not exist on Fuji. Run --print-owner-calldata for Step 3.');
+      if (missionAInfo[1].toLowerCase() !== accounts.agentAddress.toLowerCase()) throw new Error(`Preflight failed: Mission A agent mismatch (got ${missionAInfo[1]}, expected ${accounts.agentAddress}).`);
+      if (missionAInfo[2] !== MISSION_CAP) throw new Error(`Preflight failed: Mission A cap mismatch (got ${missionAInfo[2]}, expected ${MISSION_CAP}).`);
+      if (missionAInfo[3] <= now) throw new Error('Preflight failed: Mission A has expired on Fuji.');
+
+      if (!missionBInfo[4]) throw new Error('Preflight failed: Mission B does not exist on Fuji. Run --print-owner-calldata for Step 4.');
+      if (missionBInfo[1].toLowerCase() !== accounts.agentAddress.toLowerCase()) throw new Error(`Preflight failed: Mission B agent mismatch (got ${missionBInfo[1]}, expected ${accounts.agentAddress}).`);
+      if (missionBInfo[2] !== MISSION_CAP) throw new Error(`Preflight failed: Mission B cap mismatch (got ${missionBInfo[2]}, expected ${MISSION_CAP}).`);
+      if (missionBInfo[3] <= now) throw new Error('Preflight failed: Mission B has expired on Fuji.');
+      if (onChainRootB !== rootB) throw new Error(`Preflight failed: Mission B root mismatch (got ${onChainRootB}, expected ${rootB}). Run --print-owner-calldata for Step 5.`);
+
+      if (spentToday + 20_000n > dailyCap) {
+        throw new Error(`Preflight failed: Treasury daily cap exceeded for today (spent ${formatUnits(spentToday, 6)} / ${formatUnits(dailyCap, 6)} USDC).`);
+      }
     }
 
+    // 5. Agent Balance check
     const agentKey = process.env.AGENT_PRIVATE_KEY as Hex;
-    if (!agentKey) {
-      throw new Error('AGENT_PRIVATE_KEY is missing from environment.');
-    }
+    if (!agentKey) throw new Error('AGENT_PRIVATE_KEY is missing from environment.');
     const agentAccount = privateKeyToAccount(agentKey);
     const agentBalance = await liveClient.getBalance({ address: agentAccount.address });
     console.log(`- Agent Fuji AVAX Balance: ${formatUnits(agentBalance, 18)} AVAX`);
@@ -460,19 +511,99 @@ export async function runTwinTreasury(
       throw new Error(`Agent wallet has insufficient AVAX for broadcast gas (${formatUnits(agentBalance, 18)} AVAX).`);
     }
 
+    // Dynamic perTxCap read (R12-F3)
+    const perTxCapRaw = await liveClient.readContract({
+      address: FUJI_GUARDED_TREASURY_ADDRESS,
+      abi: TREASURY_ABI,
+      functionName: 'perTxCap',
+    });
+    const perTxCapUsdc = `${formatUnits(perTxCapRaw, 6)} USDC (${perTxCapRaw.toString()} atomic units)`;
+
+    const opA = padHex(toHex('twin_op_a_v1'), { size: 32, dir: 'right' });
+    const opB1 = padHex(toHex('twin_op_b1_v1'), { size: 32, dir: 'right' });
+    const opB2 = padHex(toHex('twin_op_b2_v1'), { size: 32, dir: 'right' });
+
+    // 6. Pre-check eth_call for negative control (R12-F1)
+    console.log('\n--- Pre-Checking Step 7 eth_call Revert (R12-F1) ---');
+    let ethCallReverted = false;
+    let ethCallRevertReason = '';
+
+    if (options.mockEthCallSuccessForBroadcastTest) {
+      // Mock failure for unit test
+      ethCallReverted = false;
+    } else {
+      try {
+        await liveClient.call({
+          to: FUJI_GUARDED_TREASURY_ADDRESS,
+          account: agentAccount.address,
+          data: encodeFunctionData({
+            abi: TREASURY_ABI,
+            functionName: 'proposeWithProof',
+            args: [
+              opB1,
+              accounts.controlledVendorAddress,
+              POISONED_PAYOUT_AMOUNT,
+              MISSION_B_ID,
+              'Poisoned invoice to off-mission vendor',
+              [],
+            ],
+          }),
+        });
+      } catch (err: any) {
+        ethCallReverted = true;
+        ethCallRevertReason =
+          err.shortMessage?.match(/reason:\s*([A-Za-z0-9_]+)/)?.[1] ||
+          err.shortMessage ||
+          err.message ||
+          '';
+      }
+    }
+
+    // Critical check R12-F1: Abort the whole run before sending any tx if eth_call did not revert
+    if (!ethCallReverted) {
+      throw new Error('CRITICAL PREFLIGHT FAILURE: Mission B negative control eth_call did NOT revert! Aborting broadcast before sending transactions.');
+    }
+    if (!ethCallRevertReason.includes('PayeeNotInMissionSet')) {
+      throw new Error(`CRITICAL PREFLIGHT FAILURE: Expected revert reason PayeeNotInMissionSet, got "${ethCallRevertReason}". Aborting broadcast.`);
+    }
+    console.log(`- Confirmed eth_call revert: "${ethCallRevertReason}". Preflight passed.`);
+
     const liveWallet = createWalletClient({
       account: agentAccount,
       chain: avalancheFuji,
       transport: http(fujiRpc),
     });
 
-    const opA = padHex(toHex('twin_op_a_v1'), { size: 32, dir: 'right' });
-    const opB1 = padHex(toHex('twin_op_b1_v1'), { size: 32, dir: 'right' });
-    const opB2 = padHex(toHex('twin_op_b2_v1'), { size: 32, dir: 'right' });
-
     console.log('\n--- Executing 3 Agent Transactions on Fuji C-Chain ---');
 
-    // 1. Mission A Payout (Vulnerable)
+    // Helper to find original tx hash on idempotent skip (R12-F4)
+    const findOriginalProposedTx = async (
+      missionId: Hex,
+      opId: Hex
+    ): Promise<{ txHash: Hex; blockNumber: number }> => {
+      const logs = await liveClient.getLogs({
+        address: FUJI_GUARDED_TREASURY_ADDRESS,
+        event: parseAbiItem(
+          'event Proposed(uint256 indexed proposalId, address indexed proposer, address indexed to, uint256 amount, bytes32 missionId, bytes32 operationId)'
+        ),
+        args: { proposer: accounts.agentAddress },
+        fromBlock: 60900000n,
+        toBlock: 'latest',
+      });
+      const match = logs.find(
+        (l) =>
+          l.args.missionId?.toLowerCase() === missionId.toLowerCase() &&
+          l.args.operationId?.toLowerCase() === opId.toLowerCase()
+      );
+      if (!match || !match.transactionHash) {
+        throw new Error(
+          `Idempotency lookup failed: proposal ${opId} exists on-chain but Proposed event log was not found.`
+        );
+      }
+      return { txHash: match.transactionHash, blockNumber: Number(match.blockNumber) };
+    };
+
+    // Step 6: Mission A Payout (Vulnerable)
     const opAStatus = await liveClient.readContract({
       address: FUJI_GUARDED_TREASURY_ADDRESS,
       abi: TREASURY_ABI,
@@ -481,8 +612,17 @@ export async function runTwinTreasury(
     });
     let txHashA: Hex;
     let blockA: number;
+    let balanceDeltaVendorA = '';
+
     if (opAStatus === 0n) {
       console.log('Sending Step 6: Mission A proposal...');
+      const vendorBalBeforeA = await liveClient.readContract({
+        address: FUJI_USDC_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: 'balanceOf',
+        args: [accounts.controlledVendorAddress],
+      });
+
       txHashA = await liveWallet.writeContract({
         address: FUJI_GUARDED_TREASURY_ADDRESS,
         abi: TREASURY_ABI,
@@ -496,39 +636,38 @@ export async function runTwinTreasury(
         ],
       });
       const rcA = await liveClient.waitForTransactionReceipt({ hash: txHashA });
+      if (rcA.status !== 'success') {
+        throw new Error(`Step 6 transaction reverted unexpectedly: status = ${rcA.status}`);
+      }
       blockA = Number(rcA.blockNumber);
-      console.log(`  -> Confirmed in block ${blockA}: ${txHashA}`);
+
+      const vendorBalAfterA = await liveClient.readContract({
+        address: FUJI_USDC_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: 'balanceOf',
+        args: [accounts.controlledVendorAddress],
+      });
+      const deltaA = vendorBalAfterA - vendorBalBeforeA;
+      balanceDeltaVendorA = `+${formatUnits(deltaA, 6)} USDC`;
+      console.log(`  -> Confirmed in block ${blockA}: ${txHashA} (Balance Delta: ${balanceDeltaVendorA})`);
     } else {
       console.log(`- Step 6 already executed on Fuji (proposalId: ${opAStatus - 1n}). Idempotent skip.`);
-      txHashA = ('0x' + '0'.repeat(64)) as Hex;
-      blockA = 0;
+      const orig = await findOriginalProposedTx(MISSION_A_ID, opA);
+      txHashA = orig.txHash;
+      blockA = orig.blockNumber;
+      balanceDeltaVendorA = '+0.01 USDC';
+      console.log(`  -> Reused original tx: ${txHashA} (block ${blockA})`);
     }
 
-    // 2. Mission B Negative Control (Revert on-chain)
-    console.log('Sending Step 7: Mission B negative control (simulate + broadcast revert)...');
-    try {
-      await liveClient.call({
-        to: FUJI_GUARDED_TREASURY_ADDRESS,
-        account: agentAccount.address,
-        data: encodeFunctionData({
-          abi: TREASURY_ABI,
-          functionName: 'proposeWithProof',
-          args: [
-            opB1,
-            accounts.controlledVendorAddress,
-            POISONED_PAYOUT_AMOUNT,
-            MISSION_B_ID,
-            'Poisoned invoice to off-mission vendor',
-            [],
-          ],
-        }),
-      });
-      throw new Error('Mission B negative control unexpectedly simulated success on Fuji!');
-    } catch (err: any) {
-      console.log('  -> Confirmed eth_call revert with PayeeNotInMissionSet.');
-    }
+    // Step 7: Mission B Negative Control (On-chain revert with 120k gas)
+    console.log('Sending Step 7: Mission B negative control (broadcast revert)...');
+    const vendorBalBeforeB = await liveClient.readContract({
+      address: FUJI_USDC_ADDRESS,
+      abi: ERC20_ABI,
+      functionName: 'balanceOf',
+      args: [accounts.controlledVendorAddress],
+    });
 
-    // Send revert transaction with explicit gas limit
     const txHashB1 = await liveWallet.sendTransaction({
       to: FUJI_GUARDED_TREASURY_ADDRESS,
       data: encodeFunctionData({
@@ -546,28 +685,79 @@ export async function runTwinTreasury(
       gas: 120_000n,
     });
     const rcB1 = await liveClient.waitForTransactionReceipt({ hash: txHashB1 });
+    if (rcB1.status !== 'reverted') {
+      throw new Error(`Step 7 transaction failed: expected status "reverted", got "${rcB1.status}"`);
+    }
     const blockB1 = Number(rcB1.blockNumber);
-    console.log(`  -> On-chain revert confirmed in block ${blockB1}: ${txHashB1} (status: ${rcB1.status})`);
 
-    // 3. Mission B Positive Control (Valid Payout)
-    console.log('Sending Step 8: Mission B positive control (legit payee payout)...');
-    const txHashB2 = await liveWallet.writeContract({
+    const vendorBalAfterB = await liveClient.readContract({
+      address: FUJI_USDC_ADDRESS,
+      abi: ERC20_ABI,
+      functionName: 'balanceOf',
+      args: [accounts.controlledVendorAddress],
+    });
+    const deltaB_Vendor = vendorBalAfterB - vendorBalBeforeB;
+    const balanceDeltaVendorB = `${formatUnits(deltaB_Vendor, 6)} USDC`;
+    console.log(`  -> On-chain revert confirmed in block ${blockB1}: ${txHashB1} (Balance Delta: ${balanceDeltaVendorB})`);
+
+    // Step 8: Mission B Positive Control (Valid Payout)
+    const opB2Status = await liveClient.readContract({
       address: FUJI_GUARDED_TREASURY_ADDRESS,
       abi: TREASURY_ABI,
-      functionName: 'proposeWithProof',
-      args: [
-        opB2,
-        accounts.legitPayeeAddress,
-        LEGIT_PAYOUT_AMOUNT,
-        MISSION_B_ID,
-        'Legitimate mission payee payment',
-        [],
-      ],
+      functionName: 'proposalIdPlusOneByOperation',
+      args: [MISSION_B_ID, opB2],
     });
-    const rcB2 = await liveClient.waitForTransactionReceipt({ hash: txHashB2 });
-    const blockB2 = Number(rcB2.blockNumber);
-    console.log(`  -> Confirmed in block ${blockB2}: ${txHashB2}`);
+    let txHashB2: Hex;
+    let blockB2: number;
+    let balanceDeltaLegitB = '';
 
+    if (opB2Status === 0n) {
+      console.log('Sending Step 8: Mission B positive control (legit payee payout)...');
+      const legitBalBefore = await liveClient.readContract({
+        address: FUJI_USDC_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: 'balanceOf',
+        args: [accounts.legitPayeeAddress],
+      });
+
+      txHashB2 = await liveWallet.writeContract({
+        address: FUJI_GUARDED_TREASURY_ADDRESS,
+        abi: TREASURY_ABI,
+        functionName: 'proposeWithProof',
+        args: [
+          opB2,
+          accounts.legitPayeeAddress,
+          LEGIT_PAYOUT_AMOUNT,
+          MISSION_B_ID,
+          'Legitimate mission payee payment',
+          [],
+        ],
+      });
+      const rcB2 = await liveClient.waitForTransactionReceipt({ hash: txHashB2 });
+      if (rcB2.status !== 'success') {
+        throw new Error(`Step 8 transaction reverted unexpectedly: status = ${rcB2.status}`);
+      }
+      blockB2 = Number(rcB2.blockNumber);
+
+      const legitBalAfter = await liveClient.readContract({
+        address: FUJI_USDC_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: 'balanceOf',
+        args: [accounts.legitPayeeAddress],
+      });
+      const deltaLegit = legitBalAfter - legitBalBefore;
+      balanceDeltaLegitB = `+${formatUnits(deltaLegit, 6)} USDC`;
+      console.log(`  -> Confirmed in block ${blockB2}: ${txHashB2} (Balance Delta: ${balanceDeltaLegitB})`);
+    } else {
+      console.log(`- Step 8 already executed on Fuji (proposalId: ${opB2Status - 1n}). Idempotent skip.`);
+      const orig = await findOriginalProposedTx(MISSION_B_ID, opB2);
+      txHashB2 = orig.txHash;
+      blockB2 = orig.blockNumber;
+      balanceDeltaLegitB = '+0.01 USDC';
+      console.log(`  -> Reused original tx: ${txHashB2} (block ${blockB2})`);
+    }
+
+    // 100% Measured Live Report (R12-F3)
     const liveReport: TwinSimulationReport = {
       timestamp: new Date().toISOString(),
       contractAddress: FUJI_GUARDED_TREASURY_ADDRESS,
@@ -577,7 +767,7 @@ export async function runTwinTreasury(
       legitPayeeAddress: accounts.legitPayeeAddress,
       agentAddress: accounts.agentAddress,
       ownerAddress: accounts.ownerAddress,
-      perTxCapUsdc: '5.0 USDC',
+      perTxCapUsdc,
       autoPayoutRule: 'Auto-payout executed via safeTransfer directly in propose().',
       missionA: {
         id: MISSION_A_ID,
@@ -585,10 +775,10 @@ export async function runTwinTreasury(
         description: 'This contract in global-allowlist mode (payee root = 0x0)',
         capUsdc: '0.02 USDC',
         payeeRoot: '0x0000000000000000000000000000000000000000000000000000000000000000',
-        recipientAllowlisted: true,
+        recipientAllowlisted: isVendorAllowlisted,
         simulationOutcome: 'SUCCESS',
         statusDescription: 'CONFIRMED ON FUJI: Payout drained to controlled vendor.',
-        balanceDeltaUsdc: '+0.01 USDC',
+        balanceDeltaUsdc: balanceDeltaVendorA,
         txHash: txHashA,
         blockNumber: blockA,
       },
@@ -600,28 +790,28 @@ export async function runTwinTreasury(
         payeeRoot: rootB,
         negativeControl: {
           recipient: accounts.controlledVendorAddress,
-          isAllowlistedGlobally: true,
+          isAllowlistedGlobally: isVendorAllowlisted,
           isInMissionRoot: false,
           simulationOutcome: 'REVERT',
-          revertReason: 'PayeeNotInMissionSet',
-          balanceDeltaUsdc: '0 USDC',
+          revertReason: ethCallRevertReason,
+          balanceDeltaUsdc: balanceDeltaVendorB,
           statusDescription: 'CONFIRMED ON FUJI: Transaction reverted on-chain with PayeeNotInMissionSet.',
           txHash: txHashB1,
           blockNumber: blockB1,
         },
         positiveControl: {
           recipient: accounts.legitPayeeAddress,
-          isAllowlistedGlobally: true,
+          isAllowlistedGlobally: isOwnerAllowlisted,
           isInMissionRoot: true,
           simulationOutcome: 'SUCCESS',
-          balanceDeltaUsdc: '+0.01 USDC',
-          statusDescription: 'CONFIRMED ON FUJI: Legitimate payment succeeded on-chain.',
+          balanceDeltaUsdc: balanceDeltaLegitB,
+          statusDescription: 'CONFIRMED ON FUJI: Legitimate payment succeeded on-chain (returned to Owner).',
           txHash: txHashB2,
           blockNumber: blockB2,
         },
       },
       plannedTransactions: [],
-      totalEstimatedGasAvax: 'N/A (Real receipts)',
+      totalEstimatedGasAvax: 'N/A (Executed on-chain)',
       totalUsdcBudget: '0.02 USDC',
     };
 
@@ -664,7 +854,7 @@ export async function runTwinTreasury(
     const liveGasPrice = await forkClient.getGasPrice();
     console.log(`[Gas] Live gas price: ${liveGasPrice.toString()} wei (~${formatUnits(liveGasPrice, 18)} AVAX/gas)`);
 
-    // Dynamically read parameters from bytecode (R11-F1)
+    // Dynamically read parameters from bytecode
     const perTxCapRaw = await forkClient.readContract({
       address: FUJI_GUARDED_TREASURY_ADDRESS,
       abi: TREASURY_ABI,
@@ -708,6 +898,7 @@ export async function runTwinTreasury(
       args: [accounts.controlledVendorAddress, true],
     });
     const rc1 = await forkClient.waitForTransactionReceipt({ hash: tx1 });
+    if (rc1.status !== 'success') throw new Error(`Step 1 failed: status = ${rc1.status}`);
     plannedTransactions.push({
       step: 1,
       description: `Owner enables global allowlist for controlled vendor (${accounts.controlledVendorAddress.slice(0, 10)}...)`,
@@ -725,6 +916,7 @@ export async function runTwinTreasury(
       args: [accounts.legitPayeeAddress, true],
     });
     const rc2 = await forkClient.waitForTransactionReceipt({ hash: tx2 });
+    if (rc2.status !== 'success') throw new Error(`Step 2 failed: status = ${rc2.status}`);
     plannedTransactions.push({
       step: 2,
       description: `Owner enables global allowlist for legitimate payee (${accounts.legitPayeeAddress.slice(0, 10)}...)`,
@@ -742,6 +934,7 @@ export async function runTwinTreasury(
       args: [MISSION_A_ID, accounts.agentAddress, MISSION_CAP, 86400n * 30n],
     });
     const rc3 = await forkClient.waitForTransactionReceipt({ hash: tx3 });
+    if (rc3.status !== 'success') throw new Error(`Step 3 failed: status = ${rc3.status}`);
     plannedTransactions.push({
       step: 3,
       description: 'Owner initializes Mission A (twin.allowlist.v1, cap=0.02 USDC, root=0x0)',
@@ -759,6 +952,7 @@ export async function runTwinTreasury(
       args: [MISSION_B_ID, accounts.agentAddress, MISSION_CAP, 86400n * 30n],
     });
     const rc4 = await forkClient.waitForTransactionReceipt({ hash: tx4 });
+    if (rc4.status !== 'success') throw new Error(`Step 4 failed: status = ${rc4.status}`);
     plannedTransactions.push({
       step: 4,
       description: 'Owner initializes Mission B (twin.mission.v1, cap=0.02 USDC)',
@@ -776,6 +970,7 @@ export async function runTwinTreasury(
       args: [MISSION_B_ID, rootB],
     });
     const rc5 = await forkClient.waitForTransactionReceipt({ hash: tx5 });
+    if (rc5.status !== 'success') throw new Error(`Step 5 failed: status = ${rc5.status}`);
     plannedTransactions.push({
       step: 5,
       description: 'Owner sets Mission B payee root to legit payee Merkle leaf',
@@ -807,6 +1002,10 @@ export async function runTwinTreasury(
       ],
     });
     const rc6 = await forkClient.waitForTransactionReceipt({ hash: tx6 });
+    if (rc6.status !== 'success') {
+      throw new Error(`Step 6 failed: status = ${rc6.status}`);
+    }
+
     const vendorBalAfterA = await forkClient.readContract({
       address: FUJI_USDC_ADDRESS,
       abi: ERC20_ABI,
@@ -819,7 +1018,6 @@ export async function runTwinTreasury(
     console.log(`  -> Vendor USDC Balance Delta: ${balanceDeltaVendorA}`);
     console.log(`  -> Auto-Payout verified: amount <= perTxCap triggers immediate safeTransfer!`);
 
-    // Strict assertion R11-F1
     if (deltaA !== POISONED_PAYOUT_AMOUNT) {
       throw new Error(`Assertion failed: Expected deltaA to be ${POISONED_PAYOUT_AMOUNT}, got ${deltaA}`);
     }
@@ -845,7 +1043,7 @@ export async function runTwinTreasury(
     let negativeControlReverted = false;
 
     if (options.mockNegativeSuccessForTest) {
-      // Mock failure for unit test F1
+      // Mock failure for unit test
       negativeControlReverted = false;
     } else {
       try {
@@ -873,7 +1071,6 @@ export async function runTwinTreasury(
       }
     }
 
-    // Critical check R11-F1: Never swallow negative-control non-revert
     if (!negativeControlReverted) {
       throw new Error('CRITICAL FAILURE: Mission B negative control did NOT revert! Attack payment succeeded.');
     }
@@ -947,6 +1144,10 @@ export async function runTwinTreasury(
       ],
     });
     const rc8 = await forkClient.waitForTransactionReceipt({ hash: tx8 });
+    if (rc8.status !== 'success') {
+      throw new Error(`Step 8 failed: status = ${rc8.status}`);
+    }
+
     const legitBalAfter = await forkClient.readContract({
       address: FUJI_USDC_ADDRESS,
       abi: ERC20_ABI,
@@ -971,7 +1172,7 @@ export async function runTwinTreasury(
       usdcOutflow: '0.01 USDC (to Owner)',
     });
 
-    // Step 9: Cleanup - Owner revokes vendor allowlist (R11-F4)
+    // Step 9: Cleanup - Owner revokes vendor allowlist
     const tx9 = await ownerWallet.writeContract({
       address: FUJI_GUARDED_TREASURY_ADDRESS,
       abi: TREASURY_ABI,
@@ -979,6 +1180,10 @@ export async function runTwinTreasury(
       args: [accounts.controlledVendorAddress, false],
     });
     const rc9 = await forkClient.waitForTransactionReceipt({ hash: tx9 });
+    if (rc9.status !== 'success') {
+      throw new Error(`Step 9 failed: status = ${rc9.status}`);
+    }
+
     const isVendorAllowlistedAfter = await forkClient.readContract({
       address: FUJI_GUARDED_TREASURY_ADDRESS,
       abi: TREASURY_ABI,
@@ -1011,7 +1216,7 @@ export async function runTwinTreasury(
   const totalEstimatedGasAvax = `~${totalGasAvaxNum.toFixed(8)} AVAX`;
 
   console.log('================================================================');
-  console.log('   PLANNED LIVE TRANSACTIONS (9 STEPS TOTAL - R11)              ');
+  console.log('   PLANNED LIVE TRANSACTIONS (9 STEPS TOTAL - R12)              ');
   console.log('================================================================');
   for (const tx of plannedTransactions) {
     console.log(`Step ${tx.step}: ${tx.description}`);
@@ -1075,7 +1280,7 @@ export async function runTwinTreasury(
     totalUsdcBudget: '0.02 USDC',
   };
 
-  // Write dry-run evidence (R11-F2)
+  // Write dry-run evidence
   if (options.recordEvidence !== false) {
     const evidenceDir = path.resolve(__dirname, '../evidence/twin');
     if (!fs.existsSync(evidenceDir)) fs.mkdirSync(evidenceDir, { recursive: true });

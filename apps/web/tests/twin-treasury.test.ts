@@ -222,4 +222,26 @@ describe('Twin Treasury Verification & Route Tests (Round 11)', () => {
       }
     }
   });
+
+  it('R12-F1 (fail test): throws critical error before sending tx if eth_call unexpectedly simulates success', async () => {
+    const origEnv = process.env.TWIN_ALLOW_BROADCAST;
+    process.env.TWIN_ALLOW_BROADCAST = '1';
+
+    try {
+      await expect(
+        runTwinTreasury({
+          broadcast: true,
+          mockEthCallSuccessForBroadcastTest: true,
+        })
+      ).rejects.toThrow(
+        'CRITICAL PREFLIGHT FAILURE: Mission B negative control eth_call did NOT revert! Aborting broadcast before sending transactions.'
+      );
+    } finally {
+      if (origEnv !== undefined) {
+        process.env.TWIN_ALLOW_BROADCAST = origEnv;
+      } else {
+        delete process.env.TWIN_ALLOW_BROADCAST;
+      }
+    }
+  }, 30000);
 });

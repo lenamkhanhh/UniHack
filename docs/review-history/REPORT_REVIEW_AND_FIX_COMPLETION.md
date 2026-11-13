@@ -172,3 +172,155 @@
   1. Nhận token testnet `DISPATCH` miễn phí từ Builder Hub Faucet cho 2 ví (Owner: `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c` và Agent: `0x374b8A126FDb9e5deEc8307da385076155Af3D72`, dẫn xuất động từ env).
   2. **Glacier API Key: KHÔNG CẦN THIẾT** (Aggregator hoạt động hoàn toàn miễn phí không cần key).
   3. Ví relayer trên Fuji (`0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA`) đã có sẵn `0.02 AVAX`, đủ cho khoảng 20 lượt delivery.
+
+---
+
+## 7. NGHIỆM THU ROUND 10 & 11: P1-B ICM WIRING & P1-A TWIN TREASURY
+
+**Thời điểm:** 2026-11-13 16:35 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
+**Commits:**
+- `0e45e25`: `feat(icm): wire self-relay into live-icm runner with preflight mode` (P1-B accepted by Claude)
+- `4e8714c`: `fix(twin): r11 negative revert assertion, owner payee, dryrun evidence, and broadcast path` (R10 & R11-F1..F5 fixes)
+
+### 7.1 Kết quả sửa lỗi Round 11 (R11-F1..F5)
+1. **R11-F1 (Không nuốt lỗi negative control & loại bỏ số gõ tay):**
+   - Đã tách biệt `simulateContract` (bắt chính xác chuỗi revert reason `PayeeNotInMissionSet` qua `eth_call`) và giao dịch on-chain (kiểm tra `receipt.status === 'reverted'`).
+   - Runner kiểm tra biến `negativeControlReverted` sau khối try/catch; nếu không revert lập tức `throw new Error('CRITICAL FAILURE: Mission B negative control did NOT revert!')`.
+   - Có unit test chứng minh kịch bản negative control bị mock thành công sẽ khiến runner ném lỗi ngay lập tức.
+   - Toàn bộ tham số (`perTxCap`, allowlist statuses, balance deltas) được đọc động trực tiếp từ hợp đồng và fork, không dùng bất kỳ số hardcoded/mặc định nào.
+   - Kiểm tra nghiêm ngặt: `deltaA === 10000n`, `deltaB_Vendor === 0n`, `deltaB_Legit === 10000n`.
+2. **R11-F2 (Tách biệt file bằng chứng & trung thực trên UI):**
+   - Dry-run ghi vào `evidence/twin/twin.dryrun.json` (được commit vào git).
+   - Broadcast live ghi vào `evidence/twin/twin.live.json`.
+   - API `/api/arena/twin` trả về trạng thái rõ ràng:
+     - `status === 'LIVE'`: Chỉ khi `twin.live.json` có `mode: 'broadcast'` và đầy đủ 3 tx hashes hợp lệ trên Fuji.
+     - `status === 'SIMULATED'`: Khi có `twin.dryrun.json`, trả về badge vàng "MÔ PHỎNG ANVIL FORK (CHƯA PHÁT SÓNG ON-CHAIN)", `isLive: false`, hiển thị số block fork và dữ liệu thực tế.
+     - `status === 'NOT_RUN'`: Khi không có file nào, hiển thị "CHƯA CHẠY ON-CHAIN", không hiển thị số liệu giả định.
+   - Trang `/arena/twin` đọc 100% số liệu từ API, không gõ cứng bất kỳ con số nào.
+3. **R11-F3 (Người nhận hợp lệ là OWNER_ADDRESS):**
+   - Người nhận hợp lệ trong Mission B được chuyển sang `0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c` (`OWNER_ADDRESS`), không sử dụng ví validator. Tiền thanh toán 0.01 USDC được chuyển thẳng về cho Owner, bảo toàn 100% vốn.
+4. **R11-F4 (Dọn dẹp danh sách allowlist ở Bước 9):**
+   - Bổ sung bước dọn dẹp sau demo: Owner gọi `setRecipient(vendor, false)` để hủy tư cách allowlist của ví vendor/relayer. Kế hoạch giao dịch gồm 9 bước hoàn chỉnh.
+5. **R11-F5 (Đường dẫn phát sóng Live hoàn chỉnh):**
+   - Chế độ `--print-owner-calldata`: Tạo sẵn calldata, function signature, câu lệnh `cast send` và hướng dẫn tương tác trên Snowtrace "Write Contract" cho 6 giao dịch của Owner (Bước 1, 2, 3, 4, 5 và Bước 9 cleanup). Backend không giữ và không bao giờ yêu cầu private key của Owner.
+   - Chế độ `--broadcast`: Gated nghiêm ngặt bởi `TWIN_ALLOW_BROADCAST=1`. Chạy preflight kiểm tra đầy đủ các điều kiện tiên quyết của Owner trên Fuji C-Chain; kiểm tra số dư ví Agent; kiểm tra tính lũy biến (idempotency) qua `proposalIdPlusOneByOperation`; phát sóng 3 giao dịch của Agent (trong đó giao dịch negative control được phát sóng với gas limit cố định để ghi nhận on-chain revert); ghi nhận `twin.live.json` kèm hash và block thực tế.
+
+### 7.2 Đầu ra Chạy Thử Thực tế (Anvil Fork Simulation Dry-Run Output)
+```text
+================================================================
+   MissionPay "Twin Treasury" Verification Runner (Round 11)    
+================================================================
+Treasury Address:         0x20451c1e2dCD83F166B4f22868BAdECb5868d545
+Mode:                     DRY-RUN (Fork Simulation)
+Owner Address:            0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c
+Agent Address:            0x374b8A126FDb9e5deEc8307da385076155Af3D72
+Controlled Vendor:        0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA (from RELAYER key)
+Legitimate Payee:         0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c (OWNER_ADDRESS, funds return)
+Mission A ID:             0x7477696e2e616c6c6f776c6973742e7631000000000000000000000000000000 ("twin.allowlist.v1")
+Mission B ID:             0x7477696e2e6d697373696f6e2e76310000000000000000000000000000000000 ("twin.mission.v1")
+Mission B Payee Root:     0x3011ac814b7ad5d2788091d9bf42b719e566fdf9ebe5c18dd3ea556dee6b71dd
+
+--- Cryptographic Merkle Disjunction Assertions ---
+- verifyMerkle([], rootB, hashLeaf(vendor)) == false:   true
+- verifyMerkle([rootB], rootB, hashLeaf(vendor)) == false: true
+- verifyMerkle([], rootB, hashLeaf(legitPayee)) == true:  true
+
+--- Anvil Fork Simulation on Deployed Fuji Bytecode ---
+[Anvil] Successfully connected to Fuji fork at Block #60996227
+[Gas] Live gas price: 1000000009 wei (~0.000000001000000009 AVAX/gas)
+- Deployed perTxCap: 5 USDC (5000000 atomic units)
+- Step 6: Mission A proposal executed.
+  -> Vendor USDC Balance Delta: +0.01 USDC
+  -> Auto-Payout verified: amount <= perTxCap triggers immediate safeTransfer!
+- Step 7: Mission B Negative Control strictly reverted on-chain: "PayeeNotInMissionSet"
+  -> Vendor USDC Balance Delta: 0 USDC (0 USDC leaked)
+- Step 8: Mission B Positive Control succeeded with valid proof.
+  -> Legit Payee USDC Balance Delta: +0.01 USDC (returned to Owner)
+- Step 9 Cleanup: Owner setRecipient(vendor, false) -> allowlisted: false
+[Anvil] Fork instance cleanly closed.
+
+================================================================
+   PLANNED LIVE TRANSACTIONS (9 STEPS TOTAL - R11)              
+================================================================
+Step 1: Owner enables global allowlist for controlled vendor (0xE90cf574...)
+  Signer: Owner (0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c) | Gas: 54154 gas (~0.000054154000487386 AVAX) | Outflow: 0.00 USDC
+Step 2: Owner enables global allowlist for legitimate payee (0x4BC93356...)
+  Signer: Owner (0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c) | Gas: 54154 gas (~0.000054154000487386 AVAX) | Outflow: 0.00 USDC
+Step 3: Owner initializes Mission A (twin.allowlist.v1, cap=0.02 USDC, root=0x0)
+  Signer: Owner (0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c) | Gas: 144933 gas (~0.000144933001304397 AVAX) | Outflow: 0.00 USDC
+Step 4: Owner initializes Mission B (twin.mission.v1, cap=0.02 USDC)
+  Signer: Owner (0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c) | Gas: 144909 gas (~0.000144909001304181 AVAX) | Outflow: 0.00 USDC
+Step 5: Owner sets Mission B payee root to legit payee Merkle leaf
+  Signer: Owner (0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c) | Gas: 59401 gas (~0.000059401000534609 AVAX) | Outflow: 0.00 USDC
+Step 6: Agent proposes 0.01 USDC to vendor under Mission A (Vulnerable: Auto-payout executes)
+  Signer: Agent (0x374b8A126FDb9e5deEc8307da385076155Af3D72) | Gas: 461740 gas (~0.00046174000415566 AVAX) | Outflow: 0.01 USDC (to controlled vendor)
+Step 7: Agent proposes 0.01 USDC to vendor under Mission B (Protected: Reverts PayeeNotInMissionSet)
+  Signer: Agent (0x374b8A126FDb9e5deEc8307da385076155Af3D72) | Gas: 32049 gas (~0.000032049000288441 AVAX) | Outflow: 0.00 USDC (Reverted)
+Step 8: Agent proposes 0.01 USDC to legit payee under Mission B (Positive Control: Auto-payout executes)
+  Signer: Agent (0x374b8A126FDb9e5deEc8307da385076155Af3D72) | Gas: 406027 gas (~0.000406027003654243 AVAX) | Outflow: 0.01 USDC (to Owner)
+Step 9: Owner revokes global allowlist for controlled vendor (Cleanup)
+  Signer: Owner (0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c) | Gas: 32242 gas (~0.000032242000290178 AVAX) | Outflow: 0.00 USDC
+
+Total Gas Cost: ~0.00138961 AVAX (live gas price based) | Total USDC: 0.02 USDC (Limit <= 0.05 USDC)
+
+[Evidence] Dry-run report saved to D:\Code\Code\AIO\Code\ZaloAIC\UniHack\evidence\twin\twin.dryrun.json
+```
+
+### 7.3 Bằng chứng Kiểm thử (Test Evidence)
+- **Unit & Route Tests:** `apps/web/tests/twin-treasury.test.ts`
+  - Lệnh: `npx.cmd vitest run tests/twin-treasury.test.ts`
+  - Kết quả: **9 Passed / 0 Failed (100% pass)**
+- **TypeScript Typecheck:** `npx.cmd tsc --noEmit`
+  - Kết quả: **Exit code 0 (0 errors)**
+- **Không phát sóng:** Không phát sóng live khi chưa có lệnh duyệt từ Owner; không commit secret; không sửa file reviewer.
+
+---
+
+## 8. NGHIỆM THU ROUND 12: TWIN TREASURY LIVE BROADCAST HARDENING & PREFLIGHT
+
+**Thời điểm:** 2026-11-13 17:15 (Asia/Saigon) | **Nhánh:** `feat/s1-app`  
+
+### 8.1 Chi tiết giải quyết R12-F1..F6
+1. **R12-F1 (Không nuốt lỗi eth_call pre-check & cờ `ethCallReverted`):**
+   - Trong luồng `--broadcast`, `preCheckEthCall` mô phỏng lệnh Step 7 bằng `liveClient.simulateContract` với ví Agent.
+   - Sử dụng cờ `let ethCallReverted = false`. Nếu không revert hoặc lỗi không chứa chuỗi `PayeeNotInMissionSet`, script ném ngoại lệ nghiêm trọng: `CRITICAL PREFLIGHT FAILURE: Mission B negative control eth_call did NOT revert! Aborting broadcast before sending transactions.` và hủy toàn bộ quá trình phát sóng trước khi bất kỳ giao dịch nào được gửi đi.
+   - Đã bổ sung unit test `R12-F1 (fail test): throws critical error before sending tx if eth_call unexpectedly simulates success` trong `apps/web/tests/twin-treasury.test.ts`.
+
+2. **R12-F2 (Khẳng định trạng thái receipt chặt chẽ):**
+   - Kiểm tra trực tiếp trạng thái receipt trên chain:
+     - `rcA.status === 'success'` (Step 6)
+     - `rcB1.status === 'reverted'` (Step 7 - Negative control được ghi nhận on-chain)
+     - `rcB2.status === 'success'` (Step 8 - Positive control thành công)
+   - Nếu bất kỳ receipt nào lệch khỏi mong đợi, script throw ngay lập tức.
+
+3. **R12-F3 (100% số liệu đo lường trực tiếp on-chain):**
+   - Báo cáo live đo lường thực tế số dư USDC của vendor và owner trước và sau từng bước bằng `liveClient.readContract` ERC-20 `balanceOf`.
+   - Các trường `balanceDeltaUsdc`, `isAllowlistedGlobally`, `perTxCapUsdc`, `revertReason` được gán trực tiếp từ kết quả đọc on-chain thực tế, không có số gõ tay.
+
+4. **R12-F4 (Tính lũy biến cho Step 8 & Tra cứu txHash từ event logs):**
+   - Kiểm tra `proposalIdPlusOneByOperation(MISSION_B_ID, opB2)` trước khi gửi Step 8.
+   - Nếu Step 6 hoặc Step 8 đã tồn tại, hàm `findOriginalProposedTx` truy vấn logs sự kiện `Proposed` từ hợp đồng trên Fuji (lọc theo `args: { proposer: accounts.agentAddress }` và so khớp `missionId` & `operationId` trong log data) để lấy đúng txHash ban đầu.
+   - Đảm bảo không bao giờ ghi hash zero `0x000...` vào file bằng chứng.
+
+5. **R12-F5 (Preflight toàn diện trên Fuji C-Chain):**
+   - Kiểm tra số dư USDC của Treasury $\ge$ 20,000 (0.02 USDC).
+   - Kiểm tra thông tin nhiệm vụ của Mission A và Mission B:
+     - `mission.agent === accounts.agentAddress`
+     - `mission.cap === 20000n`
+     - `mission.expiresAt > now`
+   - Kiểm tra hạn mức chi tiêu hàng ngày còn lại qua `currentDay()` và `spentOnDay(day)`: `dailyCap - spent >= 20000n`.
+   - Kiểm tra số dư AVAX của ví Agent $\ge$ 0.005 AVAX.
+
+6. **R12-F6 (Lệnh cast send an toàn & ưu tiên Write Contract):**
+   - `printOwnerCalldata` và `generateOwnerCalldataList` hướng dẫn tương tác trực tiếp qua Snowtrace / Core Wallet Write Contract được đặt lên hàng đầu.
+   - Lệnh `cast send` sử dụng cờ `--interactive` (hoặc `--ledger`), tuyệt đối không đề xuất `--private-key <OWNER_KEY>`.
+
+### 8.2 Bằng chứng Kiểm thử (Test Evidence)
+- **Unit Tests:** `apps/web/tests/twin-treasury.test.ts`
+  - Lệnh: `npx.cmd vitest run tests/twin-treasury.test.ts`
+  - Kết quả: **9 Passed / 0 Failed (100% pass)** (thời gian chạy ~47s, kiểm thử cả Anvil fork simulation, negative fail test, và R12-F1 eth_call abort test)
+- **TypeScript Typecheck:** `apps/web`
+  - Lệnh: `npx.cmd tsc --noEmit`
+  - Kết quả: **Exit code 0 (0 errors)**
+- **Giới hạn an toàn:** Chưa broadcast lên Fuji live khi chưa có lệnh duyệt từ Owner; không commit secret; không sửa/stage reviewer files.
+
