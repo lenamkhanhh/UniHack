@@ -13,6 +13,8 @@
     "bench": "tsx scripts/attack-eval.ts",
     "verify-proof": "tsx scripts/verify-proof.ts",
     "worker:validation": "npm --workspace=apps/web run worker:validation",
+    "record:demo": "tsx scripts/record-demo-video.ts",
+    "build:video": "tsx scripts/video/build-video.ts",
     "verify:all": "node scripts/verify-all.cjs"
   },
   "devDependencies": {

@@ -1,276 +1,126 @@
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  createPublicClient,
-  http,
-  isAddress,
-  getAddress,
-  encodeFunctionData,
-  parseAbiItem,
-  keccak256,
-  toHex,
-  Hex,
-  Address,
-  PublicClient,
-  formatUnits,
-} from 'viem';
-import { avalancheFuji } from 'viem/chains';
 import { resolveClientIp } from '@/lib/bounty';
+import {
+  checkSimulateRateLimit,
+  runJudgeSimulation,
+  GUARDED_TREASURY_ADDRESS,
+  AGENT_ADDRESS,
+} from '@/lib/judge-service';
 
 export const dynamic = 'force-dynamic';
 
-export const GUARDED_TREASURY_ADDRESS: Address =
-  '0x20451c1e2dCD83F166B4f22868BAdECb5868d545';
-export const AGENT_ADDRESS: Address =
-  '0x374b8A126FDb9e5deEc8307da385076155Af3D72';
-export const OWNER_ADDRESS: Address =
-  '0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c';
-export const MISSION_B_ID: Hex =
-  '0x7477696e2e6d697373696f6e2e76310000000000000000000000000000000000';
-
-export const SIMULATE_ABI = [
-  parseAbiItem(
-    'function proposeWithProof(bytes32 operationId, address to, uint256 amount, bytes32 missionId, string reason, bytes32[] proof) external returns (uint256)'
-  ),
-  parseAbiItem(
-    'function missions(bytes32) view returns (bytes32, address, uint256, uint256, bool)'
-  ),
-];
-
-// In-memory sliding window rate limiter: 10 requests / minute / IP
-const ipSimulateTimestamps = new Map<string, number[]>();
-
-export function checkSimulateRateLimit(ip: string, maxPerMin = 10): boolean {
-  const now = Date.now();
-  const windowStart = now - 60_000;
-  const existing = (ipSimulateTimestamps.get(ip) || []).filter((t) => t > windowStart);
-
-  if (existing.length >= maxPerMin) {
-    return false;
-  }
-
-  existing.push(now);
-  ipSimulateTimestamps.set(ip, existing);
-  return true;
-}
-
-export function clearSimulateRateLimit(): void {
-  ipSimulateTimestamps.clear();
-}
-
-export interface SimulateResult {
-  success: boolean;
-  outcome: 'SUCCESS' | 'REVERT';
-  recipient: string;
-  amountAtomic: number;
-  amountUsdc: string;
-  revertReason?: string;
-  missionBExpiry: string | null;
-  message: string;
-}
-
-export async function runJudgeSimulation(
-  recipientRaw: string,
-  amountAtomicRaw: number = 10000,
-  client?: PublicClient
-): Promise<SimulateResult> {
-  if (
-    !recipientRaw ||
-    typeof recipientRaw !== 'string' ||
-    !isAddress(recipientRaw.trim(), { strict: false })
-  ) {
-    throw new Error('INVALID_ADDRESS');
-  }
-
-  const recipient = getAddress(recipientRaw.trim());
-  const amountAtomic = Number(amountAtomicRaw);
-
-  if (!Number.isInteger(amountAtomic) || amountAtomic < 1 || amountAtomic > 10000) {
-    throw new Error('INVALID_AMOUNT');
-  }
-
-  const rpcUrl =
-    process.env.AVALANCHE_FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
-  const publicClient =
-    client ||
-    createPublicClient({
-      chain: avalancheFuji,
-      transport: http(rpcUrl),
-    });
-
-  // 1. Read Mission B state & expiry from live Fuji (R13A-F1: Never hardcode date fallback)
-  let missionBExpiryIso: string | null = null;
-  try {
-    const missionBData = await publicClient.readContract({
-      address: GUARDED_TREASURY_ADDRESS,
-      abi: SIMULATE_ABI,
-      functionName: 'missions',
-      args: [MISSION_B_ID],
-    });
-    if (missionBData && missionBData[3]) {
-      const expiresAtSec = Number(missionBData[3]);
-      if (expiresAtSec > 0) {
-        missionBExpiryIso = new Date(expiresAtSec * 1000).toISOString();
-      }
-    }
-  } catch (err: any) {
-    // If read fails, keep missionBExpiryIso as null (never use typed-in date)
-    if (
-      err.name === 'HttpRequestError' ||
-      err.message?.includes('fetch failed') ||
-      err.message?.includes('ECONNREFUSED')
-    ) {
-      throw new Error('RPC_ERROR: Unable to reach Avalanche Fuji RPC node');
-    }
-  }
-
-  // 2. Perform eth_call simulation
-  const opId = keccak256(toHex(`judge_sim_${Date.now()}_${Math.random()}`)) as Hex;
-  const amountUsdc = `${(amountAtomic / 1e6).toFixed(6)} USDC`;
-
-  try {
-    await publicClient.call({
-      to: GUARDED_TREASURY_ADDRESS,
-      account: AGENT_ADDRESS,
-      data: encodeFunctionData({
-        abi: SIMULATE_ABI,
-        functionName: 'proposeWithProof',
-        args: [
-          opId,
-          recipient,
-          BigInt(amountAtomic),
-          MISSION_B_ID,
-          'judge interactive simulation',
-          [], // empty proof
-        ],
-      }),
-    });
-
-    return {
-      success: true,
-      outcome: 'SUCCESS',
-      recipient,
-      amountAtomic,
-      amountUsdc,
-      missionBExpiry: missionBExpiryIso,
-      message:
-        'Simulation succeeded! The Fuji GuardedTreasury contract accepts this recipient under Mission B policy and would transfer funds.',
-    };
-  } catch (err: any) {
-    // R13A-F2: Classify as REVERT ONLY when viem error chain explicitly contains
-    // ContractFunctionRevertedError or an execution reverted message.
-    let isRevert = false;
-    let revertReason = '';
-
-    if (typeof err?.walk === 'function') {
-      const revertErr = err.walk((e: any) =>
-        e?.name === 'ContractFunctionRevertedError' ||
-        e?.message?.includes('execution reverted') ||
-        e?.message?.includes('PayeeNotInMissionSet')
-      );
-      if (revertErr) {
-        isRevert = true;
-        revertReason =
-          revertErr.data?.errorName ||
-          revertErr.shortMessage?.match(/reason:\s*([A-Za-z0-9_]+)/)?.[1] ||
-          (revertErr.message?.includes('PayeeNotInMissionSet') ? 'PayeeNotInMissionSet' : '') ||
-          revertErr.shortMessage ||
-          'ExecutionReverted';
-      }
-    }
-
-    if (!isRevert) {
-      const msg = err?.message || '';
-      const shortMsg = err?.shortMessage || '';
-      if (
-        msg.includes('execution reverted') ||
-        shortMsg.includes('execution reverted') ||
-        msg.includes('PayeeNotInMissionSet')
-      ) {
-        isRevert = true;
-        revertReason =
-          shortMsg.match(/reason:\s*([A-Za-z0-9_]+)/)?.[1] ||
-          (msg.includes('PayeeNotInMissionSet') ? 'PayeeNotInMissionSet' : '') ||
-          'ExecutionReverted';
-      }
-    }
-
-    // If it's NOT an explicit EVM revert (e.g. HTTP 429, 500, network error, timeout, RPC node error),
-    // fail closed with RPC_ERROR so the route returns 502, NOT a fake REVERT!
-    if (!isRevert) {
-      throw new Error(`RPC_ERROR: ${err?.message || 'RPC communication error'}`);
-    }
-
-    if (revertReason.includes('PayeeNotInMissionSet')) {
-      revertReason = 'PayeeNotInMissionSet';
-    }
-
-    return {
-      success: false,
-      outcome: 'REVERT',
-      revertReason,
-      recipient,
-      amountAtomic,
-      amountUsdc,
-      missionBExpiry: missionBExpiryIso,
-      message: `The live Fuji contract strictly rejected this payout proposal with revert reason: "${revertReason}".`,
-    };
-  }
-}
-
 export async function POST(req: NextRequest) {
-  try {
-    const { clientIp } = resolveClientIp(req.headers);
-    const allowed = checkSimulateRateLimit(clientIp, 10);
-    if (!allowed) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'QUOTA_EXCEEDED',
-          message:
-            'Rate limit exceeded: maximum 10 simulations per minute per IP. Please try again in 1 minute.',
-        },
-        { status: 429 }
-      );
-    }
-
-    const body = await req.json().catch(() => ({}));
-    const { recipient, amountAtomic } = body;
-
-    const result = await runJudgeSimulation(
-      recipient,
-      amountAtomic !== undefined ? Number(amountAtomic) : 10000
+  const { clientIp } = resolveClientIp(req.headers);
+  if (!checkSimulateRateLimit(clientIp, 10)) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'QUOTA_EXCEEDED',
+        message: 'Rate limit exceeded: max 10 simulations per minute per IP.',
+        messageVi: 'Vượt quá giới hạn: tối đa 10 lượt mô phỏng mỗi phút theo địa chỉ IP.',
+      },
+      { status: 429 }
     );
+  }
 
-    return NextResponse.json(result);
+  let body: any;
+  try {
+    const rawText = await req.text();
+    if (rawText.length > 2048) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'BAD_REQUEST',
+          message: 'Request body exceeds 2KB size limit.',
+        },
+        { status: 400 }
+      );
+    }
+    body = JSON.parse(rawText);
+  } catch {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'BAD_REQUEST',
+        message: 'Invalid JSON body.',
+      },
+      { status: 400 }
+    );
+  }
+
+  const { recipient, amountAtomic = 10000, reason = '' } = body || {};
+
+  if (!recipient || typeof recipient !== 'string') {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'BAD_REQUEST',
+        message: 'Recipient address string is required.',
+      },
+      { status: 400 }
+    );
+  }
+
+  if (typeof amountAtomic !== 'number' || amountAtomic <= 0 || amountAtomic > 10000) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'BAD_REQUEST',
+        message: 'Amount out of bounds: must be between 1 and 10000 atomic units ($0.01 USDC max).',
+      },
+      { status: 400 }
+    );
+  }
+
+  if (typeof reason === 'string' && reason.length > 256) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'BAD_REQUEST',
+        message: 'Reason parameter must not exceed 256 characters.',
+      },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const simResult = await runJudgeSimulation(recipient, amountAtomic);
+    return NextResponse.json({
+      success: true,
+      simulation: simResult,
+    });
   } catch (err: any) {
-    if (err.message === 'INVALID_ADDRESS') {
+    if (err?.message === 'INVALID_ADDRESS') {
       return NextResponse.json(
         {
           success: false,
           error: 'BAD_REQUEST',
-          message:
-            'Invalid Ethereum address. Please provide a valid 20-byte address format (0x...).',
+          message: 'Invalid Ethereum address: must be a 20-byte hex address.',
         },
         { status: 400 }
       );
     }
-    if (err.message === 'INVALID_AMOUNT') {
+
+    if (err?.message === 'INVALID_AMOUNT') {
       return NextResponse.json(
         {
           success: false,
           error: 'BAD_REQUEST',
-          message:
-            'Amount out of bounds: must be an integer between 1 and 10,000 atomic units (<= 0.01 USDC).',
+          message: 'Amount out of bounds: must be between 1 and 10000 atomic units ($0.01 USDC max).',
         },
         { status: 400 }
       );
     }
-    if (err.message?.startsWith('RPC_ERROR')) {
+
+    if (err?.isRpcError || err?.message?.startsWith('RPC_ERROR')) {
       return NextResponse.json(
         {
           success: false,
           error: 'RPC_ERROR',
-          message: 'Failed to communicate with Avalanche Fuji RPC node. Please retry.',
+          message:
+            'Avalanche Fuji RPC node error or rate limit. This is not a contract revert.',
+          messageVi:
+            'Lỗi kết nối RPC node Avalanche Fuji (429/timeout). Đây không phải lỗi từ hợp đồng.',
         },
         { status: 502 }
       );
@@ -279,8 +129,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: 'INTERNAL_ERROR',
-        message: err.message || 'Simulation unexpected error',
+        error: 'SIMULATION_ERROR',
+        message: err?.message || 'Simulation execution failed.',
       },
       { status: 500 }
     );

@@ -1,0 +1,31 @@
+1
+00:00:00,000 --> 00:00:03,500
+MissionPay: Same vendor. Same treasury. Two outcomes.
+
+2
+00:00:03,500 --> 00:00:09,500
+Dual-Layer Defense: LLM agents propose, while Avalanche Fuji contracts enforce.
+
+3
+00:00:09,500 --> 00:00:34,000
+Live on Avalanche Fuji: Twin Treasury compares Global Allowlist vs Mission Guard.
+
+4
+00:00:34,000 --> 00:01:04,000
+Try it yourself: any random attacker strictly reverts with PayeeNotInMissionSet on Fuji.
+
+5
+00:01:04,000 --> 00:01:34,000
+Bounty Challenge: prompt injection fools the agent, but the contract preserves the treasury.
+
+6
+00:01:34,000 --> 00:01:59,000
+On-chain proof: Snowtrace confirms execution reverted with PayeeNotInMissionSet.
+
+7
+00:01:59,000 --> 00:02:29,000
+Independent verification: tamper with 1 single byte and the entire cryptographic chain breaks.
+
+8
+00:02:29,000 --> 00:02:45,000
+LLMs can be fooled. Budgets on Avalanche can't. MissionPay: sign once, chain enforces.

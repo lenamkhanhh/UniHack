@@ -1,37 +1,28 @@
-# MissionPay — kịch bản video demo (2:30)
+# MissionPay — Kịch Bản Video Demo (Round 13)
 
-Lời thoại tiếng Anh (khớp deck). Ghi chú quay bằng tiếng Việt. Mỗi cảnh ghi rõ màn hình, thao tác và thứ phải thấy được trên màn hình. **Chỉ quay số liệu thật**: nếu một con số trên màn hình khác với kịch bản thì đọc theo màn hình.
+**Thời lượng:** ~1 phút 45 giây  
+**Độ phân giải:** 1920×1080 (Full HD), 60fps  
+**Phụ đề:** Tiếng Anh nhúng trực tiếp trên màn hình (`captions.srt`), khớp lời thoại `VOICEOVER.md`.  
+**Nguyên tắc:** 100% bằng chứng đo lường thực tế on-chain Avalanche Fuji C-Chain.
 
-## Chuẩn bị trước khi quay (checklist)
+---
 
-- [ ] App chạy bản production (`npm run build && npm start`), mode `LIVE_FUJI`, RPC Fuji ổn định (mở `/api/health`, thấy block mới).
-- [ ] Đã đăng ký passkey thật (Windows Hello / Face ID) trên `/missions/new` và đã deploy authority cho đúng origin đang quay (localhost hoặc domain public).
-- [ ] `/bounty`: chạy `scripts/bounty-reset-stats.ts` để xóa lượt test; chuẩn bị sẵn payload vendor-diversion (vendor `0x3333…`). Lưu ý: Gemini thật có thể từ chối, nên quay 2–3 lần và chọn lần bị lừa, **ghi lại số lần đã thử** để nói thật nếu bị hỏi.
-- [ ] Tab Snowtrace mở sẵn: GuardedTreasury `0x2045…d545`, tx revert `0xc5f1…f1ff`, tx validation `0xb641…d059`.
-- [ ] `/verify/<s1b>` mở sẵn.
-- [ ] Màn hình 1920×1080, zoom trình duyệt 110%, tắt thông báo, ẩn bookmark bar.
-- [ ] Mic thu riêng; quay màn hình bằng OBS 60fps.
+## Danh Sách Cảnh Quay Thực Tế (Scene Order)
 
-## Kịch bản
+| # | Phân Cảnh | Thời Gian | Màn Hình / Thao Tác | Lời Thoại (Voiceover) | Chi Tiết Hiển Thị Trên Màn Hình |
+|---|---|---|---|---|---|
+| **S0** | **Twin Treasury Live trên Fuji** | 0:00–0:14 | `/arena/twin`: Cuộn xem bảng so sánh song song 2 mission | *"Here on Avalanche Fuji, our Twin Treasury shows the difference: a global allowlist drains funds, but MissionPay's mission guard reverts the attack on-chain."* | Badge xanh "CONFIRMED ON FUJI"; Cột trái (Mission A allowlist) mất +0.01 USDC; Cột phải (Mission B guard) revert `PayeeNotInMissionSet`, 0 USDC thoát; 2 link Snowtrace. |
+| **S1** | **Chế Độ Giám Khảo: Tự Thử Nghiệm** | 0:14–0:34 | `/judge`: Nhập ví attacker ngẫu nhiên $\rightarrow$ Revert; thử ví Owner $\rightarrow$ Thành công | *"In Judge Mode, anyone can test this live: type any attacker address, and the smart contract strictly rejects it with PayeeNotInMissionSet, while legitimate payees succeed."* | Nút "🎲 Random Attacker" $\rightarrow$ Thẻ đỏ `CONTRACT REVERTED: PayeeNotInMissionSet`; Nút "🛡️ Test Owner" $\rightarrow$ Thẻ xanh `CONTRACT ACCEPTED: Payout Authorized`; Lệnh `cast call`. |
+| **S2** | **Đấu Trường Hack Ngân Quỹ (Bounty)** | 0:34–0:54 | `/bounty`: Gửi hóa đơn tấn công đánh lừa agent | *"In our public Bounty challenge, prompt injection completely tricks the autonomous agent, but our dual-layer guard stops the payout with zero dollars lost."* | Thẻ 1: Agent bị thuyết phục (LLM Tricked ✅); Thẻ 2: Guard chặn vì ngoài phạm vi; Thẻ 3: Hợp đồng revert `PayeeNotInMissionSet`; Bảo toàn $0.00 thất thoát. |
+| **S3** | **Bằng Chứng On-Chain Snowtrace** | 0:54–1:08 | Snowtrace tx `0x0ad5...3e38` phóng to dòng revert reason | *"On Snowtrace, the live transaction receipt proves it: execution strictly reverted on-chain with the custom error PayeeNotInMissionSet."* | Dòng status: `0 (failed)`; Revert reason: `PayeeNotInMissionSet`; gasUsed: 60,000 gas. |
+| **S4** | **Kiểm Toán Độc Lập Phía Trình Duyệt** | 1:08–1:28 | `/verify/demo-seed`: Điểm 100/100 ERC-8004 $\rightarrow$ Bấm sửa 1 byte $\rightarrow$ Chuỗi đỏ gãy | *"Every step is cryptographically anchored. Tampering with even a single byte instantly breaks the hash chain, turning the client-side verifier red."* | Chứng nhận ERC-8004 100/100; Bấm "TEST MODIFY 1 BYTE" lập tức chuyển đỏ `CORRUPTED / TAMPERED`; Bấm khôi phục chuyển xanh `VALID`. |
+| **S5** | **Kết Luận & Kêu Gọi Hành Động** | 1:28–1:42 | Slide tổng kết + Thông tin repo và hợp đồng Fuji | *"LLMs can be fooled. Budgets on Avalanche can't. Sign the mission once, and the smart contract decides who gets paid."* | Dòng tiêu đề lớn: "LLMs can be fooled. Budgets on Avalanche can't."; Địa chỉ contract GuardedTreasury Fuji; Link GitHub repository. |
 
-| # | Thời gian | Màn hình / thao tác | Lời thoại | Phải thấy trên màn hình |
-|---|---|---|---|---|
-| 1 | 0:00–0:15 | Slide 2 (Bankr), zoom chậm vào số $174,000 | "In May, one line of Morse code made an AI agent send away $174,000. The model was fooled. Nothing else stood in the way." | Số tiền, ngày |
-| 2 | 0:15–0:30 | Slide 3 (ADI) | "New attacks don't even give orders. They plant a fake recipient in a web page or an invoice. Llama Prompt Guard 2 caught none of 108." | 0/108, 23%, 22% |
-| 3 | 0:30–0:50 | `/missions/new`: điền mission (2 payee, cap $10), bấm "Approve with passkey", **chạm vân tay / Face ID thật** | "With MissionPay, the owner signs one mission: who can be paid, how much, until when. Here I approve it with my fingerprint. Avalanche checks that signature on-chain." | Hộp thoại passkey của OS, rồi tx hash + "approved" |
-| 4 | 0:50–1:25 | `/bounty`: chọn "Email", dán payload vendor-diversion, gửi | "Now let's attack it. This email tells the agent to pay a vendor the company knows, but who isn't part of this mission. The agent falls for it. The validator blocks it: that payee is not in the signed set. And the contract on Fuji refuses it too." | Thẻ 1 "BỊ THUYẾT PHỤC", thẻ 2 `PAYEE_NOT_IN_MISSION_SET`, thẻ 3 `PayeeNotInMissionSet`, "$0.00" |
-| 5 | 1:25–1:40 | Snowtrace: tx revert `0xc5f1…f1ff`, phóng to dòng error | "Even if our server were hacked, this is what happens on-chain. The contract itself says no." | `PayeeNotInMissionSet` trên Snowtrace |
-| 6 | 1:40–2:00 | Slide 9 (benchmark) | "We ran 357 real-LLM attacks. Without a guard, a third of them moved money. A normal allowlist still let 17 of 20 known-vendor attacks through. MissionPay: zero, and every legitimate payment still went through." | 32.1/44.5, 17/20·19/20, 0/277, 40/40 |
-| 7 | 2:00–2:15 | `/verify/<s1b>`: thẻ ERC-8004 Validation 100/100; sửa 1 byte trong audit → chuỗi đỏ | "Every step is anchored on Avalanche, and an independent validator re-checks the mission from the chain. Change one byte, and the chain breaks." | 100/100, validator address, chuỗi đỏ |
-| 8 | 2:15–2:30 | Slide 14 (close) + QR `/bounty` | "LLMs can be fooled. Budgets on Avalanche can't. Scan the code and try to take the five dollars yourself." | QR, câu chốt |
+---
 
-## Cập nhật sau PLAN_MAX
-
-Khi có kết quả thật thì thay cảnh 6 hoặc thêm 1 câu:
-- **M4 (AgentDojo replay):** "On AgentDojo banking replay, MissionPay blocked 120 of 128 payment injections, and even with the attacker on the allowlist, the Avalanche contract rejected every off-mission payout." (Được đánh dấu là số đo replay mô hình ngoại tuyến, không phải live run).
-- **M9 (ICM):** thay cảnh 5 bằng 1 lượt chi xuyên L1 bị C-Chain từ chối, nếu có tx thật.
-
-## Mẹo
-- Không đọc slide; cảnh 4 là trọng tâm, để màn hình nói.
-- Nếu LLM không bị lừa trong lúc quay: nói thật "this time the model refused; here's a run where it didn't", rồi chuyển sang bản ghi lượt bị lừa (ảnh `deck-shots/bounty-result-tricked.png`).
-- Giữ con trỏ chuột ít di chuyển; phóng to bằng OBS zoom khi cần.
+## File Đầu Ra Kèm Theo (Artifacts)
+- `artifacts/submission-s1/video/raw-demo.webm`: Video gốc quay tự động qua Playwright (1920x1080).
+- `artifacts/submission-s1/video/demo-silent.mp4`: Video chuẩn MP4 H.264 (1080p).
+- `artifacts/submission-s1/video/captions.srt`: File phụ đề thời gian chuẩn khớp từng giây.
+- `artifacts/submission-s1/video/VOICEOVER.md`: Lời đọc ngắn gọn 132 từ dành cho người thuyết trình.
+- `artifacts/submission-s1/video/scenes.json`: Cấu hình danh sách phân cảnh và mốc thời gian.

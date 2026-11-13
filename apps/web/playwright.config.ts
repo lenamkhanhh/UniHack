@@ -31,13 +31,29 @@ export default defineConfig({
   projects: [
     {
       name: 'ui-mocked',
-      testIgnore: /.*real-integration\.spec\.ts/,
+      testIgnore: [/.*real-integration\.spec\.ts/, /.*record-demo\.spec\.ts/],
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'real-integration',
       testMatch: /.*real-integration\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'video',
+      testMatch: /.*record-demo\.spec\.ts/,
+      timeout: 180000,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1920, height: 1080 },
+        video: {
+          mode: 'on',
+          size: { width: 1920, height: 1080 },
+        },
+        launchOptions: {
+          slowMo: 300,
+        },
+      },
     },
   ],
   webServer: isNoWebServer

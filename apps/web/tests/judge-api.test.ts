@@ -1,19 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
+import { GET as getReceiptsRoute } from '../app/api/judge/receipts/route';
+import { POST as simulateRoute } from '../app/api/judge/simulate/route';
 import {
   fetchLiveReceipts,
-  GET as getReceiptsRoute,
-} from '../app/api/judge/receipts/route';
-import {
   runJudgeSimulation,
   checkSimulateRateLimit,
   clearSimulateRateLimit,
-  POST as simulateRoute,
   OWNER_ADDRESS,
   AGENT_ADDRESS,
   GUARDED_TREASURY_ADDRESS,
   MISSION_B_ID,
-} from '../app/api/judge/simulate/route';
+} from '../lib/judge-service';
 
 describe('Judge Mode API Routes (Round 13)', () => {
   beforeEach(() => {
@@ -126,7 +124,8 @@ describe('Judge Mode API Routes (Round 13)', () => {
       expect(result.recipient.toLowerCase()).toBe('0xdead000000000000000000000000000000000001');
       expect(result.amountAtomic).toBe(10000);
       expect(result.amountUsdc).toBe('0.010000 USDC');
-      expect(new Date(result.missionBExpiry).getTime()).toBeGreaterThan(Date.now());
+      expect(result.missionBExpiry).not.toBeNull();
+      expect(new Date(result.missionBExpiry!).getTime()).toBeGreaterThan(Date.now());
     });
 
     it('returns SUCCESS outcome for legitimate owner payee with valid proof', async () => {
