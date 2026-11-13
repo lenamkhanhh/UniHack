@@ -40,6 +40,8 @@ test.describe('WOW-W2: ERC-8004 Validation Registry on Avalanche Fuji', () => {
   });
 
   test.beforeEach(async ({ page }) => {
+    // Pin UI language to English (lib/i18n.tsx reads missionpay_lang from localStorage)
+    await page.addInitScript(() => localStorage.setItem('missionpay_lang', 'en'));
     // Hide dev overlay indicators
     await page.addInitScript(() => {
       const style = document.createElement('style');
@@ -62,12 +64,12 @@ test.describe('WOW-W2: ERC-8004 Validation Registry on Avalanche Fuji', () => {
     await page.goto('/verify/fuji-live-mission-s1b');
 
     // Wait for main content to load
-    await expect(page.locator('h1')).toContainText('ĐỪNG TIN CHÚNG TÔI — TỰ KIỂM CHỨNG');
+    await expect(page.locator('h1')).toContainText("DON'T TRUST US — VERIFY YOURSELF");
 
     // Assert ERC-8004 Validation card
     const statusBadge = page.locator('[data-testid="erc8004-status-badge"]');
     await expect(statusBadge).toBeVisible({ timeout: 15000 });
-    await expect(statusBadge).toContainText('Điểm xác thực: 100/100');
+    await expect(statusBadge).toContainText('Validation Score: 100/100');
 
     const tagBadge = page.locator('[data-testid="erc8004-tag-badge"]');
     await expect(tagBadge).toBeVisible();

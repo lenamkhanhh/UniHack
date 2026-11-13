@@ -1,6 +1,11 @@
 import { test, expect } from './fixtures/wallet';
 
 test.describe('E2E Browser Workflow: Dashboard, Pending Invariants & Publication Boundaries', () => {
+  test.beforeEach(async ({ page }) => {
+    // Pin UI language to English (lib/i18n.tsx reads missionpay_lang from localStorage)
+    await page.addInitScript(() => localStorage.setItem('missionpay_lang', 'en'));
+  });
+
   test('Renders empty dashboard when no public missions are available', async ({ page }) => {
     await page.route('/api/missions', async (route) => {
       await route.fulfill({
@@ -12,9 +17,9 @@ test.describe('E2E Browser Workflow: Dashboard, Pending Invariants & Publication
 
     await page.goto('/');
 
-    await expect(page.locator('h1')).toHaveText('Mission Dashboard');
-    await expect(page.locator('text=No missions found in current database deployment.')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Go to Demo & Run Test Mission' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Active Missions & On-Chain Budgets' })).toBeVisible();
+    await expect(page.locator('text=No active missions found in current database.')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Launch Demo Mission' })).toBeVisible();
   });
 
   test('Renders published mission cards with two separate budgets on dashboard', async ({ page }) => {
@@ -50,7 +55,7 @@ test.describe('E2E Browser Workflow: Dashboard, Pending Invariants & Publication
     await expect(page.getByText('ACTIVE', { exact: true })).toBeVisible();
 
     // Verify Two Separate Budgets (00 §2, 05 §5)
-    await expect(page.locator('text=Tool Budget (S1)')).toBeVisible();
+    await expect(page.locator('text=Tool Budget (Session Wallet)')).toBeVisible();
     // 5.00 - 0.10 - 0.05 = 4.85 USDC remaining
     await expect(page.locator('text=4.85 USDC')).toBeVisible();
     await expect(page.locator('text=Spent: 0.10')).toBeVisible();

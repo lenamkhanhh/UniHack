@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Judge Mode E2E Spec (Round 13)', () => {
+  test.beforeEach(async ({ page }) => {
+    // Pin UI language to English (lib/i18n.tsx reads missionpay_lang from localStorage)
+    await page.addInitScript(() => localStorage.setItem('missionpay_lang', 'en'));
+  });
+
   test('HomePage has large Judge Mode CTA button that navigates to /judge', async ({ page }) => {
     await page.goto('/');
 
@@ -9,8 +14,9 @@ test.describe('Judge Mode E2E Spec (Round 13)', () => {
     await expect(judgeBtn).toContainText(/Judge mode/i);
 
     await judgeBtn.click();
-    await expect(page).toHaveURL(/\/judge/);
-    await expect(page.locator('h1')).toContainText(/Judge Mode|Chế độ Giám khảo/i);
+    // First visit compiles /judge on a cold dev server, so allow more than the default 5s
+    await expect(page).toHaveURL(/\/judge/, { timeout: 15000 });
+    await expect(page.locator('h1')).toContainText(/Judge Mode|Chế độ Giám khảo/i, { timeout: 15000 });
   });
 
   test('Judge page renders Block 1 receipts, interactive simulation in Block 2, and terminal commands in Block 3', async ({
@@ -145,8 +151,8 @@ test.describe('Judge Mode E2E Spec (Round 13)', () => {
 
     // 4. Check Block 4 Resources & Known Limits
     await expect(page.locator('#block4-heading')).toBeVisible();
-    await expect(page.getByText(/Pitch Deck|Slide Thuyết Trình/i)).toBeVisible();
-    await expect(page.getByText(/Fuji On-Chain Evidence|Bằng Chứng Fuji/i)).toBeVisible();
+    await expect(page.getByRole('link', { name: /Pitch Deck|Slide Thuyết Trình/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Fuji On-Chain Evidence|Bằng Chứng Fuji/i })).toBeVisible();
     await expect(page.getByText(/Deployed Fuji Bytecode/i)).toBeVisible();
   });
 });

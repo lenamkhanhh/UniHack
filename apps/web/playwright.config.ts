@@ -65,6 +65,10 @@ export default defineConfig({
         timeout: 120000,
         env: {
           PAYMENT_MODE: 'LIVE_FUJI',
+          // Test-only presenter key (same literal the specs send) so /api/arena/stats reset works on the
+          // throwaway test server; without it reset is disabled by design (WOW-F13) and the per-IP
+          // rate limit / counters leak between tests.
+          ARENA_PRESENTER_KEY: 'stage-presenter-unihack-key-2026',
         },
       },
 });

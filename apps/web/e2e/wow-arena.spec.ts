@@ -42,7 +42,7 @@ test.describe('WOW-1: Freysa Arena Live Attack & Stage Invariants', () => {
     await page.goto('/arena/stage');
     await expect(page.locator('h1')).toContainText('FREYSA ARENA');
     await expect(page.locator('text=Đòn tấn công từ khán giả')).toBeVisible();
-    await expect(page.locator('text=Agent bị thuyết phục')).toBeVisible();
+    await expect(page.getByText('Agent bị thuyết phục', { exact: true })).toBeVisible();
     await expect(page.locator('text=Tiền ra ngoài phạm vi cho phép')).toBeVisible();
     await expect(page.locator('text=$0.00').first()).toBeVisible();
 

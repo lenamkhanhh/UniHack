@@ -10,6 +10,8 @@ test.describe('WOW-F18: High-Resolution 1920x1080 Deck Evidence Screenshots Suit
   const deckShotsDir = path.resolve(process.cwd(), '../../artifacts/submission-s1/deck-shots');
 
   test.beforeEach(async ({ page }) => {
+    // Pin UI language to English (lib/i18n.tsx reads missionpay_lang from localStorage)
+    await page.addInitScript(() => localStorage.setItem('missionpay_lang', 'en'));
     // Invariant: Hide dev overlay buttons, nextjs-portal or indicators completely
     await page.addInitScript(() => {
       const style = document.createElement('style');
@@ -111,8 +113,8 @@ test.describe('WOW-F18: High-Resolution 1920x1080 Deck Evidence Screenshots Suit
 
   test('3. deck-verify-ok.png: Captures intact Keccak-256 cryptographic proof', async ({ page }) => {
     await page.goto('/verify/demo-seed');
-    await expect(page.locator('h1')).toContainText('ĐỪNG TIN CHÚNG TÔI — TỰ KIỂM CHỨNG');
-    await expect(page.locator('text=CHUỖI TOÀN VẸN 100%')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('h1')).toContainText("DON'T TRUST US — VERIFY YOURSELF");
+    await expect(page.locator('text=HASH CHAIN VALID')).toBeVisible({ timeout: 15000 });
     await expect(page.locator('[data-testid="demo-seed-banner"]')).toBeVisible();
 
     await page.waitForTimeout(1500); // Allow QR render
@@ -123,7 +125,7 @@ test.describe('WOW-F18: High-Resolution 1920x1080 Deck Evidence Screenshots Suit
 
   test('4. deck-verify-tampered.png: Captures broken cryptographic chain upon 1-byte mutation', async ({ page }) => {
     await page.goto('/verify/demo-seed');
-    await expect(page.locator('text=CHUỖI TOÀN VẸN 100%')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('text=HASH CHAIN VALID')).toBeVisible({ timeout: 15000 });
 
     // Mutate 1 byte
     const tamperBtn = page.locator('[data-testid="tamper-one-byte-btn"]');
@@ -131,7 +133,7 @@ test.describe('WOW-F18: High-Resolution 1920x1080 Deck Evidence Screenshots Suit
     await tamperBtn.click({ force: true });
 
     // Verify broken chain alert and red state
-    await expect(page.locator('text=CHUỖI BỊ GÃY / GIAN LẬN')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=CORRUPTED / TAMPERED')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('[data-testid="reset-original-btn"]')).toBeVisible();
 
     const outPath = path.join(deckShotsDir, 'deck-verify-tampered.png');
@@ -203,7 +205,7 @@ test.describe('WOW-F18: High-Resolution 1920x1080 Deck Evidence Screenshots Suit
   test('7. pv-f7: Captures mission dashboard and stage in payee root status states', async ({ page }) => {
     // 1. Mission Dashboard view
     await page.goto('/');
-    await expect(page.locator('h1')).toContainText('Mission Dashboard');
+    await expect(page.getByRole('heading', { name: 'Active Missions & On-Chain Budgets' })).toBeVisible();
 
     await page.waitForTimeout(1000);
     const unconfirmedPath = path.resolve(process.cwd(), 'evidence/pv-f7-mission-unconfirmed-root.png');

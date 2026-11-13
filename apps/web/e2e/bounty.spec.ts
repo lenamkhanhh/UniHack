@@ -3,6 +3,11 @@ import fs from 'fs';
 import path from 'path';
 
 test.describe('WOW-W3: "Hack the Treasury" Public Bounty Challenge (/bounty)', () => {
+  test.beforeEach(async ({ page }) => {
+    // Pin UI language to English (lib/i18n.tsx reads missionpay_lang from localStorage)
+    await page.addInitScript(() => localStorage.setItem('missionpay_lang', 'en'));
+  });
+
   test('Submits attack payload, displays 3-step guard result, keeps treasury intact, and captures screenshot', async ({ page }) => {
     // 1. Set viewport to 1920x1080 for deck screenshot requirement
     await page.setViewportSize({ width: 1920, height: 1080 });
@@ -11,12 +16,12 @@ test.describe('WOW-W3: "Hack the Treasury" Public Bounty Challenge (/bounty)', (
     await page.goto('/bounty');
 
     // 3. Verify hero text and live treasury badge
-    await expect(page.locator('h1')).toContainText('Lừa agent trả tiền cho bạn');
-    await expect(page.locator('text=Ngân sách bounty mission:')).toBeVisible();
-    await expect(page.locator('text=Số dư treasury:')).toBeVisible();
+    await expect(page.locator('h1')).toContainText('Trick the agent to pay you.');
+    await expect(page.locator('text=Bounty budget remaining:')).toBeVisible();
+    await expect(page.locator('text=Treasury balance:')).toBeVisible();
 
     // 4. Select attack vector (Invoice PDF Text)
-    const invoiceBtn = page.getByRole('button', { name: 'Hóa Đơn PDF (Text)' });
+    const invoiceBtn = page.getByRole('radio', { name: 'PDF Invoice' });
     await invoiceBtn.click();
 
     // 5. Fill attacker address
@@ -30,16 +35,16 @@ test.describe('WOW-W3: "Hack the Treasury" Public Bounty Challenge (/bounty)', (
     );
 
     // 7. Click submit button
-    const submitBtn = page.getByRole('button', { name: /Gửi Đòn Tấn Công/ });
+    const submitBtn = page.getByRole('button', { name: /Submit Attack Proposal/ });
     await submitBtn.click();
 
     // 8. Verify 3-step guard evaluation result card
-    const resultCard = page.locator('text=Kết Quả Đánh Giá Đa Tầng (3-Layer Guard)');
+    const resultCard = page.locator('text=3-Layer Defense Evaluation Result');
     await expect(resultCard).toBeVisible({ timeout: 25000 });
-    await expect(page.locator('text=TREASURY BẢO TOÀN ($0.00 MẤT)')).toBeVisible();
-    await expect(page.locator('text=Tầng 1: LLM Agent')).toBeVisible();
-    await expect(page.locator('text=Tầng 2: Validator Off-Chain')).toBeVisible();
-    await expect(page.locator('text=Tầng 3: Smart Contract Fuji')).toBeVisible();
+    await expect(page.locator('text=TREASURY PRESERVED ($0.00 DRAINED)')).toBeVisible();
+    await expect(page.locator('text=Step 1: Autonomous Agent (LLM)')).toBeVisible();
+    await expect(page.locator('text=Step 2: MissionPay Guard Engine')).toBeVisible();
+    await expect(page.locator('text=Step 3: Avalanche Fuji Smart Contract')).toBeVisible();
 
     // 9. Verify treasury balance remains intact
     await expect(page.getByText('$0.00', { exact: true })).toBeVisible();
@@ -71,7 +76,7 @@ test.describe('WOW-W3: "Hack the Treasury" Public Bounty Challenge (/bounty)', (
     await page.goto('/bounty');
 
     // 1. Select attack vector (Email)
-    const emailBtn = page.getByRole('button', { name: 'Email Giả Mạo' });
+    const emailBtn = page.getByRole('radio', { name: 'Spoofed Email' });
     await emailBtn.click();
 
     // 2. Fill secondary corporate vendor address (in global directory, not in mission payee set)
@@ -85,24 +90,26 @@ test.describe('WOW-W3: "Hack the Treasury" Public Bounty Challenge (/bounty)', (
     );
 
     // 4. Submit attack
-    const submitBtn = page.getByRole('button', { name: /Gửi Đòn Tấn Công/ });
+    const submitBtn = page.getByRole('button', { name: /Submit Attack Proposal/ });
     await submitBtn.click();
 
     // 5. Verify 3-step guard evaluation with tricked LLM
-    const resultCard = page.locator('text=Kết Quả Đánh Giá Đa Tầng (3-Layer Guard)');
+    const resultCard = page.locator('text=3-Layer Defense Evaluation Result');
     await expect(resultCard).toBeVisible({ timeout: 25000 });
-    await expect(page.locator('text=TREASURY BẢO TOÀN ($0.00 MẤT)')).toBeVisible();
+    await expect(page.locator('text=TREASURY PRESERVED ($0.00 DRAINED)')).toBeVisible();
 
     // Step 1: LLM Tricked
-    await expect(page.locator('text=Tầng 1: LLM Agent')).toBeVisible();
-    await expect(page.getByText('BỊ THUYẾT PHỤC', { exact: true })).toBeVisible();
+    await expect(page.locator('text=Step 1: Autonomous Agent (LLM)')).toBeVisible();
+    // Scope to the Step 1 card: the public attack feed also shows TRICKED badges from earlier attempts
+    const step1Card = page.getByText('Step 1: Autonomous Agent (LLM)').locator('xpath=../..');
+    await expect(step1Card.getByText('TRICKED', { exact: true })).toBeVisible();
 
     // Step 2: Off-chain Guard Blocked
-    await expect(page.locator('text=Tầng 2: Validator Off-Chain')).toBeVisible();
+    await expect(page.locator('text=Step 2: MissionPay Guard Engine')).toBeVisible();
     await expect(page.getByText('Rule: PAYEE_NOT_IN_MISSION_SET')).toBeVisible();
 
     // Step 3: Contract Fuji Revert
-    await expect(page.locator('text=Tầng 3: Smart Contract Fuji')).toBeVisible();
+    await expect(page.locator('text=Step 3: Avalanche Fuji Smart Contract')).toBeVisible();
     await expect(page.getByText('Revert: PayeeNotInMissionSet')).toBeVisible();
 
     // 6. Capture 1920x1080 screenshot of the fooled LLM + guard block
