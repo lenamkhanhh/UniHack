@@ -185,3 +185,23 @@ The same vendor (`0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA`, our relayer walle
 | Cleanup: vendor removed from the allowlist | success | [0x56e1154e…5562](https://testnet.snowtrace.io/tx/0x56e1154e1b7cfb7e1b76203c4a5267e25663ed11fec0b017051a0969e3f05562) |
 
 Owner setup tx: [allowlist vendor](https://testnet.snowtrace.io/tx/0x602d2adb6f2bb664becd0aa80ecea4d0cce5495937e4581f079a24fe84e0ad49), [allowlist owner](https://testnet.snowtrace.io/tx/0xe199f2d2299518442db9deefd59a8d89c9bf9317ce48e19d7bfbe52d874bb192), [create A](https://testnet.snowtrace.io/tx/0xa4df3ea95537dd1f18fc20625593f729957bba557a3612ad95967efd41220dd5), [create B](https://testnet.snowtrace.io/tx/0xb74522d3772d544ddc262c10cf76896ac0d93d4f75751f2191b94806fe1b459f), [set root B](https://testnet.snowtrace.io/tx/0xf6034287255bf4f8d73c692f17a32914339a02656c62158fb729ecdc0e18f8a0). Report: `evidence/twin/twin.live.json`. Script: `scripts/twin-treasury.ts`.
+
+## Mission `fuji-live-mission-s1c` (13/11/2026, live on Fuji, re-run with a durable audit export)
+
+The audit rows of `fuji-live-mission-s1b` were lost from the local database (a test teardown wiped the shared DB; fixed in e96ef16). s1b's on-chain anchor and validation remain on Fuji, but its rows can no longer be shown. s1c re-runs the same flow end to end, and its audit rows are committed in `evidence/missions/fuji-live-mission-s1c/audit.json`, so any DB can be re-seeded with `scripts/seed-mission-audit.ts`.
+
+| Step | Signer | Tx |
+|---|---|---|
+| createMission (cap 0.10 USDC) | owner | [0x14b457e8…f231](https://testnet.snowtrace.io/tx/0x14b457e8eb99500c028e69c0508051a20f132b21c90ae98e3d3152bd10d1f231) |
+| setMissionToolCap (0.02 USDC) | owner | [0x2815c7df…277c](https://testnet.snowtrace.io/tx/0x2815c7df79b7a0bb5f9191d2efaa33c7873f6773d45ab34e6420edf9b2d5277c) |
+| fundMissionWallet → session wallet 0xA86b…f4bf | owner | [0x16271ac9…3769](https://testnet.snowtrace.io/tx/0x16271ac9185e9d25dd70a0313e9b1d9342509e04285b4552f3c2fcbde24a3769) |
+| setMissionPayeeRoot (payee set = owner) | owner | [0x23e98b65…03b1](https://testnet.snowtrace.io/tx/0x23e98b65209aa8470e137d82d4cd11d8f6e65747c4ec66da56990b08ebb103b1) |
+| proposeWithProof 0.01 USDC → owner | agent | [0x7514dc40…e7f6](https://testnet.snowtrace.io/tx/0x7514dc40f1c054df683f2a000b928a6a65be596e5b8220ec4f594a04144ee7f6) |
+| anchorMissionProof (DB head 0xb6383cfe…4158) | owner | [0xeaa2b191…aabd](https://testnet.snowtrace.io/tx/0xeaa2b191dede374d002770a22ca3a6d867123bce34f6fc83c01802daea87aabd) |
+| ERC-8004 validationRequest | owner | [0xbc446fac…033e](https://testnet.snowtrace.io/tx/0xbc446fac45207d3cc7b633c8e9f951da1c23fec29aac837703cf3c290e2b033e) |
+| ERC-8004 validationResponse: 100, verified-full | validator 0x83F5…13B5 | [0xa9f7fadd…5ffa](https://testnet.snowtrace.io/tx/0xa9f7faddb9e15f0efdb94349f49aed63a5af30666a9edeeffbb5fe8814af5ffa) |
+
+- The x402 tool purchase was skipped in this run (`x402: SKIPPED` in run.json). The x402 settlement proof remains s1b's tx [0x8c898c90…8208](https://testnet.snowtrace.io/tx/0x8c898c904fef42c9a2e5d45b18549bd48dce285ef81d497f588ae41320dc8208).
+- USDC moved, measured from Transfer logs: treasury −0.03; session wallet +0.02 (held, owner-controlled); owner +0.01. Gas: 1,186,632 total.
+- Check it yourself: `cast call 0x20451c1e2dCD83F166B4f22868BAdECb5868d545 "anchoredMissionProofs(bytes32)(bytes32)" $(cast keccak fuji-live-mission-s1c) --rpc-url https://api.avax-test.network/ext/bc/C/rpc` returns `0xb6383cfec46d06ac2f6ba3c83b122baa48cf9bcd8b748cc4e2c6c7ad40814158`.
+- Report: `evidence/missions/fuji-live-mission-s1c/run.json`. Page: `/verify/fuji-live-mission-s1c`.
