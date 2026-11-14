@@ -33,6 +33,12 @@ Cập nhật: 2026-11-13.
 - Đòn thật không dùng người lạ: nó trỏ tới một vendor công ty đã quen. Trên Fuji (13/11), cùng vendor trong allowlist chung: chế độ allowlist trả tiền, chế độ mission set revert `PayeeNotInMissionSet`, còn người nhận đúng vẫn được trả. Ba tx trong bảng mục 1.
 - Lưu ý khi trả lời: "vendor bị lừa" trong demo là ví của chính đội (relayer), tiền 0,01 USDC testnet, đã gỡ khỏi allowlist sau demo. Treasury trên Fuji là bản deploy cũ (chưa có A1/A3); demo chỉ dùng logic có sẵn trong bản đó.
 
+**"ENShell / Immunity (ETHGlobal 2026) cũng chặn agent bị prompt injection, khác gì?"**
+- ENShell (top 10 ETHGlobal Cannes 2026) và Immunity (top 10 ETHGlobal New York 2026, cùng tác giả) cho một LLM (Claude chạy trong Chainlink CRE) chấm điểm rủi ro từng giao dịch, rồi approve, escalate hoặc block. Quyết định vẫn là phán đoán của một model.
+- MissionPay không dùng LLM để quyết định: owner ký sẵn tập người nhận của mission (Merkle root), và contract trên Avalanche chỉ trả cho địa chỉ có trong tập đó. Một vendor quen nhưng không thuộc mission thì bị revert, bất kể nội dung nghe hợp lý đến đâu (Twin Treasury trên Fuji, 13/11).
+- Không nói mình "tốt hơn" họ: hai cách bổ sung cho nhau, chấm rủi ro có thể đứng trước, contract là chốt cuối.
+- Nguồn: ethglobal.com/showcase/enshell-6t95y, ethglobal.com/showcase/immunity-eg56a.
+
 **"Sao vẫn lọt 8/128?"**
 - Cả 8 đều do người dùng tự viết IBAN của kẻ tấn công vào prompt, bảo đó là chủ nhà mới. Guard không thể biết người dùng bị lừa từ trước. Ở đây owner phải ký duyệt tập người nhận của mission; lần ký đó là chỗ con người kiểm.
 
