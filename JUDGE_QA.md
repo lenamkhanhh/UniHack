@@ -1,7 +1,8 @@
 # MissionPay: Q&A dự phòng cho giám khảo
 
 Chỉ dùng các con số đã được Claude kiểm lại. Ô ghi "CHƯA CÓ" thì không được nói lên sân khấu.
-Cập nhật: 2026-11-13.
+Cập nhật: 2026-11-14.
+Live Demo URL: [https://unihack-missionpay.vercel.app](https://unihack-missionpay.vercel.app)
 
 ## 1. Số liệu được phép nói
 

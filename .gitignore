@@ -49,3 +49,6 @@ artifacts/submission-s1/video/test-tts.mp3
 artifacts/submission-s1/video/cards/*.mp4
 
 
+
+.vercel
+.env*

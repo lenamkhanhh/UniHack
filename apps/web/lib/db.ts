@@ -2,12 +2,22 @@ import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 
-const connectionString =
+let connectionString =
   process.env.DATABASE_URL ||
   'postgresql://postgres:postgres_test_password@127.0.0.1:55432/unihack_test';
 
+const isHosted =
+  connectionString.includes('supabase') ||
+  connectionString.includes('neon') ||
+  connectionString.includes('sslmode=require');
+
+if (isHosted && connectionString.includes('sslmode=require')) {
+  connectionString = connectionString.replace('sslmode=require', 'sslmode=no-verify');
+}
+
 const pool = new Pool({
   connectionString,
+  ssl: isHosted ? { rejectUnauthorized: false } : undefined,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
