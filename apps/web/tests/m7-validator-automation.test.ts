@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import {
   createPublicClient,
@@ -10,7 +10,7 @@ import {
   parseTransaction,
   keccak256,
 } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
+import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
 import { avalancheFuji } from 'viem/chains';
 import { prisma } from '@/lib/db';
 import {
@@ -39,6 +39,7 @@ import {
   renewJobLease,
   advanceValidationJob,
   buildFrozenValidationContext,
+  getValidatorAddress,
   reserveValidatorNonce,
   allocateValidatorNonce,
 } from '@/lib/validator-job';
@@ -63,6 +64,18 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     setValidationFetcherForTesting(null);
     await clearDatabase();
   });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  // Hermetic validator identity: the job runner derives its validator account from
+  // VALIDATOR_PRIVATE_KEY (falling back to AGENT_PRIVATE_KEY), while frozen contexts default to
+  // getValidatorAddress(). Pin a throwaway key so both agree regardless of a developer's .env.
+  function stubTestValidatorKey(): string {
+    vi.stubEnv('VALIDATOR_PRIVATE_KEY', generatePrivateKey());
+    return getValidatorAddress();
+  }
 
   function createMockPublicClient(bundle: any, overrides: {
     headMatches?: boolean;
@@ -1448,6 +1461,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
 
   // A4-22: Exact chain response: stored local 100 vs actual chain 37 displays/persists 37 as chainScore, with local 100 separately
   it('M7-A4-22: Exact chain response: stored local 100 vs actual chain 37 displays/persists 37 as chainScore, with local 100 separately', async () => {
+    const stubbedValidator = stubTestValidatorKey();
     const payees = ['0x1111111111111111111111111111111111111111'];
     const tree = computePayeeMerkleTree(payees);
     const { mission } = await createTestMission({
@@ -1473,7 +1487,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     const frozenCtx = buildFrozenValidationContext({
       bundle,
       ownerAddress: mission.ownerAddress,
-      validatorAddress: '0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5',
+      validatorAddress: stubbedValidator,
       agentId: '294',
     });
     frozenCtx.evidence = {
@@ -1509,7 +1523,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
       }
       if (functionName === 'isValidationComplete') return true;
       if (functionName === 'getValidationStatus') {
-        return ['0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5', 294n, 37, testRespHash, 'partial-override', 1700000000n];
+        return [stubbedValidator, 294n, 37, testRespHash, 'partial-override', 1700000000n];
       }
       throw new Error(`Unexpected function: ${functionName}`);
     });
@@ -2465,6 +2479,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
 
   // A4-32: Truly frozen evidence & identities
   it('M7-A4-32: Truly frozen evidence & identities: rejects mutated identities with STALE_CONTEXT and reuses frozen evidence hash without re-scan', async () => {
+    stubTestValidatorKey();
     const { mission } = await createTestMission();
     const bundle = await buildMissionValidationBundle(mission.slug);
     const requestHash = computeValidationRequestHash(bundle);
