@@ -93,7 +93,7 @@ jobs:
           version: stable
 
       - name: Build contracts (ABI artifacts for m9-abi tests)
-        run: cd contracts && forge build
+        run: cd contracts && forge build --skip test --skip script
 
       - name: Generate Prisma Client
         run: npm --workspace=apps/web run prisma:generate
