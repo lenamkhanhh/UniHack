@@ -61,7 +61,6 @@ export default defineConfig({
         },
         launchOptions: {
           slowMo: 300,
-          args: ['--disable-blink-features=AutomationControlled'],
         },
       },
     },
