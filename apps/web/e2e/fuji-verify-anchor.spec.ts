@@ -9,12 +9,12 @@ test.describe('S1-F7: Avalanche Fuji Verified Anchor Evidence Screenshot', () =>
     colorScheme: 'dark',
   });
 
-  const deckShotsDir = path.resolve(process.cwd(), '../../artifacts/submission-s1/deck-shots');
-  const webEvidenceDir = path.resolve(process.cwd(), 'evidence');
+  const repoRoot = path.resolve(__dirname, '../../..');
+  const deckShotsDir = path.resolve(repoRoot, 'artifacts/submission-s1/deck-shots');
+  const webEvidenceDir = path.resolve(__dirname, '../evidence');
 
   test.beforeAll(async () => {
     // Seed the REAL Fuji mission fuji-live-mission-s1c (run 13/11/2026) via hermetic standalone script
-    const repoRoot = path.resolve(process.cwd(), '../..');
     const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres:postgres_test_password@127.0.0.1:55432/unihack_test';
     const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
     execSync(`${npxCmd} tsx scripts/seed-mission-audit.ts --slug fuji-live-mission-s1c`, {

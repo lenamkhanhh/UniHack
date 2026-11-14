@@ -9,11 +9,11 @@ test.describe('WOW-W2: ERC-8004 Validation Registry on Avalanche Fuji', () => {
     colorScheme: 'dark',
   });
 
-  const deckShotsDir = path.resolve(process.cwd(), '../../artifacts/submission-s1/deck-shots');
+  const repoRoot = path.resolve(__dirname, '../../..');
+  const deckShotsDir = path.resolve(repoRoot, 'artifacts/submission-s1/deck-shots');
 
   test.beforeAll(async () => {
     // Seed the REAL Fuji mission fuji-live-mission-s1c (run 13/11/2026) via hermetic standalone script
-    const repoRoot = path.resolve(process.cwd(), '../..');
     const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres:postgres_test_password@127.0.0.1:55432/unihack_test';
     const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
     execSync(`${npxCmd} tsx scripts/seed-mission-audit.ts --slug fuji-live-mission-s1c`, {
