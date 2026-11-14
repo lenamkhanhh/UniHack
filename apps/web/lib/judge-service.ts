@@ -272,7 +272,7 @@ export interface SimulateResult {
 
 export function classifyError(err: any): { isRevert: boolean; reason: string } {
   let isContractRevert = false;
-  let reason = 'PayeeNotInMissionSet';
+  let reason = '';
 
   if (err && typeof err.walk === 'function') {
     const walked = err.walk((e: any) => {
@@ -292,6 +292,7 @@ export function classifyError(err: any): { isRevert: boolean; reason: string } {
   const rawMessage = (err?.message || err?.shortMessage || String(err)).toLowerCase();
   if (
     rawMessage.includes('execution reverted') ||
+    rawMessage.includes('reverted with the following reason') ||
     rawMessage.includes('payeenotinmissionset') ||
     rawMessage.includes('custom error') ||
     rawMessage.includes('contractfunctionrevertederror')
@@ -299,14 +300,18 @@ export function classifyError(err: any): { isRevert: boolean; reason: string } {
     isContractRevert = true;
   }
 
-  if (rawMessage.includes('exceeded') || rawMessage.includes('budget')) {
-    reason = 'BudgetExceeded';
-  } else if (rawMessage.includes('expired')) {
-    reason = 'MissionExpired';
-  } else if (rawMessage.includes('unauthorized') || rawMessage.includes('agent')) {
-    reason = 'UnauthorizedAgent';
-  } else {
+  // Report the reason the contract actually gave; never default to PayeeNotInMissionSet.
+  const original = err?.shortMessage || err?.message || String(err);
+  const m =
+    original.match(/reverted with the following reason:\s*([^\n]+)/i) ||
+    original.match(/reason:\s*([A-Za-z0-9_]+)/i) ||
+    original.match(/execution reverted:\s*([^\n]+)/i);
+  if (m && m[1].trim()) {
+    reason = m[1].trim();
+  } else if (rawMessage.includes('payeenotinmissionset')) {
     reason = 'PayeeNotInMissionSet';
+  } else {
+    reason = 'ExecutionReverted (reason not decoded)';
   }
 
   return { isRevert: isContractRevert, reason };

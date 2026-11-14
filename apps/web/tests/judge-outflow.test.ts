@@ -19,3 +19,18 @@ describe('judge outflow is measured from Transfer logs', () => {
     expect(measuredOutflowAtomic({ logs: [] })).toBe(0n);
   });
 });
+
+import { classifyError } from '../lib/judge-service';
+
+describe('judge revert reason is the one the contract gave', () => {
+  it('extracts the decoded reason', () => {
+    const r = classifyError({ shortMessage: 'The contract function "proposeWithProof" reverted with the following reason:\nMissionExpired' });
+    expect(r.isRevert).toBe(true);
+    expect(r.reason).toBe('MissionExpired');
+  });
+  it('never defaults an undecoded revert to PayeeNotInMissionSet', () => {
+    const r = classifyError({ message: 'execution reverted' });
+    expect(r.isRevert).toBe(true);
+    expect(r.reason).not.toBe('PayeeNotInMissionSet');
+  });
+});
