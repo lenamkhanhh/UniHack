@@ -18,8 +18,8 @@ const EVID = path.join(ROOT, "apps/web/evidence");
 
 // ---------- Theme ----------
 const THEME = {
-  name: "MissionPay Paper",
-  headFontFace: "Geist",
+  name: "MissionPay v8b",
+  headFontFace: "Archivo Black",
   bodyFontFace: "Geist",
   // Same slots as before (the generator uses dk1 as page background and lt1 as text),
   // now filled with the v6 web palette: paper, ink, Avalanche red, meaning-coded green.
@@ -30,11 +30,11 @@ const THEME = {
     lt2: "5E646E", // muted text
     accent1: "E84142", // Avalanche red: attacks, blocked
     accent2: "0B7A4B", // green: paid / safe
-    accent3: "A86A12", // amber: pending / simulation labels
-    accent4: "1F5FA8", // links, data
+    accent3: "B7791F", // amber: pending / simulation labels
+    accent4: "2457C5", // blue: links, data
     accent5: "E4E3DC", // card border / rules
     accent6: "7C828C", // slate
-    hlink: "1F5FA8",
+    hlink: "2457C5",
     folHlink: "5E646E",
   },
 };
@@ -59,7 +59,7 @@ pres.defineSlideMaster({
   title: "MP_TITLE",
   background: { color: C.text1 },
   objects: [
-    { placeholder: { options: { name: "title", type: "title", x: MX, y: 2.2, w: W - 2 * MX, h: 1.4, fontSize: 60, bold: true, color: TXT, fontFace: "Geist", valign: "middle", align: "left", margin: 0 }, text: "" } },
+    { placeholder: { options: { name: "title", type: "title", x: MX, y: 2.2, w: W - 2 * MX, h: 1.4, fontSize: 54, bold: false, color: TXT, fontFace: "Archivo Black", valign: "middle", align: "left", margin: 0 }, text: "" } },
     { placeholder: { options: { name: "body", type: "body", x: MX, y: 3.7, w: W - 2 * MX, h: 1.0, fontSize: 28, color: TXT, valign: "top", align: "left", margin: 0 }, text: "" } },
   ],
 });
@@ -68,10 +68,10 @@ pres.defineSlideMaster({
   background: { color: C.text1 },
   margin: [0.5, 0.6, 0.6, 0.6],
   objects: [
-    { placeholder: { options: { name: "title", type: "title", x: MX, y: 0.4, w: W - 2 * MX, h: 0.85, fontSize: 32, bold: true, color: TXT, fontFace: "Geist", valign: "middle", align: "left", margin: 0 }, text: "" } },
-    { text: { text: "MissionPay · Avalanche Team1 Vietnam UniHack 2026", options: { x: MX, y: H - 0.45, w: 7, h: 0.3, fontSize: 10, color: MUTED, margin: 0 } } },
+    { placeholder: { options: { name: "title", type: "title", x: MX, y: 0.4, w: W - 2 * MX, h: 0.85, fontSize: 24, bold: false, color: TXT, fontFace: "Archivo Black", valign: "middle", align: "left", margin: 0 }, text: "" } },
+    { text: { text: "MissionPay · Avalanche Team1 Vietnam UniHack 2026", options: { x: MX, y: H - 0.45, w: 7, h: 0.3, fontSize: 12, color: MUTED, margin: 0 } } },
   ],
-  slideNumber: { x: W - MX - 0.6, y: H - 0.45, w: 0.6, h: 0.3, fontSize: 10, color: MUTED, align: "right" },
+  slideNumber: { x: W - MX - 0.6, y: H - 0.45, w: 0.6, h: 0.3, fontSize: 12, color: MUTED, align: "right" },
 });
 
 // ---------- Helpers ----------
@@ -123,6 +123,13 @@ function T(slide, text, opts) {
   slide.addText(text, Object.assign({ isTextBox: true, margin: 0, color: TXT, fontSize: 16, valign: "top" }, opts));
 }
 
+
+// v8b title voice: Archivo Black, uppercase, red full stop (Avalanche Builder Hub style).
+function title(slide, text) {
+  const t = text.replace(/[.\s]+$/, "").toUpperCase();
+  slide.addText([{ text: t, options: { color: TXT } }, { text: ".", options: { color: RED } }], { placeholder: "title" });
+}
+
 async function main() {
   // ===== 1. Title =====
   pres.addSection({ title: "Opening" });
@@ -140,7 +147,7 @@ async function main() {
   // ===== 2. Hook: Bankr =====
   pres.addSection({ title: "Problem" });
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Problem" });
-  s.addText("May 2026: one line of Morse code moved $174,000", { placeholder: "title" });
+  title(s, "May 2026: one line of Morse code moved $174,000");
   T(s, "$174,000", { x: MX, y: 1.6, w: 6.6, h: 1.5, fontSize: 96, bold: true, color: RED, fontFace: "Geist", objectName: "big stat" });
   T(s, "drained from a Grok-linked Bankr wallet on Base. The attacker hid an instruction in Morse code; the AI decoded it and the wallet obeyed.", { x: MX, y: 3.2, w: 6.2, h: 1.2, fontSize: 18, color: TXT, objectName: "stat caption" });
   T(s, [
@@ -163,12 +170,12 @@ async function main() {
     { text: "Not a one-off. ", options: { bold: true, color: AMBER } },
     { text: "Jul 2026: hidden web text made 4 of 26 models pay a scammer (Zscaler). Oct 2026: 9 of 10 models raised their own spending caps (Cornell/Yale).", options: { color: TXT } },
   ], { x: 7.6, y: 5.05, w: 4.95, h: 1.05, fontSize: 14, valign: "middle", objectName: "freysa text" });
-  T(s, "Sources: Cointelegraph Magazine (May 13, 2026); OECD.AI incident 2026-05-04; MetaMask Security Report May 2026; Zscaler ThreatLabz (Jul 2026); CoinDesk (Nov 1, 2026); BeInCrypto Intelligence, State of AI Agent Payments 2026 (Oct 6, 2026, via Yahoo Finance). Reported loss ranges from $155k to $204k by source.", { x: MX, y: 6.35, w: W - 2 * MX, h: 0.5, fontSize: 10, color: MUTED, objectName: "sources" });
+  T(s, "Sources: Cointelegraph Magazine (May 13, 2026); OECD.AI incident 2026-05-04; MetaMask Security Report May 2026; Zscaler ThreatLabz (Jul 2026); CoinDesk (Nov 1, 2026); BeInCrypto Intelligence, State of AI Agent Payments 2026 (Oct 6, 2026, via Yahoo Finance). Reported loss ranges from $155k to $204k by source.", { x: MX, y: 6.35, w: W - 2 * MX, h: 0.5, fontSize: 12, color: MUTED, objectName: "sources" });
   s.addNotes("Hook trong 20 giây. Nhấn mạnh: không lộ key, không hack contract. Agent chỉ ĐỌC một bài đăng. Zscaler và Cornell cho thấy đây là quy luật, và còn rất mới: tuần trước 9/10 model tự nâng hạn mức của chính nó.");
 
   // ===== 3. Why filters fail (ADI research) =====
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Problem" });
-  s.addText("The new attacks plant data, not instructions", { placeholder: "title" });
+  title(s, "The new attacks plant data, not instructions");
   const adi = [
     ["0 / 108", "attacks flagged by Llama Prompt Guard 2, a prompt-injection filter", RED],
     ["23%", "still succeed against CaMeL, Google DeepMind's design-level defense", AMBER],
@@ -193,12 +200,12 @@ async function main() {
     { text: "The owner already knows who they pay.", options: { color: TXT } },
   ], { x: rx + 0.3, y: 1.75, w: rw - 0.6, h: 3.95, fontSize: 19, valign: "top", objectName: "adi explainer" });
   T(s, "So MissionPay puts that list on Avalanche and checks where every address came from.", { x: MX, y: 6.05, w: W - 2 * MX, h: 0.45, fontSize: 18, italic: true, color: AMBER, objectName: "adi takeaway" });
-  T(s, "Source: Choi et al., \"Agent Data Injection Attacks are Realistic Threats to AI Agents\", arXiv 2607.05120 (Seoul National University / UIUC, Jul 2026). AgentDojo with GPT-5.2; baseline 49.1% attack success.", { x: MX, y: 6.5, w: W - 2 * MX, h: 0.4, fontSize: 10, color: MUTED, objectName: "adi source" });
+  T(s, "Source: Choi et al., \"Agent Data Injection Attacks are Realistic Threats to AI Agents\", arXiv 2607.05120 (Seoul National University / UIUC, Jul 2026). AgentDojo with GPT-5.2; baseline 49.1% attack success.", { x: MX, y: 6.5, w: W - 2 * MX, h: 0.4, fontSize: 12, color: MUTED, objectName: "adi source" });
   s.addNotes("30 giây. Đây là slide 'vì sao giờ'. Nói: đòn mới không ra lệnh, mà cài dữ liệu, ví dụ một trường recipient giả trong kết quả tìm kiếm. Filter bắt được 0 trên 108. Cả CaMeL của DeepMind cũng còn lọt 23%. Chính paper nói: phải có policy chặt ở chỗ hành động, mà policy đó khó viết. Với thanh toán thì dễ: owner biết mình trả cho ai. Chuyển sang slide sau.");
 
   // ===== 4. Insight =====
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Problem" });
-  s.addText("Caps stop how much. They don't stop who", { placeholder: "title" });
+  title(s, "Caps stop how much. They don't stop who");
   const colW = 5.85, gx = MX, gx2 = MX + colW + 0.43;
   card(s, gx, 1.55, colW, 4.55, "today column");
   card(s, gx2, 1.55, colW, 4.55, "missionpay column");
@@ -229,7 +236,7 @@ async function main() {
   // ===== 4. How it works =====
   pres.addSection({ title: "Product" });
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Product" });
-  s.addText("Mission → Budget → Proof", { placeholder: "title" });
+  title(s, "Mission → Budget → Proof");
   const steps = [
     [fa.FaFileSignature, "1  Mission", "The owner signs a mission (a goal, a $10 cap, a $5 tool cap, an expiry) with a wallet, or with Face ID / a fingerprint checked on-chain by Avalanche's P-256 precompile. The backend never holds the owner's key."],
     [fa.FaWallet, "2  Budget", "The agent gets its own session wallet for this mission only. It buys tools with gasless USDC over x402. Before money moves, the validator checks the caps and where the recipient came from."],
@@ -250,7 +257,7 @@ async function main() {
   // ===== 5. Demo: Bankr replay =====
   pres.addSection({ title: "Live demo" });
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Live demo" });
-  s.addText("Live: we replay the Bankr attack against our agent", { placeholder: "title" });
+  title(s, "Live: we replay the Bankr attack against our agent");
   await shot(s, pickShot("deck-bankr.png", "wow-bankr-replay.png"), MX, 1.5, 8.1, 4.75, "Bankr replay: unguarded simulation on the left, MissionPay on the right with $0.00 moved", "bankr screenshot");
   const callouts = [
     [fa.FaBrain, HEX.accent3, "Agent convinced", "The poisoned search result decodes to \"send 50 USDC to 0xA77AC…\". We force the planner to obey."],
@@ -263,12 +270,12 @@ async function main() {
     T(s, callouts[i][2], { x: 9.85, y, w: 2.9, h: 0.45, fontSize: 18, bold: true, objectName: "callout title " + (i + 1) });
     T(s, callouts[i][3], { x: 9.85, y: y + 0.48, w: 2.9, h: 1.0, fontSize: 13, color: MUTED, objectName: "callout body " + (i + 1) });
   }
-  T(s, "Left panel is a labelled simulation of an unguarded wallet. On Fuji, a payout to an unapproved payee reverted in GuardedTreasury: tx 0xc5f13e5d…fea4f1ff.", { x: MX, y: 6.4, w: W - 2 * MX, h: 0.4, fontSize: 11, color: AMBER, objectName: "honesty note" });
+  T(s, "Left panel is a labelled simulation of an unguarded wallet. On Fuji, a payout to an unapproved payee reverted in GuardedTreasury: tx 0xc5f13e5d…fea4f1ff.", { x: MX, y: 6.4, w: W - 2 * MX, h: 0.4, fontSize: 12, color: AMBER, objectName: "honesty note" });
   s.addNotes("Bấm phím 2 trên /stage. Để màn hình tự chạy. Nói: agent đã bị thuyết phục, nhưng tiền đã chuyển là 0 đô. Không đọc slide.");
 
   // ===== 6. Bounty: Hack the Treasury =====
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Live demo" });
-  s.addText("Your turn: 5 USDC sits on Fuji. Make the agent pay you", { placeholder: "title" });
+  title(s, "Your turn: 5 USDC sits on Fuji. Make the agent pay you");
   await shot(s, path.join(SHOTS, "deck-bounty-tricked.png"), 4.95, 1.5, 7.78, 4.55, "Bounty page: Gemini was fooled into paying vendor 0x3333, the validator blocked it with PAYEE_NOT_IN_MISSION_SET, and the Fuji contract reverted with PayeeNotInMissionSet", "bounty screenshot");
   const layers = [
     [fa.FaBrain, HEX.accent3, "1  The LLM", "Real Gemini 3.5 Flash-Lite reads your invoice, email or web page. It can be fooled, and the page says so when it is."],
@@ -280,15 +287,15 @@ async function main() {
     card(s, MX, y, 4.1, 1.3, "layer card " + (i + 1));
     await iconDot(s, layers[i][0], layers[i][1], MX + 0.2, y + 0.2, 0.55, "layer icon " + (i + 1));
     T(s, layers[i][2], { x: MX + 0.9, y: y + 0.12, w: 3.1, h: 0.4, fontSize: 16, bold: true, objectName: "layer title " + (i + 1) });
-    T(s, layers[i][3], { x: MX + 0.9, y: y + 0.52, w: 3.1, h: 0.75, fontSize: 11.5, color: TXT, objectName: "layer body " + (i + 1) });
+    T(s, layers[i][3], { x: MX + 0.9, y: y + 0.52, w: 3.1, h: 0.75, fontSize: 12, color: TXT, objectName: "layer body " + (i + 1) });
   }
-  T(s, "Shown: a real run where Gemini was fooled into paying 0x3333 (a company vendor outside this mission). The bounty agent uses a typical accounting prompt; with a stricter prompt it refused all 5 sample attacks. Prize is Fuji testnet USDC; the counters on /bounty read missionSpent from the chain.", { x: MX, y: 6.2, w: W - 2 * MX, h: 0.6, fontSize: 10.5, color: AMBER, objectName: "bounty note" });
+  T(s, "Shown: a real run where Gemini was fooled into paying 0x3333 (a company vendor outside this mission). The bounty agent uses a typical accounting prompt; with a stricter prompt it refused all 5 sample attacks. Prize is Fuji testnet USDC; the counters on /bounty read missionSpent from the chain.", { x: MX, y: 6.2, w: W - 2 * MX, h: 0.6, fontSize: 12, color: AMBER, objectName: "bounty note" });
   s.addNotes("Mở QR /bounty (QR có sau khi deploy public). Nói: ngân sách 5 USDC thật trên Fuji, ai lừa được agent trả cho ví mình thì lấy. Ba tầng: LLM có thể bị lừa, validator chặn payee ngoài tập owner ký, contract trên Fuji revert. Trung thực: prompt agent là prompt kế toán thông thường; prompt chặt hơn thì Gemini từ chối 5/5. Cuối bài đọc số lượt thử và số tiền ra ngoài trên màn hình (đọc từ chain).");
 
   // ===== 7. Defense in depth =====
   pres.addSection({ title: "Why it holds" });
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Why it holds" });
-  s.addText("Every failure has a ceiling the owner signed", { placeholder: "title" });
+  title(s, "Every failure has a ceiling the owner signed");
   const head = (t) => ({ text: t, options: { bold: true, color: TXT, fill: { color: CARD }, fontSize: 15 } });
   const cell = (t, color = TXT, bold = false) => ({ text: t, options: { color, bold, fontSize: 14 } });
   const rows = [
@@ -301,12 +308,12 @@ async function main() {
     [cell("A paid x402 request is swapped or replayed"), cell("The payment signature is bound to the exact request, and a nonce settles once (fixes from the ATC '26 x402 study)"), cell("$0 extra", GREEN, true)],
   ];
   s.addTable(rows, { x: MX, y: 1.55, w: W - 2 * MX, colW: [3.6, 5.6, 2.93], fontFace: "Geist", border: { type: "solid", color: HEX.accent5, pt: 0.75 }, fill: { color: HEX.dk1 }, valign: "middle", rowH: [0.45, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7], margin: 0.08, objectName: "loss table" });
-  T(s, "Proved, not just tested: 6 invariants fuzzed over 32,768 calls and 4 Halmos symbolic checks (no payee outside the signed set, no spend over caps); a copy with the Merkle check removed fails at once. 111 Foundry + 301 app tests. Live on Fuji (13/11), same allowlisted vendor, same treasury: allowlist-only mission paid it 0.01 USDC (tx 0x548d…7fc6); mission-set mission reverted PayeeNotInMissionSet (tx 0x0ad5…3e38); the approved payee was still paid (tx 0xcb72…6315).", { x: MX, y: 6.3, w: W - 2 * MX, h: 0.55, fontSize: 10.5, color: MUTED, objectName: "tests note" });
+  T(s, "Tested and proved: 111 Foundry tests incl. 6 fuzzed invariants (32,768 calls) and 4 Halmos symbolic checks; removing the Merkle check fails them at once. Live on Fuji (13/11): the allowlist-only mission paid the vendor (tx 0x548d…7fc6), the payee-set mission reverted (tx 0x0ad5…3e38).", { x: MX, y: 6.5, w: W - 2 * MX, h: 0.45, fontSize: 11, color: MUTED, objectName: "tests note" });
   s.addNotes("Đây là slide giám khảo kỹ thuật thích. Mỗi lỗi đều có trần. Câu hỏi 'nếu lộ key agent?' → mất tối đa số dư ví phiên, không chạm treasury. Nếu hỏi 'chứng minh gì?': Halmos chứng minh symbolic trong phạm vi có giới hạn (proof dài ≤ 2, 4 leaf), không phải formal verification toàn hệ thống; chi tiết FORMAL.md.");
 
   // ===== 7b. Benchmark (PayBench-ADI) =====
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Why it holds" });
-  s.addText("We attacked it 357 times with real LLMs", { placeholder: "title" });
+  title(s, "We attacked it 357 times with real LLMs");
   s.addChart(pres.charts.BAR, [
     { name: "No guard", labels: ["Gemini 3.5 Flash-Lite", "Gemini 3.1 Flash-Lite"], values: [32.1, 44.5] },
     { name: "Caps + allowlist", labels: ["Gemini 3.5 Flash-Lite", "Gemini 3.1 Flash-Lite"], values: [12.1, 13.9] },
@@ -322,7 +329,7 @@ async function main() {
     objectName: "benchmark chart",
   });
   const bstats = [
-    ["17/20 · 19/20", "attacks that named a vendor already on the company list (but not in this mission) got through caps + allowlist. The NOMOS gate reports the same kind of gap (8/288)", AMBER],
+    ["17/20 · 19/20", "attacks naming a known company vendor (not in this mission) got through caps + allowlist", AMBER],
     ["0 / 277", "attack runs moved money with MissionPay (95% upper bound 2.7% per model)", GREEN],
     ["40 / 40", "legitimate tasks (payouts and tool buys) still went through, on both models (no false positives)", GREEN],
   ];
@@ -330,18 +337,18 @@ async function main() {
     const y = 1.45 + i * 1.48;
     card(s, 8.25, y, W - MX - 8.25, 1.32, "bench stat card " + (i + 1));
     T(s, bstats[i][0], { x: 8.45, y: y + 0.08, w: W - MX - 8.65, h: 0.52, fontSize: 25, bold: true, color: bstats[i][2], objectName: "bench stat " + (i + 1) });
-    T(s, bstats[i][1], { x: 8.45, y: y + 0.60, w: W - MX - 8.65, h: 0.65, fontSize: 11.5, color: TXT, objectName: "bench label " + (i + 1) });
+    T(s, bstats[i][1], { x: 8.45, y: y + 0.60, w: W - MX - 8.65, h: 0.65, fontSize: 12, color: TXT, objectName: "bench label " + (i + 1) });
   }
   T(s, [
-    { text: "AgentDojo banking, model-free replay: ", options: { bold: true, color: SKY } },
-    { text: "120/128 financial injections blocked (all 8 misses: user_task_15, where the user's own prompt names the attacker IBAN); benign false positives 3/16, same as ProvGuard policy v1; Fuji fork: guard and GuardedTreasury agree 169/169; with the attacker on the global allowlist the contract still reverts 150/150 PayeeNotInMissionSet.", options: { color: TXT } }
-  ], { x: MX, y: 5.92, w: W - 2 * MX, h: 0.36, fontSize: 9.5, objectName: "bench agentdojo replay" });
-  T(s, "PayBench-ADI: 140 attack + 40 benign synthetic cases per model (instruction injection, structural ADI, vendor diversion, Bankr/Zscaler/Cornell/Freysa-style), temperature 0, one fresh agent run per case; N = 180 and 177. The structural ADI cases fooled neither model (0/40 and 0/39). Off-chain provenance guards also reach about 0% on AgentDojo banking (ProvGuard, NOMOS); numbers are not comparable across benchmarks. 10 blocked payouts replayed against GuardedTreasury on Fuji via eth_call: 9 reverted PayeeNotInMissionSet, 1 other revert. Dataset, scorer and leaderboard are public (eval/README.md, CC-BY-4.0) so other teams can plug in their own agent.", { x: MX, y: 6.32, w: W - 2 * MX, h: 0.55, fontSize: 9, color: MUTED, objectName: "bench method" });
+    { text: "AgentDojo banking, live (Gemini 3.1 Flash-Lite, 48 attacks): ", options: { bold: true, color: SKY } },
+    { text: "no guard 31/48 attacks succeeded; MissionPay 2/48, both where the user's own prompt names the attacker. Replay: 120/128 blocked; Fuji fork: 150/150 reverted with the attacker on the allowlist.", options: { color: TXT } },
+  ], { x: MX, y: 5.86, w: W - 2 * MX, h: 0.55, fontSize: 12.5, objectName: "bench agentdojo" });
+  T(s, "PayBench-ADI: 140 attack + 40 benign synthetic cases per model, temperature 0, N = 180 and 177. AgentDojo and PayBench numbers are not comparable with each other or with other papers. Data and scorer: eval/README.md (CC-BY-4.0).", { x: MX, y: 6.45, w: W - 2 * MX, h: 0.42, fontSize: 11, color: MUTED, objectName: "bench method" });
   s.addNotes("45 giây. Đây là số đo thật, không phải demo. Không guard: 32 đến 45% đòn làm tiền đi. Cap cộng allowlist chặn được phần lớn, nhưng khi kẻ tấn công chỉ tới một vendor có trong allowlist chung của công ty mà không thuộc mission này thì allowlist để lọt 17/20 và 19/20. MissionPay: 0 trên 277 lượt tấn công, và 40/40 khoản trả hợp lệ vẫn đi. Nếu bị hỏi: case là synthetic dựa trên sự cố thật; ADI phá cấu trúc (40 case) không lừa được hai model này; chưa dùng dataset APort vì cần token Hugging Face.");
 
   // ===== 8. Verify =====
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Why it holds" });
-  s.addText("Don't trust us. Change 1 byte, the chain breaks", { placeholder: "title" });
+  title(s, "Don't trust us. Change 1 byte, the chain breaks");
   const vw = 5.85;
   const v1 = await shot(s, pickShot("deck-verify-ok.png", "wow-verify-original.png"), MX, 1.5, vw, 4.4, "Verifier: hash chain intact", "verify ok screenshot");
   await shot(s, pickShot("deck-verify-tampered.png", "wow-verify-tampered.png"), MX + vw + 0.43, 1.5, vw, 4.4, "Verifier: one byte edited, chain broken from that entry", "verify tampered screenshot");
@@ -354,7 +361,7 @@ async function main() {
   // ===== 9. Built on Avalanche =====
   pres.addSection({ title: "Avalanche" });
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Avalanche" });
-  s.addText("Built on Avalanche, not just deployed there", { placeholder: "title" });
+  title(s, "Built on Avalanche, not just deployed there");
   const tiles = [
     [fa.FaBolt, "x402 on Fuji", "Gasless USDC tool payments (EIP-3009). A facilitator settles and pays the gas, so the mission's session wallet needs no AVAX."],
     [fa.FaCubes, "GuardedTreasury", "Per-mission caps, session wallets funded and swept by the owner, BLOCK / QUEUE / EXECUTE on-chain."],
@@ -368,19 +375,19 @@ async function main() {
     card(s, x, 1.55, tw, 4.2, "tile " + (i + 1));
     await iconDot(s, tiles[i][0], HEX.accent1, x + 0.3, 1.8, 0.7, "tile icon " + (i + 1));
     T(s, tiles[i][1], { x: x + 0.2, y: 2.65, w: tw - 0.4, h: 0.5, fontSize: 14.5, bold: true, objectName: "tile title " + (i + 1) });
-    T(s, tiles[i][2], { x: x + 0.2, y: 3.2, w: tw - 0.4, h: 2.45, fontSize: 11.5, color: TXT, objectName: "tile body " + (i + 1) });
+    T(s, tiles[i][2], { x: x + 0.2, y: 3.2, w: tw - 0.4, h: 2.45, fontSize: 12, color: TXT, objectName: "tile body " + (i + 1) });
   }
   card(s, MX, 5.88, W - 2 * MX, 0.85, "status card");
   T(s, [
     { text: "Live on Fuji: ", options: { bold: true, color: GREEN } },
     { text: "GuardedTreasury 0x2045…d545 (verified) · x402 settle 0x8c89…8208 · payee root set 0x2a4c…90a4 · payout with proof 0x7694…6c9a · unapproved payout reverted 0xc5f1…f1ff · Twin Treasury: allowlisted vendor paid 0x548d…7fc6, then blocked by mission set 0x0ad5…3e38 · anchor 0x43bd…0547 · ERC-8004 feedback 0xeddd…9105 · validation 100/100 0xb641…d059 · passkey approval 0x494b…a929. Median finality measured: 4.2 s. Every link: FUJI_EVIDENCE.md.", options: { color: TXT } },
-  ], { x: MX + 0.3, y: 5.92, w: W - 2 * MX - 0.6, h: 0.77, fontSize: 11, valign: "middle", objectName: "status text" });
+  ], { x: MX + 0.3, y: 5.92, w: W - 2 * MX - 0.6, h: 0.77, fontSize: 12, valign: "middle", objectName: "status text" });
   s.addNotes("Avalanche là 25 điểm. Mọi hash trên slide là tx thật trên Fuji, reviewer đã kiểm bằng cast (ngày 07/11). Nếu được hỏi: mở FUJI_EVIDENCE.md hoặc Snowtrace. Câu chốt: tx 0xc5f1 là lúc chính contract từ chối trả tiền cho người nhận không có trong danh sách owner ký. Twin Treasury (13/11): cùng một vendor có trong allowlist chung, mission chỉ dùng allowlist trả tiền (0x548d), mission có tập người nhận revert PayeeNotInMissionSet (0x0ad5), người nhận đúng vẫn được trả (0xcb72). Vendor là ví relayer của đội, đã gỡ khỏi allowlist sau demo. ValidationRegistry là bản port từ ava-labs/8004-boilerplate (Fuji chưa có registry chính thức), validator là ví riêng, chỉ đọc chain. Passkey: bản trên Fuji là demo instance riêng, khóa demo là khóa phần mềm; passkey thật của owner đăng ký khi quay video. Finality 4.2 s là đo từ lúc gửi tới lúc có receipt qua RPC công khai, gồm cả thời gian polling.");
 
   // ===== 10. Competition =====
   pres.addSection({ title: "Market" });
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Market" });
-  s.addText("Others stop strangers. We stop off-mission payees", { placeholder: "title" });
+  title(s, "Others stop strangers. We stop off-mission payees");
   const ch = (t, hl = false) => ({ text: t, options: { bold: true, fontSize: 13, color: hl ? C.text1 : TXT, fill: { color: hl ? HEX.accent2 : HEX.dk2 } } });
   const cc = (t, hl = false, col = null) => ({ text: t, options: { fontSize: 12, color: col || (hl ? GREEN : TXT), bold: hl } });
   const comp = [
@@ -392,13 +399,13 @@ async function main() {
     [cc("Receipts anyone can check"), cc("Server logs"), cc("On-chain counters"), cc("Snowtrace txs"), cc("No"), cc("Anchored hash chain + ERC-8004 Validation", true)],
   ];
   s.addTable(comp, { x: MX, y: 1.5, w: W - 2 * MX, colW: [2.35, 2.2, 1.85, 1.75, 1.75, 2.23], fontFace: "Geist", border: { type: "solid", color: HEX.accent5, pt: 0.75 }, fill: { color: HEX.dk1 }, valign: "middle", rowH: [0.75, 0.55, 0.75, 0.75, 0.75, 0.6], margin: 0.08, objectName: "competition table" });
-  T(s, "*Safe/Zodiac Roles, MetaMask ERC-7715, Coinbase Spend Permissions, Polygon OMS. \"Paid\" for allowlist designs follows from their documented rules (a listed payee is sent), not from our test of their code. Sources: ProvGuard repo (Oct 2026), NOMOS arXiv 2610.11030, SPILLWAY arXiv 2611.07222, allowance-ai repo (Nov 2026), AgentGuard402 repo.", { x: MX, y: 5.75, w: W - 2 * MX, h: 0.5, fontSize: 10, color: MUTED, objectName: "comp note" });
+  T(s, "*Safe/Zodiac Roles, MetaMask ERC-7715, Coinbase Spend Permissions, Polygon OMS. \"Paid\" for allowlist designs follows from their documented rules (a listed payee is sent), not from our test of their code. Sources: ProvGuard repo (Oct 2026), NOMOS arXiv 2610.11030, SPILLWAY arXiv 2611.07222, allowance-ai repo (Nov 2026), AgentGuard402 repo.", { x: MX, y: 5.75, w: W - 2 * MX, h: 0.5, fontSize: 12, color: MUTED, objectName: "comp note" });
   T(s, "Everyone can stop a stranger. MissionPay also stops a familiar payee who isn't part of this mission, and the chain enforces it.", { x: MX, y: 6.3, w: W - 2 * MX, h: 0.5, fontSize: 16, italic: true, color: AMBER, objectName: "comp takeaway" });
   s.addNotes("Q&A: 'ProvGuard, NOMOS, SPILLWAY đạt 0% rồi?' -> đúng, họ mạnh trên AgentDojo; nhưng chạy trong runtime của agent nên server bị chiếm là mất, và họ cho trả tới người đã biết: NOMOS tự ghi 8/288 lượt chuyển hướng sang payee quen. Đó đúng là bộ E10 của mình: allowlist lọt 17/20 và 19/20, MissionPay 0. Không nói ASR mình tốt hơn họ, vì benchmark khác nhau. 'allowance-ai trên NEAR?' -> giống ở cap, allowlist, Face ID, arena; khác ở payee theo mission (vendor trong allowlist được trả ngay), provenance, x402 trên Avalanche, neo proof + ERC-8004 Validation, benchmark LLM thật. 'AgentGuard402?' -> allowlist chung + cap, không có mission, provenance, proof. 'Kite?' -> Kite là cả L1; MissionPay là lớp chính sách + proof chạy trên C-Chain. 'Freysa làm bounty từ 2024?' -> Freysa mất tiền vì guard nằm trong prompt; bounty của mình để contract quyết định. 'CaMeL/Progent?' -> paper ADI đo vẫn lọt 22-23%. 'AP2 mandate?' -> paper whisper: AP2 ký giao dịch, không ký quyết định.");
 
   // ===== 11. Impact =====
   s = pres.addSlide({ masterName: "MP_CONTENT", sectionTitle: "Market" });
-  s.addText("Agents already pay each other, mostly unguarded", { placeholder: "title" });
+  title(s, "Agents already pay each other, mostly unguarded");
   const stats = [["27,499", "paid x402 endpoints tracked (Sep 30, 2026)", SKY], ["1,495", "of them charge more than their own listed price", RED], ["1,600+", "agents registered with ERC-8004 on Avalanche (Feb 2026)", GREEN]];
   for (let i = 0; i < 3; i++) {
     const x = MX + i * (3.75 + 0.4);
@@ -419,7 +426,7 @@ async function main() {
     { text: "MCP plugin so any agent framework can use it", options: { bullet: true, breakLine: true } },
     { text: "A dedicated Avalanche L1 for agent payments", options: { bullet: true } },
   ], { x: MX + 6.58, y: 4.95, w: 5.3, h: 1.2, fontSize: 13, color: TXT, paraSpaceAfter: 2, objectName: "roadmap list" });
-  T(s, "Sources: x402 endpoint monitor cited on DEV Community (Sep 30, 2026); Avalanche ERC-8004 announcement (Feb 2026).", { x: MX, y: 6.4, w: W - 2 * MX, h: 0.35, fontSize: 10, color: MUTED, objectName: "impact sources" });
+  T(s, "Sources: x402 endpoint monitor cited on DEV Community (Sep 30, 2026); Avalanche ERC-8004 announcement (Feb 2026).", { x: MX, y: 6.4, w: W - 2 * MX, h: 0.35, fontSize: 12, color: MUTED, objectName: "impact sources" });
   s.addNotes("Số 1.495 endpoint thu cao hơn giá niêm yết là lý do có price guard. Mô hình phí là kế hoạch, nói rõ là 'planned'.");
 
   // ===== 12. Close =====
