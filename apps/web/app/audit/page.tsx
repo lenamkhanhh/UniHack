@@ -42,32 +42,35 @@ export default function AuditPage() {
   };
 
   return (
-    <div className="wrap space-y-6 py-8">
-      <div className="flex items-center justify-between">
+    <div>
+    <div className="hero-band hero-mint">
+      <div className="hero-inner flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Canonical Audit Ledger</h1>
-          <p className="text-ink-2 text-sm">
+          <h1 className="display-h1 mb-5 stop-after">Canonical Audit Ledger</h1>
+          <p className="lede">
             Serialized append-only cryptographic hash chain of all decisions and settlements.
           </p>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={handleVerify}
-            className="bg-paid hover:bg-paid text-white text-xs font-semibold px-3 py-1.5 rounded transition"
+            className="btn-dark btn-sm whitespace-nowrap"
           >
             Verify Chain
           </button>
           <button
             onClick={handleExport}
-            className="bg-mist hover:bg-mist-2 text-ink text-xs font-semibold px-3 py-1.5 rounded border border-rule transition"
+            className="btn-ghost btn-sm whitespace-nowrap"
           >
             Export Proof JSON
           </button>
         </div>
       </div>
+    </div>
+    <div className="wrap band space-y-6">
 
       {checkpoint && (
-        <div className="bg-paper border border-rule rounded-lg p-4 text-xs space-y-1">
+        <div className="bg-paper border border-rule rounded-data p-4 text-xs space-y-1">
           <div className="text-ink-2 font-semibold">Current Checkpoint:</div>
           <div className="text-ink-2">Head Hash: {checkpoint.headHash}</div>
           <div className="text-ink-2">Total Entries: {checkpoint.entryCount}</div>
@@ -76,7 +79,7 @@ export default function AuditPage() {
 
       {verificationResult && (
         <div
-          className={`p-4 rounded border text-sm ${
+          className={`p-4 rounded-tag border text-sm ${
             verificationResult.valid
               ? 'bg-paid-bg border-paid-rule text-paid'
               : 'bg-blocked-bg border-blocked-rule text-blocked'
@@ -97,7 +100,7 @@ export default function AuditPage() {
         </div>
       )}
 
-      <div className="bg-paper border border-rule rounded-lg overflow-hidden">
+      <div className="bg-paper border border-rule rounded-data overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-card border-b border-rule text-ink-2">
@@ -141,6 +144,7 @@ export default function AuditPage() {
           </table>
         </div>
       </div>
+    </div>
     </div>
   );
 }

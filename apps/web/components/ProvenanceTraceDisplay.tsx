@@ -9,16 +9,15 @@ interface Props {
 
 export default function ProvenanceTraceDisplay({ trace }: Props) {
   return (
-    <div className="bg-paper border border-rule rounded-xl p-5 space-y-4">
+    <div className="bg-paper border border-rule rounded-data p-5 space-y-4">
       <div className="flex items-center justify-between border-b border-rule pb-3">
         <div className="flex items-center gap-2">
-          <span className="text-base">🧬</span>
           <span className="text-xs font-bold uppercase tracking-wider text-ink-2">
             Đường Đi Dữ Liệu Bẩn (Provenance Trace)
           </span>
         </div>
         <span
-          className={`text-[10px] font-bold px-2.5 py-0.5 rounded border ${
+          className={`text-[13px] font-bold px-2.5 py-0.5 rounded-tag border ${
             trace.isBlocked
               ? 'bg-blocked-bg text-blocked border-blocked-rule'
               : 'bg-paid-bg text-paid border-paid-rule'
@@ -28,7 +27,7 @@ export default function ProvenanceTraceDisplay({ trace }: Props) {
         </span>
       </div>
 
-      <p className="text-xs text-ink-2 font-mono bg-card p-2.5 rounded-lg border border-rule">
+      <p className="text-xs text-ink-2 font-mono bg-card p-2.5 rounded-data border border-rule">
         {trace.summary}
       </p>
 
@@ -59,16 +58,16 @@ export default function ProvenanceTraceDisplay({ trace }: Props) {
                 className={`absolute -left-[31px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-rule ${dotColor} transition-transform group-hover:scale-125`}
               />
 
-              <div className="bg-card border border-rule rounded-lg p-3 space-y-1 hover:border-rule transition">
+              <div className="bg-card border border-rule rounded-data p-3 space-y-1 hover:border-rule transition">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-semibold text-ink">
                     Bước {st.step}: {st.label}
                   </span>
-                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${badgeColor}`}>
+                  <span className={`text-[13px] font-mono px-2 py-0.5 rounded-tag border ${badgeColor}`}>
                     {st.status}
                   </span>
                 </div>
-                <div className="text-[11px] font-mono text-ink-2">{st.source}</div>
+                <div className="text-[13px] font-mono text-ink-2">{st.source}</div>
                 <div className="text-xs text-ink-2">{st.detail}</div>
               </div>
             </div>

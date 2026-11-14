@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { Kicker, Stop } from '@/components/Display';
 
 interface TwinEvidence {
   timestamp: string;
@@ -178,14 +179,14 @@ export default function TwinTreasuryPage() {
 
   return (
     <main className="min-h-screen bg-paper text-ink font-sans">
-      {/* Hero band: night */}
-      <div className="bg-night text-[#E9EAEC]">
-        <div className="wrap space-y-6 pt-6 pb-12">
+      {/* Hero band: sand */}
+      <div className="hero-band hero-sand">
+        <div className="wrap space-y-6 pt-6 pb-12 sm:pb-14">
           {/* Navigation & Language Toggle */}
           <div className="flex items-center justify-between">
             <Link
               href="/"
-              className="text-xs text-[#A3A9B3] hover:text-white transition-colors flex items-center space-x-1 focus:ring-2 focus:ring-white rounded px-2 py-1"
+              className="text-sm text-ink-2 hover:text-ink underline underline-offset-2 transition-colors flex items-center space-x-1 focus:ring-2 focus:ring-ink rounded-tag px-1 py-1"
               aria-label="Back to Homepage"
             >
               <span>{t.backHome}</span>
@@ -198,7 +199,7 @@ export default function TwinTreasuryPage() {
                   localStorage.setItem('missionpay_lang', next);
                 } catch {}
               }}
-              className="text-xs px-3 py-1 bg-night-2 hover:bg-night-rule text-[#E9EAEC] border border-night-rule rounded-full transition-colors focus:ring-2 focus:ring-white"
+              className="text-[13px] font-semibold px-3 py-1 bg-card hover:bg-mist text-ink border border-rule-2 rounded-full transition-colors focus:ring-2 focus:ring-ink"
               aria-label="Toggle language"
             >
               {t.switchLang}
@@ -206,37 +207,34 @@ export default function TwinTreasuryPage() {
           </div>
 
           {/* Header Banner */}
-          <section className="space-y-4 pt-4">
-            <div className="inline-flex items-center space-x-2 px-3 py-1 bg-blocked-bg text-blocked text-xs font-semibold rounded-[5px] border border-blocked-rule">
-              <span className="text-white w-2 h-2 rounded-full bg-blocked animate-pulse" />
-              <span>{t.badge}</span>
-            </div>
-            <h1 className="text-[34px] sm:text-[46px] font-bold text-white leading-[1.05] tracking-[-0.04em] max-w-[22ch]">
-              {t.title}
+          <section className="pt-4">
+            <Kicker>{t.badge}</Kicker>
+            <h1 className="display-h1 mb-5 max-w-[22ch]">
+              <Stop>{t.title}</Stop>
             </h1>
-            <p className="text-base md:text-[17.5px] text-[#A3A9B3] max-w-3xl leading-relaxed">{t.subtitle}</p>
+            <p className="lede">{t.subtitle}</p>
 
             {/* Status Badges */}
-            <div className="pt-2">
+            <div className="pt-6">
               {isLive ? (
-                <span className="inline-block px-3 py-1 bg-paid-bg text-paid border border-paid-rule rounded-lg text-xs font-bold">
+                <span className="tag-paid border border-paid-rule">
                   {t.recordedBadge}
                 </span>
               ) : isSimulated ? (
-                <div className="inline-block px-4 py-2 bg-warn-bg border border-warn-rule rounded-xl text-left max-w-2xl">
+                <div className="outcome-warn inline-block px-4 py-3 text-left max-w-2xl">
                   <div className="flex items-center space-x-2 text-warn text-xs font-bold">
                     <span className="text-white w-2 h-2 rounded-full bg-warn" />
                     <span>{t.simulatedBadge} • BLOCK #{evidence?.forkBlockNumber || 'N/A'}</span>
                   </div>
-                  <p className="text-xs text-ink-2 mt-1">{t.simulatedNotice}</p>
+                  <p className="text-sm text-ink-2 mt-1">{t.simulatedNotice}</p>
                 </div>
               ) : (
-                <div className="inline-block px-4 py-2 bg-blocked-bg border border-blocked-rule rounded-xl text-left max-w-2xl">
+                <div className="outcome-blocked inline-block px-4 py-3 text-left max-w-2xl">
                   <div className="flex items-center space-x-2 text-blocked text-xs font-bold">
                     <span className="text-white w-2 h-2 rounded-full bg-blocked" />
                     <span>{t.notRunBadge}</span>
                   </div>
-                  <p className="text-xs text-ink-2 mt-1">{t.notRunNotice}</p>
+                  <p className="text-sm text-ink-2 mt-1">{t.notRunNotice}</p>
                 </div>
               )}
             </div>
@@ -244,38 +242,42 @@ export default function TwinTreasuryPage() {
         </div>
       </div>
 
-      <div className="wrap py-10">
-      <div className="w-full max-w-5xl flex flex-col space-y-6">
+      <div className="wrap pt-10 pb-10">
         {/* Precondition callout */}
-        <div className="border border-rule bg-mist rounded-xl p-4 text-xs text-ink-2 flex items-center justify-between flex-wrap gap-2">
+        <div className="max-w-5xl border border-info-rule border-l-4 border-l-info bg-info-bg rounded-data p-4 text-sm text-ink-2 flex items-center justify-between flex-wrap gap-2">
           <span>{t.vendorNotice}</span>
           <a
             href="https://testnet.snowtrace.io/address/0x20451c1e2dCD83F166B4f22868BAdECb5868d545"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blocked hover:text-blocked underline focus:ring-1 focus:ring-ink rounded"
+            className="text-info font-semibold underline underline-offset-2 hover:text-ink focus:ring-1 focus:ring-ink rounded-tag"
           >
             {t.viewContract} ↗
           </a>
         </div>
 
-        {/* Twin Columns Comparison */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      </div>
+
+      {/* Twin Columns Comparison (proof band) */}
+      <div className="redbar" aria-hidden="true" />
+      <div className="band-navy">
+      <div className="wrap band">
+        <div className="max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Column A: Global Allowlist Mode */}
           <div
-            className="border border-l-4 border-blocked-rule border-l-brand bg-blocked-bg rounded-card p-6 flex flex-col justify-between space-y-6"
+            className="border border-l-4 border-blocked-rule border-l-brand bg-blocked-bg text-ink rounded-data p-6 flex flex-col justify-between space-y-6"
             tabIndex={0}
             role="region"
             aria-label="Treasury A: Global Allowlist Mode"
           >
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-blocked font-bold uppercase tracking-wider">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-mono text-[13px] text-blocked font-medium uppercase tracking-[0.08em]">
                   MISSION A • twin.allowlist.v1
                 </span>
                 <span
                   id="twin-col-a-outcome"
-                  className="px-2 py-0.5 bg-blocked-bg text-blocked border border-blocked-rule rounded text-[11px]"
+                  className="px-2 py-0.5 text-blocked border border-blocked-rule rounded-tag text-[13px] font-bold bg-card"
                 >
                   {evidence?.missionA?.balanceDeltaUsdc
                     ? `${t.colALeak} (${evidence.missionA.balanceDeltaUsdc})`
@@ -283,11 +285,11 @@ export default function TwinTreasuryPage() {
                 </span>
               </div>
               <div>
-                <h2 className="text-lg font-bold text-ink">{t.colATitle}</h2>
-                <p className="text-xs text-ink-2 mt-1">{t.colADesc}</p>
+                <h2 className="card-title">{t.colATitle}</h2>
+                <p className="text-[15px] text-ink-2 mt-1">{t.colADesc}</p>
               </div>
 
-              <div className="bg-card border border-blocked-rule rounded-xl p-4 space-y-2 font-mono text-xs break-all">
+              <div className="bg-card border border-blocked-rule rounded-data p-4 space-y-2 font-mono text-xs break-all">
                 <div className="text-ink-2">
                   payeeRoot:{' '}
                   <span className="text-ink">
@@ -316,7 +318,7 @@ export default function TwinTreasuryPage() {
                 </div>
               </div>
 
-              <p className="text-xs text-ink-2 leading-relaxed">
+              <p className="text-[15px] text-ink-2 leading-relaxed">
                 {lang === 'vi'
                   ? 'Kẻ tấn công lừa agent bằng invoice giả mang địa chỉ vendor quen thuộc. Do hợp đồng chỉ kiểm tra danh sách cho phép chung và số tiền <= perTxCap, giao dịch tự động chuyển tiền ngay lập tức trong propose()!'
                   : 'The attacker tricks the agent with a poisoned invoice naming a recognized vendor. Because the contract only checks a global allowlist and the amount <= perTxCap, funds are immediately drained via safeTransfer in propose().'}
@@ -344,27 +346,27 @@ export default function TwinTreasuryPage() {
 
           {/* Column B: Mission-Scoped Guard */}
           <div
-            className="border border-l-4 border-paid-rule border-l-paid bg-paid-bg rounded-card p-6 flex flex-col justify-between space-y-6"
+            className="border border-l-4 border-paid-rule border-l-paid bg-paid-bg text-ink rounded-data p-6 flex flex-col justify-between space-y-6"
             tabIndex={0}
             role="region"
             aria-label="Treasury B: Mission-Scoped Guard"
           >
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-paid font-bold uppercase tracking-wider">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-mono text-[13px] text-paid font-medium uppercase tracking-[0.08em]">
                   MISSION B • twin.mission.v1
                 </span>
-                <span className="px-2 py-0.5 bg-paid-bg text-paid border border-paid-rule rounded text-[11px]">
+                <span className="px-2 py-0.5 text-paid border border-paid-rule rounded-tag text-[13px] font-bold bg-card">
                   {t.colBBlock}
                 </span>
               </div>
               <div>
-                <h2 className="text-lg font-bold text-ink">{t.colBTitle}</h2>
-                <p className="text-xs text-ink-2 mt-1">{t.colBDesc}</p>
+                <h2 className="card-title">{t.colBTitle}</h2>
+                <p className="text-[15px] text-ink-2 mt-1">{t.colBDesc}</p>
               </div>
 
               {/* Negative Control Box */}
-              <div className="bg-card border border-paid-rule rounded-xl p-3 space-y-2 font-mono text-xs break-all">
+              <div className="bg-card border border-paid-rule rounded-data p-3 space-y-2 font-mono text-xs break-all">
                 <div className="text-warn font-semibold">{t.negControlTitle}</div>
                 <div className="text-ink-2">
                   verifyMerkleProof(vendor in rootB):{' '}
@@ -387,7 +389,7 @@ export default function TwinTreasuryPage() {
               </div>
 
               {/* Positive Control Box */}
-              <div className="bg-card border border-paid-rule rounded-xl p-3 space-y-2 font-mono text-xs break-all">
+              <div className="bg-card border border-paid-rule rounded-data p-3 space-y-2 font-mono text-xs break-all">
                 <div className="text-paid font-semibold">{t.posControlTitle}</div>
                 <div className="text-ink-2">
                   verifyMerkleProof(Owner in rootB):{' '}
@@ -409,7 +411,7 @@ export default function TwinTreasuryPage() {
                 </div>
               </div>
 
-              <p className="text-xs text-ink-2 leading-relaxed">
+              <p className="text-[15px] text-ink-2 leading-relaxed">
                 {lang === 'vi'
                   ? 'Khi kẻ tấn công cố chuyển tiền cho vendor ngoài mission, hợp đồng đối chiếu chữ ký Merkle root của mission và từ chối ngay lập tức (PayeeNotInMissionSet). Đồng thời, vendor chính thức của mission có Merkle proof hợp lệ vẫn được thanh toán bình thường.'
                   : 'When the attacker attempts to divert payment to a non-mission vendor, the contract validates the Merkle root on-chain and rejects the transaction with PayeeNotInMissionSet. Simultaneously, the authorized mission payee with valid proof is successfully paid.'}
@@ -449,17 +451,22 @@ export default function TwinTreasuryPage() {
           </div>
         </div>
 
+      </div>
+      </div>
+
+      <div className="wrap band">
+      <div className="w-full max-w-5xl flex flex-col space-y-6">
         {/* Planned Live Transactions Section */}
         {evidence?.plannedTransactions && evidence.plannedTransactions.length > 0 && (
-          <div className="border border-rule bg-mist rounded-card p-6 space-y-4">
-            <h3 className="text-sm font-bold text-ink uppercase tracking-wider">
+          <div className="border border-rule bg-card rounded-data p-6 space-y-4">
+            <h3 className="card-title">
               {t.txPlanTitle}
             </h3>
-            <div className="space-y-3 text-xs">
+            <div className="space-y-3 text-sm">
               {evidence.plannedTransactions.map((tx) => (
                 <div
                   key={tx.step}
-                  className="border border-rule bg-mist rounded-lg p-3 flex flex-col md:flex-row md:items-center justify-between gap-2"
+                  className="border border-rule bg-paper rounded-data p-3 flex flex-col md:flex-row md:items-center justify-between gap-2"
                 >
                   <div>
                     <span
@@ -481,7 +488,7 @@ export default function TwinTreasuryPage() {
                 </div>
               ))}
             </div>
-            <div className="text-xs text-ink-2 pt-2 flex justify-between items-center">
+            <div className="text-sm text-ink-2 pt-2 flex flex-wrap gap-2 justify-between items-center">
               <span>Total Gas: {evidence.totalEstimatedGasAvax}</span>
               <span className="text-paid">Within Budget ({evidence.totalUsdcBudget} &le; 0.05 USDC)</span>
             </div>
@@ -489,11 +496,11 @@ export default function TwinTreasuryPage() {
         )}
 
         {/* Conclusion / Takeaway */}
-        <div className="bg-card border border-rule rounded-card p-6 text-center space-y-2">
-          <h3 className="text-sm font-bold text-ink uppercase tracking-wider">
-            {t.conclusionTitle}
-          </h3>
-          <p className="text-xs text-ink-2 max-w-3xl mx-auto leading-relaxed">
+        <div className="bg-card border border-rule rounded-card p-6 sm:p-8 space-y-3">
+          <h2 className="sec-h">
+            <Stop>{t.conclusionTitle}</Stop>
+          </h2>
+          <p className="text-base text-ink-2 max-w-3xl leading-relaxed">
             {t.conclusionText}
           </p>
         </div>

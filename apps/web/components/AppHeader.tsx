@@ -42,11 +42,11 @@ export default function AppHeader({
   ];
 
   return (
-    <header className="relative z-10 bg-paper">
+    <header className="relative z-10 border-b border-rule bg-paper">
       <div className="wrap flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3 lg:h-16 lg:py-0">
         <Link
           href="/"
-          className="flex items-center gap-2.5 rounded text-lg font-bold tracking-[-0.02em] text-ink no-underline"
+          className="flex items-center gap-2.5 rounded-tag text-lg font-bold tracking-[-0.02em] text-ink no-underline"
         >
           <BrandMark />
           <span>MissionPay</span>
@@ -54,7 +54,7 @@ export default function AppHeader({
 
         <nav
           aria-label="Main navigation"
-          className="order-last -mx-1 flex w-full items-center gap-1 overflow-x-auto text-[14.5px] font-medium lg:order-none lg:mx-0 lg:ml-2 lg:w-auto lg:min-w-0 lg:flex-1"
+          className="order-last -mx-1 flex w-full items-center gap-1 overflow-x-auto text-[15px] font-medium lg:order-none lg:mx-0 lg:ml-2 lg:w-auto lg:min-w-0 lg:flex-1"
         >
           {navLinks.map((link) => {
             const isActive = pathname === link.href || (link.href !== '/' && pathname?.startsWith(link.href));
@@ -63,8 +63,8 @@ export default function AppHeader({
                 key={link.href}
                 href={link.href}
                 aria-current={isActive ? 'page' : undefined}
-                className={`whitespace-nowrap rounded-full px-2.5 py-1.5 no-underline transition-colors ${
-                  isActive ? 'bg-mist text-ink' : 'text-ink-2 hover:text-ink'
+                className={`whitespace-nowrap rounded-full px-3 py-1.5 no-underline transition-colors ${
+                  isActive ? 'bg-ink text-white' : 'text-ink-2 hover:bg-mist hover:text-ink'
                 }`}
               >
                 {link.label}
@@ -83,7 +83,7 @@ export default function AppHeader({
               type="button"
               onClick={() => setLang('en')}
               aria-pressed={lang === 'en'}
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+              className={`rounded-full px-2.5 py-1 text-[13px] font-semibold transition-colors ${
                 lang === 'en' ? 'bg-ink text-white' : 'text-ink-2 hover:text-ink'
               }`}
             >
@@ -93,7 +93,7 @@ export default function AppHeader({
               type="button"
               onClick={() => setLang('vi')}
               aria-pressed={lang === 'vi'}
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+              className={`rounded-full px-2.5 py-1 text-[13px] font-semibold transition-colors ${
                 lang === 'vi' ? 'bg-ink text-white' : 'text-ink-2 hover:text-ink'
               }`}
             >
@@ -103,11 +103,11 @@ export default function AppHeader({
 
           {/* Network & Mode Badges */}
           <div className="hidden items-center gap-1.5 sm:flex lg:hidden 2xl:flex">
-            <span className="tag-neutral font-mono text-[11px] font-semibold">{paymentMode}</span>
-            <span className="tag-neutral font-mono text-[11px] font-semibold">{stage}</span>
+            <span className={`${paymentMode === 'MOCK' ? 'tag-warn' : 'tag-info'} font-mono font-semibold`}>{paymentMode}</span>
+            <span className="tag-neutral font-mono font-semibold">{stage}</span>
           </div>
 
-          <Link href="/judge" className="btn-primary btn-sm hidden whitespace-nowrap font-semibold md:inline-flex">
+          <Link href="/judge" className="btn-primary btn-sm btn-arrow hidden whitespace-nowrap md:inline-flex">
             Check it yourself
           </Link>
         </div>

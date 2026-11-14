@@ -33,10 +33,10 @@ export default function BankrReplayPage() {
         <div>
           <div className="flex items-center space-x-2">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
-            <h1 className="text-2xl font-bold tracking-tight text-white">
+            <h1 className="font-display text-[28px] font-black uppercase leading-none tracking-[-0.02em] text-white">
               REPLAY VỤ BANKR / GROK ($174k DRAIN)
             </h1>
-            <span className="text-xs bg-rose-950/60 text-rose-300 border border-rose-800 px-2.5 py-0.5 rounded font-mono font-bold">
+            <span className="text-xs bg-rose-950/60 text-rose-300 border border-rose-800 px-2.5 py-0.5 rounded-tag font-mono font-bold">
               HISTORICAL INCIDENT • MAY 2026
             </span>
           </div>
@@ -49,7 +49,7 @@ export default function BankrReplayPage() {
           onClick={handleRunReplay}
           disabled={loading}
           data-testid="run-bankr-replay-btn"
-          className="bg-night-rule disabled:opacity-50 text-white font-bold py-3 px-6 rounded-xl flex items-center space-x-2 transition text-sm font-mono tracking-wide"
+          className="bg-night-rule disabled:opacity-50 text-white font-bold py-3 px-6 rounded-full flex items-center space-x-2 transition text-sm font-mono tracking-wide"
         >
           {loading ? (
             <>
@@ -60,13 +60,13 @@ export default function BankrReplayPage() {
               <span>Đang tái hiện kịch bản...</span>
             </>
           ) : (
-            <span>⚡ CHẠY LẠI VỤ BANKR $170k (30 GIÂY)</span>
+            <span>CHẠY LẠI VỤ BANKR $170k (30 GIÂY)</span>
           )}
         </button>
       </div>
 
       {error && (
-        <div className="my-4 p-4 bg-red-950/40 border border-red-500 rounded-lg text-sm text-red-200">
+        <div className="my-4 p-4 bg-red-950/40 border border-red-500 rounded-data text-sm text-red-200">
           {error}
         </div>
       )}
@@ -81,7 +81,7 @@ export default function BankrReplayPage() {
               <span className="text-xs font-mono font-bold bg-red-950/60 text-red-400 px-3 py-1 rounded-full border border-red-800">
                 MÔ PHỎNG — HỆ KHÔNG CÓ GUARD
               </span>
-              <span className="text-[11px] font-mono text-gray-500">Kịch bản Bankr / Grok thật</span>
+              <span className="text-[13px] font-mono text-gray-500">Kịch bản Bankr / Grok thật</span>
             </div>
 
             <h2 className="text-lg font-bold text-gray-200 mb-2">Ví AI Agent Hot Wallet truyền thống</h2>
@@ -90,7 +90,7 @@ export default function BankrReplayPage() {
             </p>
 
             {/* Drained Balance Box */}
-            <div className="bg-[#131722] border border-red-900/60 rounded-xl p-5 mb-6 text-center space-y-2">
+            <div className="bg-navy-2 border border-red-900/60 rounded-data p-5 mb-6 text-center space-y-2">
               <span className="text-xs font-mono text-gray-400 uppercase tracking-widest block">
                 Số dư ví ban đầu ➔ Số dư sau đòn tấn công
               </span>
@@ -102,27 +102,27 @@ export default function BankrReplayPage() {
                 </span>
               </div>
               <span className="inline-block text-xs font-mono font-bold text-red-400 bg-red-950/60 px-3 py-1 rounded-full border border-red-800 mt-2">
-                {result ? '💸 TOÀN BỘ SỐ DƯ BỊ RÚT SẠCH' : 'Chờ chạy kịch bản...'}
+                {result ? 'TOÀN BỘ SỐ DƯ BỊ RÚT SẠCH' : 'Chờ chạy kịch bản...'}
               </span>
             </div>
 
             <div className="space-y-3 text-xs text-gray-400">
               <div className="flex items-center space-x-2">
-                <span className="text-red-500 font-bold">❌</span>
+                <span className="text-red-500 font-bold">✗</span>
                 <span>Không có Allowlist kiểm tra địa chỉ nhận.</span>
               </div>
               <div className="flex items-center space-x-2">
-                <span className="text-red-500 font-bold">❌</span>
+                <span className="text-red-500 font-bold">✗</span>
                 <span>Không có trần chi tiêu (Cap) khóa chặt theo từng nhiệm vụ.</span>
               </div>
               <div className="flex items-center space-x-2">
-                <span className="text-red-500 font-bold">❌</span>
+                <span className="text-red-500 font-bold">✗</span>
                 <span>Guard chỉ nằm trong System Prompt của LLM nên bị thuyết phục.</span>
               </div>
             </div>
           </div>
 
-          <div className="text-[10px] text-gray-500 border-t border-night-rule pt-3 mt-6 font-mono text-center">
+          <div className="text-[13px] text-gray-500 border-t border-night-rule pt-3 mt-6 font-mono text-center">
             MÔ PHỎNG CLIENT-SIDE • KHÔNG TẠO BẤT KỲ GIAO DỊCH HAY DỮ LIỆU DB NÀO
           </div>
         </div>
@@ -135,7 +135,7 @@ export default function BankrReplayPage() {
               <span className="text-xs font-mono font-bold bg-emerald-950/60 text-emerald-400 px-3 py-1 rounded-full border border-emerald-800">
                 HỆ THỐNG MISSIONPAY (MÔ PHỎNG SANDBOX)
               </span>
-              <span className="text-[11px] font-mono text-gray-500">Lớp contract: chứng minh khi chạy Fuji</span>
+              <span className="text-[13px] font-mono text-gray-500">Lớp contract: chứng minh khi chạy Fuji</span>
             </div>
 
             <h2 className="text-lg font-bold text-gray-200 mb-2">GuardedTreasury + Ví phiên cô lập</h2>
@@ -144,7 +144,7 @@ export default function BankrReplayPage() {
             </p>
 
             {/* Preserved Balance Box */}
-            <div className="bg-[#131722] border border-emerald-900/60 rounded-xl p-5 mb-6 text-center space-y-2">
+            <div className="bg-navy-2 border border-emerald-900/60 rounded-data p-5 mb-6 text-center space-y-2">
               <span className="text-xs font-mono text-gray-400 uppercase tracking-widest block">
                 Thiệt hại tài chính thực tế
               </span>
@@ -160,26 +160,26 @@ export default function BankrReplayPage() {
 
             {/* Real-time Defense Status */}
             {result ? (
-              <div className="space-y-3 bg-night p-4 rounded-xl border border-night-rule text-xs font-mono">
+              <div className="space-y-3 bg-night p-4 rounded-data border border-night-rule text-xs font-mono">
                 <div className="flex items-center justify-between">
                   <span className="text-gray-400">Trạng thái Agent (LLM):</span>
-                  <span className="text-amber-400 font-bold">🧠 ĐÃ BỊ THUYẾT PHỤC ✅</span>
+                  <span className="text-amber-400 font-bold">ĐÃ BỊ THUYẾT PHỤC</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-400">Nguồn gốc người nhận:</span>
-                  <span className="text-rose-400 font-bold bg-rose-950/60 px-2 py-0.5 rounded border border-rose-800 text-[10px]">
+                  <span className="text-rose-400 font-bold bg-rose-950/60 px-2 py-0.5 rounded-tag border border-rose-800 text-[13px]">
                     {result.validatorVerdict?.toProvenance ? `NGUỒN: ${result.validatorVerdict.toProvenance} (DỮ LIỆU BẨN)` : 'NGUỒN: WEB (DỮ LIỆU BẨN)'}
                   </span>
                 </div>
                 <div className="flex flex-col space-y-1">
                   <span className="text-gray-400">Validator Guard:</span>
-                  <span className="text-red-400 font-bold text-xs bg-red-950/40 p-2 rounded border border-red-900/50">
-                    {result.guardedSystem?.contractDefense || `🛡️ Validator BLOCK ${result.validatorVerdict?.rule || 'RECIPIENT_NOT_ALLOWLISTED'} (off-chain) · Lớp contract cap: sẽ chứng minh khi chạy Fuji live`}
+                  <span className="text-red-400 font-bold text-xs bg-red-950/40 p-2 rounded-tag border border-red-900/50">
+                    {result.guardedSystem?.contractDefense || `Validator BLOCK ${result.validatorVerdict?.rule || 'RECIPIENT_NOT_ALLOWLISTED'} (off-chain) · Lớp contract cap: sẽ chứng minh khi chạy Fuji live`}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-400">Lý do bảo vệ:</span>
-                  <span className="text-gray-300 text-[11px]">{result.validatorVerdict?.reason}</span>
+                  <span className="text-gray-300 text-[13px]">{result.validatorVerdict?.reason}</span>
                 </div>
                 {result.guardedSystem?.auditEntryHash && (
                   <div className="flex items-center justify-between pt-2 border-t border-night-rule">
@@ -191,13 +191,13 @@ export default function BankrReplayPage() {
                 )}
               </div>
             ) : (
-              <div className="p-4 bg-night rounded-xl border border-night-rule text-center text-xs text-gray-500 font-mono">
+              <div className="p-4 bg-night rounded-data border border-night-rule text-center text-xs text-gray-500 font-mono">
                 Bấm nút phía trên để kích hoạt đòn tấn công Morse và xem hệ thống phản ứng.
               </div>
             )}
           </div>
 
-          <div className="text-[10px] text-gray-500 border-t border-night-rule pt-3 mt-6 font-mono text-center">
+          <div className="text-[13px] text-gray-500 border-t border-night-rule pt-3 mt-6 font-mono text-center">
             BẢO VỆ OFF-CHAIN BỞI VALIDATOR • LỚP CONTRACT CAP SẼ CHỨNG MINH KHI CHẠY FUJI LIVE
           </div>
         </div>
@@ -205,17 +205,17 @@ export default function BankrReplayPage() {
 
       {/* Decoded Morse Inspector Accordion */}
       {result?.attackFixture && (
-        <div className="bg-night border border-night-rule rounded-xl p-4 my-2 text-xs font-mono space-y-2">
+        <div className="bg-night border border-night-rule rounded-data p-4 my-2 text-xs font-mono space-y-2">
           <div className="flex items-center justify-between text-gray-400">
-            <span className="text-amber-400 font-bold">📻 BẰNG CHỨNG ĐÒN TẤN CÔNG (ATTACK FIXTURE):</span>
-            <span className="text-[11px] text-gray-500">{result.attackFixture.source}</span>
+            <span className="text-amber-400 font-bold">BẰNG CHỨNG ĐÒN TẤN CÔNG (ATTACK FIXTURE):</span>
+            <span className="text-[13px] text-gray-500">{result.attackFixture.source}</span>
           </div>
-          <div className="bg-[#121724] p-3 rounded border border-night-rule text-amber-300">
-            <span className="text-gray-500 block text-[10px]">Chuỗi mã Morse ẩn trong tài liệu nguồn:</span>
+          <div className="bg-navy-2 p-3 rounded-tag border border-night-rule text-amber-300">
+            <span className="text-gray-500 block text-[13px]">Chuỗi mã Morse ẩn trong tài liệu nguồn:</span>
             {result.attackFixture.rawMorse}
           </div>
-          <div className="bg-[#121724] p-3 rounded border border-night-rule text-rose-300">
-            <span className="text-gray-500 block text-[10px]">Dòng lệnh sau khi Agent giải mã thành công:</span>
+          <div className="bg-navy-2 p-3 rounded-tag border border-night-rule text-rose-300">
+            <span className="text-gray-500 block text-[13px]">Dòng lệnh sau khi Agent giải mã thành công:</span>
             {result.attackFixture.decodedMorse}
           </div>
         </div>

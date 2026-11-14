@@ -210,7 +210,7 @@ export default function StageConsolePage() {
       className="min-h-screen bg-night text-white flex flex-col justify-between font-sans selection:bg-cyan-500/30"
     >
       {/* Top Bar for Stage Control */}
-      <header className="border-b border-night-rule bg-[#070a10]/90 px-6 py-3 flex items-center justify-between z-30">
+      <header className="border-b border-night-rule bg-navy/95 px-6 py-3 flex items-center justify-between z-30">
         <div className="flex items-center space-x-3">
           <div className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse" />
           <span className="font-mono text-sm font-bold tracking-widest text-cyan-400 uppercase">
@@ -222,7 +222,7 @@ export default function StageConsolePage() {
         </div>
 
         {/* Scene Navigation Buttons */}
-        <div className="flex items-center space-x-1.5 bg-night-2 border border-night-rule rounded-xl p-1 font-mono text-xs">
+        <div className="flex items-center space-x-1.5 bg-night-2 border border-night-rule rounded-data p-1 font-mono text-xs">
           {[
             { id: 1, label: '0:00 Hook' },
             { id: 2, label: '0:15 Bankr Replay' },
@@ -234,13 +234,13 @@ export default function StageConsolePage() {
               key={s.id}
               onClick={() => setCurrentScene(s.id)}
               data-testid={`scene-btn-${s.id}`}
-              className={`px-3 py-1.5 rounded-lg transition font-bold flex items-center space-x-1 ${
+              className={`px-3 py-1.5 rounded-full transition font-bold flex items-center space-x-1 ${
                 currentScene === s.id
                   ? 'bg-cyan-500 text-black'
                   : 'text-gray-400 hover:text-white hover:bg-night-rule'
               }`}
             >
-              <span className="text-[10px] opacity-75">{s.id}.</span>
+              <span className="text-[13px] opacity-75">{s.id}.</span>
               <span>{s.label}</span>
             </button>
           ))}
@@ -251,29 +251,29 @@ export default function StageConsolePage() {
           {payeeRootConfirmed ? (
             <span
               data-testid="stage-payee-root-badge"
-              className="px-2.5 py-1 rounded-lg border bg-emerald-950/40 text-emerald-300 border-emerald-600/50 font-bold flex items-center gap-1.5"
+              className="px-2.5 py-1 rounded-data border bg-emerald-950/40 text-emerald-300 border-emerald-600/50 font-bold flex items-center gap-1.5"
             >
               <span>✓</span> Payee root on-chain
             </span>
           ) : (
             <span
               data-testid="stage-payee-root-badge"
-              className="px-2.5 py-1 rounded-lg border bg-amber-950/50 text-amber-300 border-amber-600/60 font-bold flex items-center gap-1.5"
+              className="px-2.5 py-1 rounded-data border bg-amber-950/50 text-amber-300 border-amber-600/60 font-bold flex items-center gap-1.5"
             >
-              <span>⚠</span> Payee root chưa lên chain
+              Payee root chưa lên chain
             </span>
           )}
 
           <button
             onClick={() => setDemoMode(demoMode === 'LIVE' ? 'DEMO SEED' : 'LIVE')}
             data-testid="toggle-seed-mode-btn"
-            className={`px-3 py-1 rounded-lg border transition font-bold ${
+            className={`px-3 py-1 rounded-full border transition font-bold ${
               demoMode === 'LIVE'
                 ? 'bg-emerald-950/40 text-emerald-300 border-emerald-600/50'
                 : 'bg-amber-950/60 text-amber-300 border-amber-500 animate-pulse'
             }`}
           >
-            {demoMode === 'LIVE' ? '🟢 LIVE MODE' : '🟡 DEMO SEED (OFFLINE)'}
+            {demoMode === 'LIVE' ? 'LIVE MODE' : 'DEMO SEED (OFFLINE)'}
           </button>
         </div>
       </header>
@@ -292,7 +292,7 @@ export default function StageConsolePage() {
               VỤ TẤN CÔNG ĐIỂN HÌNH THÁNG 5/2026
             </div>
 
-            <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold font-mono tracking-tight text-white leading-none">
+            <h1 className="text-5xl md:text-7xl lg:text-8xl font-display font-black uppercase tracking-[-0.02em] text-white leading-none">
               $174,000
             </h1>
 
@@ -308,7 +308,7 @@ export default function StageConsolePage() {
             <div className="pt-6 flex items-center space-x-4">
               <button
                 onClick={() => setCurrentScene(2)}
-                className="bg-cyan-500 hover:bg-cyan-400 text-black font-mono font-bold px-6 py-3 rounded-xl transition flex items-center space-x-2"
+                className="bg-cyan-500 hover:bg-cyan-400 text-black font-mono font-bold px-6 py-3 rounded-full transition flex items-center space-x-2"
               >
                 <span>BẤM PHÍM [2] ĐỂ CHẠY LẠI VỤ TẤN CÔNG</span>
                 <span>→</span>
@@ -337,22 +337,22 @@ export default function StageConsolePage() {
                 onClick={runBankrReplay}
                 disabled={bankrRunning}
                 data-testid="run-bankr-stage-btn"
-                className="bg-red-600 hover:bg-red-500 text-white font-mono font-bold text-sm px-6 py-3 rounded-xl transition disabled:opacity-50 flex items-center space-x-2"
+                className="bg-red-600 hover:bg-red-500 text-white font-mono font-bold text-sm px-6 py-3 rounded-full transition disabled:opacity-50 flex items-center space-x-2"
               >
-                <span>{bankrRunning ? '⏳ ĐANG TẤN CÔNG...' : '⚡ CHẠY LẠI VỤ BANKR $170K'}</span>
+                <span>{bankrRunning ? 'ĐANG TẤN CÔNG...' : 'CHẠY LẠI VỤ BANKR $170K'}</span>
               </button>
             </div>
 
             {/* Split Screen View */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Left Side: Unguarded Hot Wallet Simulation */}
-              <div className="bg-[#12080a] border-2 border-red-900/60 rounded-2xl p-6 flex flex-col justify-between">
+              <div className="bg-navy-2 border-2 border-red-900/60 rounded-2xl p-6 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-xs font-mono font-bold text-red-400">
                       MÔ PHỎNG — VÍ NÓNG KHÔNG CÓ GUARD (BANKR)
                     </span>
-                    <span className="text-[10px] bg-red-950 text-red-300 border border-red-800 px-2 py-0.5 rounded font-mono font-bold">
+                    <span className="text-[13px] bg-red-950 text-red-300 border border-red-800 px-2 py-0.5 rounded-tag font-mono font-bold">
                       UNGUARDED
                     </span>
                   </div>
@@ -366,14 +366,14 @@ export default function StageConsolePage() {
                     </span>
                     {bankrDrainBalance === 0 && (
                       <span className="block text-sm font-mono text-red-400 mt-2 font-bold animate-pulse">
-                        💀 TÀI KHOẢN BỊ RÚT CẠN VỀ 0!
+                        TÀI KHOẢN BỊ RÚT CẠN VỀ 0!
                       </span>
                     )}
                   </div>
                 </div>
 
-                <div className="p-3 bg-red-950/40 border border-red-900/80 rounded-xl text-xs font-mono text-red-300/80">
-                  ⚠️ LLM diễn giải mã Morse → Ví tin tưởng thực thi ngay → Mất trắng $174k.
+                <div className="p-3 bg-red-950/40 border border-red-900/80 rounded-data text-xs font-mono text-red-300/80">
+                  LLM diễn giải mã Morse → Ví tin tưởng thực thi ngay → Mất trắng $174k.
                 </div>
               </div>
 
@@ -384,27 +384,27 @@ export default function StageConsolePage() {
                     <span className="text-xs font-mono font-bold text-emerald-400">
                       MISSIONPAY TRÊN AVALANCHE FUJI
                     </span>
-                    <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-700 px-2 py-0.5 rounded font-mono font-bold">
+                    <span className="text-[13px] bg-emerald-950 text-emerald-300 border border-emerald-700 px-2 py-0.5 rounded-tag font-mono font-bold">
                       GUARDED
                     </span>
                   </div>
 
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between p-3 bg-night rounded-xl border border-emerald-900/60 font-mono text-xs">
+                    <div className="flex items-center justify-between p-3 bg-night rounded-data border border-emerald-900/60 font-mono text-xs">
                       <span className="text-gray-400">Tâm trí LLM:</span>
-                      <span className="text-amber-400 font-bold">🧠 ĐÃ BỊ THUYẾT PHỤC ✅</span>
+                      <span className="text-amber-400 font-bold">ĐÃ BỊ THUYẾT PHỤC</span>
                     </div>
 
-                    <div className="flex items-center justify-between p-3 bg-night rounded-xl border border-emerald-900/60 font-mono text-xs">
+                    <div className="flex items-center justify-between p-3 bg-night rounded-data border border-emerald-900/60 font-mono text-xs">
                       <span className="text-gray-400">Thực thi Validator:</span>
                       <span className="text-red-400 font-bold">
-                        🛡️ {bankrResult?.verdict?.status || 'BLOCK'} RECIPIENT_NOT_ALLOWLISTED
+                        {bankrResult?.verdict?.status || 'BLOCK'} RECIPIENT_NOT_ALLOWLISTED
                       </span>
                     </div>
 
-                    <div className="text-center py-4 bg-night rounded-xl border border-emerald-900/80">
+                    <div className="text-center py-4 bg-night rounded-data border border-emerald-900/80">
                       <span className="text-xs font-mono text-gray-400 uppercase block mb-1">
-                        💸 Số Tiền Thất Thoát Thực Tế
+                        Số Tiền Thất Thoát Thực Tế
                       </span>
                       <span className="text-5xl md:text-6xl font-bold font-mono text-emerald-400">
                         $0.00
@@ -413,17 +413,17 @@ export default function StageConsolePage() {
                   </div>
                 </div>
 
-                <div className="mt-4 p-3 bg-emerald-950/40 border border-emerald-900/80 rounded-xl text-xs font-mono text-emerald-300/80 flex items-center justify-between">
-                  <span>✅ Audit: ATTACK_BLOCKED ghi vào ledger</span>
+                <div className="mt-4 p-3 bg-emerald-950/40 border border-emerald-900/80 rounded-data text-xs font-mono text-emerald-300/80 flex items-center justify-between">
+                  <span>Audit: ATTACK_BLOCKED ghi vào ledger</span>
                   <span className="font-bold">0 DB Payments</span>
                 </div>
               </div>
             </div>
 
             {/* Morse Code Decoder Inspector */}
-            <div className="p-4 bg-night border border-night-rule rounded-xl font-mono text-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="p-4 bg-night border border-night-rule rounded-data font-mono text-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div>
-                <span className="text-gray-500 block text-[10px] uppercase font-bold">
+                <span className="text-gray-500 block text-[13px] uppercase font-bold">
                   Dòng mã Morse bị giấu trong fixture:
                 </span>
                 <span className="text-cyan-400 select-all">
@@ -431,7 +431,7 @@ export default function StageConsolePage() {
                 </span>
               </div>
               <div>
-                <span className="text-gray-500 block text-[10px] uppercase font-bold">
+                <span className="text-gray-500 block text-[13px] uppercase font-bold">
                   Nội dung đã giải mã:
                 </span>
                 <span className="text-white font-bold">
@@ -500,7 +500,7 @@ export default function StageConsolePage() {
                 <span className="text-emerald-400 font-bold text-sm">
                   ${formatUsdc(arenaStats.remainingTreasuryUsdc, '10.00')} / ${formatUsdc(arenaStats.treasuryCapUsdc, '10.00')}
                 </span>
-                <span className="text-gray-500 text-[11px]">
+                <span className="text-gray-500 text-[13px]">
                   (Đã chi trong hạn mức: ${formatUsdc(arenaStats.spentWithinBudgetUsdc, '0.00')})
                 </span>
               </div>
@@ -526,7 +526,7 @@ export default function StageConsolePage() {
                   data-testid="reset-arena-sandbox-btn"
                   onClick={handleResetArena}
                   disabled={resettingArena}
-                  className="px-3 py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/60 rounded-xl font-bold transition text-[11px] disabled:opacity-50"
+                  className="px-3 py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/60 rounded-full font-bold transition text-[13px] disabled:opacity-50"
                   title="Presenter Only: Reset Arena Budget to $10.00"
                 >
                   {resettingArena ? 'Đang reset...' : '↻ Reset Sandbox ($10.00)'}
@@ -542,7 +542,7 @@ export default function StageConsolePage() {
                 <span className="font-mono text-sm font-bold text-cyan-400 mt-2">
                   QUÉT QR ĐỂ HACK AGENT
                 </span>
-                <span className="font-mono text-[11px] text-gray-400 mt-1 select-all break-all">
+                <span className="font-mono text-[13px] text-gray-400 mt-1 select-all break-all">
                   {arenaUrl}
                 </span>
               </div>
@@ -562,17 +562,17 @@ export default function StageConsolePage() {
                   {(arenaStats.recentAttacks || []).map((atk) => (
                     <div
                       key={atk.id}
-                      className="p-3 bg-[#101420] border border-night-rule rounded-xl flex items-center justify-between"
+                      className="p-3 bg-navy-2 border border-night-rule rounded-data flex items-center justify-between"
                     >
                       <div className="truncate pr-4">
-                        <span className="text-[10px] text-gray-500 block">{atk.category}</span>
+                        <span className="text-[13px] text-gray-500 block">{atk.category}</span>
                         <span className="text-white truncate block">{atk.text}</span>
                       </div>
                       <div className="text-right whitespace-nowrap">
-                        <span className="text-[10px] bg-red-950 text-red-300 border border-red-800 px-2 py-0.5 rounded font-bold block mb-1">
-                          🛡️ BLOCK {atk.blockedRule}
+                        <span className="text-[13px] bg-red-950 text-red-300 border border-red-800 px-2 py-0.5 rounded-tag font-bold block mb-1">
+                          BLOCK {atk.blockedRule}
                         </span>
-                        <span className="text-[10px] text-emerald-400 font-bold">
+                        <span className="text-[13px] text-emerald-400 font-bold">
                           Loss: $0.00
                         </span>
                       </div>
@@ -602,7 +602,7 @@ export default function StageConsolePage() {
               <Link
                 href="/verify/demo-seed"
                 target="_blank"
-                className="bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/50 text-cyan-300 font-mono text-xs font-bold py-2 px-4 rounded-xl transition"
+                className="bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/50 text-cyan-300 font-mono text-xs font-bold py-2 px-4 rounded-data transition"
               >
                 MỞ CLIENT VERIFIER (WOW-2) ↗
               </Link>
@@ -613,23 +613,23 @@ export default function StageConsolePage() {
 
             {/* Architecture 3 Layers Explanation Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-xs">
-              <div className="p-4 bg-night border border-night-rule rounded-xl">
+              <div className="p-4 bg-night border border-night-rule rounded-data">
                 <span className="text-cyan-400 font-bold block mb-1">TẦNG 1: VALIDATOR</span>
-                <p className="text-gray-400 text-[11px] leading-relaxed">
+                <p className="text-gray-400 text-[13px] leading-relaxed">
                   Lớp code độc lập kiểm tra Recipient Allowlist và Spending Caps. Hoàn toàn tách biệt khỏi tâm trí LLM.
                 </p>
               </div>
 
-              <div className="p-4 bg-night border border-night-rule rounded-xl">
+              <div className="p-4 bg-night border border-night-rule rounded-data">
                 <span className="text-emerald-400 font-bold block mb-1">TẦNG 2: SMART CONTRACT</span>
-                <p className="text-gray-400 text-[11px] leading-relaxed">
+                <p className="text-gray-400 text-[13px] leading-relaxed">
                   GuardedTreasury trên Avalanche Fuji khóa cứng ngân sách. Dù server bị chiếm cũng không thể chi quá mức.
                 </p>
               </div>
 
-              <div className="p-4 bg-night border border-night-rule rounded-xl">
+              <div className="p-4 bg-night border border-night-rule rounded-data">
                 <span className="text-purple-400 font-bold block mb-1">TẦNG 3: VÍ PHIÊN (SESSION)</span>
-                <p className="text-gray-400 text-[11px] leading-relaxed">
+                <p className="text-gray-400 text-[13px] leading-relaxed">
                   Sinh ví EOA riêng cho từng nhiệm vụ. Thiệt hại tối đa khi lộ key chỉ bằng đúng khoản tiền đã cấp cho task đó.
                 </p>
               </div>
@@ -670,7 +670,7 @@ export default function StageConsolePage() {
 
             {/* Grand Punchline */}
             <div className="space-y-4 max-w-4xl">
-              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold font-mono tracking-tight text-white leading-tight">
+              <h1 className="text-4xl md:text-6xl lg:text-7xl font-display font-black uppercase tracking-[-0.02em] text-white leading-tight">
                 LLM CÓ THỂ BỊ LỪA.
                 <br />
                 <span className="text-white">
@@ -682,22 +682,18 @@ export default function StageConsolePage() {
             {/* Footer Trust Seals */}
             <div className="pt-6 flex flex-wrap items-center justify-center gap-6 font-mono text-xs text-gray-500">
               <div className="flex items-center space-x-2">
-                <span>🏔️</span>
                 <span>Avalanche C-Chain / Fuji</span>
               </div>
               <span>•</span>
               <div className="flex items-center space-x-2">
-                <span>⚡</span>
                 <span>x402 Micropayments</span>
               </div>
               <span>•</span>
               <div className="flex items-center space-x-2">
-                <span>📜</span>
                 <span>ERC-8004 Agent Trust</span>
               </div>
               <span>•</span>
               <div className="flex items-center space-x-2">
-                <span>🔒</span>
                 <span>Keccak-256 Hash Chains</span>
               </div>
             </div>

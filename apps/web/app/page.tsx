@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n';
 import AskContract from '@/components/AskContract';
+import { Kicker, Stop } from '@/components/Display';
 
 interface MissionSummary {
   slug: string;
@@ -39,7 +40,7 @@ function TxLink({ hash, dark = false }: { hash: string; dark?: boolean }) {
       href={`${SNOWTRACE_TX}${hash}`}
       target="_blank"
       rel="noreferrer"
-      className={`font-mono text-[13px] underline underline-offset-2 ${dark ? 'text-[#C9CDD3] hover:text-white' : 'text-ink-2 hover:text-ink'}`}
+      className={`font-mono text-[13px] underline underline-offset-2 ${dark ? 'text-[#A9C2F5] hover:text-white' : 'text-info hover:text-ink'}`}
     >
       {hash.slice(0, 10)}…{hash.slice(-4)}
     </a>
@@ -60,7 +61,9 @@ function PasskeyIcon() {
   );
 }
 
-const compCard = 'relative z-[1] rounded-card bg-card shadow-[0_30px_60px_-28px_rgba(15,17,21,.55)] lg:absolute';
+const compShadow = 'relative z-[1] bg-card shadow-[0_30px_60px_-28px_rgba(15,17,21,.55)] lg:absolute';
+const compCard = `${compShadow} rounded-card`;
+const compData = `${compShadow} rounded-data`;
 
 export default function LandingPage() {
   const { t } = useI18n();
@@ -95,7 +98,7 @@ export default function LandingPage() {
       mission: 'twin.allowlist.v1',
       rule: t('home.twin.rule_allowlist'),
       paid: '0.01 USDC',
-      outcome: <span className="tag bg-[#3A1218] text-[#FF8593]">{t('home.twin.out_drained')}</span>,
+      outcome: <span className="tag bg-blocked-bg text-blocked">{t('home.twin.out_drained')}</span>,
       tx: '0x548d1106a69626eed32d308088f188c6d2d71d8e2f61e495f637d9f04e367fc6',
       hl: false,
     },
@@ -103,7 +106,7 @@ export default function LandingPage() {
       mission: 'twin.mission.v1',
       rule: t('home.twin.rule_mission'),
       paid: '0.00 USDC',
-      outcome: <span className="tag bg-[#123A27] text-[#6FE0A8]">{t('home.twin.out_reverted')}</span>,
+      outcome: <span className="tag bg-paid-bg text-paid">{t('home.twin.out_reverted')}</span>,
       tx: '0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38',
       hl: true,
     },
@@ -111,7 +114,7 @@ export default function LandingPage() {
       mission: `twin.mission.v1 ${t('home.twin.control')}`,
       rule: t('home.twin.rule_control'),
       paid: t('home.twin.paid_control'),
-      outcome: <span className="tag bg-[#262A32] text-[#C9CDD3]">{t('home.twin.out_paid')}</span>,
+      outcome: <span className="tag bg-navy-rule text-[#E9ECF2]">{t('home.twin.out_paid')}</span>,
       tx: '0xcb7236d146a2c8e2789db8ec2a80358b17d65993fc7b07187802e34c48656315',
       hl: false,
     },
@@ -129,20 +132,18 @@ export default function LandingPage() {
   return (
     <div className="overflow-x-hidden">
       {/* Hero */}
-      <section aria-labelledby="hero-heading" className="wrap grid items-center gap-10 pb-14 pt-6 lg:grid-cols-[.92fr_1.08fr]">
+      <div className="hero-band hero-paper">
+      <section aria-labelledby="hero-heading" className="wrap grid items-center gap-10 pb-14 pt-8 lg:grid-cols-[.92fr_1.08fr] lg:pt-10">
         <div>
-          <h1
-            id="hero-heading"
-            className="m-0 mb-[18px] text-[40px] font-bold leading-none tracking-[-0.045em] sm:text-[46px] lg:text-[60px]"
-          >
-            {t('home.hero.title_a')} <span className="text-brand">{t('home.hero.title_b')}</span>
+          <h1 id="hero-heading" className="display-h1 mb-5 lg:text-[64px]">
+            <Stop>{t('home.hero.title_a')}</Stop> <Stop>{t('home.hero.title_b')}</Stop>
           </h1>
-          <p className="m-0 mb-6 max-w-[46ch] text-[17.5px] text-ink-2">{t('home.hero.lede')}</p>
+          <p className="lede mb-6 max-w-[46ch]">{t('home.hero.lede')}</p>
           <div className="mb-5 flex flex-wrap gap-2.5">
-            <a href="#try" className="btn-primary">
+            <a href="#try" className="btn-primary btn-arrow">
               {t('home.cta.ask')}
             </a>
-            <Link href="/bounty" className="btn-ghost">
+            <Link href="/bounty" className="btn-dark btn-arrow">
               {t('home.cta.bounty')}
             </Link>
           </div>
@@ -153,7 +154,7 @@ export default function LandingPage() {
                 href={l.href}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-full bg-[#ECEBE5] px-3 py-1.5 text-[13.5px] font-medium text-ink no-underline hover:bg-mist-2"
+                className="rounded-full border border-rule-2 bg-card px-3 py-1.5 font-mono text-[13px] font-medium uppercase tracking-[0.06em] text-ink no-underline hover:bg-mist"
               >
                 {t(l.key)}
               </a>
@@ -170,7 +171,7 @@ export default function LandingPage() {
 
           <div className={`${compCard} p-[18px] lg:left-6 lg:top-6 lg:w-[262px]`}>
             <div className="text-[13px] text-ink-3">{t('home.comp.mission_label')}</div>
-            <h4 className="mb-2.5 mt-0.5 text-[17px] font-semibold">{t('home.comp.mission_title')}</h4>
+            <h4 className="mb-2.5 mt-0.5 text-[18px] font-semibold">{t('home.comp.mission_title')}</h4>
             <div className="flex justify-between border-t border-rule py-[7px] text-sm">
               <span>{t('home.comp.budget')}</span>
               <span className="font-semibold tabular-nums">0.10 USDC</span>
@@ -185,7 +186,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className={`${compCard} py-2 lg:bottom-[34px] lg:right-6 lg:w-[390px]`}>
+          <div className={`${compData} py-2 lg:bottom-[34px] lg:right-6 lg:w-[390px]`}>
             {[
               { title: t('home.comp.q1_title'), sub: t('home.comp.q1_sub'), tag: <span className="tag-paid">{t('home.comp.q1_tag')}</span> },
               { title: t('home.comp.q2_title'), sub: t('home.comp.q2_sub'), tag: <span className="tag-blocked">{t('home.comp.q2_tag')}</span> },
@@ -193,18 +194,18 @@ export default function LandingPage() {
             ].map((q, i) => (
               <div key={i} className="grid grid-cols-[1fr_auto] items-center gap-2.5 border-b border-rule px-4 py-[11px] last:border-b-0">
                 <div>
-                  <b className="block text-sm font-semibold">{q.title}</b>
-                  <small className="text-[12.5px] text-ink-3">{q.sub}</small>
+                  <b className="block text-[15px] font-semibold">{q.title}</b>
+                  <small className="text-[13px] text-ink-3">{q.sub}</small>
                 </div>
                 {q.tag}
               </div>
             ))}
           </div>
 
-          <div className={`${compCard} border-l-[5px] border-blocked px-[18px] py-4 lg:right-6 lg:top-6 lg:w-[272px]`}>
+          <div className={`${compData} border-l-4 border-brand px-[18px] py-4 lg:right-6 lg:top-6 lg:w-[272px]`}>
             <div className="text-base font-extrabold text-blocked">{t('home.comp.receipt_title')}</div>
-            <div className="mt-0.5 text-[12.5px] text-ink-3">GuardedTreasury · proposeWithProof</div>
-            <div className="mt-2.5 font-mono text-[12.5px] text-ink-2">
+            <div className="mt-0.5 text-[13px] text-ink-3">GuardedTreasury · proposeWithProof</div>
+            <div className="mt-2.5 font-mono text-[13px] text-ink-2">
               PayeeNotInMissionSet
               <br />
               tx 0x0ad53adc…3e38
@@ -214,34 +215,36 @@ export default function LandingPage() {
           <div className="relative z-[1] self-start rounded-full bg-brand-deep px-2.5 py-1 text-xs font-medium text-white lg:absolute lg:bottom-3 lg:left-6">{t('home.comp.note')}</div>
         </div>
       </section>
+      </div>
 
       {/* Three objects */}
       <section className="bg-sand" aria-labelledby="objects-heading">
-        <div className="wrap pb-16 pt-14">
-          <h2 id="objects-heading" className="sec-h">{t('home.objects.title')}</h2>
+        <div className="wrap band">
+          <Kicker>{t('home.objects.kick')}</Kicker>
+          <h2 id="objects-heading" className="sec-h"><Stop>{t('home.objects.title')}</Stop></h2>
           <p className="sec-p">{t('home.objects.desc')}</p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="overflow-hidden rounded-2xl border border-[#E2DACB] bg-card">
+            <div className="overflow-hidden rounded-card border border-[#DDD5C6] bg-card">
               <div className="grid h-[168px] place-items-center bg-[#F7EBD3]">
-                <div className="w-[190px] rounded-[10px] bg-white p-3.5 text-[11.5px] shadow-[0_16px_30px_-18px_rgba(15,17,21,.5)]">
+                <div className="w-[220px] rounded-data bg-white p-3.5 text-[13px] shadow-[0_16px_30px_-18px_rgba(15,17,21,.5)]">
                   <b className="text-[13px]">{t('home.objects.doc_title')}</b>
                   <div className="flex justify-between border-b border-dashed border-rule py-[5px]"><span>{t('home.objects.doc_budget')}</span><span>0.10 USDC</span></div>
                   <div className="flex justify-between border-b border-dashed border-rule py-[5px]"><span>{t('home.objects.doc_payees')}</span><span>1</span></div>
                   <div className="flex justify-between py-[5px]"><span>{t('home.objects.doc_signer')}</span><span className="font-mono">0x4BC9…8F7c</span></div>
-                  <div className="mt-2 rounded-[5px] bg-paid-bg px-[7px] py-[5px] font-mono text-[10.5px] text-paid">root 0x3011ac81…71dd</div>
+                  <div className="mt-2 rounded-data bg-paid-bg px-[7px] py-[5px] font-mono text-[13px] text-paid">root 0x3011ac81…71dd</div>
                 </div>
               </div>
               <div className="px-5 pb-5 pt-[18px]">
-                <h3 className="mb-1 mt-0 text-[17px] font-semibold">{t('home.objects.t1_title')}</h3>
-                <p className="m-0 text-[14.5px] text-ink-2">{t('home.objects.t1_desc')}</p>
+                <h3 className="card-title mb-1.5">{t('home.objects.t1_title')}</h3>
+                <p className="m-0 text-[15px] text-ink-2">{t('home.objects.t1_desc')}</p>
               </div>
             </div>
-            <div className="overflow-hidden rounded-2xl border border-[#E2DACB] bg-card">
+            <div className="overflow-hidden rounded-card border border-[#DDD5C6] bg-card">
               <div className="grid h-[168px] place-items-center bg-[#E5ECF6]">
-                <div className="w-[210px] rounded-[10px] bg-white p-3.5 text-xs shadow-[0_16px_30px_-18px_rgba(15,17,21,.5)]">
+                <div className="w-[220px] rounded-data bg-white p-3.5 text-xs shadow-[0_16px_30px_-18px_rgba(15,17,21,.5)]">
                   <span className="text-ink-3">{t('home.objects.prop_label')}</span>
                   <div className="mb-2 mt-0.5 text-[22px] font-extrabold">0.01 USDC</div>
-                  <div className="rounded-[5px] bg-chalk px-[7px] py-1.5 font-mono text-[10.5px] leading-[1.45] text-ink-2">
+                  <div className="rounded-data bg-chalk px-[7px] py-1.5 font-mono text-[13px] leading-[1.45] text-ink-2">
                     to 0x4BC9…8F7c
                     <br />
                     proof [ ] → root ✓
@@ -249,24 +252,24 @@ export default function LandingPage() {
                 </div>
               </div>
               <div className="px-5 pb-5 pt-[18px]">
-                <h3 className="mb-1 mt-0 text-[17px] font-semibold">{t('home.objects.t2_title')}</h3>
-                <p className="m-0 text-[14.5px] text-ink-2">{t('home.objects.t2_desc')}</p>
+                <h3 className="card-title mb-1.5">{t('home.objects.t2_title')}</h3>
+                <p className="m-0 text-[15px] text-ink-2">{t('home.objects.t2_desc')}</p>
               </div>
             </div>
-            <div className="overflow-hidden rounded-2xl border border-[#E2DACB] bg-card">
+            <div className="overflow-hidden rounded-card border border-[#DDD5C6] bg-card">
               <div className="grid h-[168px] place-items-center bg-[#F6E1E1]">
                 <div className="flex gap-2.5">
                   <div className="grid h-[120px] w-24 place-items-center rounded-[10px] bg-paid p-2 text-center text-[13px] font-extrabold text-white">
-                    <div>PAY<small className="mt-1 block text-[11px] font-medium opacity-90">{t('home.objects.gate_ok_sub')}</small></div>
+                    <div>PAY<small className="mt-1 block text-[13px] font-medium opacity-90">{t('home.objects.gate_ok_sub')}</small></div>
                   </div>
                   <div className="grid h-[120px] w-24 place-items-center rounded-[10px] bg-blocked p-2 text-center text-[13px] font-extrabold text-white">
-                    <div>REVERT<small className="mt-1 block text-[11px] font-medium opacity-90">{t('home.objects.gate_no_sub')}</small></div>
+                    <div>REVERT<small className="mt-1 block text-[13px] font-medium opacity-90">{t('home.objects.gate_no_sub')}</small></div>
                   </div>
                 </div>
               </div>
               <div className="px-5 pb-5 pt-[18px]">
-                <h3 className="mb-1 mt-0 text-[17px] font-semibold">{t('home.objects.t3_title')}</h3>
-                <p className="m-0 text-[14.5px] text-ink-2">{t('home.objects.t3_desc')}</p>
+                <h3 className="card-title mb-1.5">{t('home.objects.t3_title')}</h3>
+                <p className="m-0 text-[15px] text-ink-2">{t('home.objects.t3_desc')}</p>
               </div>
             </div>
           </div>
@@ -274,36 +277,38 @@ export default function LandingPage() {
       </section>
 
       {/* Table 1: twin treasury (dark band) */}
-      <section className="bg-night text-[#E9EAEC]" aria-labelledby="twin-heading">
-        <div className="wrap pb-16 pt-14">
-          <h2 id="twin-heading" className="sec-h text-white">{t('home.twin.title')}</h2>
-          <p className="sec-p text-[#A3A9B3]">{t('home.twin.desc')}</p>
+      <div className="redbar" aria-hidden="true" />
+      <section className="band-navy" aria-labelledby="twin-heading">
+        <div className="wrap band">
+          <Kicker>{t('home.twin.kick')}</Kicker>
+          <h2 id="twin-heading" className="sec-h"><Stop>{t('home.twin.title')}</Stop></h2>
+          <p className="sec-p">{t('home.twin.desc')}</p>
           <figure className="tbl m-0">
             <div className="overflow-x-auto">
               <table className="min-w-[720px]">
                 <thead>
                   <tr>
-                    <th className="border-[#E9EAEC] text-[#8E95A0]">{t('home.twin.th_mission')}</th>
-                    <th className="border-[#E9EAEC] text-[#8E95A0]">{t('home.twin.th_rule')}</th>
-                    <th className="r border-[#E9EAEC] text-[#8E95A0]">{t('home.twin.th_paid')}</th>
-                    <th className="border-[#E9EAEC] text-[#8E95A0]">{t('home.twin.th_outcome')}</th>
-                    <th className="border-[#E9EAEC] text-[#8E95A0]">{t('home.twin.th_tx')}</th>
+                    <th className="border-[#E9ECF2] text-[#B4BDCC]">{t('home.twin.th_mission')}</th>
+                    <th className="border-[#E9ECF2] text-[#B4BDCC]">{t('home.twin.th_rule')}</th>
+                    <th className="r border-[#E9ECF2] text-[#B4BDCC]">{t('home.twin.th_paid')}</th>
+                    <th className="border-[#E9ECF2] text-[#B4BDCC]">{t('home.twin.th_outcome')}</th>
+                    <th className="border-[#E9ECF2] text-[#B4BDCC]">{t('home.twin.th_tx')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {twinRows.map((r) => (
-                    <tr key={r.mission} className={r.hl ? 'bg-[#16241D]' : undefined}>
-                      <td className="border-[#262A32]">{r.mission}</td>
-                      <td className="border-[#262A32]">{r.rule}</td>
-                      <td className="r num border-[#262A32]">{r.paid}</td>
-                      <td className="border-[#262A32]">{r.outcome}</td>
-                      <td className="border-[#262A32]"><TxLink hash={r.tx} dark /></td>
+                    <tr key={r.mission} className={r.hl ? 'bg-navy-2' : undefined}>
+                      <td className="border-navy-rule">{r.mission}</td>
+                      <td className="border-navy-rule">{r.rule}</td>
+                      <td className="r num border-navy-rule">{r.paid}</td>
+                      <td className="border-navy-rule">{r.outcome}</td>
+                      <td className="border-navy-rule"><TxLink hash={r.tx} dark /></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <figcaption className="text-[#A3A9B3]">
+            <figcaption className="text-[#B4BDCC]">
               <b>Table 1.</b> {t('home.twin.caption')}
             </figcaption>
           </figure>
@@ -317,8 +322,9 @@ export default function LandingPage() {
 
       {/* Table 2: results + known limits */}
       <section className="bg-tint-slate" aria-labelledby="results-heading">
-        <div className="wrap pb-16 pt-14">
-          <h2 id="results-heading" className="sec-h">{t('home.results.title')}</h2>
+        <div className="wrap band">
+          <Kicker>{t('home.results.kick')}</Kicker>
+          <h2 id="results-heading" className="sec-h"><Stop>{t('home.results.title')}</Stop></h2>
           <p className="sec-p">{t('home.results.desc')}</p>
           <figure className="tbl m-0">
             <div className="overflow-x-auto">
@@ -347,8 +353,8 @@ export default function LandingPage() {
               <b>Table 2.</b> {t('home.results.caption')}
             </figcaption>
           </figure>
-          <div className="mt-4 grid gap-5 rounded-card bg-[#DCE3EC] px-[22px] py-[18px] lg:grid-cols-[180px_1fr]">
-            <h3 className="m-0 text-[17px] font-bold">{t('home.limits.title')}</h3>
+          <div className="mt-6 grid gap-5 rounded-card border-l-4 border-amber bg-card px-[22px] py-[18px] lg:grid-cols-[180px_1fr]">
+            <h3 className="card-title">{t('home.limits.title')}</h3>
             <ul className="m-0 list-disc pl-[18px] text-ink-2">
               <li>{t('home.limits.l1')}</li>
               <li>{t('home.limits.l2')}</li>
@@ -359,13 +365,13 @@ export default function LandingPage() {
       </section>
 
       {/* Active Missions Dashboard Section */}
-      <section aria-labelledby="active-missions-heading" className="wrap space-y-6 pb-16 pt-14">
+      <section aria-labelledby="active-missions-heading" className="wrap band space-y-6">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div>
-            <h2 id="active-missions-heading" className="sec-h max-w-none">
-              {t('landing.section.missions')}
+            <h2 id="active-missions-heading" className="sec-h max-w-[30ch]">
+              <Stop>{t('landing.section.missions')}</Stop>
             </h2>
-            <p className="m-0 max-w-[60ch] text-[15px] text-ink-2">{t('landing.section.missions_desc')}</p>
+            <p className="m-0 max-w-[60ch] text-base text-ink-2">{t('landing.section.missions_desc')}</p>
           </div>
           <button
             onClick={loadMissions}
@@ -382,7 +388,7 @@ export default function LandingPage() {
             <p className="m-0 text-sm text-ink-2">{t('landing.loading')}</p>
           </div>
         ) : error ? (
-          <div className="rounded-card border border-blocked-rule bg-blocked-bg p-6 text-center">
+          <div className="outcome-blocked p-6 text-center">
             <p className="mb-3 mt-0 text-sm font-semibold text-blocked">Error: {error}</p>
             <button onClick={loadMissions} className="btn-primary btn-sm font-semibold">
               Retry Connection
@@ -423,7 +429,7 @@ export default function LandingPage() {
                     <span className={m.status === 'ACTIVE' ? 'tag-paid' : 'tag-blocked'}>{m.status}</span>
                   </div>
 
-                  <div className="space-y-1 text-[13px] text-ink-2">
+                  <div className="space-y-1 text-sm text-ink-2">
                     <div className="truncate">Owner: <span className="font-mono">{m.ownerAddress}</span></div>
                     <div className="truncate">Agent: <span className="font-mono">{m.agentAddress}</span></div>
                     <div>Expires: {new Date(m.expiresAt).toLocaleString()}</div>
@@ -444,7 +450,7 @@ export default function LandingPage() {
 
                   {/* Two Separate Budgets */}
                   <div className="grid grid-cols-2 gap-3 border-t border-rule pt-4">
-                    <div className="rounded-[10px] bg-paper p-3">
+                    <div className="rounded-data border border-rule bg-paper p-3">
                       <div className="text-xs font-medium text-ink-2">{t('landing.card.tool_budget')}</div>
                       <div className="mt-1 text-lg font-bold tabular-nums text-ink">
                         {(Number(toolRemaining) / 1e6).toFixed(2)} USDC
@@ -456,7 +462,7 @@ export default function LandingPage() {
                       </div>
                     </div>
 
-                    <div className="rounded-[10px] bg-paper p-3">
+                    <div className="rounded-data border border-rule bg-paper p-3">
                       <div className="text-xs font-medium text-ink-2">{t('landing.card.treasury_budget')}</div>
                       <div className="mt-1 text-lg font-bold tabular-nums text-ink">
                         {(Number(treasuryRemaining) / 1e6).toFixed(2)} USDC
@@ -473,13 +479,13 @@ export default function LandingPage() {
                   </div>
 
                   {m.deliverableHash && (
-                    <div className="break-all rounded-[10px] bg-paid-bg p-2.5 text-xs text-paid">
+                    <div className="break-all rounded-data bg-paid-bg p-2.5 text-xs text-paid">
                       Deliverable Hash: <span className="font-mono">{m.deliverableHash}</span>
                     </div>
                   )}
 
                   <div className="flex items-center justify-between pt-1 text-[13px]">
-                    <Link href={`/verify/${m.slug}`} className="font-medium text-ink underline underline-offset-2 hover:text-ink-2">
+                    <Link href={`/verify/${m.slug}`} className="link font-medium">
                       {t('landing.card.view_proof')}
                     </Link>
                     {new Date() >= new Date(m.expiresAt) && (
@@ -493,7 +499,7 @@ export default function LandingPage() {
         )}
       </section>
 
-      <footer className="bg-night py-7 pb-14 text-sm text-[#8E95A0]">
+      <footer className="bg-navy py-7 pb-14 text-sm text-[#B4BDCC]">
         <div className="wrap">{t('home.footer')}</div>
       </footer>
     </div>

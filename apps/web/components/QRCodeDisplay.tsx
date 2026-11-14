@@ -73,13 +73,13 @@ export default function QRCodeDisplay({
             alt={`QR Code for ${url}`}
             width={size}
             height={size}
-            className="block rounded-lg"
+            className="block rounded-data"
             style={{ width: `${size}px`, height: `${size}px` }}
           />
         ) : (
           <div
             style={{ width: `${size}px`, height: `${size}px` }}
-            className="flex items-center justify-center bg-mist text-ink-2 text-xs font-mono rounded-lg animate-pulse"
+            className="flex items-center justify-center bg-mist text-ink-2 text-xs font-mono rounded-data animate-pulse"
           >
             {error || 'Đang tạo QR...'}
           </div>
@@ -87,7 +87,7 @@ export default function QRCodeDisplay({
       </div>
 
       {showUrlText && url && (
-        <p className="mt-3 text-xs font-mono text-ink break-all select-all bg-paper px-3 py-1.5 rounded-lg border border-rule max-w-full">
+        <p className="mt-3 text-xs font-mono text-ink break-all select-all bg-paper px-3 py-1.5 rounded-data border border-rule max-w-full">
           {url}
         </p>
       )}

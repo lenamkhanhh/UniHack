@@ -140,15 +140,15 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
         </div>
         <div className="flex items-center space-x-2">
           {mode === 'DEMO SEED' ? (
-            <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/50 px-2.5 py-0.5 rounded font-bold">
+            <span className="text-[13px] bg-amber-500/20 text-amber-300 border border-amber-500/50 px-2.5 py-0.5 rounded-tag font-bold">
               DEMO SEED (OFFLINE)
             </span>
           ) : isLiveHonest ? (
-            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 px-2.5 py-0.5 rounded font-bold">
+            <span className="text-[13px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 px-2.5 py-0.5 rounded-tag font-bold">
               LIVE ON AVALANCHE FUJI
             </span>
           ) : (
-            <span className="text-[10px] bg-night-rule text-gray-300 border border-night-rule px-2.5 py-0.5 rounded font-bold">
+            <span className="text-[13px] bg-night-rule text-gray-300 border border-night-rule px-2.5 py-0.5 rounded-tag font-bold">
               MOCK — chưa gửi lên chain
             </span>
           )}
@@ -157,21 +157,21 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
 
       {/* DEMO SEED Banner if in seed mode */}
       {mode === 'DEMO SEED' && (
-        <div className="mb-4 p-2.5 bg-amber-950/40 border border-amber-500/40 rounded-xl text-[11px] text-amber-200 text-center font-bold">
-          ⚠️ DEMO SEED — DỮ LIỆU MÔ PHỎNG DETERMINISTIC, KHÔNG PHẢI GIAO DỊCH THẬT
+        <div className="mb-4 p-2.5 bg-amber-950/40 border border-amber-500/40 rounded-data text-[13px] text-amber-200 text-center font-bold">
+          DEMO SEED — DỮ LIỆU MÔ PHỎNG DETERMINISTIC, KHÔNG PHẢI GIAO DỊCH THẬT
         </div>
       )}
 
       {/* Visual Canvas of Architecture & Particles */}
-      <div className="relative py-8 px-4 bg-night border border-night-rule rounded-xl overflow-hidden min-h-[220px] flex items-center justify-between">
+      <div className="relative py-8 px-4 bg-night border border-night-rule rounded-data overflow-hidden min-h-[220px] flex items-center justify-between">
         {/* Node 1: Guarded Treasury */}
         <div className="flex flex-col items-center z-10 w-28 text-center">
           <div className="w-14 h-14 rounded-2xl bg-cyan-950/60 border-2 border-cyan-500 flex items-center justify-center">
-            <span className="text-2xl">🏛️</span>
+            <span className="font-mono text-sm font-bold text-cyan-300">GT</span>
           </div>
           <span className="text-xs font-bold text-cyan-300 mt-2">Treasury</span>
-          <span className="text-[9px] text-gray-400">GuardedTreasury</span>
-          <span className="text-[9px] text-gray-500">Avalanche Fuji</span>
+          <span className="text-[13px] text-gray-400">GuardedTreasury</span>
+          <span className="text-[13px] text-gray-500">Avalanche Fuji</span>
         </div>
 
         {/* Path 1: Treasury -> Session Wallet */}
@@ -184,11 +184,11 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
         {/* Node 2: Session Wallet */}
         <div className="flex flex-col items-center z-10 w-28 text-center">
           <div className="w-14 h-14 rounded-2xl bg-emerald-950/60 border-2 border-emerald-500 flex items-center justify-center">
-            <span className="text-2xl">👛</span>
+            <span className="font-mono text-sm font-bold text-emerald-300">EOA</span>
           </div>
           <span className="text-xs font-bold text-emerald-300 mt-2">Ví Phiên</span>
-          <span className="text-[9px] text-gray-400">Session EOA</span>
-          <span className="text-[9px] text-emerald-400 font-bold">Cap: 5.00 USDC</span>
+          <span className="text-[13px] text-gray-400">Session EOA</span>
+          <span className="text-[13px] text-emerald-400 font-bold">Cap: 5.00 USDC</span>
         </div>
 
         {/* Path 2: Session Wallet -> Destination */}
@@ -225,10 +225,10 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
                   : 'bg-night-2 border-night-rule'
               }`}
             >
-              <span className="text-sm">🛡️</span>
+              <span className="font-mono text-[13px] font-bold">G</span>
             </div>
             {animationState === 'BOUNCED' && (
-              <div className="absolute -top-10 whitespace-nowrap bg-red-950/90 border border-red-500 text-red-300 text-[9px] font-bold px-2 py-0.5 rounded animate-bounce">
+              <div className="absolute -top-10 whitespace-nowrap bg-red-950/90 border border-red-500 text-red-300 text-[13px] font-bold px-2 py-0.5 rounded-tag animate-bounce">
                 BLOCK {blockedRule}
               </div>
             )}
@@ -238,21 +238,19 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
         {/* Node 3: Split Destinations (Allowed vs Attacker) */}
         <div className="flex flex-col space-y-3 z-10 w-32">
           {/* Allowed Merchant */}
-          <div className="bg-[#101420] border border-emerald-500/40 rounded-xl p-2 text-center">
+          <div className="bg-navy-2 border border-emerald-500/40 rounded-data p-2 text-center">
             <div className="flex items-center justify-center space-x-1">
-              <span className="text-xs">🤖</span>
-              <span className="text-[11px] font-bold text-emerald-300">Tool Merchant</span>
+              <span className="text-[13px] font-bold text-emerald-300">Tool Merchant</span>
             </div>
-            <span className="text-[8px] text-gray-500 block truncate">Allowlisted Tool</span>
+            <span className="text-[13px] text-gray-500 block truncate">Allowlisted Tool</span>
           </div>
 
           {/* Attacker */}
-          <div className="bg-red-950/20 border border-red-500/40 rounded-xl p-2 text-center">
+          <div className="bg-red-950/20 border border-red-500/40 rounded-data p-2 text-center">
             <div className="flex items-center justify-center space-x-1">
-              <span className="text-xs">🥷</span>
-              <span className="text-[11px] font-bold text-red-400">Attacker Address</span>
+              <span className="text-[13px] font-bold text-red-400">Attacker Address</span>
             </div>
-            <span className="text-[8px] text-red-300/70 block truncate">0xA77AC... (Blocked)</span>
+            <span className="text-[13px] text-red-300/70 block truncate">0xA77AC... (Blocked)</span>
           </div>
         </div>
       </div>
@@ -263,20 +261,20 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
           <button
             onClick={triggerValidFlow}
             disabled={animationState !== 'IDLE'}
-            className="bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/50 text-emerald-300 px-3 py-1.5 rounded-lg text-xs font-bold transition disabled:opacity-50"
+            className="bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/50 text-emerald-300 px-3 py-1.5 rounded-data text-xs font-bold transition disabled:opacity-50"
           >
             ▶️ Mô Phỏng Luồng Hợp Lệ ($0.05)
           </button>
           <button
             onClick={triggerBlockedFlow}
             disabled={animationState !== 'IDLE'}
-            className="bg-red-600/20 hover:bg-red-600/30 border border-red-500/50 text-red-300 px-3 py-1.5 rounded-lg text-xs font-bold transition disabled:opacity-50"
+            className="bg-red-600/20 hover:bg-red-600/30 border border-red-500/50 text-red-300 px-3 py-1.5 rounded-data text-xs font-bold transition disabled:opacity-50"
           >
-            ⚡ Mô Phỏng Đòn Tấn Công Bị Chặn
+            Mô Phỏng Đòn Tấn Công Bị Chặn
           </button>
         </div>
 
-        <div className="text-[11px] text-gray-400">
+        <div className="text-[13px] text-gray-400">
           Hiệu ứng:{' '}
           <span className="text-white font-bold">
             {animationState === 'IDLE' && 'Sẵn sàng'}
@@ -290,14 +288,14 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
       {/* Ledger Entries List (Derived dynamically from activeEntries, empty if no entries) */}
       <div className="mt-4 pt-3 border-t border-night-rule">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">
+          <span className="text-[13px] text-gray-400 uppercase tracking-wider font-bold">
             Sổ Cái Ledger ({activeEntries.length} bản ghi):
           </span>
-          {loading && <span className="text-[10px] text-cyan-400">Đang tải ledger...</span>}
+          {loading && <span className="text-[13px] text-cyan-400">Đang tải ledger...</span>}
         </div>
 
         {activeEntries.length === 0 ? (
-          <div className="p-4 bg-night border border-night-rule rounded-xl text-center text-xs text-gray-500 font-mono">
+          <div className="p-4 bg-night border border-night-rule rounded-data text-center text-xs text-gray-500 font-mono">
             Sổ cái ledger hiện chưa có giao dịch nào.
           </div>
         ) : (
@@ -305,20 +303,20 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
             {activeEntries.map((e) => (
               <div
                 key={e.id}
-                className={`flex items-center justify-between text-[11px] px-2.5 py-1 rounded border ${
+                className={`flex items-center justify-between text-[13px] px-2.5 py-1 rounded-tag border ${
                   e.status === 'BLOCKED'
                     ? 'bg-red-950/40 border-red-500/60 text-red-200'
-                    : 'bg-[#101420] border-night-rule text-gray-300'
+                    : 'bg-navy-2 border-night-rule text-gray-300'
                 }`}
               >
                 <div className="flex items-center space-x-2 truncate pr-2">
-                  <span className="text-gray-500 text-[10px]">{e.id}</span>
+                  <span className="text-gray-500 text-[13px]">{e.id}</span>
                   <span className="truncate">{e.from} → {e.to}</span>
                 </div>
                 <div className="flex items-center space-x-2 whitespace-nowrap">
                   <span className="font-bold">{e.amount}</span>
                   <span
-                    className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                    className={`text-[13px] px-1.5 py-0.2 rounded-tag font-bold ${
                       e.status === 'BLOCKED' ? 'bg-red-500 text-white' : 'bg-emerald-500/20 text-emerald-300'
                     }`}
                   >

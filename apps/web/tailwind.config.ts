@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss";
 
-// v6 design tokens. Values live as CSS variables in app/globals.css; names here are the
-// Tailwind aliases (e.g. bg-paper, text-ink-2, border-rule, bg-paid-bg, text-blocked).
+// v8b design tokens (artifacts/ui-mockup/DESIGN_SYSTEM_v8b.md). Values live as CSS variables in
+// app/globals.css; names here are the Tailwind aliases (e.g. bg-paper, text-ink-2, bg-tint-mint).
 const config: Config = {
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -32,19 +32,37 @@ const config: Config = {
         warn: "var(--warn)",
         "warn-bg": "var(--warn-bg)",
         "warn-rule": "var(--warn-rule)",
+        amber: "var(--amber)",
+        info: "var(--info)",
+        "info-bg": "var(--info-bg)",
+        "info-rule": "var(--info-rule)",
+        navy: "var(--navy)",
+        "navy-2": "var(--navy-2)",
+        "navy-rule": "var(--navy-rule)",
         sand: "var(--sand)",
         night: "var(--night)",
         "night-2": "var(--night-2)",
         "night-rule": "var(--night-rule)",
         "tint-rose": "var(--tint-rose)",
         "tint-slate": "var(--tint-slate)",
+        "tint-mint": "var(--tint-mint)",
       },
       fontFamily: {
         sans: ["var(--font-geist)", "system-ui", "sans-serif"],
         mono: ["var(--font-geist-mono)", "ui-monospace", "monospace"],
+        display: ["var(--font-archivo)", "var(--font-geist)", "sans-serif"],
+      },
+      fontSize: {
+        // Nothing on the web below 13px (design system v8b).
+        xs: ["13px", { lineHeight: "1.45" }],
       },
       borderRadius: {
-        card: "14px",
+        // Corner rules: content cards 16px, data panels/tables/receipts/code 4px,
+        // status tags 6px, inputs 10px, buttons/chips pill.
+        card: "16px",
+        data: "4px",
+        tag: "6px",
+        input: "10px",
       },
     },
   },

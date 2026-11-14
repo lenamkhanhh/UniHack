@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useI18n } from '@/lib/i18n';
+import { Kicker, Stop } from '@/components/Display';
 import {
   extractP256Coordinates,
   parseDerSignature,
@@ -355,52 +356,50 @@ export default function NewMissionPasskeyPage() {
 
   return (
     <div className="min-h-screen bg-paper text-ink font-sans">
-      {/* Hero band: sand */}
-      <div className="bg-sand border-b border-rule">
-        <section className="wrap space-y-4 pt-10 pb-10">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="px-3 py-1 text-xs font-semibold rounded-[5px] bg-card text-ink border border-rule-2">
-              {t('passkey.tag.w4')}
-            </span>
-            <span className="px-3 py-1 text-xs font-semibold rounded-[5px] bg-paid-bg text-paid border border-paid-rule">
+      {/* Hero band: slate */}
+      <div className="hero-band hero-slate">
+        <section className="hero-inner">
+          <Kicker>{t('passkey.tag.w4')}</Kicker>
+          <h1
+            className="display-h1 mb-5 max-w-[20ch]"
+            data-testid="passkey-page-header"
+          >
+            <Stop>{t('passkey.hero.title')}</Stop>
+          </h1>
+          <p className="lede">
+            {t('passkey.hero.desc')}
+          </p>
+          <div className="flex flex-wrap items-center gap-2 pt-6">
+            <span className="tag-paid border border-paid-rule">
               {t('passkey.tag.precompile')}
             </span>
-            <span className="px-3 py-1 text-xs font-semibold rounded-[5px] bg-card text-ink border border-rule-2">
+            <span className="tag-info border border-info-rule font-mono">
               Chain ID: {authorityConfig.chainId}
             </span>
           </div>
-          <h1
-            className="text-[34px] sm:text-[46px] font-bold text-ink leading-[1.05] tracking-[-0.04em] max-w-[22ch]"
-            data-testid="passkey-page-header"
-          >
-            {t('passkey.hero.title')}
-          </h1>
-          <p className="text-ink-2 text-base md:text-[17.5px] max-w-3xl leading-relaxed">
-            {t('passkey.hero.desc')}
-          </p>
         </section>
       </div>
 
-      <div className="wrap py-10">
+      <div className="wrap band">
       <div className="max-w-4xl space-y-8">
 
         {/* On-Chain Specs Card */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 rounded-xl bg-card border border-rule">
-            <div className="text-xs text-ink-2 font-medium">Precompile</div>
-            <div className="font-mono text-sm text-paid mt-1">0x0000...0100</div>
+          <div className="p-4 rounded-data bg-card border border-rule border-t-4 border-t-info">
+            <div className="text-sm text-ink-2 font-medium">Precompile</div>
+            <div className="font-mono text-[15px] text-paid mt-1">0x0000...0100</div>
             <div className="text-xs text-ink-2 mt-1">RIP-7212 secp256r1 Native</div>
           </div>
-          <div className="p-4 rounded-xl bg-card border border-rule">
-            <div className="text-xs text-ink-2 font-medium">Authority Contract</div>
-            <div className="font-mono text-sm text-ink mt-1" title={authorityConfig.authorityAddress}>
+          <div className="p-4 rounded-data bg-card border border-rule border-t-4 border-t-info">
+            <div className="text-sm text-ink-2 font-medium">Authority Contract</div>
+            <div className="font-mono text-[15px] text-info mt-1" title={authorityConfig.authorityAddress}>
               {authorityConfig.authorityAddress.slice(0, 6)}...{authorityConfig.authorityAddress.slice(-4)}
             </div>
             <div className="text-xs text-ink-2 mt-1">Next Nonce: {authorityConfig.nextNonce}</div>
           </div>
-          <div className="p-4 rounded-xl bg-card border border-rule">
-            <div className="text-xs text-ink-2 font-medium">Guarded Treasury</div>
-            <div className="font-mono text-sm text-ink mt-1" title={authorityConfig.treasuryAddress}>
+          <div className="p-4 rounded-data bg-card border border-rule border-t-4 border-t-info">
+            <div className="text-sm text-ink-2 font-medium">Guarded Treasury</div>
+            <div className="font-mono text-[15px] text-info mt-1" title={authorityConfig.treasuryAddress}>
               {authorityConfig.treasuryAddress.slice(0, 6)}...{authorityConfig.treasuryAddress.slice(-4)}
             </div>
             <div className="text-xs text-ink-2 mt-1">Managed Treasury</div>
@@ -410,22 +409,22 @@ export default function NewMissionPasskeyPage() {
         {/* Registered Passkey Status & Metadata */}
         <div className="p-5 rounded-card bg-card border border-rule space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-ink">
+            <h2 className="card-title">
               Thiết Bị Passkey Xác Thực (Owner Credential)
             </h2>
             {registeredKey ? (
-              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-paid-bg text-paid border border-paid-rule">
+              <span className="tag-paid border border-paid-rule">
                 Đã ghi nhận Passkey
               </span>
             ) : (
-              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-warn-bg text-warn border border-warn-rule">
+              <span className="tag-warn border border-warn-rule">
                 Chưa đăng ký
               </span>
             )}
           </div>
 
           {registeredKey ? (
-            <div className="space-y-2 text-xs">
+            <div className="space-y-2 text-sm font-mono">
               <div className="text-ink-2 break-all">
                 <span className="text-ink-2">Credential ID:</span> {registeredKey.id}
               </div>
@@ -438,25 +437,25 @@ export default function NewMissionPasskeyPage() {
 
               <div className="pt-2 flex flex-wrap items-center gap-3">
                 {isCoordinatesMatched ? (
-                  <span className="px-2 py-1 rounded bg-paid-bg border border-paid-rule text-paid text-xs">
+                  <span className="px-2 py-1 rounded-tag bg-paid-bg border border-paid-rule text-paid text-xs">
                     ✓ Khớp hoàn toàn với Passkey đăng ký trên Authority Contract
                   </span>
                 ) : (
-                  <span className="px-2 py-1 rounded bg-warn-bg border border-warn-rule text-warn text-xs">
+                  <span className="px-2 py-1 rounded-tag bg-warn-bg border border-warn-rule text-warn text-xs">
                     ℹ Tọa độ khác Authority on-chain hiện tại (Sử dụng nút xuất cấu hình bên dưới cho script deploy)
                   </span>
                 )}
                 <button
                   type="button"
                   onClick={handleCopyExport}
-                  className="px-3 py-1 rounded bg-mist hover:bg-mist-2 text-ink border border-rule text-xs transition"
+                  className="btn-ghost btn-sm"
                 >
                   {copiedExport ? 'Đã sao chép!' : 'Xuất tọa độ cho script deploy'}
                 </button>
               </div>
             </div>
           ) : (
-            <p className="text-xs text-ink-2">
+            <p className="text-[15px] text-ink-2">
               Nhấn nút &quot;{t('passkey.btn.register')}&quot; để khởi tạo cặp khóa P-256 phần cứng an toàn trên thiết bị (Touch ID, Face ID, Windows Hello). Không có private key nào được lưu trên máy chủ hay truyền qua mạng.
             </p>
           )}
@@ -470,11 +469,11 @@ export default function NewMissionPasskeyPage() {
           }}
           className="p-6 rounded-card bg-card border border-rule space-y-6"
         >
-          <h2 className="text-lg font-semibold text-ink">Mission Configuration & Caps</h2>
+          <h2 className="card-title">Mission Configuration & Caps</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="missionSlugInput" className="block text-xs font-semibold text-ink-2 mb-1">
+              <label htmlFor="missionSlugInput" className="block text-[15px] font-semibold text-ink mb-1.5">
                 {t('passkey.field.slug')}
               </label>
               <input
@@ -484,12 +483,12 @@ export default function NewMissionPasskeyPage() {
                 value={missionSlug}
                 onChange={(e) => setMissionSlug(e.target.value)}
                 aria-describedby="missionSlugHelp"
-                className="w-full px-3 py-2 rounded-lg bg-card border border-rule-2 text-sm font-mono text-ink focus:outline-none focus:ring-2 focus:ring-ink focus:border-ink min-h-[44px]"
+                className="input w-full font-mono text-sm min-h-[44px]"
               />
               <span id="missionSlugHelp" className="sr-only">Unique identifier for this mission</span>
             </div>
             <div>
-              <label htmlFor="agentAddressInput" className="block text-xs font-semibold text-ink-2 mb-1">
+              <label htmlFor="agentAddressInput" className="block text-[15px] font-semibold text-ink mb-1.5">
                 {t('passkey.field.agent')}
               </label>
               <input
@@ -499,14 +498,14 @@ export default function NewMissionPasskeyPage() {
                 value={agentAddress}
                 onChange={(e) => setAgentAddress(e.target.value)}
                 aria-describedby="agentAddressHelp"
-                className="w-full px-3 py-2 rounded-lg bg-card border border-rule-2 text-sm font-mono text-ink focus:outline-none focus:ring-2 focus:ring-ink focus:border-ink min-h-[44px]"
+                className="input w-full font-mono text-sm min-h-[44px]"
               />
               <span id="agentAddressHelp" className="sr-only">Avalanche address of the agent signer</span>
             </div>
           </div>
 
           <div>
-            <label htmlFor="payeeRootInput" className="block text-xs font-semibold text-ink-2 mb-1">
+            <label htmlFor="payeeRootInput" className="block text-[15px] font-semibold text-ink mb-1.5">
               {t('passkey.field.payee_root')}
             </label>
             <input
@@ -516,14 +515,14 @@ export default function NewMissionPasskeyPage() {
               value={payeeRoot}
               onChange={(e) => setPayeeRoot(e.target.value)}
               aria-describedby="payeeRootHelp"
-              className="w-full px-3 py-2 rounded-lg bg-card border border-rule-2 text-sm font-mono text-ink focus:outline-none focus:ring-2 focus:ring-ink focus:border-ink min-h-[44px]"
+              className="input w-full font-mono text-sm min-h-[44px]"
             />
             <span id="payeeRootHelp" className="sr-only">Owner-signed Merkle root of authorized payee addresses</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label htmlFor="capUsdcInput" className="block text-xs font-semibold text-ink-2 mb-1">
+              <label htmlFor="capUsdcInput" className="block text-[15px] font-semibold text-ink mb-1.5">
                 {t('passkey.field.cap')}
               </label>
               <input
@@ -532,11 +531,11 @@ export default function NewMissionPasskeyPage() {
                 type="text"
                 value={capUsdc}
                 onChange={(e) => setCapUsdc(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-card border border-rule-2 text-sm font-mono text-ink focus:outline-none focus:ring-2 focus:ring-ink focus:border-ink min-h-[44px]"
+                className="input w-full font-mono text-sm min-h-[44px]"
               />
             </div>
             <div>
-              <label htmlFor="toolCapUsdcInput" className="block text-xs font-semibold text-ink-2 mb-1">
+              <label htmlFor="toolCapUsdcInput" className="block text-[15px] font-semibold text-ink mb-1.5">
                 {t('passkey.field.tool_cap')}
               </label>
               <input
@@ -545,11 +544,11 @@ export default function NewMissionPasskeyPage() {
                 type="text"
                 value={toolCapUsdc}
                 onChange={(e) => setToolCapUsdc(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-card border border-rule-2 text-sm font-mono text-ink focus:outline-none focus:ring-2 focus:ring-ink focus:border-ink min-h-[44px]"
+                className="input w-full font-mono text-sm min-h-[44px]"
               />
             </div>
             <div>
-              <label htmlFor="durationHoursInput" className="block text-xs font-semibold text-ink-2 mb-1">
+              <label htmlFor="durationHoursInput" className="block text-[15px] font-semibold text-ink mb-1.5">
                 {t('passkey.field.duration')}
               </label>
               <input
@@ -558,7 +557,7 @@ export default function NewMissionPasskeyPage() {
                 type="text"
                 value={durationHours}
                 onChange={(e) => setDurationHours(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-card border border-rule-2 text-sm font-mono text-ink focus:outline-none focus:ring-2 focus:ring-ink focus:border-ink min-h-[44px]"
+                className="input w-full font-mono text-sm min-h-[44px]"
               />
             </div>
           </div>
@@ -569,7 +568,7 @@ export default function NewMissionPasskeyPage() {
               type="button"
               onClick={handleRegisterPasskey}
               disabled={loading}
-              className="px-5 py-2.5 rounded-full font-medium text-sm bg-card hover:bg-mist text-ink border border-rule-2 transition focus:outline-none focus:ring-2 focus:ring-ink min-h-[44px]"
+              className="btn-ghost min-h-[44px] focus:outline-none focus:ring-2 focus:ring-ink"
               data-testid="register-passkey-btn"
             >
               {t('passkey.btn.register')}
@@ -578,7 +577,7 @@ export default function NewMissionPasskeyPage() {
             <button
               type="submit"
               disabled={loading || !registeredKey}
-              className={`px-6 py-2.5 rounded-full font-semibold text-sm transition flex items-center space-x-2 focus:outline-none min-h-[44px] ${
+              className={`btn min-h-[44px] focus:outline-none ${
                 !registeredKey || loading
                   ? 'bg-mist text-ink-3 cursor-not-allowed border border-rule'
                   : 'bg-brand hover:bg-brand-deep text-white focus:ring-2 focus:ring-ink'
@@ -589,14 +588,14 @@ export default function NewMissionPasskeyPage() {
             </button>
 
             {loading && (
-              <span className="text-xs text-ink animate-pulse font-medium">Processing transaction...</span>
+              <span className="text-sm text-ink animate-pulse font-medium">Processing transaction...</span>
             )}
           </div>
 
           {/* Error Message */}
           {errorMessage && (
             <div
-              className="p-3.5 rounded-xl bg-blocked-bg border border-blocked-rule border-l-4 border-l-brand text-xs text-blocked"
+              className="outcome-blocked p-3.5 text-sm text-blocked"
               role="alert"
               data-testid="passkey-error-alert"
             >
@@ -607,7 +606,7 @@ export default function NewMissionPasskeyPage() {
           {/* Status Message */}
           {status && (
             <div
-              className="p-3.5 rounded-xl bg-paper border border-rule text-xs text-ink"
+              className="p-3.5 rounded-data bg-paper border border-rule text-sm text-ink"
               role="status"
               aria-live="polite"
             >
@@ -619,21 +618,21 @@ export default function NewMissionPasskeyPage() {
         {/* Live Relay Results Card */}
         {relayResult && relayResult.status === 'CONFIRMED' && relayResult.txHash && relayResult.blockNumber && (
           <div
-            className="p-6 rounded-card bg-paid-bg border border-paid-rule border-l-4 border-l-paid space-y-4"
+            className="outcome-paid p-6 space-y-4"
             data-testid="passkey-confirmed-card"
           >
-            <div className="flex items-center space-x-2 text-paid font-semibold text-sm">
+            <div className="flex items-center space-x-2 text-paid font-semibold text-lg">
               <span>{t('passkey.success.title')}</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div className="break-all">
                 <span className="text-ink-2">Tx Hash:</span>{' '}
                 <a
                   href={relayResult.snowtraceUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-ink underline"
+                  className="link font-mono"
                 >
                   {relayResult.txHash || 'N/A'}
                 </a>
@@ -656,17 +655,17 @@ export default function NewMissionPasskeyPage() {
 
         {relayResult && relayResult.status === 'SIMULATION_SUCCESS' && (
           <div
-            className="p-6 rounded-card bg-tint-slate border border-rule-2 space-y-4"
+            className="p-6 rounded-data bg-info-bg border border-info-rule border-l-4 border-l-info space-y-4"
             data-testid="passkey-simulation-card"
           >
             <div className="flex items-center space-x-2 text-ink font-semibold text-sm">
-              <span className="px-2 py-0.5 rounded bg-tint-slate text-ink text-xs font-bold">
+              <span className="tag-info border border-info-rule">
                 Simulation Success
               </span>
               <span>Xác thực mô phỏng thành công (Chưa broadcast on-chain)</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-ink-2">Contract:</span>{' '}
                 <span className="text-ink break-all">{relayResult.authorityAddress}</span>

@@ -2,14 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
-/* v6 design tokens (artifacts/ui-mockup/index-v6.html). Colour carries meaning:
-   red = blocked / brand, green = paid / allowed. Always paired with text. */
+/* v8b design tokens (artifacts/ui-mockup/DESIGN_SYSTEM_v8b.md). Colour carries meaning:
+   red = brand / blocked / attack, green = paid / valid, amber = pending / MOCK,
+   blue = links / data / on-chain references, navy = dark proof bands.
+   Colour is never alone: every status also has a word. */
 :root {
   --paper: #F7F6F2;
   --card: #FFFFFF;
   --ink: #0F1115;
   --ink-2: #454A53;
-  --ink-3: #6B717B; /* v6 #7C828C darkened to pass WCAG AA (4.5:1) on paper and white */
+  --ink-3: #5E646E; /* secondary text floor on paper */
   --rule: #E4E3DC;
   --rule-2: #CFCEC7;
   --mist: #EFEEE8;
@@ -23,15 +25,24 @@
   --blocked: #D3102E;
   --blocked-bg: #FCE8EB;
   --blocked-rule: #F2BCC5;
-  --warn: #7A4E00;
-  --warn-bg: #FBF0D9;
+  --amber: #B7791F;
+  --warn: #7A4E00; /* amber text, darkened from #B7791F so small text passes AA */
+  --warn-bg: #FBF0DC;
   --warn-rule: #EBD3A0;
-  --sand: #EFE9DD;
-  --night: #12151B;
-  --night-2: #191C22;
-  --night-rule: #2A2E36;
+  --info: #2457C5;
+  --info-bg: #E7EEFB;
+  --info-rule: #C3D3F2;
+  --navy: #14213D;
+  --navy-2: #1C2B4D;
+  --navy-rule: #2E3D60;
+  --sand: #ECE7DD;
   --tint-rose: #FBEDEA;
-  --tint-slate: #E7ECF2;
+  --tint-slate: #E6ECF3;
+  --tint-mint: #E6F2EC;
+  /* Dark surfaces (projector pages, proof bands) use navy instead of near-black. */
+  --night: #14213D;
+  --night-2: #1C2B4D;
+  --night-rule: #2E3D60;
 }
 
 html {
@@ -43,8 +54,8 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-geist), system-ui, sans-serif;
-  font-size: 15.5px;
-  line-height: 1.5;
+  font-size: 16px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -58,11 +69,93 @@ body {
     @apply mx-auto w-full max-w-[1240px] px-5 sm:px-8;
   }
 
+  /* Display type: Archivo 900 uppercase, page h1 and section h2 only. */
+  .display-h1 {
+    @apply m-0 font-display text-[36px] font-black uppercase leading-[.95] tracking-[-0.02em] text-ink sm:text-[48px] lg:text-[60px];
+    overflow-wrap: break-word;
+  }
+  .sec-h {
+    @apply m-0 mb-3 max-w-[26ch] font-display text-[28px] font-black uppercase leading-[.95] tracking-[-0.02em] sm:text-[36px] lg:text-[40px];
+    overflow-wrap: break-word;
+  }
+  .sec-p {
+    @apply m-0 mb-7 max-w-[62ch] text-[16.5px] leading-[1.55] text-ink-2;
+  }
+  .lede {
+    @apply m-0 max-w-[62ch] text-[17px] leading-[1.55] text-ink-2;
+  }
+  .stop {
+    color: var(--brand);
+  }
+  /* Red full stop drawn by CSS, for headings whose exact text is asserted by tests. */
+  .stop-after::after {
+    content: ".";
+    color: var(--brand);
+  }
+
+  /* Micro-label: mono uppercase, preceded by an 8px red square. */
+  .kick {
+    @apply mb-3 flex items-center gap-2 font-mono text-[13px] font-medium uppercase tracking-[0.12em] text-ink-3;
+  }
+  .kick::before {
+    content: "";
+    flex: none;
+    width: 8px;
+    height: 8px;
+    background: var(--brand);
+  }
+
+  /* Card / table title: Geist 600, sentence case, never uppercase. */
+  .card-title {
+    @apply m-0 text-[18px] font-semibold leading-snug tracking-[-0.01em] text-ink sm:text-[19px];
+  }
+
+  /* Page hero: tinted band with a faint triangle grid (hero only). */
+  .hero-band {
+    @apply relative;
+    background-color: var(--hero-tint, var(--paper));
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='48'%3E%3Cpath d='M0 48 L28 0 L56 48 Z' fill='none' stroke='%230F1115' stroke-opacity='.07' stroke-width='1'/%3E%3C/svg%3E");
+  }
+  .hero-paper { --hero-tint: var(--paper); }
+  .hero-sand { --hero-tint: var(--sand); }
+  .hero-rose { --hero-tint: var(--tint-rose); }
+  .hero-slate { --hero-tint: var(--tint-slate); }
+  .hero-mint { --hero-tint: var(--tint-mint); }
+  .hero-inner {
+    @apply wrap pb-12 pt-10 sm:pb-14 sm:pt-12;
+  }
+
+  /* Proof band: navy with a 12px red bar above. */
+  .redbar {
+    height: 12px;
+    background: var(--brand);
+  }
+  .band-navy {
+    background: var(--navy);
+    color: #E9ECF2;
+  }
+  .band-navy .sec-h {
+    color: #fff;
+  }
+  .band-navy .sec-p,
+  .band-navy .lede {
+    color: #B4BDCC;
+  }
+  .band-navy .kick {
+    color: #B4BDCC;
+  }
+  .band {
+    @apply py-14 lg:py-[72px];
+  }
+
   /* Pill buttons */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-[18px] py-[11px] text-[15px] font-medium no-underline transition-colors;
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-[18px] py-[11px] text-[15px] font-semibold no-underline transition-colors;
   }
   .btn-primary {
+    @apply btn bg-brand text-white hover:bg-brand-deep;
+  }
+  .btn-dark {
     @apply btn bg-ink text-white hover:bg-ink-2;
   }
   .btn-ghost {
@@ -71,10 +164,17 @@ body {
   .btn-sm {
     @apply px-3.5 py-2 text-sm;
   }
+  .btn-arrow::after {
+    content: "\2192";
+    margin-left: 2px;
+  }
+  .btn-dark.btn-arrow::after {
+    color: var(--brand);
+  }
 
-  /* Small tags: colour plus text, never colour alone */
+  /* Status tags: 6px corners, colour plus text, never colour alone. */
   .tag {
-    @apply inline-flex items-center whitespace-nowrap rounded-[5px] px-[9px] py-1 text-[12.5px] font-bold;
+    @apply inline-flex items-center whitespace-nowrap rounded-tag px-[9px] py-1 text-[13px] font-bold leading-tight;
   }
   .tag-paid {
     @apply tag bg-paid-bg text-paid;
@@ -88,24 +188,49 @@ body {
   .tag-warn {
     @apply tag bg-warn-bg text-warn;
   }
+  .tag-info {
+    @apply tag bg-info-bg text-info;
+  }
 
+  /* Content card: 16px. Data panel (tables, receipts, code, tx rows): 4px. */
   .card {
     @apply rounded-card border border-rule bg-card;
   }
-
-  .sec-h {
-    @apply m-0 mb-2.5 max-w-[24ch] text-[30px] font-bold leading-[1.08] tracking-[-0.035em] sm:text-[38px];
+  .panel {
+    @apply rounded-data border border-rule bg-card;
   }
-  .sec-p {
-    @apply m-0 mb-7 max-w-[60ch] text-[16.5px] text-ink-2;
+  .code-block {
+    @apply overflow-x-auto whitespace-pre-wrap break-all rounded-data border border-rule bg-chalk p-3 font-mono text-[13px] leading-[1.5] text-ink-2;
   }
 
-  /* Paper / Kaggle-style tables */
+  /* Outcome: filled panel with a 4px left border in the status colour. */
+  .outcome {
+    @apply rounded-data border border-l-4 p-4;
+  }
+  .outcome-paid {
+    @apply outcome border-paid-rule border-l-paid bg-paid-bg;
+  }
+  .outcome-blocked {
+    @apply outcome border-blocked-rule border-l-brand bg-blocked-bg;
+  }
+  .outcome-warn {
+    @apply outcome border-warn-rule border-l-amber bg-warn-bg;
+  }
+
+  .input {
+    @apply rounded-input border border-rule-2 bg-card px-3.5 py-2.5 text-[15px] text-ink focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink;
+  }
+
+  .link {
+    @apply text-info underline underline-offset-2 hover:text-ink;
+  }
+
+  /* Paper-style data tables (4px container, mono uppercase headers) */
   .tbl :where(table) {
-    @apply w-full border-collapse text-[14.5px];
+    @apply w-full border-collapse text-[15px];
   }
   .tbl :where(th) {
-    @apply border-b-[1.5px] border-ink pb-2.5 pr-3.5 text-left text-[13px] font-medium text-ink-3;
+    @apply border-b-[1.5px] border-ink pb-2.5 pr-3.5 text-left font-mono text-[13px] font-medium uppercase tracking-[0.06em] text-ink-3;
   }
   .tbl :where(td) {
     @apply border-b border-rule py-[13px] pr-3.5 align-middle;
@@ -117,6 +242,6 @@ body {
     @apply whitespace-nowrap tabular-nums;
   }
   .tbl :where(figcaption) {
-    @apply mt-3 max-w-[90ch] text-[13.5px] text-ink-2;
+    @apply mt-3 max-w-[90ch] text-sm text-ink-2;
   }
 }

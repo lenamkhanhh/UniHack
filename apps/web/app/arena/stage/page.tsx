@@ -122,9 +122,9 @@ export default function ArenaStagePage() {
         <div className="flex items-center space-x-3">
           <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white flex items-center space-x-2">
+            <h1 className="font-display text-[28px] font-black uppercase leading-none tracking-[-0.02em] text-white flex items-center space-x-2">
               <span>FREYSA ARENA</span>
-              <span className="text-xs bg-red-500/20 text-red-400 border border-red-500/40 px-2 py-0.5 rounded font-mono">
+              <span className="text-xs bg-red-500/20 text-red-400 border border-red-500/40 px-2 py-0.5 rounded-tag font-mono">
                 STAGE LIVE
               </span>
             </h1>
@@ -136,14 +136,14 @@ export default function ArenaStagePage() {
 
         <div className="flex items-center space-x-2">
           <span className="text-xs font-mono text-slate-300">PAYMENT_MODE:</span>
-          <span className="text-xs px-2.5 py-1 bg-amber-500/10 text-amber-300 border border-amber-500/30 rounded font-mono font-bold">
+          <span className="text-xs px-2.5 py-1 bg-amber-500/10 text-amber-300 border border-amber-500/30 rounded-tag font-mono font-bold">
             MOCK SANDBOX (ZERO REAL LOSS)
           </span>
         </div>
       </div>
 
       {/* Live Fuji Realtime Balances (WOW-W5) */}
-      <div className="bg-night border border-night-rule rounded-xl px-4 py-2.5 my-3 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+      <div className="bg-night border border-night-rule rounded-data px-4 py-2.5 my-3 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
         <div className="flex items-center space-x-2">
           {fujiBalances?.mode === 'LIVE_FUJI' ? (
             <>
@@ -161,7 +161,7 @@ export default function ArenaStagePage() {
             </>
           )}
         </div>
-        <div className="flex items-center space-x-6 text-[11px]">
+        <div className="flex items-center space-x-6 text-[13px]">
           <div>
             <span className="text-gray-400">Treasury (0x2045...): </span>
             <span className="text-white font-bold">{fujiBalances?.balances?.treasuryUsdc ?? '5.80'} USDC</span>
@@ -205,7 +205,7 @@ export default function ArenaStagePage() {
             {stats.convincedAttacks}
           </span>
           <span className="text-xs text-amber-400/80 mt-2 font-medium">
-            LLM đồng ý xuất lệnh sai luật ✅
+            LLM đồng ý xuất lệnh sai luật 
           </span>
         </div>
 
@@ -234,7 +234,7 @@ export default function ArenaStagePage() {
           <span className="text-emerald-400 font-bold text-sm">
             ${remainingUsdc} / ${capUsdc}
           </span>
-          <span className="text-slate-300 text-[11px]">
+          <span className="text-slate-300 text-[13px]">
             (Đã chi: ${spentBudgetUsdc})
           </span>
         </div>
@@ -264,7 +264,7 @@ export default function ArenaStagePage() {
             </div>
           </div>
 
-          <div className="text-[11px] text-gray-400 bg-red-950/20 p-2.5 rounded-lg border border-red-900/30 w-full mt-4">
+          <div className="text-[13px] text-gray-400 bg-red-950/20 p-2.5 rounded-data border border-red-900/30 w-full mt-4">
             <span className="font-bold text-red-300 block mb-1">Quy tắc Arena:</span>
             Mọi đòn tấn công được truyền trực tiếp vào Agent qua sandbox. Validator chặn người nhận không truy về chữ ký owner, lệnh vượt cap, và mọi lệnh đổi policy.
           </div>
@@ -277,7 +277,7 @@ export default function ArenaStagePage() {
               <span className="text-xs font-mono font-bold uppercase tracking-wider text-gray-400">
                 Nhật ký đòn tấn công trực tiếp (Live Attack Feed)
               </span>
-              <span className="text-[10px] font-mono bg-cyan-950/40 text-cyan-300 border border-cyan-800 px-2 py-0.5 rounded-full">
+              <span className="text-[13px] font-mono bg-cyan-950/40 text-cyan-300 border border-cyan-800 px-2 py-0.5 rounded-full">
                 Thời gian thực
               </span>
             </div>
@@ -291,25 +291,25 @@ export default function ArenaStagePage() {
               data.recentAttacks.map((atk: any) => (
                 <div
                   key={atk.id}
-                  className="bg-[#101522] border border-night-rule rounded-xl p-4 space-y-2 hover:border-night-rule transition"
+                  className="bg-navy-2 border border-night-rule rounded-data p-4 space-y-2 hover:border-night-rule transition"
                 >
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center space-x-2">
                       <span className="font-mono text-gray-400">{atk.timestamp?.slice(11, 19)}</span>
-                      <span className="font-mono text-cyan-400 font-bold bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-900">
+                      <span className="font-mono text-cyan-400 font-bold bg-cyan-950/40 px-2 py-0.5 rounded-tag border border-cyan-900">
                         Client #{atk.clientTag}
                       </span>
                     </div>
 
                     <div className="flex items-center space-x-2">
                       {atk.agentConvinced && (
-                        <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-mono text-[10px] font-bold">
-                          🧠 LLM THUYẾT PHỤC ✅
+                        <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-tag font-mono text-[13px] font-bold">
+                          LLM THUYẾT PHỤC ✅
                         </span>
                       )}
                       {(atk.toProvenance || atk.verdict?.toProvenance) && (
                         <span
-                          className={`font-mono font-bold text-[10px] px-2 py-0.5 rounded border ${
+                          className={`font-mono font-bold text-[13px] px-2 py-0.5 rounded-tag border ${
                             (atk.toProvenance || atk.verdict?.toProvenance) === 'OWNER_MISSION'
                               ? 'bg-emerald-950/40 text-emerald-300 border-emerald-700/60'
                               : (atk.toProvenance || atk.verdict?.toProvenance) === 'TOOL_OUTPUT'
@@ -323,7 +323,7 @@ export default function ArenaStagePage() {
                         </span>
                       )}
                       <span
-                        className={`font-mono font-bold text-[10px] px-2.5 py-0.5 rounded ${
+                        className={`font-mono font-bold text-[13px] px-2.5 py-0.5 rounded-tag ${
                           atk.verdict?.outcome === 'BLOCK'
                             ? 'bg-red-500/20 text-red-400 border border-red-500/40'
                             : atk.verdict?.outcome === 'QUEUE'
@@ -332,10 +332,10 @@ export default function ArenaStagePage() {
                         }`}
                       >
                         {atk.verdict?.outcome === 'BLOCK'
-                          ? `🛑 CHẶN BỞI ${atk.verdict?.rule || 'RULE'}`
+                          ? `CHẶN BỞI ${atk.verdict?.rule || 'RULE'}`
                           : atk.verdict?.outcome === 'QUEUE'
-                          ? `⏳ VÀO HÀNG ĐỢI (${atk.verdict?.rule})`
-                          : '✅ HỢP LỆ'}
+                          ? `VÀO HÀNG ĐỢI (${atk.verdict?.rule})`
+                          : 'HỢP LỆ'}
                       </span>
                     </div>
                   </div>
@@ -348,29 +348,28 @@ export default function ArenaStagePage() {
 
                   {/* Decoded Morse info if present */}
                   {atk.decodedMorse && (
-                    <div className="text-xs bg-amber-950/30 border border-amber-800/40 p-2 rounded text-amber-200 font-mono">
-                      📻 <span className="font-bold">Mã Morse giải mã:</span> {atk.decodedMorse}
+                    <div className="text-xs bg-amber-950/30 border border-amber-800/40 p-2 rounded-tag text-amber-200 font-mono">
+                      <span className="font-bold">Mã Morse giải mã:</span> {atk.decodedMorse}
                     </div>
                   )}
 
                   {/* Defense Verdict Details */}
                   <div className="flex items-center justify-between text-xs pt-1 border-t border-night-rule">
                     <div className="flex items-center space-x-3">
-                      <span className="text-gray-400 text-[11px] truncate max-w-[280px]">
+                      <span className="text-gray-400 text-[13px] truncate max-w-[280px]">
                         {atk.verdict?.reason || atk.agentThought}
                       </span>
                       {atk.provenanceTrace && (
                         <button
                           type="button"
                           onClick={() => setExpandedTraceId(expandedTraceId === atk.id ? null : atk.id)}
-                          className="text-[11px] text-cyan-400 hover:text-cyan-300 underline font-mono flex items-center gap-1"
+                          className="text-[13px] text-cyan-400 hover:text-cyan-300 underline font-mono flex items-center gap-1"
                         >
-                          <span>🧬</span>
                           <span>{expandedTraceId === atk.id ? 'Thu gọn Trace' : 'Xem Provenance Trace'}</span>
                         </button>
                       )}
                     </div>
-                    <span className="text-emerald-400 font-mono font-bold text-[11px]">
+                    <span className="text-emerald-400 font-mono font-bold text-[13px]">
                       Tổn thất: $0.00
                     </span>
                   </div>
@@ -389,7 +388,7 @@ export default function ArenaStagePage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 <p className="text-xs font-mono">Đang chờ đòn tấn công đầu tiên từ khán giả...</p>
-                <p className="text-[11px] text-slate-400">Quét mã QR bên cạnh để bắt đầu thử nghiệm.</p>
+                <p className="text-[13px] text-slate-400">Quét mã QR bên cạnh để bắt đầu thử nghiệm.</p>
               </div>
             )}
           </div>

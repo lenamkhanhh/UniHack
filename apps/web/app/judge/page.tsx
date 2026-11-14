@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n';
+import { Kicker, Stop } from '@/components/Display';
 
 interface JudgeReceiptItem {
   id: string;
@@ -139,26 +140,24 @@ export default function JudgePage() {
 
   return (
     <div>
-      {/* Hero band: sand */}
-      <div className="bg-sand border-b border-rule">
-      <section className="space-y-4 pt-10 pb-10 max-w-6xl mx-auto px-4 sm:px-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-[5px] bg-card border border-rule-2 text-ink text-xs font-semibold">
-          <span className="flex h-2 w-2 relative">
-            <span className="text-white absolute inline-flex h-full w-full rounded-full bg-ink opacity-75"></span>
-            <span className="text-white relative inline-flex rounded-full h-2 w-2 bg-ink"></span>
-          </span>
+      {/* Hero band: slate */}
+      <div className="hero-band hero-slate">
+      <section className="hero-inner">
+        <Kicker>
           {isVi
             ? 'XÁC MINH TRỰC TIẾP AVALANCHE FUJI · ĐÁNH GIÁ 30 GIÂY'
             : 'AVALANCHE FUJI LIVE VERIFICATION · 30-SECOND AUDIT'}
-        </div>
+        </Kicker>
 
-        <h1 className="text-[34px] sm:text-[46px] font-bold text-ink leading-[1.05] tracking-[-0.04em] max-w-[22ch]">
-          {isVi
-            ? 'Chế độ Giám khảo: Tự Kiểm Chứng trong 30 Giây'
-            : 'Judge Mode: Verify On-Chain Proof in 30 Seconds'}
+        <h1 className="display-h1 mb-5 max-w-[20ch]">
+          <Stop>
+            {isVi
+              ? 'Chế độ Giám khảo: Tự Kiểm Chứng trong 30 Giây'
+              : 'Judge Mode: Verify On-Chain Proof in 30 Seconds'}
+          </Stop>
         </h1>
 
-        <p className="text-ink-2 text-base md:text-[17.5px] max-w-3xl leading-relaxed">
+        <p className="lede">
           {isVi
             ? 'Kiểm tra biên lai các giao dịch đã thực sự diễn ra on-chain trên Avalanche Fuji C-Chain, hoặc trực tiếp mô phỏng các giao dịch tấn công từ ví agent tới smart contract bằng eth_call ngay tại đây.'
             : 'Inspect live receipts of transactions that already occurred on Avalanche Fuji C-Chain, or simulate arbitrary off-mission attacks directly against the deployed contract via eth_call with zero gas and zero setup.'}
@@ -166,15 +165,17 @@ export default function JudgePage() {
       </section>
       </div>
 
-      <div className="space-y-12 py-10 max-w-6xl mx-auto px-4 sm:px-6">
-      {/* Block 1: Already happened on Fuji */}
-      <section aria-labelledby="block1-heading" className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      {/* Block 1: Already happened on Fuji (proof band) */}
+      <div className="redbar" aria-hidden="true" />
+      <div className="band-navy">
+      <section aria-labelledby="block1-heading" className="wrap band space-y-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2 id="block1-heading" className="text-xl sm:text-2xl font-bold text-ink flex items-center gap-2">
-              <span>{isVi ? 'Đã Diễn Ra Trên Avalanche Fuji C-Chain' : 'Already Happened on Avalanche Fuji C-Chain'}</span>
+            <Kicker>{isVi ? 'Biên lai đọc trực tiếp từ Fuji RPC' : 'Receipts read live from Fuji RPC'}</Kicker>
+            <h2 id="block1-heading" className="sec-h">
+              <Stop>{isVi ? 'Đã Diễn Ra Trên Avalanche Fuji C-Chain' : 'Already Happened on Avalanche Fuji C-Chain'}</Stop>
             </h2>
-            <p className="text-xs sm:text-sm text-ink-2 mt-1">
+            <p className="sec-p mb-0">
               {isVi
                 ? 'Đọc trực tiếp từ RPC Avalanche Fuji thông qua viem getTransactionReceipt khi tải trang. Không có số liệu gõ tay.'
                 : 'Queried directly from Avalanche Fuji RPC on page load via viem getTransactionReceipt. 100% measured on-chain.'}
@@ -182,7 +183,7 @@ export default function JudgePage() {
           </div>
           <Link
             href="/arena/twin"
-            className="text-xs text-ink hover:text-ink underline flex items-center gap-1"
+            className="flex items-center gap-1 text-[15px] text-[#A9C2F5] underline underline-offset-2 hover:text-white"
           >
             <span>{isVi ? 'Xem Bảng Đối Chứng Twin Treasury' : 'View Twin Treasury Arena'}</span>
             <span>→</span>
@@ -190,14 +191,14 @@ export default function JudgePage() {
         </div>
 
         {loadingReceipts ? (
-          <div className="p-8 rounded-card bg-card border border-rule text-center space-y-3">
+          <div className="p-8 rounded-data bg-navy-2 border border-navy-rule text-center space-y-3">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-paid"></div>
-            <p className="text-sm text-ink-2">
+            <p className="text-[15px] text-[#B4BDCC]">
               {isVi ? 'Đang đọc biên lai trực tiếp từ Avalanche Fuji RPC...' : 'Fetching live transaction receipts from Avalanche Fuji RPC...'}
             </p>
           </div>
         ) : receiptsError ? (
-          <div className="p-6 rounded-card bg-blocked-bg border border-blocked-rule text-blocked space-y-2">
+          <div className="outcome-blocked p-6 text-blocked space-y-2">
             <div className="font-bold flex items-center gap-2">
               <span>{isVi ? 'Lỗi kết nối RPC Fuji' : 'Fuji RPC Connectivity Issue'}</span>
             </div>
@@ -211,7 +212,7 @@ export default function JudgePage() {
                 <div
                   key={rc.id}
                   id={`receipt-card-${rc.id}`}
-                  className={`p-5 rounded-card border border-l-4 transition-all flex flex-col justify-between space-y-4 ${
+                  className={`p-5 rounded-data border border-l-4 transition-all flex flex-col justify-between space-y-4 ${
                     isSuccess
                       ? 'bg-paid-bg border-paid-rule border-l-paid'
                       : 'bg-blocked-bg border-blocked-rule border-l-brand'
@@ -219,11 +220,11 @@ export default function JudgePage() {
                 >
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold text-ink-2">
+                      <span className="font-mono text-[13px] font-medium tracking-[0.08em] text-ink-2">
                         STEP {rc.step}
                       </span>
                       <span
-                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${
+                        className={`px-2.5 py-0.5 rounded-tag text-[13px] font-bold uppercase tracking-wider ${
                           isSuccess
                             ? 'bg-paid-bg text-paid border border-paid-rule'
                             : 'bg-blocked-bg text-blocked border border-blocked-rule'
@@ -239,15 +240,15 @@ export default function JudgePage() {
                       </span>
                     </div>
 
-                    <h3 className="font-bold text-sm text-ink leading-snug">
+                    <h3 className="card-title">
                       {isVi ? rc.labelVi : rc.label}
                     </h3>
 
-                    <p className="text-xs text-ink-2 leading-relaxed">
+                    <p className="text-[15px] text-ink-2 leading-relaxed">
                       {isVi ? rc.descriptionVi : rc.description}
                     </p>
 
-                    <div className="p-2.5 rounded-xl bg-paper border border-rule space-y-1 text-[11px]">
+                    <div className="p-2.5 rounded-data bg-card border border-rule space-y-1 text-[13px]">
                       <div className="flex justify-between text-ink-2">
                         <span>Block:</span>
                         <span className="text-ink font-semibold">#{rc.blockNumber}</span>
@@ -275,7 +276,7 @@ export default function JudgePage() {
                     href={rc.snowtraceUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl bg-paper hover:bg-mist border border-rule hover:border-rule text-xs text-ink transition focus:outline-none focus:ring-2 focus:ring-ink"
+                    className="inline-flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-full bg-card hover:bg-mist border border-rule-2 text-sm font-semibold text-info transition focus:outline-none focus:ring-2 focus:ring-ink"
                   >
                     <span>{isVi ? 'Xem trên Snowtrace' : 'View on Snowtrace'}</span>
                     <span>↗</span>
@@ -286,22 +287,22 @@ export default function JudgePage() {
           </div>
         )}
       </section>
+      </div>
 
+      <div className="wrap band space-y-16">
       {/* Block 2: Try it yourself */}
       <section aria-labelledby="block2-heading" className="p-6 sm:p-8 rounded-card bg-card border border-rule space-y-6">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-[5px] bg-warn-bg border border-warn-rule text-warn text-xs font-semibold mb-2">
-            <span>{isVi ? 'TƯƠNG TÁC TRỰC TIẾP · KHÔNG CẦN GAS' : 'INTERACTIVE AUDIT · ZERO GAS'}</span>
-          </div>
-          <h2 id="block2-heading" className="text-xl sm:text-2xl font-bold text-ink flex items-center gap-2">
-            <span>{isVi ? 'Tự Mình Kiểm Chứng (Mô Phỏng Trực Tiếp Trên Fuji)' : 'Try It Yourself: Interactive Fuji Contract Simulation'}</span>
+          <Kicker>{isVi ? 'TƯƠNG TÁC TRỰC TIẾP · KHÔNG CẦN GAS' : 'INTERACTIVE AUDIT · ZERO GAS'}</Kicker>
+          <h2 id="block2-heading" className="sec-h">
+            <Stop>{isVi ? 'Tự Mình Kiểm Chứng (Mô Phỏng Trực Tiếp Trên Fuji)' : 'Try It Yourself: Interactive Fuji Contract Simulation'}</Stop>
           </h2>
-          <p className="text-xs sm:text-sm text-ink-2 mt-1 max-w-3xl">
+          <p className="text-base text-ink-2 mt-1 max-w-3xl">
             {isVi
               ? 'Nhập bất kỳ địa chỉ ví nào để thử nghiệm giải ngân dưới Mission B (đã áp Merkle root do chủ sở hữu ký). Máy chủ sẽ gửi eth_call với tư cách ví agent tới smart contract GuardedTreasury trên Avalanche Fuji C-Chain.'
               : 'Enter ANY recipient address to test against Mission B (enforcing owner-signed Merkle payee root). The server executes an eth_call with account=agent against the live Fuji GuardedTreasury contract.'}
           </p>
-          <div className="mt-2 text-xs text-paid">
+          <div className="mt-2 text-sm font-medium text-paid">
             {isVi
               ? 'Mô phỏng eth_call đối với hợp đồng thực tế; không phát sóng giao dịch, không tiêu tốn tiền.'
               : 'eth_call simulation against the live contract; nothing is sent, zero gas consumed.'}
@@ -311,7 +312,7 @@ export default function JudgePage() {
         {/* Input & Action Form */}
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="block text-xs font-bold text-ink-2 uppercase">
+            <label className="block text-[15px] font-semibold text-ink">
               {isVi ? 'Địa chỉ người nhận đề xuất (Recipient Address):' : 'Proposed Payee Address:'}
             </label>
             <div className="flex flex-col sm:flex-row gap-2">
@@ -320,7 +321,7 @@ export default function JudgePage() {
                 value={recipient}
                 onChange={(e) => setRecipient(e.target.value.trim())}
                 placeholder="0x..."
-                className="flex-1 min-w-0 px-4 py-2.5 rounded-full bg-card border border-rule-2-2 font-mono text-sm text-ink focus:outline-none focus:ring-2 focus:ring-ink"
+                className="input flex-1 min-w-0 font-mono text-sm"
               />
               <button
                 type="button"
@@ -344,7 +345,7 @@ export default function JudgePage() {
 
           <div className="flex flex-wrap items-center gap-4">
             <div className="w-full sm:w-auto">
-              <label className="block text-xs text-ink-2 mb-1">
+              <label className="block text-sm text-ink-2 mb-1">
                 {isVi ? 'Số tiền mô phỏng (atomic units, max 10000 = 0.01 USDC):' : 'Amount (atomic units, max 10000 = 0.01 USDC):'}
               </label>
               <input
@@ -353,7 +354,7 @@ export default function JudgePage() {
                 max="10000"
                 value={amountAtomic}
                 onChange={(e) => setAmountAtomic(Number(e.target.value))}
-                className="w-48 px-3 py-2 rounded-xl bg-card border border-rule-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-ink"
+                className="input w-48 text-sm"
               />
             </div>
 
@@ -381,7 +382,7 @@ export default function JudgePage() {
 
         {/* Simulation Output Card */}
         {simError && (
-          <div className="p-4 rounded-xl bg-blocked-bg border border-blocked-rule text-blocked text-xs space-y-1">
+          <div className="outcome-blocked text-blocked text-sm space-y-1">
             <div className="font-bold flex items-center gap-2">
               <span>{isVi ? 'Lỗi mô phỏng:' : 'Simulation Error:'}</span>
             </div>
@@ -393,7 +394,7 @@ export default function JudgePage() {
           <div
             id="simulation-result-card"
             data-outcome={simResult.outcome}
-            className={`p-5 rounded-card border border-l-4 transition-all space-y-3 ${
+            className={`p-5 rounded-data border border-l-4 transition-all space-y-3 ${
               simResult.outcome === 'REVERT'
                 ? 'bg-blocked-bg border-blocked-rule border-l-brand'
                 : 'bg-paid-bg border-paid-rule border-l-paid'
@@ -401,8 +402,7 @@ export default function JudgePage() {
           >
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rule pb-2">
               <div className="flex items-center gap-2">
-                <span className="text-base">{simResult.outcome === 'REVERT' ? '🛑' : '✅'}</span>
-                <span className="font-bold text-sm text-ink">
+                <span className="font-bold text-base text-ink">
                   {simResult.outcome === 'REVERT'
                     ? isVi
                       ? 'HỢP ĐỒNG FUJI TỪ CHỐI (REVERT)'
@@ -413,7 +413,7 @@ export default function JudgePage() {
                 </span>
               </div>
               <span
-                className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                className={`px-2.5 py-0.5 rounded-tag text-xs font-bold ${
                   simResult.outcome === 'REVERT'
                     ? 'bg-blocked-bg text-blocked border border-blocked-rule'
                     : 'bg-paid-bg text-paid border border-paid-rule'
@@ -423,26 +423,26 @@ export default function JudgePage() {
               </span>
             </div>
 
-            <p className="text-sm text-ink">{simResult.message}</p>
+            <p className="text-[15px] text-ink">{simResult.message}</p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
-              <div className="p-2.5 rounded-lg bg-paper border border-rule space-y-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm pt-1">
+              <div className="p-2.5 rounded-data bg-card border border-rule space-y-1">
                 <div className="text-ink-2">Tested Payee:</div>
                 <div className="font-mono text-ink truncate">{simResult.recipient}</div>
               </div>
-              <div className="p-2.5 rounded-lg bg-paper border border-rule space-y-1">
+              <div className="p-2.5 rounded-data bg-card border border-rule space-y-1">
                 <div className="text-ink-2">Simulated Amount:</div>
                 <div className="text-ink">
                   {simResult.amountAtomic} atomic units ({simResult.amountUsdc})
                 </div>
               </div>
               {simResult.revertReason && (
-                <div className="p-2.5 rounded-lg bg-paper border border-rule space-y-1 sm:col-span-2">
+                <div className="p-2.5 rounded-data bg-card border border-rule space-y-1 sm:col-span-2">
                   <div className="text-ink-2">Exact On-Chain Revert Reason:</div>
                   <div className="font-mono text-blocked font-bold text-sm">{simResult.revertReason}</div>
                 </div>
               )}
-              <div className="p-2.5 rounded-lg bg-paper border border-rule space-y-1 sm:col-span-2">
+              <div className="p-2.5 rounded-data bg-card border border-rule space-y-1 sm:col-span-2">
                 <div className="text-ink-2">
                   {isVi ? 'Thời hạn hiệu lực Mission B (đọc từ contract):' : 'Mission B Expiry (read on-chain):'}
                 </div>
@@ -462,10 +462,11 @@ export default function JudgePage() {
       {/* Block 3: Reproduce from a terminal */}
       <section aria-labelledby="block3-heading" className="space-y-4">
         <div>
-          <h2 id="block3-heading" className="text-xl sm:text-2xl font-bold text-ink flex items-center gap-2">
-            <span>{isVi ? 'Tái Lập Độc Lập Từ Terminal Của Bạn (Foundry Cast)' : 'Reproduce from Your Terminal (Foundry Cast)'}</span>
+          <Kicker>Foundry cast · public RPC</Kicker>
+          <h2 id="block3-heading" className="sec-h">
+            <Stop>{isVi ? 'Tái Lập Độc Lập Từ Terminal Của Bạn (Foundry Cast)' : 'Reproduce from Your Terminal (Foundry Cast)'}</Stop>
           </h2>
-          <p className="text-xs sm:text-sm text-ink-2 mt-1">
+          <p className="text-base text-ink-2 mt-1 max-w-3xl">
             {isVi
               ? 'Không tin giao diện web? Copy các câu lệnh cast call dưới đây và dán thẳng vào terminal cá nhân. RPC công khai không cần cấu hình key.'
               : "Don't trust the web UI? Copy-paste these read-only cast call commands directly into your local terminal against public Fuji RPC."}
@@ -474,39 +475,39 @@ export default function JudgePage() {
 
         <div className="space-y-4">
           {/* Attacker Revert Command */}
-          <div className="p-4 sm:p-5 rounded-card bg-card border border-rule space-y-2">
+          <div className="p-4 sm:p-5 rounded-data bg-card border border-rule border-l-4 border-l-brand space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-bold text-blocked">
+              <span className="text-sm font-bold text-blocked">
                 {isVi ? 'A. Kịch bản kẻ tấn công (Kỳ vọng: revert PayeeNotInMissionSet)' : 'A. Attacker Scenario (Expected Revert: PayeeNotInMissionSet)'}
               </span>
               <button
                 type="button"
                 onClick={() => copyToClipboard(castAttackerCmd, 'attacker')}
-                className="px-3 py-1 rounded-full bg-mist hover:bg-mist-2 text-xs text-ink transition"
+                className="shrink-0 px-3 py-1 rounded-full bg-ink hover:bg-ink-2 text-[13px] font-semibold text-white transition"
               >
                 {copiedKey === 'attacker' ? (isVi ? 'Đã sao chép! ✓' : 'Copied! ✓') : isVi ? 'Sao chép lệnh' : 'Copy command'}
               </button>
             </div>
-            <pre className="font-mono p-3 rounded-xl bg-paper border border-rule text-[11px] text-ink-2 overflow-x-auto whitespace-pre-wrap break-all">
+            <pre className="code-block">
               {castAttackerCmd}
             </pre>
           </div>
 
           {/* Owner Positive Control Command */}
-          <div className="p-4 sm:p-5 rounded-card bg-card border border-rule space-y-2">
+          <div className="p-4 sm:p-5 rounded-data bg-card border border-rule border-l-4 border-l-paid space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-bold text-paid">
+              <span className="text-sm font-bold text-paid">
                 {isVi ? 'B. Kịch bản đối chứng hợp lệ (Kỳ vọng: proposal ID thành công)' : 'B. Positive Control Scenario (Expected: Proposal ID Success)'}
               </span>
               <button
                 type="button"
                 onClick={() => copyToClipboard(castOwnerCmd, 'owner')}
-                className="px-3 py-1 rounded-full bg-mist hover:bg-mist-2 text-xs text-ink transition"
+                className="shrink-0 px-3 py-1 rounded-full bg-ink hover:bg-ink-2 text-[13px] font-semibold text-white transition"
               >
                 {copiedKey === 'owner' ? (isVi ? 'Đã sao chép! ✓' : 'Copied! ✓') : isVi ? 'Sao chép lệnh' : 'Copy command'}
               </button>
             </div>
-            <pre className="font-mono p-3 rounded-xl bg-paper border border-rule text-[11px] text-ink-2 overflow-x-auto whitespace-pre-wrap break-all">
+            <pre className="code-block">
               {castOwnerCmd}
             </pre>
           </div>
@@ -515,8 +516,8 @@ export default function JudgePage() {
 
       {/* Block 4: Resources & Known Limits */}
       <section aria-labelledby="block4-heading" className="p-6 sm:p-8 rounded-card bg-card border border-rule space-y-6">
-        <h2 id="block4-heading" className="text-xl sm:text-2xl font-bold text-ink flex items-center gap-2">
-          <span>{isVi ? 'Tài Liệu Kiểm Chứng & Giới Hạn Đã Biết' : 'Resources & Known Limits'}</span>
+        <h2 id="block4-heading" className="sec-h">
+          <Stop>{isVi ? 'Tài Liệu Kiểm Chứng & Giới Hạn Đã Biết' : 'Resources & Known Limits'}</Stop>
         </h2>
 
         {/* 3 Links */}
@@ -525,13 +526,13 @@ export default function JudgePage() {
             href="https://github.com/lenamkhanhh/UniHack/raw/feat/s1-app/artifacts/submission-s1/deck-v2/MissionPay_Deck_v2.pdf"
             target="_blank"
             rel="noreferrer"
-            className="p-4 rounded-card bg-paper hover:bg-mist border border-rule hover:border-rule transition space-y-1 block"
+            className="p-4 rounded-card bg-tint-slate hover:bg-[#DCE4EE] border border-info-rule transition space-y-1 block"
           >
-            <div className="font-bold text-sm text-ink flex items-center justify-between">
+            <div className="card-title flex items-center justify-between">
               <span>{isVi ? 'Slide Thuyết Trình (PDF)' : 'Pitch Deck (PDF)'}</span>
-              <span className="text-xs text-ink-2">↗</span>
+              <span className="text-sm text-info">↗</span>
             </div>
-            <p className="text-xs text-ink-2">
+            <p className="text-sm text-ink-2">
               {isVi ? '13 slide định dạng PDF với số liệu benchmark thật.' : '13-slide pitch deck with verified replay benchmark.'}
             </p>
           </a>
@@ -540,13 +541,13 @@ export default function JudgePage() {
             href="https://github.com/lenamkhanhh/UniHack/blob/feat/s1-app/artifacts/submission-s1/FUJI_EVIDENCE.md"
             target="_blank"
             rel="noreferrer"
-            className="p-4 rounded-card bg-paper hover:bg-mist border border-rule hover:border-rule transition space-y-1 block"
+            className="p-4 rounded-card bg-tint-slate hover:bg-[#DCE4EE] border border-info-rule transition space-y-1 block"
           >
-            <div className="font-bold text-sm text-ink flex items-center justify-between">
+            <div className="card-title flex items-center justify-between">
               <span>{isVi ? 'Bằng Chứng Fuji On-Chain' : 'Fuji On-Chain Evidence'}</span>
-              <span className="text-xs text-ink-2">↗</span>
+              <span className="text-sm text-info">↗</span>
             </div>
-            <p className="text-xs text-ink-2">
+            <p className="text-sm text-ink-2">
               {isVi ? 'Danh sách tx hash, contract address và log sự kiện.' : 'Complete tx hashes, deployed contract addresses, and event logs.'}
             </p>
           </a>
@@ -555,24 +556,24 @@ export default function JudgePage() {
             href="https://github.com/lenamkhanhh/UniHack"
             target="_blank"
             rel="noreferrer"
-            className="p-4 rounded-card bg-paper hover:bg-mist border border-rule hover:border-rule transition space-y-1 block"
+            className="p-4 rounded-card bg-tint-slate hover:bg-[#DCE4EE] border border-info-rule transition space-y-1 block"
           >
-            <div className="font-bold text-sm text-ink flex items-center justify-between">
+            <div className="card-title flex items-center justify-between">
               <span>{isVi ? 'Mã Nguồn GitHub' : 'GitHub Repository'}</span>
-              <span className="text-xs text-ink-2">↗</span>
+              <span className="text-sm text-info">↗</span>
             </div>
-            <p className="text-xs text-ink-2">
+            <p className="text-sm text-ink-2">
               {isVi ? 'Kho mã nguồn đầy đủ kèm bộ test Foundry và Vitest.' : 'Full source code with Foundry unit and invariant suites.'}
             </p>
           </a>
         </div>
 
         {/* Known Limits Disclosure */}
-        <div className="p-5 rounded-card bg-paper border border-warn-rule space-y-3">
-          <div className="font-bold text-xs uppercase tracking-wider text-warn flex items-center gap-2">
+        <div className="outcome-warn p-5 space-y-3">
+          <div className="card-title text-warn flex items-center gap-2">
             <span>{isVi ? 'Tính Minh Bạch: Các Giới Hạn Đã Biết (Known Limits)' : 'Honest Disclosure: Known Limits'}</span>
           </div>
-          <ul className="text-xs text-ink-2 space-y-2 list-disc pl-4 leading-relaxed">
+          <ul className="text-[15px] text-ink-2 space-y-2 list-disc pl-5 leading-relaxed">
             <li>
               <strong className="text-ink">Deployed Fuji Bytecode:</strong>{' '}
               {isVi

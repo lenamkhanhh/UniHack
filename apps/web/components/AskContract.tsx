@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n';
+import { Kicker, Stop } from '@/components/Display';
 
 // Same read-only endpoint the /judge simulator uses (eth_call as the agent, 0.01 USDC, no gas).
 const TREASURY_ADDRESS = '0x20451c1e2dCD83F166B4f22868BAdECb5868d545';
@@ -74,9 +75,10 @@ export default function AskContract() {
       : { cls: 'bg-mist text-ink', title: t('home.try.idle_title') };
 
   return (
-    <div className="wrap grid items-center gap-10 py-14 lg:grid-cols-2 lg:py-16">
+    <div className="wrap band grid items-center gap-10 lg:grid-cols-2">
       <div>
-        <h2 className="sec-h">{t('home.try.title')}</h2>
+        <Kicker>{t('home.try.kick')}</Kicker>
+        <h2 className="sec-h"><Stop>{t('home.try.title')}</Stop></h2>
         <p className="sec-p">{t('home.try.desc')}</p>
         <form
           onSubmit={(e) => {
@@ -84,19 +86,19 @@ export default function AskContract() {
             check();
           }}
         >
-          <label htmlFor="ask-addr" className="mb-2 block text-sm font-semibold">
+          <label htmlFor="ask-addr" className="mb-2 block text-[15px] font-semibold">
             {t('home.try.label')}
           </label>
-          <div className="flex gap-2 rounded-full border border-[#E8C9C4] bg-card p-1.5 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ink">
+          <div className="flex gap-2 rounded-input border border-[#E8C9C4] bg-card p-1.5 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ink">
             <input
               id="ask-addr"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               spellCheck={false}
               autoComplete="off"
-              className="min-w-0 flex-1 border-0 bg-transparent px-3.5 py-2.5 font-mono text-sm text-ink focus:outline-none"
+              className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2.5 font-mono text-sm text-ink focus:outline-none"
             />
-            <button type="submit" disabled={busy || !address.trim()} className="btn-primary font-semibold disabled:opacity-60">
+            <button type="submit" disabled={busy || !address.trim()} className="btn-dark disabled:opacity-60">
               {busy ? t('home.try.checking') : t('home.try.check')}
             </button>
           </div>
@@ -118,17 +120,17 @@ export default function AskContract() {
             </button>
           ))}
         </div>
-        <Link href="/judge" className="mt-5 inline-block text-sm text-ink-2 underline underline-offset-2 hover:text-ink">
+        <Link href="/judge" className="link mt-5 inline-block text-[15px]">
           {t('home.try.full_judge')}
         </Link>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-rule bg-card" aria-live="polite" data-testid="home-ask-answer">
+      <div className="overflow-hidden rounded-card border border-rule bg-card" aria-live="polite" data-testid="home-ask-answer">
         <div className={`px-[22px] py-[18px] ${top.cls}`}>
           <b className="block text-[19px] font-semibold">{top.title}</b>
-          <span className="text-[13.5px] opacity-90">{answer.kind === 'idle' ? t('home.try.idle_sub') : t('home.try.sub')}</span>
+          <span className="text-sm opacity-90">{answer.kind === 'idle' ? t('home.try.idle_sub') : t('home.try.sub')}</span>
         </div>
-        <dl className="m-0 grid grid-cols-[96px_1fr] gap-x-3.5 gap-y-2 px-5 py-4 text-[13.5px]">
+        <dl className="m-0 grid grid-cols-[96px_1fr] gap-x-3.5 gap-y-2 px-5 py-4 text-sm">
           {answer.kind === 'revert' && (
             <>
               <dt className="text-ink-3">{t('home.try.dt_revert')}</dt>
@@ -152,7 +154,7 @@ export default function AskContract() {
           <dt className="text-ink-3">{t('home.try.dt_mission')}</dt>
           <dd className="m-0 font-mono">twin.mission.v1</dd>
         </dl>
-        <pre className="mx-[22px] mb-[22px] mt-0 whitespace-pre-wrap break-all rounded-lg bg-chalk px-3.5 py-3 font-mono text-xs leading-normal text-ink-2">
+        <pre className="code-block mx-[22px] mb-[22px] mt-0">
           {castCmd}
         </pre>
       </div>
