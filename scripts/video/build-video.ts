@@ -244,13 +244,13 @@ async function main() {
 
   const frameSnapshots = [
     { name: 'scene0.png', time: 1.5, desc: 'S0 Title Card' },
-    { name: 'scene1.png', time: offset1 + 14 * scale, desc: 'S1 Home Twin Treasury' },
-    { name: 'scene2.png', time: offset1 + 60 * scale, desc: 'S2 Judge Mode Simulator' },
-    { name: 'scene3.png', time: offset1 + 86 * scale, desc: 'S3 Bounty Challenge' },
-    { name: 'scene4.png', time: offset1 + 104 * scale, desc: 'S4 Snowtrace Revert' },
-    { name: 'scene5.png', time: offset1 + 124 * scale, desc: 'S5 Independent Verifier' },
-    { name: 'scene6.png', time: offset2 + 2.5, desc: 'S6 Architecture Diagram' },
-    { name: 'scene7.png', time: offset3 + 3.0, desc: 'S7 Outro Card' },
+    { name: 'scene1.png', time: 18.7, desc: 'S1 Home Twin Treasury' },
+    { name: 'scene2.png', time: 69.0, desc: 'S2 Judge Mode Simulator' },
+    { name: 'scene3.png', time: 101.8, desc: 'S3 Bounty Challenge' },
+    { name: 'scene4.png', time: 116.2, desc: 'S4 Snowtrace Revert' },
+    { name: 'scene5.png', time: 133.9, desc: 'S5 Independent Verifier' },
+    { name: 'scene6.png', time: 159.3, desc: 'S6 Architecture Diagram' },
+    { name: 'scene7.png', time: 164.5, desc: 'S7 Outro Card' },
   ];
 
   for (const snap of frameSnapshots) {

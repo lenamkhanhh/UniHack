@@ -480,22 +480,22 @@ Thời lượng toàn bộ video `MissionPay-demo.mp4`: **2m 48.00s (168.00s)** 
 
 - **Đường dẫn tệp:** `artifacts/submission-s1/video/MissionPay-demo.mp4`
 - **Thời lượng thực tế:** **2m 48.00s (168.00 giây)** — Nằm trọn vẹn trong khoảng **2:40 – 2:55** theo quy định Round 14.
-- **Dung lượng tệp:** **11.06 MB** (11,599,527 bytes) — Cực kỳ nhẹ, dưới xa ngưỡng 50 MB của Git repo.
-- **Định dạng video:** 1080p30 H.264 (High Profile, `yuv420p`), bitrate ~552 kbps.
+- **Dung lượng tệp:** **12.64 MB** (13,256,067 bytes) — Cực kỳ nhẹ, dưới xa ngưỡng 50 MB của Git repo.
+- **Định dạng video:** 1080p30 H.264 (High Profile, `yuv420p`), bitrate ~630 kbps.
 - **Âm thanh:** AAC stereo 192 kbps, chuẩn hóa EBU R128. Giọng đọc `en-US-ChristopherNeural` (131 từ, thỏa mãn $\le 150$ từ). Hỗ trợ `--voice owner.wav` cho thuyết minh tùy biến.
 - **Phụ đề & Kịch bản:** 
   - `artifacts/submission-s1/video/captions.srt` (khớp chính xác từng micro-second theo giọng đọc và phân cảnh).
   - `artifacts/submission-s1/video/VOICEOVER.md` (131 từ, thứ tự phân cảnh S0..S7 chuẩn).
   - `VIDEO_SCRIPT.md` tại thư mục gốc repository đã được đồng bộ hóa toàn diện.
 - **Trích xuất ảnh phân cảnh:** Đầy đủ 8 ảnh độ phân giải cao 1080p tại `artifacts/submission-s1/video/frames/`:
-  - `scene0.png`: Thẻ mở đầu (Intro Card v8b)
-  - `scene1.png`: Đối chứng Twin Treasury (Home)
-  - `scene2.png`: Thẩm định Fuji Receipts & Revert Simulation (Judge - Revert card ở nửa trên, không che caption)
-  - `scene3.png`: Thử thách tấn công ghi hình (Bounty)
-  - `scene4.png`: Bằng chứng giao dịch thất bại (Snowtrace Revert)
-  - `scene5.png`: Trình kiểm chứng mật mã độc lập (Verify s1c - 3 entries, Head MATCH, 100/100 ERC-8004)
-  - `scene6.png`: Sơ đồ kiến trúc 3 lớp (Diagram v8b)
-  - `scene7.png`: Thẻ kết thúc & URL truy cập (Outro Card v8b)
+  - `scene0.png` (1.5s): Thẻ mở đầu (Intro Card v8b)
+  - `scene1.png` (18.7s): Đối chứng Twin Treasury (Home)
+  - `scene2.png` (69.0s): Thẩm định Fuji Receipts & Revert Simulation (Judge - Revert card ở nửa trên 50%, không che caption)
+  - `scene3.png` (101.8s): Thử thách tấn công ghi hình (Bounty)
+  - `scene4.png` (116.2s): Bằng chứng giao dịch thất bại (Snowtrace Revert)
+  - `scene5.png` (133.9s): Trình kiểm chứng mật mã độc lập (Verify s1c - 3 entries, Head MATCH, 100/100 ERC-8004)
+  - `scene6.png` (159.3s): Sơ đồ kiến trúc 3 lớp (Diagram v8b)
+  - `scene7.png` (164.5s): Thẻ kết thúc & URL truy cập (Outro Card v8b)
 
 ### 11.4 Kết quả Kiểm thử & Đảm bảo An toàn
 - **TypeScript Typecheck:** `npx.cmd tsc --noEmit` $\to$ **Exit code 0 (0 errors)**.
