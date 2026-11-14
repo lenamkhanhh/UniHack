@@ -591,7 +591,48 @@ Thời lượng toàn bộ video `MissionPay-demo.mp4`: **2m 48.00s (168.00s)** 
   - **Dung lượng:** 12.53 MB (< 50 MB ngưỡng Git).
   - **Scene 4 Frame:** `artifacts/submission-s1/video/frames/scene4.png` là giao diện Snowtrace thật 100%.
 
+---
 
+## 15. NGHIỆM THU ROUND 15: PUBLIC DEPLOY (VERCEL + HOSTED SUPABASE)
 
+**Thời điểm:** 2026-11-14 21:55 (Asia/Saigon) | **Nhánh:** `feat/s1-app` | **Commit:** `7c3f6db` (`chore(deploy): public demo URL`)  
+**Mục tiêu:** Triển khai public demo của `apps/web` theo đúng `docs/DEPLOY_RUNBOOK.md` và `docs/DEPLOY_CHECKLIST.md`.
 
+### 15.1 Bảng Nghiệm thu Triển khai Round 15
+
+| Tiêu chí | Trạng thái | Chi tiết triển khai & Kiểm tra an toàn |
+|---|---|---|
+| **Public Live URL** | **ACCEPTED** | `https://unihack-missionpay.vercel.app` (Vercel project: `unihack-missionpay`, Node.js 24.x). |
+| **Hosted Database** | **ACCEPTED** | Supabase PostgreSQL (`ref: sewjfebggkxadmwbgxjk`, region: `ap-southeast-1`). Áp dụng đủ 7 Prisma migrations (`prisma migrate deploy`). Đã seed mission audit `fuji-live-mission-s1c` qua `scripts/seed-mission-audit.ts` (chỉ đọc RPC Fuji, không broadcast). |
+| **Bảo mật Biến Môi trường (Zero Secrets)** | **ACCEPTED** | Môi trường production Vercel chỉ chứa: `DATABASE_URL`, `DIRECT_URL`, `PAYMENT_MODE=LIVE_FUJI` và các biến công khai `NEXT_PUBLIC_*`. **TUYỆT ĐỐI KHÔNG CẤP** private keys (Deployer, Agent, Relayer, Facilitator, Validator), Session Wallet seed hay bất kỳ LLM API key nào. |
+| **Smoke Tests URL Public** | **ACCEPTED** | Chạy smoke test toàn diện (`scripts/smoke-deploy.ts`):<br>- `/`: HTTP 200 OK<br>- `/judge`: HTTP 200 OK, twin receipts tải đầy đủ từ Fuji, tính năng Ask-the-contract mô phỏng kẻ tấn công revert chính xác `PayeeNotInMissionSet`<br>- `/verify/fuji-live-mission-s1c`: HTTP 200 OK, hiển thị đầy đủ VALID + MATCH + 100/100 (verified-full)<br>- `/bounty`: HTTP 200 OK, hiển thị nhãn RECORDED RUN trung thực khi không có LLM key.<br>- 4 ảnh chụp màn hình lưu tại `artifacts/submission-s1/deploy-smoke/`. |
+| **Tài liệu & Git** | **ACCEPTED** | Cập nhật Live Demo URL vào `README.md` (dòng đầu) và `JUDGE_QA.md`. Commit `7c3f6db` trên `feat/s1-app`. |
+
+---
+
+## 16. NGHIỆM THU ROUND 16: CI PLAYWRIGHT & VITEST GREEN TRÊN GITHUB ACTIONS (PR #1)
+
+**Thời điểm:** 2026-11-14 22:45 (Asia/Saigon) | **Nhánh:** `feat/s1-app` | **Commits:** `a3582b7`, `cd06190`  
+**Mục tiêu:** Xử lý triệt để các lỗi khiến Playwright E2E và Vitest thất bại trên Linux CI runner của GitHub Actions cho PR #1 (`https://github.com/lenamkhanhh/UniHack/pull/1`).
+
+### 16.1 Bảng Nghiệm thu Sửa lỗi Round 16
+
+| Mã lỗi | Nhóm | Trạng thái | File thực hiện | Mô tả giải pháp & Bằng chứng kiểm tra |
+|---|---|---|---|---|
+| **R16-F1** | **E2E Seed & Fuji Anchor trên Linux** | **ACCEPTED** | `apps/web/e2e/erc8004-validation.spec.ts`<br>`apps/web/e2e/fuji-verify-anchor.spec.ts`<br>`apps/web/lib/config.ts`<br>`apps/web/app/api/missions/[slug]/complete/route.ts`<br>`apps/web/playwright.config.ts` | **Đảm bảo đường dẫn tuyệt đối hermetic và cập nhật treasury fallback deployed:**<br>1. Thay thế `path.resolve(process.cwd(), '../..')` bằng `path.resolve(__dirname, '../../..')` giúp đường dẫn repo root bất biến bất kể Playwright chạy từ thư mục gốc hay thư mục con `apps/web`.<br>2. Chạy `npx tsx scripts/seed-mission-audit.ts` qua `execSync` độc lập trong `beforeAll`.<br>3. Sửa địa chỉ kho quỹ fallback từ địa chỉ cũ `0x5aAdFB...` thành hợp đồng thực tế đã triển khai trên Fuji: `0x20451c1e2dCD83F166B4f22868BAdECb5868d545` trong `lib/config.ts` và route complete. Khắc phục triệt để lỗi contract call `anchoredMissionProofs` trả về `0x` và hash lệch làm mất điểm 100/100.<br>4. Bổ sung `NEXT_PUBLIC_STAGE: process.env.NEXT_PUBLIC_STAGE || 'S2'` và `GUARDED_TREASURY_ADDRESS` vào biến môi trường `webServer` trong `playwright.config.ts`, giúp layout header hiển thị chuẩn nhãn `S2`. |
+| **R16-F2** | **Bounty Mocked Mode & Deck Shots** | **ACCEPTED** | `apps/web/lib/bounty.ts`<br>`apps/web/e2e/bounty.spec.ts` | **Đảm bảo bounty UI trả về kết quả mô phỏng tất định trong môi trường test/mock:**<br>1. Sửa `lib/bounty.ts`: loại bỏ fallback `Boolean(process.env.CI)` ép stub mode ngoài ý muốn trong vitest kiểm tra trạng thái 503 khi xóa API key. `isStub` được kiểm soát chặt chẽ bằng `STUB_BOUNTY_LLM === '1'`.<br>2. `e2e/bounty.spec.ts`: sửa `deckShotsDir` sang `path.resolve(__dirname, '../../../artifacts/submission-s1/deck-shots')` đảm bảo chụp ảnh minh chứng thành công trên Linux CI runner.<br>3. Không nới lỏng bất kỳ assertion nào và tuyệt đối không đưa API key vào CI. |
+
+### 16.2 Kết quả Kiểm thử & Trạng thái GitHub Actions CI (PR #1)
+
+- **GitHub PR Checks:** `gh pr checks 1 --repo lenamkhanhh/UniHack` $\to$ **ALL 5/5 JOBS PASSED (GREEN)**:
+  1. `Foundry Contracts`: **PASS** (23s)
+  2. `Guard SDK (@missionpay/guard)`: **PASS** (23s)
+  3. `AgentDojo Benchmarks`: **PASS** (38s)
+  4. `Next.js Web Application`: **PASS** (2m17s) — TypeScript 0 errors, Vitest 37/37 files (352 passed, 3 skipped)
+  5. `Playwright E2E (ui-mocked)`: **PASS** (3m6s) — 40/40 tests passed trên Ubuntu Linux runner
+- **Bảo đảm An toàn:**
+  - Không push vào nhánh `main`.
+  - Không nộp bài / merge PR khi chưa có phê duyệt từ reviewer.
+  - Không commit secret / private keys.
+  - Không broadcast giao dịch mới lên Avalanche Fuji C-Chain.
 
