@@ -1,31 +1,31 @@
 1
-00:00:00,000 --> 00:00:03,500
+00:00:00,500 --> 00:00:03,200
 MissionPay: Same vendor. Same treasury. Two outcomes.
 
 2
-00:00:03,500 --> 00:00:09,500
-Dual-Layer Defense: LLM agents propose, while Avalanche Fuji contracts enforce.
+00:00:04,700 --> 00:00:30,973
+Live on Avalanche Fuji, our Twin Treasury benchmark shows the difference: an allowlist leaks funds, but MissionPay reverts the attack on-chain.
 
 3
-00:00:09,500 --> 00:00:34,000
-Live on Avalanche Fuji: Twin Treasury compares Global Allowlist vs Mission Guard.
+00:00:31,965 --> 00:01:15,608
+In Judge Mode, test any off-mission attacker: the smart contract strictly rejects it with PayeeNotInMissionSet, while legitimate payees succeed.
 
 4
-00:00:34,000 --> 00:01:04,000
-Try it yourself: any random attacker strictly reverts with PayeeNotInMissionSet on Fuji.
+00:01:17,592 --> 00:01:41,398
+In our public Bounty challenge, prompt injection fools the autonomous agent, but our dual-layer guard stops the payout with zero dollars lost.
 
 5
-00:01:04,000 --> 00:01:34,000
-Bounty Challenge: prompt injection fools the agent, but the contract preserves the treasury.
+00:01:43,381 --> 00:01:50,325
+Snowtrace confirms the live receipt: execution strictly reverted on-chain with zero funds lost.
 
 6
-00:01:34,000 --> 00:01:59,000
-On-chain proof: Snowtrace confirms execution reverted with PayeeNotInMissionSet.
+00:01:51,317 --> 00:02:36,299
+Every step is cryptographically anchored with ERC-8004 one hundred out of one hundred score. Tampering with one single byte instantly breaks the hash chain.
 
 7
-00:01:59,000 --> 00:02:29,000
-Independent verification: tamper with 1 single byte and the entire cryptographic chain breaks.
+00:02:37,099 --> 00:02:41,199
+Off-chain agents propose payouts, while Avalanche smart contracts enforce deterministic cryptographic limits.
 
 8
-00:02:29,000 --> 00:02:45,000
-LLMs can be fooled. Budgets on Avalanche can't. MissionPay: sign once, chain enforces.
+00:02:41,799 --> 00:02:47,500
+LLMs can be fooled. Budgets on Avalanche can't. Sign once, chain enforces.

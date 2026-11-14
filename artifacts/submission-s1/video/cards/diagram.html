@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>MissionPay Demo - Architecture Diagram</title>
+  <title>MissionPay Demo - Architecture Diagram (v8b)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@800;900&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;600&display=swap" rel="stylesheet">
   <style>
     * {
       box-sizing: border-box;
@@ -12,9 +14,9 @@
     body {
       width: 1920px;
       height: 1080px;
-      background: #0B0F17;
-      color: #FFFFFF;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #F7F6F2;
+      color: #0F1115;
+      font-family: 'Geist', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -25,52 +27,60 @@
 
     .top-header {
       position: absolute;
-      top: 60px;
+      top: 50px;
       display: flex;
       flex-direction: column;
       align-items: center;
       text-align: center;
     }
 
-    .badge {
+    .kicker {
       display: inline-flex;
       align-items: center;
-      padding: 6px 18px;
-      border-radius: 9999px;
-      background: rgba(232, 65, 66, 0.15);
-      border: 1px solid rgba(232, 65, 66, 0.4);
-      color: #E84142;
-      font-size: 15px;
-      font-weight: 700;
-      letter-spacing: 1.5px;
+      gap: 8px;
+      font-family: 'Geist Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
-      margin-bottom: 12px;
+      color: #0F1115;
+      margin-bottom: 10px;
+    }
+
+    .red-sq {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: #E84142;
+      flex-shrink: 0;
     }
 
     .title {
-      font-size: 40px;
-      font-weight: 800;
-      color: #F8FAFC;
+      font-family: 'Archivo', sans-serif;
+      font-size: 46px;
+      font-weight: 900;
+      color: #0F1115;
+      letter-spacing: -0.02em;
+      text-transform: uppercase;
     }
 
-    .title span {
+    .dot-accent {
       color: #E84142;
     }
 
     .subtitle {
-      font-size: 20px;
-      color: #94A3B8;
+      font-size: 19px;
+      color: #5E646E;
       margin-top: 8px;
+      font-weight: 500;
     }
 
-    /* Diagram Canvas */
     .diagram-svg {
       width: 1680px;
       height: 640px;
-      margin-top: 60px;
+      margin-top: 70px;
     }
 
-    /* SVG Animation Styles */
     .flow-line {
       stroke-dasharray: 8 6;
       animation: flowAnim 1.2s linear infinite;
@@ -81,148 +91,99 @@
       to { stroke-dashoffset: 0; }
     }
 
-    .draw-path {
-      stroke-dasharray: 1000;
-      stroke-dashoffset: 1000;
-      animation: drawOn 2.5s ease-out forwards;
-    }
-
-    @keyframes drawOn {
-      to { stroke-dashoffset: 0; }
-    }
-
-    .node-card {
-      transition: transform 0.3s ease;
-    }
-
-    .pulse-glow {
-      animation: pulseGlow 2.5s ease-in-out infinite;
-    }
-
-    @keyframes pulseGlow {
-      0%, 100% { filter: drop-shadow(0 0 12px rgba(232, 65, 66, 0.3)); }
-      50% { filter: drop-shadow(0 0 28px rgba(232, 65, 66, 0.7)); }
-    }
-
     .bottom-meta {
       position: absolute;
-      bottom: 40px;
+      bottom: 36px;
       display: flex;
       gap: 32px;
-      font-size: 16px;
-      color: #64748B;
-      font-weight: 500;
+      font-family: 'Geist Mono', monospace;
+      font-size: 14px;
+      color: #5E646E;
+      font-weight: 600;
     }
   </style>
 </head>
 <body>
   <div class="top-header">
-    <div class="badge">Dual-Layer Security Architecture</div>
-    <div class="title">How MissionPay Protects <span>Agent Treasuries</span></div>
-    <div class="subtitle">Off-chain LLMs can be tricked by prompt injection — on-chain smart contracts enforce strict limits</div>
+    <div class="kicker"><span class="red-sq"></span>DUAL-LAYER SECURITY ARCHITECTURE</div>
+    <div class="title">HOW MISSIONPAY PROTECTS AGENT TREASURIES<span class="dot-accent">.</span></div>
+    <div class="subtitle">Off-chain LLMs can be tricked by prompt injection — on-chain smart contracts enforce deterministic limits</div>
   </div>
 
   <svg class="diagram-svg" viewBox="0 0 1680 640" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <!-- Gradients -->
-      <linearGradient id="cardGrad1" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#1E293B"/>
-        <stop offset="100%" stop-color="#0F172A"/>
-      </linearGradient>
-      <linearGradient id="cardGrad2" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#1E293B"/>
-        <stop offset="100%" stop-color="#0F172A"/>
-      </linearGradient>
-      <linearGradient id="treasuryGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#2D1216"/>
-        <stop offset="100%" stop-color="#15080A"/>
-      </linearGradient>
-
-      <!-- Glow filter -->
-      <filter id="glowFuji" x="-20%" y="-20%" width="140%" height="140%">
-        <feGaussianBlur stdDeviation="8" result="blur"/>
-        <feComposite in="SourceGraphic" in2="blur" operator="over"/>
-      </filter>
-    </defs>
-
     <!-- CONNECTIONS -->
     <!-- Line 1: Agent -> Validator -->
-    <path d="M 420 300 L 590 300" stroke="#38BDF8" stroke-width="4" stroke-linecap="round" class="flow-line"/>
-    <polygon points="590,294 606,300 590,306" fill="#38BDF8"/>
-    <text x="505" y="278" fill="#38BDF8" font-size="14" font-weight="bold" text-anchor="middle">Payment Proposal</text>
+    <path d="M 420 300 L 590 300" stroke="#2457C5" stroke-width="4" stroke-linecap="round" class="flow-line"/>
+    <polygon points="590,294 606,300 590,306" fill="#2457C5"/>
+    <text x="505" y="278" fill="#2457C5" font-family="'Geist Mono', monospace" font-size="13" font-weight="bold" text-anchor="middle">Payment Proposal</text>
 
     <!-- Line 2: Validator -> Contract -->
-    <path d="M 970 300 L 1140 300" stroke="#A855F7" stroke-width="4" stroke-linecap="round" class="flow-line"/>
-    <polygon points="1140,294 1156,300 1140,306" fill="#A855F7"/>
-    <text x="1055" y="278" fill="#A855F7" font-size="14" font-weight="bold" text-anchor="middle">proposeWithProof()</text>
-
-    <!-- Outcome Branch A (Top: Attacker Revert) -->
-    <path d="M 1520 250 L 1570 210" stroke="#EF4444" stroke-width="3" stroke-linecap="round"/>
-    <!-- Outcome Branch B (Bottom: Legitimate Success) -->
-    <path d="M 1520 350 L 1570 390" stroke="#10B981" stroke-width="3" stroke-linecap="round"/>
+    <path d="M 970 300 L 1140 300" stroke="#14213D" stroke-width="4" stroke-linecap="round" class="flow-line"/>
+    <polygon points="1140,294 1156,300 1140,306" fill="#14213D"/>
+    <text x="1055" y="278" fill="#14213D" font-family="'Geist Mono', monospace" font-size="13" font-weight="bold" text-anchor="middle">proposeWithProof()</text>
 
     <!-- NODE 1: Autonomous Agent (LLM) -->
-    <g class="node-card" transform="translate(60, 160)">
-      <rect width="360" height="280" rx="20" fill="url(#cardGrad1)" stroke="#38BDF8" stroke-width="2"/>
-      <rect x="24" y="24" width="48" height="48" rx="12" fill="rgba(56, 189, 248, 0.15)"/>
-      <text x="48" y="56" fill="#38BDF8" font-size="24" font-weight="bold" text-anchor="middle">🤖</text>
+    <g class="node-card" transform="translate(60, 150)">
+      <rect width="360" height="290" rx="16" fill="#FFFFFF" stroke="#2457C5" stroke-width="2" filter="drop-shadow(0 10px 25px rgba(15,17,21,0.06))"/>
+      <rect x="24" y="24" width="48" height="48" rx="12" fill="#E7EEFB"/>
+      <text x="48" y="56" fill="#2457C5" font-size="24" font-weight="bold" text-anchor="middle">🤖</text>
       
-      <text x="86" y="44" fill="#FFFFFF" font-size="22" font-weight="bold">Autonomous Agent</text>
-      <text x="86" y="66" fill="#94A3B8" font-size="14">Off-Chain LLM Planner</text>
+      <text x="86" y="44" fill="#0F1115" font-family="'Geist', sans-serif" font-size="20" font-weight="bold">Autonomous Agent</text>
+      <text x="86" y="66" fill="#5E646E" font-family="'Geist Mono', monospace" font-size="13">Off-Chain LLM Planner</text>
 
-      <line x1="24" y1="92" x2="336" y2="92" stroke="#334155" stroke-width="1"/>
+      <line x1="24" y1="92" x2="336" y2="92" stroke="#E4E3DC" stroke-width="1"/>
 
-      <text x="28" y="125" fill="#E2E8F0" font-size="15" font-weight="600">• Processes incoming invoices</text>
-      <text x="28" y="155" fill="#E2E8F0" font-size="15" font-weight="600">• Subject to prompt injections</text>
-      <text x="28" y="185" fill="#EF4444" font-size="15" font-weight="600">⚠️ Vulnerable to social engineering</text>
+      <text x="28" y="125" fill="#334155" font-family="'Geist', sans-serif" font-size="15" font-weight="500">• Processes incoming invoices</text>
+      <text x="28" y="155" fill="#334155" font-family="'Geist', sans-serif" font-size="15" font-weight="500">• Subject to prompt injections</text>
+      <text x="28" y="185" fill="#E84142" font-family="'Geist', sans-serif" font-size="15" font-weight="700">⚠️ Vulnerable to social engineering</text>
 
       <!-- Code pill -->
-      <rect x="24" y="210" width="312" height="44" rx="8" fill="#020617" stroke="#1E293B"/>
-      <text x="36" y="238" fill="#38BDF8" font-family="monospace" font-size="13">target: 0xDead...0001 (5 USDC)</text>
+      <rect x="24" y="215" width="312" height="44" rx="4" fill="#F8FAFC" stroke="#E4E3DC"/>
+      <text x="36" y="243" fill="#2457C5" font-family="'Geist Mono', monospace" font-size="13">target: 0xDead...0001 (5 USDC)</text>
     </g>
 
     <!-- NODE 2: Mission Validator -->
-    <g class="node-card" transform="translate(610, 160)">
-      <rect width="360" height="280" rx="20" fill="url(#cardGrad2)" stroke="#A855F7" stroke-width="2"/>
-      <rect x="24" y="24" width="48" height="48" rx="12" fill="rgba(168, 85, 247, 0.15)"/>
-      <text x="48" y="56" fill="#A855F7" font-size="24" font-weight="bold" text-anchor="middle">🛡️</text>
+    <g class="node-card" transform="translate(610, 150)">
+      <rect width="360" height="290" rx="16" fill="#FFFFFF" stroke="#14213D" stroke-width="2" filter="drop-shadow(0 10px 25px rgba(15,17,21,0.06))"/>
+      <rect x="24" y="24" width="48" height="48" rx="12" fill="#E6ECF3"/>
+      <text x="48" y="56" fill="#14213D" font-size="24" font-weight="bold" text-anchor="middle">🛡️</text>
 
-      <text x="86" y="44" fill="#FFFFFF" font-size="22" font-weight="bold">Mission Validator</text>
-      <text x="86" y="66" fill="#94A3B8" font-size="14">Cryptographic Gatekeeper</text>
+      <text x="86" y="44" fill="#0F1115" font-family="'Geist', sans-serif" font-size="20" font-weight="bold">Mission Validator</text>
+      <text x="86" y="66" fill="#5E646E" font-family="'Geist Mono', monospace" font-size="13">Cryptographic Gatekeeper</text>
 
-      <line x1="24" y1="92" x2="336" y2="92" stroke="#334155" stroke-width="1"/>
+      <line x1="24" y1="92" x2="336" y2="92" stroke="#E4E3DC" stroke-width="1"/>
 
-      <text x="28" y="125" fill="#E2E8F0" font-size="15" font-weight="600">• Loads Mission Manifest</text>
-      <text x="28" y="155" fill="#E2E8F0" font-size="15" font-weight="600">• Computes Merkle Payee Proof</text>
-      <text x="28" y="185" fill="#A855F7" font-size="15" font-weight="600">• Signs cryptographic audit trail</text>
+      <text x="28" y="125" fill="#334155" font-family="'Geist', sans-serif" font-size="15" font-weight="500">• Loads Mission Manifest</text>
+      <text x="28" y="155" fill="#334155" font-family="'Geist', sans-serif" font-size="15" font-weight="500">• Computes Merkle Payee Proof</text>
+      <text x="28" y="185" fill="#14213D" font-family="'Geist', sans-serif" font-size="15" font-weight="600">• Signs cryptographic audit trail</text>
 
       <!-- Merkle Tree Pill -->
-      <rect x="24" y="210" width="312" height="44" rx="8" fill="#020617" stroke="#1E293B"/>
-      <text x="36" y="238" fill="#A855F7" font-family="monospace" font-size="13">MerkleRoot: 0x3d4f...9a12</text>
+      <rect x="24" y="215" width="312" height="44" rx="4" fill="#F8FAFC" stroke="#E4E3DC"/>
+      <text x="36" y="243" fill="#14213D" font-family="'Geist Mono', monospace" font-size="13">MerkleRoot: 0x3011ac81...71dd</text>
     </g>
 
-    <!-- NODE 3: GuardedTreasury (Fuji C-Chain) -->
-    <g class="node-card pulse-glow" transform="translate(1160, 140)">
-      <rect width="360" height="320" rx="20" fill="url(#treasuryGrad)" stroke="#E84142" stroke-width="3"/>
-      <rect x="24" y="24" width="48" height="48" rx="12" fill="rgba(232, 65, 66, 0.25)"/>
-      <text x="48" y="56" fill="#E84142" font-size="24" font-weight="bold" text-anchor="middle">🔺</text>
+    <!-- NODE 3: GuardedTreasury (Fuji C-Chain) - v8b Navy Band Card -->
+    <g class="node-card" transform="translate(1160, 135)">
+      <rect width="360" height="320" rx="16" fill="#14213D" stroke="#E84142" stroke-width="3" filter="drop-shadow(0 14px 30px rgba(20,33,61,0.4))"/>
+      <rect x="24" y="24" width="48" height="48" rx="12" fill="#E84142"/>
+      <text x="48" y="56" fill="#FFFFFF" font-size="24" font-weight="bold" text-anchor="middle">🔺</text>
 
-      <text x="86" y="44" fill="#FFFFFF" font-size="22" font-weight="bold">GuardedTreasury</text>
-      <text x="86" y="66" fill="#FCA5A5" font-size="14">Avalanche Fuji Smart Contract</text>
+      <text x="86" y="44" fill="#FFFFFF" font-family="'Geist', sans-serif" font-size="20" font-weight="bold">GuardedTreasury</text>
+      <text x="86" y="66" fill="#FF8593" font-family="'Geist Mono', monospace" font-size="13" font-weight="600">Avalanche Fuji C-Chain</text>
 
-      <line x1="24" y1="92" x2="336" y2="92" stroke="#4C1D24" stroke-width="1"/>
+      <line x1="24" y1="92" x2="336" y2="92" stroke="#2A3859" stroke-width="1"/>
 
-      <text x="28" y="125" fill="#FFFFFF" font-size="15" font-weight="700">Contract Invariants Enforced:</text>
-      <text x="28" y="152" fill="#E2E8F0" font-size="14">• Merkle payee membership</text>
-      <text x="28" y="176" fill="#E2E8F0" font-size="14">• Per-mission budget ceiling</text>
-      <text x="28" y="200" fill="#E2E8F0" font-size="14">• Expiry timestamp validation</text>
+      <text x="28" y="122" fill="#FFFFFF" font-family="'Geist', sans-serif" font-size="15" font-weight="700">Contract Invariants Enforced:</text>
+      <text x="28" y="148" fill="#CBD5E1" font-family="'Geist', sans-serif" font-size="14">• Merkle payee membership</text>
+      <text x="28" y="172" fill="#CBD5E1" font-family="'Geist', sans-serif" font-size="14">• Per-mission budget ceiling</text>
+      <text x="28" y="196" fill="#CBD5E1" font-family="'Geist', sans-serif" font-size="14">• Expiry timestamp validation</text>
 
-      <!-- Outcome boxes -->
-      <rect x="20" y="222" width="320" height="38" rx="8" fill="#450A0A" stroke="#DC2626"/>
-      <text x="32" y="246" fill="#FCA5A5" font-family="monospace" font-size="12" font-weight="bold">❌ PayeeNotInMissionSet → REVERT</text>
+      <!-- Outcome boxes (square-ish 4px radius as per v8b) -->
+      <rect x="20" y="218" width="320" height="38" rx="4" fill="#FCE8EB" stroke="#E84142"/>
+      <text x="32" y="242" fill="#D3102E" font-family="'Geist Mono', monospace" font-size="12" font-weight="bold">❌ PayeeNotInMissionSet → REVERT</text>
 
-      <rect x="20" y="268" width="320" height="38" rx="8" fill="#064E3B" stroke="#059669"/>
-      <text x="32" y="292" fill="#A7F3D0" font-family="monospace" font-size="12" font-weight="bold">✅ Verified Payee → TRANSFER 0.01 USDC</text>
+      <rect x="20" y="264" width="320" height="38" rx="4" fill="#E3F2EA" stroke="#0B7A4B"/>
+      <text x="32" y="288" fill="#0B7A4B" font-family="'Geist Mono', monospace" font-size="12" font-weight="bold">✅ Verified Payee → TRANSFER 0.01 USDC</text>
     </g>
   </svg>
 

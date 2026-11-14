@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>MissionPay Demo - Outro Card</title>
+  <title>MissionPay Demo - Outro Card (v8b)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@800;900&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;600&display=swap" rel="stylesheet">
   <style>
     * {
       box-sizing: border-box;
@@ -12,9 +14,9 @@
     body {
       width: 1920px;
       height: 1080px;
-      background: radial-gradient(circle at 50% 45%, #181d2a 0%, #0B0F17 80%);
-      color: #FFFFFF;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #F7F6F2;
+      color: #0F1115;
+      font-family: 'Geist', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -24,192 +26,198 @@
       overflow: hidden;
     }
 
-    .badge {
+    .kicker {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px 24px;
-      border-radius: 9999px;
-      background: rgba(232, 65, 66, 0.15);
-      border: 1px solid rgba(232, 65, 66, 0.4);
-      color: #E84142;
-      font-size: 16px;
-      font-weight: 700;
-      letter-spacing: 2px;
+      gap: 10px;
+      font-family: 'Geist Mono', monospace;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
+      color: #0F1115;
       margin-bottom: 24px;
     }
 
+    .red-sq {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      background: #E84142;
+      flex-shrink: 0;
+    }
+
     .punchline-top {
-      font-size: 68px;
+      font-family: 'Archivo', sans-serif;
+      font-size: 72px;
       font-weight: 900;
       line-height: 1.1;
-      color: #F8FAFC;
-      letter-spacing: -1px;
+      color: #0F1115;
+      letter-spacing: -0.02em;
+      text-transform: uppercase;
     }
 
     .punchline-bot {
-      font-size: 68px;
+      font-family: 'Archivo', sans-serif;
+      font-size: 72px;
       font-weight: 900;
       line-height: 1.1;
       color: #E84142;
-      letter-spacing: -1px;
+      letter-spacing: -0.02em;
+      text-transform: uppercase;
       margin-bottom: 20px;
-      text-shadow: 0 0 35px rgba(232, 65, 66, 0.45);
+    }
+
+    .dot-accent {
+      color: #E84142;
     }
 
     .tagline {
       font-size: 24px;
-      color: #94A3B8;
+      color: #5E646E;
       max-width: 900px;
-      margin-bottom: 44px;
+      margin-bottom: 48px;
       line-height: 1.5;
+      font-weight: 500;
     }
 
     .cards-row {
       display: flex;
       gap: 32px;
       align-items: stretch;
-      margin-bottom: 40px;
+      margin-bottom: 48px;
     }
 
-    .qr-card {
-      background: #0F172A;
-      border: 1px solid #1E293B;
-      border-radius: 20px;
-      padding: 20px 24px;
+    .info-card {
+      background: #FFFFFF;
+      border: 1px solid #E4E3DC;
+      border-radius: 16px;
+      padding: 24px 36px;
       display: flex;
       align-items: center;
-      gap: 20px;
+      gap: 22px;
       text-align: left;
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 10px 25px rgba(15, 17, 21, 0.05);
+      min-width: 450px;
     }
 
-    .qr-placeholder {
-      width: 100px;
-      height: 100px;
-      border-radius: 16px;
-      border: 1px solid #334155;
-      background: #0B0F17;
+    .card-icon {
+      width: 58px;
+      height: 58px;
+      border-radius: 14px;
+      background: #FCE8EB;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
     }
 
-    .card-icon {
-      width: 44px;
-      height: 44px;
-    }
-
-    .qr-img {
-      width: 100px;
-      height: 100px;
-      border-radius: 12px;
-      border: 1px solid #334155;
-      background: #0B0F17;
-      padding: 4px;
-    }
-
-    .qr-info h4 {
+    .card-title {
       font-size: 20px;
-      font-weight: 800;
+      font-weight: 700;
+      color: #0F1115;
       margin-bottom: 4px;
     }
 
-    .qr-info p {
+    .card-desc {
       font-size: 14px;
-      color: #94A3B8;
+      color: #5E646E;
       margin-bottom: 8px;
     }
 
-    .qr-info .url {
-      font-family: monospace;
-      font-size: 13px;
-      color: #38BDF8;
-      background: rgba(56, 189, 248, 0.1);
-      padding: 4px 8px;
-      border-radius: 6px;
-      display: inline-block;
+    .card-url {
+      font-size: 15px;
+      color: #E84142;
+      font-family: 'Geist Mono', monospace;
+      font-weight: 700;
     }
 
-    .footer-contracts {
-      font-family: monospace;
-      font-size: 14px;
-      color: #64748B;
+    .navy-band {
+      background: #14213D;
+      border-top: 4px solid #E84142;
+      border-radius: 14px;
+      padding: 18px 48px;
       display: flex;
-      gap: 32px;
+      align-items: center;
+      gap: 36px;
+      font-family: 'Geist Mono', monospace;
+      font-size: 14px;
+      color: #FFFFFF;
+      font-weight: 500;
+      box-shadow: 0 20px 40px -10px rgba(20, 33, 61, 0.35);
     }
 
-    .footer-contracts span {
-      color: #94A3B8;
+    .navy-band .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #0B7A4B;
+      display: inline-block;
+      margin-right: 10px;
     }
   </style>
 </head>
 <body>
-  <div class="badge">
-    MissionPay · Avalanche UniHack 2026
+  <div class="kicker">
+    <span class="red-sq"></span>MISSIONPAY · AUTONOMOUS AI SPEND GOVERNANCE
   </div>
 
-  <div class="punchline-top">LLMs can be fooled.</div>
-  <div class="punchline-bot">Budgets on Avalanche can't.</div>
+  <div class="punchline-top">
+    LLMS CAN BE FOOLED<span class="dot-accent">.</span>
+  </div>
+
+  <div class="punchline-bot">
+    BUDGETS ON AVALANCHE CAN'T<span class="dot-accent">.</span>
+  </div>
 
   <div class="tagline">
-    Sign the mission once. The smart contract decides who gets paid.
+    Sign once, chain enforces. Deterministic cryptographic spend governance on Avalanche Fuji.
   </div>
 
   <div class="cards-row">
     <!-- Card 1: Judge Mode -->
-    <div class="qr-card">
-      <div id="qr-judge-container" class="qr-placeholder">
-        <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+    <div class="info-card">
+      <div class="card-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#E84142" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
         </svg>
       </div>
-      <div class="qr-info">
-        <h4 style="color: #F8FAFC;">Verify in 30 Seconds</h4>
-        <p>Live Fuji Receipts & Simulator</p>
-        <div class="url">/judge</div>
+      <div>
+        <div class="card-title">Interactive Judge Mode</div>
+        <div class="card-desc">Instant eth_call contract simulation on Avalanche Fuji</div>
+        <div class="card-url">/judge</div>
       </div>
     </div>
 
     <!-- Card 2: Bounty Arena -->
-    <div class="qr-card">
-      <div id="qr-bounty-container" class="qr-placeholder">
-        <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+    <div class="info-card">
+      <div class="card-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#E84142" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="22" y1="12" x2="18" y2="12"/>
+          <line x1="6" y1="12" x2="2" y2="12"/>
+          <line x1="12" y1="6" x2="12" y2="2"/>
+          <line x1="12" y1="22" x2="12" y2="18"/>
         </svg>
       </div>
-      <div class="qr-info">
-        <h4 style="color: #10B981;">Bounty Challenge</h4>
-        <p>Test Prompt Injections Live</p>
-        <div class="url">/bounty</div>
+      <div>
+        <div class="card-title">Hack Treasury Bounty</div>
+        <div class="card-desc">Prompt injection challenge against 3-layer guard</div>
+        <div class="card-url">/bounty</div>
       </div>
     </div>
   </div>
 
-  <div class="footer-contracts">
-    <div>GuardedTreasury: <span>0x20451c1e2dCD83F166B4f22868BAdECb5868d545</span></div>
-    <div>•</div>
-    <div>Fuji Chain ID: <span>43113</span></div>
-    <div>•</div>
-    <div>GitHub: <span>github.com/lenamkhanhh/UniHack</span></div>
+  <div class="navy-band">
+    <div><span class="dot"></span>Avalanche Fuji Testnet</div>
+    <div style="opacity: 0.4;">|</div>
+    <div>GuardedTreasury: <span style="color: #60A5FA;">0x20451c1e2dCD83F166B4f22868BAdECb5868d545</span></div>
+    <div style="opacity: 0.4;">|</div>
+    <div>Sign once, chain enforces.</div>
   </div>
-
-  <script>
-    fetch('qr-data.json')
-      .then(r => r.json())
-      .then(data => {
-        if (data && data.judgeQR) {
-          const el = document.getElementById('qr-judge-container');
-          if (el) el.innerHTML = `<img src="${data.judgeQR}" class="qr-img" alt="Judge QR" />`;
-        }
-        if (data && data.bountyQR) {
-          const el = document.getElementById('qr-bounty-container');
-          if (el) el.innerHTML = `<img src="${data.bountyQR}" class="qr-img" alt="Bounty QR" />`;
-        }
-      })
-      .catch(() => {});
-  </script>
 </body>
 </html>

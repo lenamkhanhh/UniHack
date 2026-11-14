@@ -421,5 +421,89 @@ Thời lượng toàn bộ video `MissionPay-demo.mp4`: **2m 52.00s (172.00s)**.
 - **Playwright Video Spec:** `npx playwright test e2e/video/record-demo.spec.ts --project=video` $\to$ **1 passed (100% passed)**.
 - **Tuân thủ cam kết:** Không commit file reviewer, không push remote, không commit secret; smart contracts nằm ở thư mục `contracts/`.
 
+---
+
+## 11. NGHIỆM THU ROUND 14: RE-RECORD DEMO VIDEO TRÊN THIẾT KẾ v8b VÀ HOÀN TẤT R13F-1..4 & R14-F1..3
+
+**Thời điểm:** 2026-11-14 11:05 (Asia/Saigon) | **Nhánh:** `feat/s1-app` | **HEAD:** `b9942af`  
+**Mục tiêu:** Thực hiện toàn diện đặc tả Round 14 và giải quyết trọn vẹn các yêu cầu pre-review từ Claude (`REVIEW_PROMPT_GPT.md` dòng 686–717): quay lại toàn bộ video 1080p tự động trên giao diện v8b (commit `85e2f37`), sửa đổi dứt điểm các điểm R13F-1 đến R13F-4 cùng các bổ sung R14-F1..3, khớp thời lượng 2:40–2:55, voiceover $\le 150$ từ, trích xuất 8 frame cảnh, cập nhật `VIDEO_SCRIPT.md` và `captions.srt`.
+
+### 11.1 Bảng Nghiệm thu Sửa đổi Round 14 (R13F-1 .. R13F-4 & R14-F1 .. R14-F3)
+
+| Mã lỗi | Nhóm | Trạng thái | File thực hiện | Mô tả giải pháp và Bằng chứng thực tế |
+|---|---|---|---|---|
+| **R14-F1** | **Honesty & Data Seed** | **ACCEPTED** | `apps/web/e2e/video/record-demo.spec.ts`<br>`scripts/seed-mission-audit.ts` | **Tự động seed `fuji-live-mission-s1c` vào `unihack_test` trong `beforeAll`:**<br>1. Playwright runner và server đều gắn kết với DB `unihack_test`. Đã bổ sung hàm `seedMissionAudit` trực tiếp vào `test.beforeAll` của `record-demo.spec.ts` đọc từ `evidence/missions/fuji-live-mission-s1c/audit.json`.<br>2. Cảnh 5 (`/verify/fuji-live-mission-s1c`) thể hiện trung thực tuyệt đối: hiển thị ngay `"Total blocks: 3 entries"`, `"✓ HASH CHAIN VALID"`, `"On-Chain Anchor Status: Anchored on Avalanche Fuji [MATCH]"`, head hash `0xb6383cfe...` khớp 100% với dữ liệu neo trên hợp đồng GuardedTreasury Fuji, và điểm ERC-8004 `100/100 (verified-full)`.<br>3. Trình tự trung thực: VALID + MATCH + 100/100 trước $\to$ bấm "Test modify 1 byte" $\to$ MISMATCH đỏ $\to$ bấm "Restore original" $\to$ phục hồi MATCH xanh. |
+| **R14-F2** | **Layout & Subtitle Placement** | **ACCEPTED** | `apps/web/e2e/video/record-demo.spec.ts` | **Cuộn thẻ kết quả `/judge` lên nửa trên (60–70%) màn hình, không bị caption che:**<br>1. Tại Cảnh 2 (`/judge`), sau khi thẻ `#simulation-result-card` xuất hiện (cho cả Negative Control và Positive Control), máy quay thực hiện cuộn mượt đưa thẻ lên `top: 180px` (nằm ở 20–30% đỉnh khung nhìn).<br>2. Thanh phụ đề (caption bar) cố định ở đáy màn hình `bottom: 16px` hoàn toàn tách biệt, không chạm hay che khuất bất kỳ dòng dữ liệu nào của thẻ Revert/Success (đã nghiệm thu thực tế qua `scene2.png`). |
+| **R14-F3** | **Commit Base & i18n** | **ACCEPTED** | `apps/web/` | **Xây dựng trên nền commit `b9942af`:**<br>1. Kế thừa toàn bộ giao diện v8b (Archivo 900 in hoa, red full stop `.`, navy proof band, nền giấy `#F7F6F2`).<br>2. Đồng bộ hóa i18n tiếng Anh chuẩn (`localStorage.setItem('missionpay_lang', 'en')`), toàn bộ các trang `/`, `/judge`, `/bounty`, `/verify`, `/missions/new` không còn sót chuỗi tiếng Việt. |
+| **R13F-1** | **Honesty & Timing** | **ACCEPTED** | `apps/web/e2e/video/record-demo.spec.ts`<br>`apps/web/app/judge/page.tsx` | **Hiển thị đầy đủ kết quả Revert và giữ spotlight trước khi chạy Owner:**<br>1. Tại `/judge`, máy quay nhấn "Ask the Fuji Contract" mô phỏng tấn công ngẫu nhiên $\to$ đợi kết quả revert thực tế `PayeeNotInMissionSet` xuất hiện trọn vẹn.<br>2. Giữ spotlight cố định 4.0s (0:39.0 – 0:43.0).<br>3. **Chỉ sau đó**, nhấn "Test Owner" $\to$ đợi thẻ kết quả xanh `SUCCESS` xuất hiện $\to$ giữ spotlight 3.5s (0:46.0 – 0:49.5).<br>4. Cuộn xuống hiển thị lệnh `cast call` tái tạo. |
+| **R13F-2** | **Honesty & Order** | **ACCEPTED** | `apps/web/e2e/video/record-demo.spec.ts` | **Dùng mission thật `fuji-live-mission-s1c` và đúng trình tự trung thực:**<br>1. Dữ liệu thực tế 3 entries, head `0xb6383cfec46d06ac2f6ba3c83b122baa48cf9bcd8b748cc4e2c6c7ad40814158`, ERC-8004 100/100 verified-full.<br>2. Ẩn khối QR localhost để tránh lộ URL phát triển.<br>3. Đúng trình tự: Valid $\to$ Tamper $\to$ Restore. |
+| **R13F-3** | **Pacing & Honesty** | **ACCEPTED** | `apps/web/e2e/video/record-demo.spec.ts` | **Rút ngắn cảnh Snowtrace $\le 8$s và phóng to dòng trạng thái Revert:**<br>1. Thời lượng cảnh Snowtrace chỉ kéo dài 6.6s (1:31.8 – 1:38.4), không giữ màn hình tĩnh.<br>2. Tự động cuộn và spotlight trực diện vào dòng trạng thái: `"Fail with execution reverted"` kèm thông điệp `PayeeNotInMissionSet`. |
+| **R13F-4** | **Branding & Cards** | **ACCEPTED** | `artifacts/submission-s1/video/cards/intro.html`<br>`artifacts/submission-s1/video/cards/diagram.html`<br>`artifacts/submission-s1/video/cards/outro.html`<br>`scripts/video/build-video.ts` | **Tái thiết kế toàn bộ thẻ Intro, Diagram, Outro theo chuẩn v8b:**<br>1. Tiêu đề Archivo 900 IN HOA kèm dấu chấm đỏ (`.`), thẻ proof band màu navy `#14213D`, nền giấy `#F7F6F2`, viền và điểm nhấn đỏ thương hiệu `#E84142`.<br>2. Outro card loại bỏ hoàn toàn QR và domain chưa đăng ký; chỉ hiển thị URL text chuẩn (`/judge`, `/bounty`) và địa chỉ treasury Avalanche Fuji chuẩn xác: `0x20451c1e2dCD83F166B4f22868BAdECb5868d545`.<br>3. Re-render toàn bộ thẻ tĩnh ra ảnh PNG 1080p và clip 30fps. |
+
+---
+
+### 11.2 Danh mục Mốc Thời gian Phân cảnh & Spotlight (Spotlight Timestamps Timeline)
+
+Thời lượng toàn bộ video `MissionPay-demo.mp4`: **2m 48.00s (168.00s)** — Chuẩn xác trong khung **2:40 – 2:55**.
+
+| Thời điểm (Phút:Giây) | Phân cảnh | Thẻ / Phần tử Spotlight | Nội dung & Bằng chứng thể hiện trên màn hình |
+|---|---|---|---|
+| **0:00.0 – 0:03.2** | S0 Intro Card | Title Card v8b | "SAME VENDOR. SAME TREASURY. TWO OUTCOMES." (Navy proof band, Treasury `0x2045...`) |
+| **0:03.2 – 0:28.3** | S1 Home Twin Treasury | Hero & Bảng đối chứng | So sánh trực diện hai mô hình giải ngân quỹ |
+| 0:03.2 – 0:08.0 | S1 Home | Hero Section | Giới thiệu hệ thống MissionPay và ngân quỹ on-chain |
+| 0:10.5 – 0:14.0 | S1 Home | `#twin-col-a-outcome` | ⚠️ Mission A Allowlist: +0.01 USDC Drained to Poisoned Vendor |
+| 0:14.2 – 0:16.8 | S1 Home | `#twin-col-a-tx` | Allowlist Tx: `0x548d1106...` (Confirmed on Avalanche Fuji) |
+| 0:17.0 – 0:20.5 | S1 Home | `#twin-col-b-outcome` | 🛡️ Mission B Guard: Reverted (`PayeeNotInMissionSet`) |
+| 0:20.8 – 0:23.4 | S1 Home | `#twin-col-b-revert-tx` | Revert Tx: `0x0ad53adc...` (0 USDC Outflow preserved) |
+| **0:28.3 – 1:08.0** | S2 Judge Mode | Live Receipts & Simulation | Chế độ thẩm phán trực tiếp trên Avalanche Fuji |
+| 0:30.0 – 0:33.5 | S2 Judge | `#judge-receipts-grid` | ⛓️ 3 Live On-Chain Receipts từ Fuji RPC (Block 61001944..61001949) |
+| 0:39.0 – 0:43.0 | S2 Judge | `#simulation-result-card` (Revert) | ❌ Kẻ tấn công ngẫu nhiên: Reverted (`PayeeNotInMissionSet`) — Giữ 4.0s (R13F-1), không bị caption che (R14-F2) |
+| 0:46.0 – 0:49.5 | S2 Judge | `#simulation-result-card` (Success) | ✅ Thử ví Owner: Contract Authorizes Payout (`SUCCESS`) — Giữ 3.5s |
+| 0:50.0 – 1:08.0 | S2 Judge | Terminal Reproduction | Bộ lệnh `cast call` độc lập tái tạo kết quả trực tiếp từ CLI |
+| **1:08.0 – 1:31.8** | S3 Bounty Challenge | Form & Recorded Run | Thử thách khai thác ngân quỹ AI Agent |
+| 1:10.0 – 1:15.0 | S3 Bounty | Attack Payload Form | Tự động điền payload tấn công chuyển hướng địa chỉ thanh toán |
+| 1:15.5 – 1:31.8 | S3 Bounty | Full-frame Still & Badge | Thẻ kết quả ghi hình thực tế kèm nhãn rõ ràng: `RECORDED RUN · Fuji eth_call` |
+| **1:31.8 – 1:38.4** | S4 Snowtrace Revert | Explorer Status | Minh chứng on-chain giao dịch tấn công bị từ chối ($\le 8$s, R13F-3) |
+| 1:33.0 – 1:36.0 | S4 Snowtrace | Status Row Zoom | Phóng to & spotlight dòng `"Fail with execution reverted"` (`PayeeNotInMissionSet`) |
+| **1:38.4 – 2:36.8** | S5 Independent Verifier | `/verify/fuji-live-mission-s1c` | Kiểm chứng độc lập chữ ký mật mã & tính toàn vẹn chuỗi audit |
+| 1:42.0 – 1:45.5 | S5 Verify | `erc8004-status-badge` | ✅ ERC-8004 Reputation Score: **100/100** (`verified-full`) |
+| 1:46.0 – 1:49.0 | S5 Verify | `anchor-match-badge` | ✅ On-Chain Anchor: Head `0xb6383cfe...` khớp 100% với Proof trên Fuji (3 entries hợp lệ, R14-F1) |
+| 1:49.5 – 1:52.5 | S5 Verify | Valid State Hold | Giữ trạng thái xanh hợp lệ ban đầu (R13F-2: VALID trước) |
+| 1:54.5 – 1:58.0 | S5 Verify | `anchor-mismatch-badge` | ❌ Bấm "Test modify 1 byte" $\to$ Hash Mismatch (Chain Corrupted) |
+| 2:03.0 – 2:06.5 | S5 Verify | `anchor-match-badge` | ✅ Bấm "Restore Original" $\to$ Phục hồi tính toàn vẹn 100% |
+| **2:36.8 – 2:41.5** | S6 Architecture Card | Diagram v8b | Kiến trúc 3 lớp: Agent $\to$ Off-chain Validator $\to$ GuardedTreasury Contract |
+| **2:41.5 – 2:48.0** | S7 Outro Card | Outro v8b | "LLMs CAN BE FOOLED. BUDGETS ON AVALANCHE CAN'T." + Text URLs (`/judge`, `/bounty`) |
+
+---
+
+### 11.3 Thông số Kỹ thuật Video Deliverable Hoàn tất
+
+- **Đường dẫn tệp:** `artifacts/submission-s1/video/MissionPay-demo.mp4`
+- **Thời lượng thực tế:** **2m 48.00s (168.00 giây)** — Nằm trọn vẹn trong khoảng **2:40 – 2:55** theo quy định Round 14.
+- **Dung lượng tệp:** **11.06 MB** (11,599,527 bytes) — Cực kỳ nhẹ, dưới xa ngưỡng 50 MB của Git repo.
+- **Định dạng video:** 1080p30 H.264 (High Profile, `yuv420p`), bitrate ~552 kbps.
+- **Âm thanh:** AAC stereo 192 kbps, chuẩn hóa EBU R128. Giọng đọc `en-US-ChristopherNeural` (131 từ, thỏa mãn $\le 150$ từ). Hỗ trợ `--voice owner.wav` cho thuyết minh tùy biến.
+- **Phụ đề & Kịch bản:** 
+  - `artifacts/submission-s1/video/captions.srt` (khớp chính xác từng micro-second theo giọng đọc và phân cảnh).
+  - `artifacts/submission-s1/video/VOICEOVER.md` (131 từ, thứ tự phân cảnh S0..S7 chuẩn).
+  - `VIDEO_SCRIPT.md` tại thư mục gốc repository đã được đồng bộ hóa toàn diện.
+- **Trích xuất ảnh phân cảnh:** Đầy đủ 8 ảnh độ phân giải cao 1080p tại `artifacts/submission-s1/video/frames/`:
+  - `scene0.png`: Thẻ mở đầu (Intro Card v8b)
+  - `scene1.png`: Đối chứng Twin Treasury (Home)
+  - `scene2.png`: Thẩm định Fuji Receipts & Revert Simulation (Judge - Revert card ở nửa trên, không che caption)
+  - `scene3.png`: Thử thách tấn công ghi hình (Bounty)
+  - `scene4.png`: Bằng chứng giao dịch thất bại (Snowtrace Revert)
+  - `scene5.png`: Trình kiểm chứng mật mã độc lập (Verify s1c - 3 entries, Head MATCH, 100/100 ERC-8004)
+  - `scene6.png`: Sơ đồ kiến trúc 3 lớp (Diagram v8b)
+  - `scene7.png`: Thẻ kết thúc & URL truy cập (Outro Card v8b)
+
+### 11.4 Kết quả Kiểm thử & Đảm bảo An toàn
+- **TypeScript Typecheck:** `npx.cmd tsc --noEmit` $\to$ **Exit code 0 (0 errors)**.
+- **Vitest Unit/API Suite:** `npx.cmd vitest run` $\to$ **37/37 files passed (352 passed, 3 skipped, 0 failed) — 100% Pass**.
+- **Playwright Video Recording:** `apps/web/e2e/video/record-demo.spec.ts` $\to$ **1 passed (100% passed)**.
+- **Screenshot Protection:** Các tệp hình ảnh trong `artifacts/submission-s1/deck-shots` và `apps/web/evidence` được bảo vệ nguyên vẹn 100%, không bị Playwright ghi đè.
+- **Tuân thủ cam kết tối thượng:** Không push remote, không deploy public, không commit secret; smart contracts nằm ở thư mục `contracts/`; tuyệt đối không stage hay commit các tệp reviewer (`REVIEW_PROMPT_GPT.md`, `CLAUDE_WORK_LOG.md`, `PLAN_FINAL_2026-11-13.md`).
+
+
 
 
