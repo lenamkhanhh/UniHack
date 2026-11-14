@@ -1,0 +1,1 @@
+Twin allowlist paid the vendor zero point zero one USDC. Twin mission reverted with Payee Not In Mission Set: zero USDC out. Every row links to a real Fuji transaction.

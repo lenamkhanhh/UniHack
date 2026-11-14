@@ -8,27 +8,38 @@ All third-party assets are free, open-source, or public domain, with permissive 
 
 ## 1. Narration & Voice-Over (Synthetic)
 
-- **Voice Model**: `gemini-2.5-flash-preview-tts`
+- **Voice Model**: `gemini-3.8-flash-lite-tts`
 - **Voice Preset**: `Puck` (high-energy, clear tech-demo delivery)
-- **Provider**: Google Gemini API (Multimodal Audio Output)
-- **Notice**: In accordance with competition rules and ethical disclosure, the narration voice-over is **100% synthetic**. Zero human voice actors and zero unauthorized third-party recordings were used.
+- **API Provider**: Google Generative AI (Gemini Developer API)
+- **License**: Generated under Google AI terms for developer use and distribution.
+- **Notice**: In compliance with hackathon regulations, the voice track is synthetic and fully disclosed here.
 
 ---
 
 ## 2. Background Music
 
-- **Title**: *Gymnopédie No. 1: Lent et douloureux*
-- **Composer**: Erik Satie (1888, Public Domain)
-- **Performer**: Robin Alciatore (Piano)
-- **Publisher**: Musopen (https://musopen.org/)
-- **Repository**: Wikimedia Commons ([File:Erik_Satie_-_gymnopedies_-_la_1_ere._lent_et_douloureux.ogg](https://commons.wikimedia.org/wiki/File:Erik_Satie_-_gymnopedies_-_la_1_ere._lent_et_douloureux.ogg))
-- **License**: **Public Domain (CC0 / PD 1.0 Universal)**
-- **Mix**: Mixed at volume 0.32 with dynamic sidechain ducking (-24 dB under voice), smooth intro fade-in (2s), outro fade-out (3.5s), and mastered to EBU R128 (-16 LUFS).
+- **Track Title**: *Gymnopédie No. 1*
+- **Composer**: Erik Satie (1866–1925)
+- **Audio Source**: Wikimedia Commons / Musopen
+- **License**: Public Domain (Creative Commons Zero / CC-PD-Mark)
+  - Work composition: Public Domain worldwide (composed 1888, author died > 70 years ago).
+  - Performance recording: Public domain release via Musopen / Wikimedia Commons.
+  - Link: https://commons.wikimedia.org/wiki/File:Erik_Satie_-_Gymnopedie_No_1.ogg
 
 ---
 
-## 3. Production & Tooling
+## 3. Video Assets & Fonts
 
-- **Video Capture & Automation**: Playwright (1080p Chromium headless recording)
-- **Assembly Pipeline**: Python audio processing (`wave` module, sample-accurate PCM placement)
-- **Audio Mastering & Encoding**: FFmpeg 9.0 (`sidechaincompress`, `amix`, `loudnorm`, libx264, AAC 48 kHz)
+- **Typography**: `Geist` and `Geist Mono` by Vercel
+  - License: SIL Open Font License 1.1 (OFL)
+  - Repository: https://github.com/vercel/geist-font
+- **Visual Design**: Ink/Paper theme with Avalanche Red (`#E84142`), Cobalt Blue (`#2457C5`), and Charcoal Ink (`#0F1115`).
+- **Icons & Badges**: SVG vectors designed custom for MissionPay under MIT License.
+
+---
+
+## 4. Production & Automation Pipeline
+
+- **Recording Harness**: Playwright Automation (`record-demo.spec.ts`)
+- **Video Assembly**: FFmpeg 6.0+ via Node.js / Python post-production scripts
+- **Subtitles & Transcriptions**: Gemini 3.1 Flash Lite verbatim ASR verification

@@ -1,0 +1,1 @@
+MissionPay secures AI agent treasuries. The owner signs authorized payees, agents propose payouts, and the Avalanche smart contract enforces every limit.

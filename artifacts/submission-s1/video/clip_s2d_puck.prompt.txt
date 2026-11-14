@@ -1,0 +1,1 @@
+Copy the cast command to query public Avalanche Fuji RPC directly.

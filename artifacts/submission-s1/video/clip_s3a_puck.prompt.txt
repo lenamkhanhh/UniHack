@@ -1,0 +1,1 @@
+In our public Bounty challenge, prompt injection tricks the agent, but our dual-layer guard preserves the treasury.

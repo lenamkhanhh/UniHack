@@ -1,0 +1,1 @@
+Agents propose payouts, smart contracts enforce limits.

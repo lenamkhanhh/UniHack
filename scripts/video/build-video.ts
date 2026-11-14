@@ -119,9 +119,9 @@ async function main() {
   const durOutro = getDuration(cards.outroMp4);
   const cardsNetDur = durIntro + durDiagram + durOutro - 0.9; // 3 x 0.3s xfade
 
-  // Target total video duration: 168.0s (~2m 48s), comfortably in 2:40–2:55 range (160s–175s)
-  const targetTotalDur = 168.0;
-  const targetDemoDur = Math.max(140.0, targetTotalDur - cardsNetDur);
+  // Target total video duration: 160.0s (Prompt R17c: comfortably in 140s–175s range)
+  const targetTotalDur = 160.0;
+  const targetDemoDur = targetTotalDur - cardsNetDur;
   const ptsRatio = (targetDemoDur / rawDur).toFixed(4);
 
   // Ensure demoSilent is 30fps and 1920x1080

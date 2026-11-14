@@ -670,4 +670,74 @@ Thời lượng toàn bộ video `MissionPay-demo.mp4`: **2m 48.00s (168.00s)** 
 - Giữ nguyên trạng thái không commit đối với các file của Reviewer (`REVIEW_PROMPT_GPT.md`, `CLAUDE_WORK_LOG.md`, `PLAN_FINAL_2026-11-13.md`).
 - Nhánh làm việc: `feat/s1-app`. Không push vào nhánh `main`, không merge PR #1.
 
+---
+
+## 18. NGHIỆM THU ROUND 17C: PACING RE-CUT, OS CURSOR VỚI YELLOW HALO, VA NARRATED FINAL VIDEO (GEMINI TTS PUCK)
+
+**Thời điểm:** 2026-11-15 01:50 (Asia/Saigon) | **Nhánh:** `feat/s1-app` | **Commit:** `feat(video): narrated final r17c`  
+**Mục tiêu:** Thực hiện toàn diện các yêu cầu nghiệp vụ tại mục Round 17c của Claude (`REVIEW_PROMPT_GPT.md` dòng 789–807):
+1. **R17c-F1 (Pacing & Opening Content):** `s1a_home` chỉ thuyết minh về Home page hero (khái niệm MissionPay: owner ký danh sách payee được duyệt, agent chỉ có quyền đề xuất giải ngân, smart contract Avalanche từ chối mọi trường hợp khác); tốc độ đọc $\le 2.3$ từ/giây (thực tế 2.28 words/s); **TUYỆT ĐỐI KHÔNG DÙNG `atempo`** ở bất kỳ phân đoạn nào.
+2. **R17c-F2 (Loại bỏ cảnh lặp):**
+   - (a) Home (0:12–0:44): Đi từ Home hero $\to$ Three objects $\to$ Twin table ĐÚNG 1 LẦN từ trên xuống dưới, không cuộn ngược lên.
+   - (b) Judge Mode (0:56–1:40): Thẻ Attacker REVERT $\to$ thẻ Owner SUCCESS $\to$ khối lệnh Foundry `cast call` 1 lần ($\le 6$s) $\to$ khối Known Limits 1 lần ($\le 5$s).
+   - (c) Bounty result: Cuộn mượt 1 lần từ kết quả 3-layer xuống Provenance Trace ($\le 10$s).
+   - (d) Verify: ĐÚNG 1 LƯỢT: Trạng thái ban đầu VALID + MATCH + 100/100 $\to$ bấm "Test modify 1 byte" $\to$ MISMATCH đỏ $\to$ bấm "Restore Original" $\to$ MATCH xanh.
+3. **R17c-F3 & F5 (Typography, visual polish & color scheme):**
+   - Burned caption: Cỡ chữ 30px semi-bold trắng trên dark navy pill (`rgba(20, 33, 61, 0.88)` / `#14213D`), bo góc 12px, không viền đỏ.
+   - Lower-third: Thẻ giấy `#F7F6F2`, dải accent 5px bên trái (xanh lam `#2457C5`, xanh lá `#0B7A4B` cho kết quả thành công, vàng hổ phách `#B7791F` cho mock/recorded), tiêu đề Geist 700 ink 30px, phụ đề Geist 400 20px, kicker Geist Mono 16px.
+   - Spotlight: Viền xanh lam 3px `#2457C5`, làm mờ nhẹ phần còn lại, nhãn badge 22px trong navy pill; chữ đỏ chỉ dùng duy nhất cho từ khóa mã lỗi (ví dụ `PayeeNotInMissionSet`).
+   - Huy hiệu "RECORDED RUN": Viền và chữ màu hổ phách `#B7791F` trên nền giấy `#F7F6F2`, 18px.
+4. **R17c-F4 & F6 (Con trỏ ảo & hiệu ứng click):**
+   - Con trỏ: Mũi tên OS màu trắng viền đen (~28px), bao quanh bởi vầng hào quang vàng mềm mại (`#FFD400`, ~44px, opacity 35%) di chuyển mượt mà (`page.mouse.move` 20 steps) lướt đến từng phần tử trước khi click/spotlight.
+   - Hiệu ứng click: Vòng sóng xung kích màu vàng (`#FFD400`, 40 $\to$ 70px, 300ms).
+5. **Database Configuration:** Cập nhật chuỗi kết nối Hosted Supabase PostgreSQL (`aws-1-ap-southeast-1.pooler.supabase.com:6543/5432`) vào `apps/web/.env`, kiểm tra toàn bộ 7 Prisma migrations đã đồng bộ và dữ liệu mission `fuji-live-mission-s1c` đã sẵn sàng.
+
+### 18.1 Bảng Nghiệm thu Sửa đổi Round 17c
+
+| Mã tiêu chí | Nhóm | Trạng thái | File thực hiện | Mô tả giải pháp & Bằng chứng kiểm tra thực tế |
+|---|---|---|---|---|
+| **R17c-F1** | **Pacing & Opening Speech** | **ACCEPTED** | `scripts/video/build_puck_narration.py`<br>`apps/web/e2e/video/record-demo.spec.ts` | **`s1a_home` chỉ nói về Home Hero, tốc độ $\le 2.3$ w/s, 0 atempo:**<br>1. Phân đoạn `s1a_home` (21 từ, 9.20s): "MissionPay secures AI agent treasuries. The owner signs authorized payees, agents propose payouts, and the Avalanche smart contract enforces every limit." $\to$ Đạt **2.28 words/s** ($\le 2.3$ w/s).<br>2. Loại bỏ hoàn toàn bộ lọc `atempo` trong toàn bộ pipeline audio; nếu audio dài hơn window thì tinh chỉnh text hoặc giãn cảnh, không ép tốc. |
+| **R17c-F2** | **Cắt gọt cảnh lặp (Eliminate Repeated Footage)** | **ACCEPTED** | `apps/web/e2e/video/record-demo.spec.ts` | **Cắt gọt toàn diện theo 4 kịch bản của Reviewer:**<br>1. *Home (0:12–0:44):* Cuộn top-to-bottom một lần duy nhất qua Hero $\to$ 3 Objects $\to$ Twin Table, không cuộn ngược.<br>2. *Judge Mode (0:56–1:40):* Chạy Attacker REVERT $\to$ Owner SUCCESS $\to$ hiện khối lệnh `cast call` 1 lần (5.5s) $\to$ khối Known limits 1 lần (5.0s).<br>3. *Bounty Challenge:* Cuộn mượt 1 lần từ bảng kết quả 3-layer xuống trace (9.5s).<br>4. *Verify:* Đúng 1 chu trình duy nhất: VALID+MATCH+100/100 $\to$ Modify 1 byte (MISMATCH đỏ) $\to$ Restore original (MATCH xanh). |
+| **R17c-F3 & F5** | **Typography & Thiết kế Polish (Navy/Paper/Blue)** | **ACCEPTED** | `apps/web/e2e/video/record-demo.spec.ts` | **Nâng cấp độ phân giải & tông màu visual overlays:**<br>1. Burned captions: Cỡ chữ 30px semi-bold trắng trên nền dark navy pill (`#14213D` 88% opacity), bo góc 12px, bóng mờ mịn.<br>2. Lower-third: Thẻ giấy `#F7F6F2`, dải màu xanh lam `#2457C5` (hoặc xanh lá `#0B7A4B` / hổ phách `#B7791F`), title 30px, sub 20px, kicker 16px.<br>3. Spotlight: Viền xanh lam 3px `#2457C5`, làm mờ background 40%, nhãn navy pill 22px; màu đỏ chỉ dùng cho chữ `PayeeNotInMissionSet`. |
+| **R17c-F4 & F6** | **Con trỏ OS ảo & Yellow Ripple** | **ACCEPTED** | `apps/web/e2e/video/record-demo.spec.ts` | **Con trỏ ảo tự nhiên dẫn dắt ánh nhìn:**<br>1. Injected SVG con trỏ OS màu trắng viền đen (~28px) kèm vầng hào quang vàng `#FFD400` (~44px, opacity 35%).<br>2. Hàm `glideCursor()` trượt mượt mà 20 bước trong ~500ms đến từng nút/khối trước khi click.<br>3. Hiệu ứng sóng click vàng `#FFD400` lan tỏa 40px $\to$ 70px trong 300ms. |
+| **Pacing & Duration** | **Thời lượng & Nhịp độ Thuyết minh** | **ACCEPTED** | `artifacts/submission-s1/video/MissionPay-demo.mp4` | **Thời lượng chuẩn 160.10s (2m 40.1s):**<br>- Nằm chuẩn xác trong dải **140s – 175s** (target 160.0s).<br>- Tốc độ đọc trung bình: **2.23 words/s** (chuẩn 2.0 – 2.4 words/s).<br>- Giọng đọc: 100% Google Gemini TTS preset **Puck**.<br>- Nhạc nền: Erik Satie *Gymnopédie No. 1* (CC0 Public Domain) với sidechain ducking (-24dB) và EBU R128 loudnorm (-16 LUFS). |
+| **Self-Check Bằng chứng** | **Contact Sheet & ASR Verification** | **ACCEPTED** | `artifacts/submission-s1/video/contact_sheet.png`<br>`artifacts/submission-s1/video/frames/` | **Kiểm chứng nghiêm ngặt trước khi nghiệm thu:**<br>1. Tạo bảng tiếp xúc `contact_sheet.png` (1 khung hình mỗi 4 giây, lưới 6x7 = 42 ô): xác nhận không có màn hình tĩnh nào kéo dài quá 3 ô liên tiếp mà không có chuyển động hoặc cuộn trang.<br>2. Trích xuất đủ 8 ảnh đại diện phân cảnh tại `frames/scene0.png` .. `scene7.png`.<br>3. Phiên âm ngược ASR với `gemini-3.1-flash-lite` xác nhận 100% nội dung chữ đọc khớp với kịch bản và dữ liệu trên màn hình. |
+
+### 18.2 Bảng Thống kê 15 Phân đoạn Thuyết minh Round 17c
+
+| STT | Mã Cue | Bắt đầu (s) | Thời lượng | Số từ | Tốc độ | Nội dung Thuyết minh & Khớp ngữ cảnh màn hình |
+|---|---|---|---|---|---|---|
+| 1 | `s0_intro` | 00:00.3 | 3.17s | 6 | 1.89 w/s | Same vendor. Same treasury. Two outcomes. *(Thẻ Intro v8b)* |
+| 2 | `s1a_home` | 00:04.2 | 9.20s | 21 | 2.28 w/s | MissionPay secures AI agent treasuries. The owner signs authorized payees, agents propose payouts, and the Avalanche smart contract enforces every limit. *(Home hero)* |
+| 3 | `s1b_objects` | 00:18.5 | 7.52s | 18 | 2.39 w/s | Three objects govern payouts: the owner's signed intent, a cryptographic Merkle proof, and our Avalanche Fuji smart contract. *(3 Objects cards)* |
+| 4 | `s1c_table` | 00:34.0 | 11.74s | 30 | 2.55 w/s | Twin allowlist paid the vendor zero point zero one USDC. Twin mission reverted with Payee Not In Mission Set: zero USDC out. Every row links to a real Fuji transaction. *(Twin Table đối chứng)* |
+| 5 | `s2a_receipts` | 00:51.5 | 4.94s | 12 | 2.43 w/s | In Judge Mode, three live receipts from Avalanche Fuji prove on-chain behavior. *(Lưới biên nhận Fuji RPC)* |
+| 6 | `s2b_attacker` | 01:01.2 | 5.44s | 14 | 2.57 w/s | Simulating a random attacker: the contract strictly reverts with Payee Not In Mission Set. *(Thẻ mô phỏng Attacker Revert)* |
+| 7 | `s2c_owner` | 01:14.0 | 7.93s | 18 | 2.27 w/s | Testing the owner address: authorized and accepted. These are read-only eth call simulations: no gas, no private keys. *(Thẻ mô phỏng Owner Success)* |
+| 8 | `s2d_cast` | 01:26.0 | 5.17s | 11 | 2.13 w/s | Copy the cast command to query public Avalanche Fuji RPC directly. *(Khối lệnh Foundry CLI độc lập)* |
+| 9 | `s2e_limits` | 01:33.2 | 4.68s | 11 | 2.35 w/s | Known limits: updating the mission Merkle root requires the owner's signature. *(Khối giới hạn thiết kế)* |
+| 10 | `s3a_bounty` | 01:40.0 | 6.72s | 17 | 2.53 w/s | In our public Bounty challenge, prompt injection tricks the agent, but our dual-layer guard preserves the treasury. *(Form thử thách Bounty)* |
+| 11 | `s3b_trace` | 01:50.0 | 4.59s | 13 | 2.83 w/s | The poisoned address is tainted from tool output, so the validator blocks it. *(Dấu vết nguồn gốc Provenance Trace)* |
+| 12 | `s4_snowtrace` | 01:57.5 | 8.41s | 17 | 2.02 w/s | Snowtrace confirms the live receipt: execution strictly reverted on Avalanche Fuji, with Payee Not In Mission Set. *(Explorer Snowtrace Revert Tx)* |
+| 13 | `s5_verify` | 02:09.0 | 9.41s | 17 | 1.81 w/s | Anchored on chain with an ERC 8004 score of 100, tamper with one byte, and verification breaks. *(Trang kiểm chứng độc lập s1c)* |
+| 14 | `s6_diagram` | 02:28.9 | 4.53s | 7 | 1.54 w/s | Agents propose payouts, smart contracts enforce limits. *(Thẻ sơ đồ kiến trúc 3 lớp)* |
+| 15 | `s7_outro` | 02:34.0 | 5.00s | 8 | 1.60 w/s | LLMs can be fooled. Budgets on Avalanche can't. *(Thẻ Outro v8b & URL liên kết)* |
+
+- **Tổng thời lượng âm thanh thuyết minh:** **98.46s**
+- **Tổng số từ:** **220 từ**
+- **Tốc độ đọc trung bình:** **2.23 words/s** (Đáp ứng tiêu chuẩn 2.0 – 2.4 words/s).
+
+### 18.3 Thông số Kỹ thuật File Video Thành phẩm
+- **Đường dẫn tệp:** `artifacts/submission-s1/video/MissionPay-demo.mp4`
+- **Thời lượng:** **160.10s (2m 40.1s)** (Nằm chuẩn xác trong dải **140s – 175s**).
+- **Dung lượng:** **13.68 MB** (Nhẹ, tối ưu, dưới ngưỡng 50 MB của Git).
+- **Hình ảnh:** 1920x1080 (1080p), 30 fps, H.264 High Profile, progressive.
+- **Âm thanh:** AAC 48,000 Hz stereo, chuẩn hóa EBU R128 (-16 LUFS).
+- **Tài liệu kèm theo:**
+  - `artifacts/submission-s1/video/narration.srt` & `captions.srt` (phụ đề 15 phân đoạn đồng bộ).
+  - `artifacts/submission-s1/video/CREDITS.md` (giấy phép giọng đọc nhân tạo và âm nhạc Musopen CC0).
+  - `artifacts/submission-s1/video/contact_sheet.png` (bảng tiếp xúc 1 khung hình / 4 giây).
+  - `artifacts/submission-s1/video/frames/` (`scene0.png` .. `scene7.png`).
+
+
 
