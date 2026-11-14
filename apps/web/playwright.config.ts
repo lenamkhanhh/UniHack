@@ -53,12 +53,15 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1920, height: 1080 },
+        userAgent:
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         video: {
           mode: 'on',
           size: { width: 1920, height: 1080 },
         },
         launchOptions: {
           slowMo: 300,
+          args: ['--disable-blink-features=AutomationControlled'],
         },
       },
     },

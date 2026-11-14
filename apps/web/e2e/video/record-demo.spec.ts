@@ -617,79 +617,51 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
     // =============================================================
     // SCENE 4: Snowtrace on-chain revert proof (<= 8s)
     // =============================================================
-    // R14d-F1: Try loading real Snowtrace with 20s timeout and wait for status row;
-    // if Snowtrace fails/blocks (Cloudflare challenge), use pre-captured real HTML card
-    // labeled "Snowtrace, captured 14/11" rather than falling back to another page.
+    // R14e-F1: Record the REAL Snowtrace page: testnet.snowtrace.io.
+    // Use goto timeout 30 s + waitForSelector on the status text + up to 3 retries.
+    // Do NOT substitute or fall back to any fake card or another page.
     const snowtraceTxUrl =
       'https://testnet.snowtrace.io/tx/0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38';
-    let snowtraceSuccess = false;
+    let snowtraceLoaded = false;
+    let lastError: Error | null = null;
 
-    // Fast preflight probe so Cloudflare 403 blocks don't hold the recorder for 20s
-    let isReachable = false;
-    try {
-      const probe = await fetch(snowtraceTxUrl, {
-        signal: AbortSignal.timeout(2500),
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-      });
-      if (probe.status === 200) {
-        isReachable = true;
-      }
-    } catch {}
-
-    if (isReachable) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        const resp = await page.goto(snowtraceTxUrl, { timeout: 20000, waitUntil: 'domcontentloaded' });
-        if (resp && resp.status() === 200) {
-          const title = await page.title();
-          const content = await page.content();
-          if (
-            !title.includes('Just a moment') &&
-            !content.includes('cf-browser-verification') &&
-            !content.includes('Attention Required')
-          ) {
-            const statusRow = page.locator('text=Fail with execution reverted').first();
-            await statusRow.waitFor({ state: 'visible', timeout: 8000 });
-            snowtraceSuccess = true;
-            await injectVisualEffects(page);
-            await showLowerThird(
-              page,
-              'SNOWTRACE EXPLORER',
-              'Avalanche Fuji C-Chain Transaction Receipt',
-              'Tx: 0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38',
-              2500
-            );
-            await showCaption(
-              page,
-              'On-chain proof: Snowtrace confirms execution reverted with PayeeNotInMissionSet.'
-            );
-            await triggerSpotlight(page, 'Fail', '❌ Transaction Reverted: PayeeNotInMissionSet', 3000);
-            await page.waitForTimeout(2000);
-          }
+        console.log(`[Scene 4 Snowtrace] Attempt ${attempt}/3: Navigating to ${snowtraceTxUrl}...`);
+        await page.goto(snowtraceTxUrl, { timeout: 30000, waitUntil: 'domcontentloaded' });
+        // Wait for status text on the real Snowtrace page
+        await page.waitForSelector('text=Fail with execution reverted', { timeout: 15000 });
+        snowtraceLoaded = true;
+        break;
+      } catch (err: any) {
+        console.warn(`[Scene 4 Snowtrace] Attempt ${attempt}/3 failed:`, err?.message || err);
+        lastError = err;
+        if (attempt < 3) {
+          await page.waitForTimeout(2000);
         }
-      } catch {
-        snowtraceSuccess = false;
       }
     }
 
-    if (!snowtraceSuccess) {
-      // R14d-F1 fallback: load pre-captured real Snowtrace card labeled "Snowtrace, captured 14/11"
-      const fallbackCard = path.resolve(ROOT, 'artifacts/submission-s1/video/cards/snowtrace-tx.html');
-      await page.goto(`file://${fallbackCard}`);
-      await injectVisualEffects(page);
-      await showLowerThird(
-        page,
-        'SNOWTRACE EXPLORER · CAPTURED 14/11',
-        'Avalanche Fuji C-Chain Transaction Receipt',
-        'Tx: 0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38',
-        2500
+    if (!snowtraceLoaded) {
+      throw new Error(
+        `Failed to load real Snowtrace page after 3 retries: ${lastError?.message || 'Timeout / blocked'}`
       );
-      await showCaption(
-        page,
-        'On-chain proof: Snowtrace confirms execution reverted with PayeeNotInMissionSet.'
-      );
-      await triggerSpotlight(page, '#snowtrace-status-row', '❌ Transaction Reverted: PayeeNotInMissionSet', 3500);
-      await page.waitForTimeout(2000);
     }
+
+    await injectVisualEffects(page);
+    await showLowerThird(
+      page,
+      'SNOWTRACE EXPLORER',
+      'Avalanche Fuji C-Chain Transaction Receipt',
+      'Tx: 0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38',
+      2500
+    );
+    await showCaption(
+      page,
+      'On-chain proof: Snowtrace confirms execution reverted with PayeeNotInMissionSet.'
+    );
+    await triggerSpotlight(page, 'Fail with execution reverted', '❌ Transaction Reverted: PayeeNotInMissionSet', 3000);
+    await page.waitForTimeout(2000);
 
     // =============================================================
     // SCENE 5: /verify/fuji-live-mission-s1c real anchored mission (~42s)

@@ -3,23 +3,23 @@
 MissionPay: Same vendor. Same treasury. Two outcomes.
 
 2
-00:00:04,700 --> 00:00:39,109
+00:00:04,700 --> 00:00:40,230
 Live on Avalanche Fuji, our Twin Treasury benchmark shows the difference: an allowlist leaks funds, but MissionPay reverts the attack on-chain.
 
 3
-00:00:40,392 --> 00:01:36,822
+00:00:41,552 --> 00:01:39,742
 In Judge Mode, test any off-mission attacker: the smart contract strictly rejects it with PayeeNotInMissionSet, while legitimate payees succeed.
 
 4
-00:01:39,387 --> 00:02:10,167
+00:01:42,387 --> 00:02:14,127
 In our public Bounty challenge, prompt injection fools the autonomous agent, but our dual-layer guard stops the payout with zero dollars lost.
 
 5
-00:02:12,732 --> 00:02:21,709
+00:02:16,772 --> 00:02:26,030
 Snowtrace confirms the live receipt: execution strictly reverted on-chain with zero funds lost.
 
 6
-00:02:22,992 --> 00:02:36,299
+00:02:27,352 --> 00:02:36,299
 Every step is cryptographically anchored with ERC-8004 one hundred out of one hundred score. Tampering with one single byte instantly breaks the hash chain.
 
 7
