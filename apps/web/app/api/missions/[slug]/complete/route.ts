@@ -73,7 +73,7 @@ export async function POST(
             process.env.GUARDED_TREASURY_ADDRESS
           )?.trim();
           const guardedTreasuryAddress = (rawTreasury ||
-            '0x5aAdFB43eF8dAF45DD80F4676345b7676f1D70e3') as `0x${string}`;
+            '0x20451c1e2dCD83F166B4f22868BAdECb5868d545') as `0x${string}`;
 
           const missionIdBytes32 = (
             mission.missionId.startsWith('0x')

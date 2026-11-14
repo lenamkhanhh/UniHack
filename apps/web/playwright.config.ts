@@ -74,6 +74,9 @@ export default defineConfig({
         timeout: 120000,
         env: {
           PAYMENT_MODE: 'LIVE_FUJI',
+          NEXT_PUBLIC_STAGE: process.env.NEXT_PUBLIC_STAGE || 'S2',
+          GUARDED_TREASURY_ADDRESS: '0x20451c1e2dCD83F166B4f22868BAdECb5868d545',
+          NEXT_PUBLIC_GUARDED_TREASURY_ADDRESS: '0x20451c1e2dCD83F166B4f22868BAdECb5868d545',
           // The E2E runner seeds rows through lib/db (test DB); the server must read the same test DB,
           // never the dev DB from .env.
           DATABASE_URL: TEST_DB_URL,

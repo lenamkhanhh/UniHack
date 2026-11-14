@@ -167,7 +167,7 @@ export function validateLiveFujiConfigSync(): void {
 export function getGuardedTreasuryAddress(): `0x${string}` {
   const addr = process.env.GUARDED_TREASURY_ADDRESS?.trim() ||
     process.env.NEXT_PUBLIC_GUARDED_TREASURY_ADDRESS?.trim() ||
-    '0x5aAdFB43eF8dAF45DD80F4676345b7676f1D70e3';
+    '0x20451c1e2dCD83F166B4f22868BAdECb5868d545';
   return addr as `0x${string}`;
 }
 

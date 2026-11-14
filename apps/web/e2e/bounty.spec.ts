@@ -50,7 +50,7 @@ test.describe('WOW-W3: "Hack the Treasury" Public Bounty Challenge (/bounty)', (
     await expect(page.getByText('$0.00', { exact: true })).toBeVisible();
 
     // 10. Capture 1920x1080 screenshots for pitch deck
-    const deckShotsDir = path.resolve(process.cwd(), '../../artifacts/submission-s1/deck-shots');
+    const deckShotsDir = path.resolve(__dirname, '../../../artifacts/submission-s1/deck-shots');
     if (!fs.existsSync(deckShotsDir)) {
       fs.mkdirSync(deckShotsDir, { recursive: true });
     }
@@ -119,7 +119,7 @@ test.describe('WOW-W3: "Hack the Treasury" Public Bounty Challenge (/bounty)', (
     await expect(page.getByText('Revert: PayeeNotInMissionSet')).toBeVisible();
 
     // 6. Capture 1920x1080 screenshot of the fooled LLM + guard block
-    const deckShotsDir = path.resolve(process.cwd(), '../../artifacts/submission-s1/deck-shots');
+    const deckShotsDir = path.resolve(__dirname, '../../../artifacts/submission-s1/deck-shots');
     await page.evaluate(() => {
       const el = document.getElementById('bounty-evaluation-result');
       if (el) {
