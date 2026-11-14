@@ -177,69 +177,75 @@ export default function TwinTreasuryPage() {
   const isNotRun = apiState.status === 'NOT_RUN';
 
   return (
-    <main className="min-h-screen bg-paper text-ink p-4 md:p-8 font-sans flex flex-col items-center">
+    <main className="min-h-screen bg-paper text-ink font-sans">
+      {/* Hero band: night */}
+      <div className="bg-night text-[#E9EAEC]">
+        <div className="wrap space-y-6 pt-6 pb-12">
+          {/* Navigation & Language Toggle */}
+          <div className="flex items-center justify-between">
+            <Link
+              href="/"
+              className="text-xs text-[#A3A9B3] hover:text-white transition-colors flex items-center space-x-1 focus:ring-2 focus:ring-white rounded px-2 py-1"
+              aria-label="Back to Homepage"
+            >
+              <span>{t.backHome}</span>
+            </Link>
+            <button
+              onClick={() => {
+                const next = lang === 'vi' ? 'en' : 'vi';
+                setLang(next);
+                try {
+                  localStorage.setItem('missionpay_lang', next);
+                } catch {}
+              }}
+              className="text-xs px-3 py-1 bg-night-2 hover:bg-night-rule text-[#E9EAEC] border border-night-rule rounded-full transition-colors focus:ring-2 focus:ring-white"
+              aria-label="Toggle language"
+            >
+              {t.switchLang}
+            </button>
+          </div>
+
+          {/* Header Banner */}
+          <section className="space-y-4 pt-4">
+            <div className="inline-flex items-center space-x-2 px-3 py-1 bg-blocked-bg text-blocked text-xs font-semibold rounded-[5px] border border-blocked-rule">
+              <span className="text-white w-2 h-2 rounded-full bg-blocked animate-pulse" />
+              <span>{t.badge}</span>
+            </div>
+            <h1 className="text-[34px] sm:text-[46px] font-bold text-white leading-[1.05] tracking-[-0.04em] max-w-[22ch]">
+              {t.title}
+            </h1>
+            <p className="text-base md:text-[17.5px] text-[#A3A9B3] max-w-3xl leading-relaxed">{t.subtitle}</p>
+
+            {/* Status Badges */}
+            <div className="pt-2">
+              {isLive ? (
+                <span className="inline-block px-3 py-1 bg-paid-bg text-paid border border-paid-rule rounded-lg text-xs font-bold">
+                  {t.recordedBadge}
+                </span>
+              ) : isSimulated ? (
+                <div className="inline-block px-4 py-2 bg-warn-bg border border-warn-rule rounded-xl text-left max-w-2xl">
+                  <div className="flex items-center space-x-2 text-warn text-xs font-bold">
+                    <span className="text-white w-2 h-2 rounded-full bg-warn" />
+                    <span>{t.simulatedBadge} • BLOCK #{evidence?.forkBlockNumber || 'N/A'}</span>
+                  </div>
+                  <p className="text-xs text-ink-2 mt-1">{t.simulatedNotice}</p>
+                </div>
+              ) : (
+                <div className="inline-block px-4 py-2 bg-blocked-bg border border-blocked-rule rounded-xl text-left max-w-2xl">
+                  <div className="flex items-center space-x-2 text-blocked text-xs font-bold">
+                    <span className="text-white w-2 h-2 rounded-full bg-blocked" />
+                    <span>{t.notRunBadge}</span>
+                  </div>
+                  <p className="text-xs text-ink-2 mt-1">{t.notRunNotice}</p>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div className="wrap py-10">
       <div className="w-full max-w-5xl flex flex-col space-y-6">
-        {/* Navigation & Language Toggle */}
-        <div className="flex items-center justify-between">
-          <Link
-            href="/"
-            className="text-xs text-ink-2 hover:text-ink transition-colors flex items-center space-x-1 focus:ring-2 focus:ring-ink rounded px-2 py-1"
-            aria-label="Back to Homepage"
-          >
-            <span>{t.backHome}</span>
-          </Link>
-          <button
-            onClick={() => {
-              const next = lang === 'vi' ? 'en' : 'vi';
-              setLang(next);
-              try {
-                localStorage.setItem('missionpay_lang', next);
-              } catch {}
-            }}
-            className="text-xs px-3 py-1 bg-mist hover:bg-mist border border-rule rounded-full transition-colors focus:ring-2 focus:ring-ink"
-            aria-label="Toggle language"
-          >
-            {t.switchLang}
-          </button>
-        </div>
-
-        {/* Header Banner */}
-        <div className="border border-rule bg-mist rounded-card p-6 text-center space-y-3 relative overflow-hidden">
-          <div className="inline-flex items-center space-x-2 px-3 py-1 bg-blocked-bg text-blocked text-xs font-semibold rounded-[5px] border border-blocked-rule">
-            <span className="text-white w-2 h-2 rounded-full bg-blocked animate-pulse" />
-            <span>{t.badge}</span>
-          </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-ink">
-            {t.title}
-          </h1>
-          <p className="text-sm text-ink-2 max-w-2xl mx-auto">{t.subtitle}</p>
-
-          {/* Status Badges */}
-          <div className="pt-2">
-            {isLive ? (
-              <span className="inline-block px-3 py-1 bg-paid-bg text-paid border border-paid-rule rounded-lg text-xs font-bold">
-                {t.recordedBadge}
-              </span>
-            ) : isSimulated ? (
-              <div className="inline-block px-4 py-2 bg-warn-bg border border-warn-rule rounded-xl text-left max-w-2xl">
-                <div className="flex items-center space-x-2 text-warn text-xs font-bold">
-                  <span className="text-white w-2 h-2 rounded-full bg-warn" />
-                  <span>{t.simulatedBadge} • BLOCK #{evidence?.forkBlockNumber || 'N/A'}</span>
-                </div>
-                <p className="text-xs text-ink-2 mt-1">{t.simulatedNotice}</p>
-              </div>
-            ) : (
-              <div className="inline-block px-4 py-2 bg-blocked-bg border border-blocked-rule rounded-xl text-left max-w-2xl">
-                <div className="flex items-center space-x-2 text-blocked text-xs font-bold">
-                  <span className="text-white w-2 h-2 rounded-full bg-blocked" />
-                  <span>{t.notRunBadge}</span>
-                </div>
-                <p className="text-xs text-ink-2 mt-1">{t.notRunNotice}</p>
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* Precondition callout */}
         <div className="border border-rule bg-mist rounded-xl p-4 text-xs text-ink-2 flex items-center justify-between flex-wrap gap-2">
           <span>{t.vendorNotice}</span>
@@ -257,7 +263,7 @@ export default function TwinTreasuryPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Column A: Global Allowlist Mode */}
           <div
-            className="border border-blocked-rule bg-blocked-bg rounded-card p-6 flex flex-col justify-between space-y-6"
+            className="border border-l-4 border-blocked-rule border-l-brand bg-blocked-bg rounded-card p-6 flex flex-col justify-between space-y-6"
             tabIndex={0}
             role="region"
             aria-label="Treasury A: Global Allowlist Mode"
@@ -338,7 +344,7 @@ export default function TwinTreasuryPage() {
 
           {/* Column B: Mission-Scoped Guard */}
           <div
-            className="border border-paid-rule bg-paid-bg rounded-card p-6 flex flex-col justify-between space-y-6"
+            className="border border-l-4 border-paid-rule border-l-paid bg-paid-bg rounded-card p-6 flex flex-col justify-between space-y-6"
             tabIndex={0}
             role="region"
             aria-label="Treasury B: Mission-Scoped Guard"
@@ -491,6 +497,7 @@ export default function TwinTreasuryPage() {
             {t.conclusionText}
           </p>
         </div>
+      </div>
       </div>
     </main>
   );

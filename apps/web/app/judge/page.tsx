@@ -138,10 +138,11 @@ export default function JudgePage() {
   const castOwnerCmd = `cast call ${TREASURY_ADDRESS} "proposeWithProof(bytes32,address,uint256,bytes32,string,bytes32[])" 0x0000000000000000000000000000000000000000000000000000000000000002 ${OWNER_ADDRESS} 10000 ${MISSION_B_ID} "owner control" "[]" --from ${AGENT_ADDRESS} --rpc-url https://api.avax-test.network/ext/bc/C/rpc`;
 
   return (
-    <div className="space-y-12 py-6 max-w-6xl mx-auto px-4 sm:px-6">
-      {/* Header Banner */}
-      <section className="space-y-4 pt-4 pb-8 border-b border-rule">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-[5px] bg-tint-slate border border-rule-2 text-ink text-xs font-semibold">
+    <div>
+      {/* Hero band: sand */}
+      <div className="bg-sand border-b border-rule">
+      <section className="space-y-4 pt-10 pb-10 max-w-6xl mx-auto px-4 sm:px-6">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-[5px] bg-card border border-rule-2 text-ink text-xs font-semibold">
           <span className="flex h-2 w-2 relative">
             <span className="text-white absolute inline-flex h-full w-full rounded-full bg-ink opacity-75"></span>
             <span className="text-white relative inline-flex rounded-full h-2 w-2 bg-ink"></span>
@@ -163,7 +164,9 @@ export default function JudgePage() {
             : 'Inspect live receipts of transactions that already occurred on Avalanche Fuji C-Chain, or simulate arbitrary off-mission attacks directly against the deployed contract via eth_call with zero gas and zero setup.'}
         </p>
       </section>
+      </div>
 
+      <div className="space-y-12 py-10 max-w-6xl mx-auto px-4 sm:px-6">
       {/* Block 1: Already happened on Fuji */}
       <section aria-labelledby="block1-heading" className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -208,10 +211,10 @@ export default function JudgePage() {
                 <div
                   key={rc.id}
                   id={`receipt-card-${rc.id}`}
-                  className={`p-5 rounded-card border transition-all flex flex-col justify-between space-y-4 ${
+                  className={`p-5 rounded-card border border-l-4 transition-all flex flex-col justify-between space-y-4 ${
                     isSuccess
-                      ? 'bg-card border-paid-rule'
-                      : 'bg-card border-blocked-rule'
+                      ? 'bg-paid-bg border-paid-rule border-l-paid'
+                      : 'bg-blocked-bg border-blocked-rule border-l-brand'
                   }`}
                 >
                   <div className="space-y-3">
@@ -359,7 +362,7 @@ export default function JudgePage() {
                 type="button"
                 disabled={simulating || !recipient}
                 onClick={() => handleSimulate()}
-                className="bg-ink hover:bg-ink-2 text-white px-6 py-2.5 rounded-full font-semibold text-sm disabled:opacity-50 transition focus:outline-none focus:ring-2 focus:ring-ink flex items-center gap-2"
+                className="bg-brand hover:bg-brand-deep text-white px-6 py-2.5 rounded-full font-semibold text-sm disabled:opacity-50 transition focus:outline-none focus:ring-2 focus:ring-ink flex items-center gap-2"
               >
                 {simulating ? (
                   <>
@@ -390,10 +393,10 @@ export default function JudgePage() {
           <div
             id="simulation-result-card"
             data-outcome={simResult.outcome}
-            className={`p-5 rounded-card border transition-all space-y-3 ${
+            className={`p-5 rounded-card border border-l-4 transition-all space-y-3 ${
               simResult.outcome === 'REVERT'
-                ? 'bg-blocked-bg border-blocked-rule'
-                : 'bg-paid-bg border-paid-rule'
+                ? 'bg-blocked-bg border-blocked-rule border-l-brand'
+                : 'bg-paid-bg border-paid-rule border-l-paid'
             }`}
           >
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rule pb-2">
@@ -591,6 +594,7 @@ export default function JudgePage() {
           </ul>
         </div>
       </section>
+      </div>
     </div>
   );
 }

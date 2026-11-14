@@ -354,48 +354,52 @@ export default function NewMissionPasskeyPage() {
     registeredKey.y.toLowerCase() === authorityConfig.passkeyY.toLowerCase();
 
   return (
-    <div className="min-h-screen bg-paper text-ink p-4 sm:p-6 md:p-12 font-sans">
-      <div className="max-w-4xl mx-auto space-y-8">
-        {/* Header */}
-        <div className="border-b border-rule pb-6 space-y-2">
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            <span className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded bg-tint-slate text-ink border border-rule-2">
+    <div className="min-h-screen bg-paper text-ink font-sans">
+      {/* Hero band: sand */}
+      <div className="bg-sand border-b border-rule">
+        <section className="wrap space-y-4 pt-10 pb-10">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-3 py-1 text-xs font-semibold rounded-[5px] bg-card text-ink border border-rule-2">
               {t('passkey.tag.w4')}
             </span>
-            <span className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded bg-paid-bg text-paid border border-paid-rule">
+            <span className="px-3 py-1 text-xs font-semibold rounded-[5px] bg-paid-bg text-paid border border-paid-rule">
               {t('passkey.tag.precompile')}
             </span>
-            <span className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded bg-tint-slate text-ink border border-rule-2">
+            <span className="px-3 py-1 text-xs font-semibold rounded-[5px] bg-card text-ink border border-rule-2">
               Chain ID: {authorityConfig.chainId}
             </span>
           </div>
           <h1
-            className="text-2xl sm:text-3xl font-bold tracking-tight text-ink"
+            className="text-[34px] sm:text-[46px] font-bold text-ink leading-[1.05] tracking-[-0.04em] max-w-[22ch]"
             data-testid="passkey-page-header"
           >
             {t('passkey.hero.title')}
           </h1>
-          <p className="text-ink-2 text-xs sm:text-sm mt-1 leading-relaxed">
+          <p className="text-ink-2 text-base md:text-[17.5px] max-w-3xl leading-relaxed">
             {t('passkey.hero.desc')}
           </p>
-        </div>
+        </section>
+      </div>
+
+      <div className="wrap py-10">
+      <div className="max-w-4xl space-y-8">
 
         {/* On-Chain Specs Card */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 rounded-xl bg-card border border-rule">
-            <div className="text-xs text-ink-2 uppercase font-medium">Precompile</div>
+            <div className="text-xs text-ink-2 font-medium">Precompile</div>
             <div className="font-mono text-sm text-paid mt-1">0x0000...0100</div>
             <div className="text-xs text-ink-2 mt-1">RIP-7212 secp256r1 Native</div>
           </div>
           <div className="p-4 rounded-xl bg-card border border-rule">
-            <div className="text-xs text-ink-2 uppercase font-medium">Authority Contract</div>
+            <div className="text-xs text-ink-2 font-medium">Authority Contract</div>
             <div className="font-mono text-sm text-ink mt-1" title={authorityConfig.authorityAddress}>
               {authorityConfig.authorityAddress.slice(0, 6)}...{authorityConfig.authorityAddress.slice(-4)}
             </div>
             <div className="text-xs text-ink-2 mt-1">Next Nonce: {authorityConfig.nextNonce}</div>
           </div>
           <div className="p-4 rounded-xl bg-card border border-rule">
-            <div className="text-xs text-ink-2 uppercase font-medium">Guarded Treasury</div>
+            <div className="text-xs text-ink-2 font-medium">Guarded Treasury</div>
             <div className="font-mono text-sm text-ink mt-1" title={authorityConfig.treasuryAddress}>
               {authorityConfig.treasuryAddress.slice(0, 6)}...{authorityConfig.treasuryAddress.slice(-4)}
             </div>
@@ -406,7 +410,7 @@ export default function NewMissionPasskeyPage() {
         {/* Registered Passkey Status & Metadata */}
         <div className="p-5 rounded-card bg-card border border-rule space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-ink uppercase tracking-wider">
+            <h2 className="text-sm font-semibold text-ink">
               Thiết Bị Passkey Xác Thực (Owner Credential)
             </h2>
             {registeredKey ? (
@@ -565,7 +569,7 @@ export default function NewMissionPasskeyPage() {
               type="button"
               onClick={handleRegisterPasskey}
               disabled={loading}
-              className="px-5 py-2.5 rounded-xl font-medium text-sm bg-mist hover:bg-mist-2 text-ink border border-rule transition focus:outline-none focus:ring-2 focus:ring-ink min-h-[44px]"
+              className="px-5 py-2.5 rounded-full font-medium text-sm bg-card hover:bg-mist text-ink border border-rule-2 transition focus:outline-none focus:ring-2 focus:ring-ink min-h-[44px]"
               data-testid="register-passkey-btn"
             >
               {t('passkey.btn.register')}
@@ -574,10 +578,10 @@ export default function NewMissionPasskeyPage() {
             <button
               type="submit"
               disabled={loading || !registeredKey}
-              className={`px-6 py-2.5 rounded-xl font-semibold text-sm transition flex items-center space-x-2 focus:outline-none min-h-[44px] ${
+              className={`px-6 py-2.5 rounded-full font-semibold text-sm transition flex items-center space-x-2 focus:outline-none min-h-[44px] ${
                 !registeredKey || loading
                   ? 'bg-mist text-ink-3 cursor-not-allowed border border-rule'
-                  : 'bg-ink hover:bg-ink text-white focus:ring-2 focus:ring-ink'
+                  : 'bg-brand hover:bg-brand-deep text-white focus:ring-2 focus:ring-ink'
               }`}
               data-testid="approve-passkey-btn"
             >
@@ -592,7 +596,7 @@ export default function NewMissionPasskeyPage() {
           {/* Error Message */}
           {errorMessage && (
             <div
-              className="p-3.5 rounded-xl bg-blocked-bg border border-blocked-rule text-xs text-blocked"
+              className="p-3.5 rounded-xl bg-blocked-bg border border-blocked-rule border-l-4 border-l-brand text-xs text-blocked"
               role="alert"
               data-testid="passkey-error-alert"
             >
@@ -615,7 +619,7 @@ export default function NewMissionPasskeyPage() {
         {/* Live Relay Results Card */}
         {relayResult && relayResult.status === 'CONFIRMED' && relayResult.txHash && relayResult.blockNumber && (
           <div
-            className="p-6 rounded-card bg-paid-bg border border-paid-rule space-y-4"
+            className="p-6 rounded-card bg-paid-bg border border-paid-rule border-l-4 border-l-paid space-y-4"
             data-testid="passkey-confirmed-card"
           >
             <div className="flex items-center space-x-2 text-paid font-semibold text-sm">
@@ -656,7 +660,7 @@ export default function NewMissionPasskeyPage() {
             data-testid="passkey-simulation-card"
           >
             <div className="flex items-center space-x-2 text-ink font-semibold text-sm">
-              <span className="px-2 py-0.5 rounded bg-tint-slate text-ink text-xs font-bold uppercase">
+              <span className="px-2 py-0.5 rounded bg-tint-slate text-ink text-xs font-bold">
                 Simulation Success
               </span>
               <span>Xác thực mô phỏng thành công (Chưa broadcast on-chain)</span>
@@ -678,6 +682,7 @@ export default function NewMissionPasskeyPage() {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

@@ -306,31 +306,29 @@ export default function VerifyMissionProofPage() {
   }
 
   return (
-    <div className="wrap min-h-screen bg-paper text-ink py-6 font-sans flex flex-col justify-between space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-rule pb-4 gap-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-white w-2.5 h-2.5 rounded-full bg-ink" aria-hidden="true" />
-            <h1 className="text-2xl sm:text-[34px] font-bold tracking-[-0.03em] text-ink">
-              {t('verify.hero.title')}
-            </h1>
-            <span className="text-xs bg-tint-slate text-ink border border-rule-2 px-2.5 py-0.5 rounded font-bold">
-              {t('verify.tag')}
-            </span>
-          </div>
-          <p className="text-sm text-ink-2 mt-1 max-w-2xl leading-relaxed">
-            {t('verify.hero.desc')}
-          </p>
+    <div className="min-h-screen bg-paper text-ink font-sans flex flex-col">
+      {/* Hero band: slate */}
+      <div className="bg-tint-slate border-b border-rule">
+      <section className="wrap space-y-4 pt-10 pb-10">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-[5px] bg-card border border-rule-2 text-ink text-xs font-semibold">
+          {t('verify.tag')}
         </div>
 
+        <h1 className="text-[34px] sm:text-[46px] font-bold text-ink leading-[1.05] tracking-[-0.04em] max-w-[22ch]">
+          {t('verify.hero.title')}
+        </h1>
+
+        <p className="text-ink-2 text-base md:text-[17.5px] max-w-3xl leading-relaxed">
+          {t('verify.hero.desc')}
+        </p>
+
         {/* Action Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 pt-2">
           {!isTampered ? (
             <button
               onClick={handleTamperOneByte}
               data-testid="tamper-one-byte-btn"
-              className="bg-blocked-bg hover:bg-blocked-bg border border-blocked-rule text-blocked text-xs font-bold py-2.5 px-4 rounded-full transition flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ink min-h-[44px]"
+              className="bg-brand hover:bg-brand-deep text-white text-xs font-bold py-2.5 px-4 rounded-full transition flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ink min-h-[44px]"
             >
               <span>{t('verify.btn.tamper')}</span>
             </button>
@@ -338,14 +336,16 @@ export default function VerifyMissionProofPage() {
             <button
               onClick={handleResetOriginal}
               data-testid="reset-original-btn"
-              className="bg-paid hover:bg-[#096640] text-white text-xs font-bold py-2.5 px-4 rounded-full transition flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ink min-h-[44px]"
+              className="bg-card hover:bg-mist border border-rule-2 text-ink text-xs font-bold py-2.5 px-4 rounded-full transition flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ink min-h-[44px]"
             >
               <span>{t('verify.btn.reset')}</span>
             </button>
           )}
         </div>
+      </section>
       </div>
 
+      <div className="wrap py-6 flex-1 flex flex-col justify-between space-y-6">
       {/* DEMO SEED Banner if in seed mode */}
       {isSeededDemo && (
         <div
@@ -360,14 +360,14 @@ export default function VerifyMissionProofPage() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Verification Status Card */}
         <div
-          className={`lg:col-span-3 rounded-card p-4 sm:p-6 border transition-all duration-300 ${
+          className={`lg:col-span-3 rounded-card p-4 sm:p-6 border border-l-4 transition-all duration-300 ${
             verification.valid
-              ? 'bg-paid-bg border-paid-rule'
-              : 'bg-blocked-bg border-blocked'
+              ? 'bg-paid-bg border-paid-rule border-l-paid'
+              : 'bg-blocked-bg border-blocked-rule border-l-brand'
           }`}
         >
           <div className="flex flex-wrap items-center justify-between mb-3 gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-ink-2">
+            <span className="text-xs font-medium text-ink-2">
               {t('verify.result.title')}
             </span>
             <span
@@ -600,7 +600,7 @@ export default function VerifyMissionProofPage() {
         {/* Audience QR Mobile Access */}
         <div className="bg-card border border-rule rounded-card p-5 flex flex-col items-center justify-between text-center space-y-3">
           <div>
-            <span className="text-[10px] text-ink font-bold uppercase tracking-widest block mb-1">
+            <span className="text-xs text-ink-2 font-medium block mb-1">
               OPEN ON MOBILE
             </span>
             <p className="text-xs text-ink-2 font-medium mb-3">
@@ -623,7 +623,7 @@ export default function VerifyMissionProofPage() {
       {/* Visual Hash Chain Timeline */}
       <div className="bg-card border border-rule rounded-card p-4 sm:p-6 flex-1 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-rule pb-3 gap-1">
-          <span className="text-xs font-bold uppercase tracking-wider text-ink-2">
+          <span className="text-xs font-medium text-ink-2">
             Keccak-256 Hash Chain Structure
           </span>
           <span className="text-xs text-ink-2">
@@ -641,12 +641,12 @@ export default function VerifyMissionProofPage() {
               <div
                 key={entry.sourceKey || idx}
                 data-testid={`chain-block-${idx}`}
-                className={`p-4 rounded-xl border transition-all duration-300 text-xs ${
+                className={`p-4 rounded-xl border border-l-4 transition-all duration-300 text-xs ${
                   isEntryTampered
-                    ? 'bg-blocked-bg border-blocked animate-pulse'
+                    ? 'bg-blocked-bg border-blocked-rule border-l-brand animate-pulse'
                     : isDownstreamBroken
-                    ? 'bg-blocked-bg border-blocked-rule opacity-80'
-                    : 'bg-paper border-rule hover:border-rule'
+                    ? 'bg-blocked-bg border-blocked-rule border-l-brand opacity-80'
+                    : 'bg-paid-bg border-paid-rule border-l-paid'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2 mb-2">
@@ -706,6 +706,7 @@ export default function VerifyMissionProofPage() {
         <div>
           <span>MissionPay · Avalanche Fuji</span>
         </div>
+      </div>
       </div>
     </div>
   );

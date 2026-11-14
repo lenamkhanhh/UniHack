@@ -896,21 +896,21 @@ export default function DemoPage() {
             { id: 'proof', label: '8. Scoped Proof' },
           ].map((s) => {
             const status = stepStatus[s.id] || 'IDLE';
-            let color = 'bg-slate-900 border-slate-800 text-slate-400';
-            if (status === 'RUNNING') color = 'bg-blue-950 border-blue-700 text-blue-300 animate-pulse';
-            if (status === 'PENDING') color = 'bg-amber-950 border-amber-700 text-amber-300 animate-pulse';
-            if (status === 'SUCCESS') color = 'bg-emerald-950 border-emerald-700 text-emerald-300';
-            if (status === 'ERROR') color = 'bg-rose-950 border-rose-700 text-rose-300';
+            let color = 'bg-card border-rule text-ink-2';
+            if (status === 'RUNNING') color = 'bg-card border-ink text-ink animate-pulse';
+            if (status === 'PENDING') color = 'bg-card border-warn-rule text-warn animate-pulse';
+            if (status === 'SUCCESS') color = 'bg-card border-paid-rule text-paid';
+            if (status === 'ERROR') color = 'bg-card border-blocked-rule text-blocked';
 
             return (
               <div
                 key={s.id}
                 data-testid={`step-${s.id}`}
                 data-status={status}
-                className={`border rounded p-3 text-xs flex items-center justify-between ${color}`}
+                className={`border rounded-card p-3 text-xs flex items-center justify-between ${color}`}
               >
                 <span className="font-semibold">{s.label}</span>
-                <span className="text-[10px] uppercase">{status}</span>
+                <span className="text-[11px] font-medium">{status}</span>
               </div>
             );
           })}
@@ -1030,7 +1030,7 @@ export default function DemoPage() {
                       : 'bg-card hover:bg-mist text-ink-2 border-rule'
                   }`}
                 >
-                  {systemPaused ? '🔴 System Paused (Resume)' : '⏸ Pause Kill-Switch'}
+                  {systemPaused ? 'System Paused (Resume)' : 'Pause Kill-Switch'}
                 </button>
 
                 <button
@@ -1068,7 +1068,7 @@ export default function DemoPage() {
                       ? '✓'
                       : proofVerification.status === 'FAIL'
                       ? '✗'
-                      : '⚠️'}
+                      : '!'}
                   </span>
                   <div>
                     <span className="font-semibold">
@@ -1147,7 +1147,7 @@ export default function DemoPage() {
                     </p>
                   </div>
                 </div>
-                <span className="bg-blocked-bg text-blocked border border-blocked-rule text-[10px] px-2 py-0.5 rounded uppercase">
+                <span className="bg-blocked-bg text-blocked border border-blocked-rule text-[11px] px-2 py-0.5 rounded">
                   P1-C Live Security Boundary
                 </span>
               </div>
@@ -1156,7 +1156,7 @@ export default function DemoPage() {
                 {/* Left Card: Naive Unguarded Agent */}
                 <div className="bg-blocked-bg border border-blocked-rule rounded-lg p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-blocked text-xs uppercase tracking-wider">
+                    <span className="font-semibold text-blocked text-xs">
                       Naive Unguarded Agent
                     </span>
                     <span className="text-[10px] bg-blocked-bg text-blocked border border-blocked-rule px-2 py-0.5 rounded">
@@ -1180,7 +1180,7 @@ export default function DemoPage() {
                 {/* Right Card: Guarded Agent Architecture */}
                 <div className="bg-paid-bg border border-paid-rule rounded-lg p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-paid text-xs uppercase tracking-wider">
+                    <span className="font-semibold text-paid text-xs">
                       Guarded Agent Architecture (Our System)
                     </span>
                     <span className="text-[10px] bg-paid-bg text-paid border border-paid-rule px-2 py-0.5 rounded">
@@ -1269,7 +1269,6 @@ export default function DemoPage() {
           <div className="bg-paper border border-rule rounded-lg p-5 space-y-3">
             <div className="flex items-center justify-between border-b border-rule pb-3">
               <div className="flex items-center gap-2">
-                <span className="text-base">⏳</span>
                 <h3 className="text-sm font-semibold text-ink">Supervised Approval Queue (Stage S2 Feature)</h3>
               </div>
               <span className="text-[10px] bg-mist text-ink-2 px-2 py-0.5 rounded">
@@ -1345,7 +1344,7 @@ export default function DemoPage() {
           {agentDeliverable && (
             <div className="bg-paid-bg border border-paid-rule rounded p-4 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-paid uppercase tracking-wider">
+                <span className="text-xs font-semibold text-paid">
                   Verified Deliverable Output
                 </span>
                 {agentDeliverableHash && (
