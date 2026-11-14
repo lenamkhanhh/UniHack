@@ -436,6 +436,13 @@ async function main() {
   s.addText([{ text: "LLMs can be fooled.", options: { color: TXT } }], { placeholder: "title" });
   s.addText([{ text: "Budgets on Avalanche can't.", options: { color: RED, bold: true, fontSize: 60, fontFace: "Geist" } }], { placeholder: "body" });
   T(s, "MissionPay: sign the mission once. The chain decides who gets paid.", { x: MX, y: 5.0, w: 10, h: 0.6, fontSize: 20, color: MUTED, objectName: "closing line" });
+  s.addText([
+    { text: "Team BaKhiDeVuong", options: { bold: true, color: TXT } },
+    { text: "   ·   Demo  ", options: { color: MUTED } },
+    { text: "unihack-missionpay.vercel.app", options: { color: SKY, hyperlink: { url: "https://unihack-missionpay.vercel.app" } } },
+    { text: "   ·   Code  ", options: { color: MUTED } },
+    { text: "github.com/lenamkhanhh/UniHack", options: { color: SKY, hyperlink: { url: "https://github.com/lenamkhanhh/UniHack" } } },
+  ], { x: MX, y: 5.75, w: W - 2 * MX, h: 0.45, fontSize: 16, margin: 0, isTextBox: true, objectName: "closing links" });
   T(s, "Avalanche Team1 Vietnam UniHack 2026", { x: MX, y: H - 0.9, w: 8, h: 0.35, fontSize: 14, color: MUTED, objectName: "closing event" });
   s.addNotes("Quay lại trang /bounty trước khi sang slide này: đọc N lượt thử, M lần LLM bị lừa, 0 đô ra ngoài (số đọc từ chain). Rồi nói câu chốt và dừng.");
 
