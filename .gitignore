@@ -47,6 +47,11 @@ artifacts/submission-s1/video/*-norm30.mp4
 artifacts/submission-s1/video/clip_*.mp3
 artifacts/submission-s1/video/test-tts.mp3
 artifacts/submission-s1/video/cards/*.mp4
+artifacts/submission-s1/video/*.wav
+artifacts/submission-s1/video/*.pcm
+artifacts/submission-s1/video/*.aac
+artifacts/submission-s1/video/*.asr.txt
+artifacts/submission-s1/video/voice-samples/
 
 
 
