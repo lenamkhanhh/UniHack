@@ -215,6 +215,19 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
     'bounty.step.tricked': 'TRICKED',
     'bounty.step.resilient': 'RESILIENT',
 
+    // Provenance Trace
+    'provenance.title': 'Tainted Data Path (Provenance Trace)',
+    'provenance.blocked': 'TAINTED SOURCE BLOCKED',
+    'provenance.safe': 'SAFE SOURCE',
+    'provenance.step': 'Step',
+    'provenance.source.tool_output': 'TOOL_OUTPUT (Tool Result)',
+    'provenance.source.tool_invoice': 'TOOL_OUTPUT (Invoice / Quotation Document)',
+    'provenance.source.web': 'WEB (Malicious Document / Web Page)',
+    'provenance.source.owner_mission': 'OWNER_MISSION (Treasury Owner Signature)',
+    'provenance.source.agent_reasoning': 'AGENT_REASONING (Agent Reasoning)',
+    'provenance.source.validator_guard': 'VALIDATOR_GUARD (Off-Chain Guard Layer)',
+    'provenance.source.onchain_contract': 'ONCHAIN_CONTRACT (Avalanche Fuji Contract)',
+
     // Verify Page
     'verify.tag': 'CLIENT-SIDE VERIFIER',
     'verify.hero.title': "DON'T TRUST US — VERIFY YOURSELF",
@@ -460,6 +473,19 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
     'bounty.step3.contract': 'Hợp đồng:',
     'bounty.step.tricked': 'BỊ THUYẾT PHỤC',
     'bounty.step.resilient': 'KIÊN ĐỊNH',
+
+    // Provenance Trace
+    'provenance.title': 'Đường Đi Dữ Liệu Bẩn (Provenance Trace)',
+    'provenance.blocked': 'ĐÃ CHẶN NGUỒN GỐC BẨN',
+    'provenance.safe': 'NGUỒN GỐC AN TOÀN',
+    'provenance.step': 'Bước',
+    'provenance.source.tool_output': 'TOOL_OUTPUT (Kết Quả Tool)',
+    'provenance.source.tool_invoice': 'TOOL_OUTPUT (Tài Liệu Hóa Đơn / Báo Giá)',
+    'provenance.source.web': 'WEB (Tài Liệu Độc Hại / Web Page)',
+    'provenance.source.owner_mission': 'OWNER_MISSION (Chữ Ký Chủ Ngân Quỹ)',
+    'provenance.source.agent_reasoning': 'AGENT_REASONING (Lý Luận Của Agent)',
+    'provenance.source.validator_guard': 'VALIDATOR_GUARD (Lớp Bảo Vệ Off-Chain)',
+    'provenance.source.onchain_contract': 'ONCHAIN_CONTRACT (Hợp Đồng Fuji)',
 
     // Verify Page
     'verify.tag': 'XÁC THỰC MẬT MÃ CLIENT-SIDE',

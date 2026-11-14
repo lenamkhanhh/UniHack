@@ -430,8 +430,9 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
     await page.goto('/judge');
     await injectVisualEffects(page);
 
-    // Wait for the 3 live receipts to be queried from Fuji RPC (already fulfilled instantly)
+    // Wait until the three Twin receipt cards render before taking the shot (R14d-F2)
     await page.locator('#judge-receipts-grid').waitFor({ state: 'visible', timeout: 30000 });
+    await page.locator('#receipt-card-missionB_negative').waitFor({ state: 'visible', timeout: 10000 });
     // R14-F2: Scroll receipts into upper 50% of viewport so caption at bottom never touches the receipts
     await page.evaluate(() => {
       const el = document.getElementById('judge-receipts-grid');
@@ -616,14 +617,68 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
     // =============================================================
     // SCENE 4: Snowtrace on-chain revert proof (<= 8s)
     // =============================================================
+    // R14d-F1: Try loading real Snowtrace with 20s timeout and wait for status row;
+    // if Snowtrace fails/blocks (Cloudflare challenge), use pre-captured real HTML card
+    // labeled "Snowtrace, captured 14/11" rather than falling back to another page.
     const snowtraceTxUrl =
       'https://testnet.snowtrace.io/tx/0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38';
+    let snowtraceSuccess = false;
+
+    // Fast preflight probe so Cloudflare 403 blocks don't hold the recorder for 20s
+    let isReachable = false;
     try {
-      await page.goto(snowtraceTxUrl, { timeout: 3500 });
+      const probe = await fetch(snowtraceTxUrl, {
+        signal: AbortSignal.timeout(2500),
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      });
+      if (probe.status === 200) {
+        isReachable = true;
+      }
+    } catch {}
+
+    if (isReachable) {
+      try {
+        const resp = await page.goto(snowtraceTxUrl, { timeout: 20000, waitUntil: 'domcontentloaded' });
+        if (resp && resp.status() === 200) {
+          const title = await page.title();
+          const content = await page.content();
+          if (
+            !title.includes('Just a moment') &&
+            !content.includes('cf-browser-verification') &&
+            !content.includes('Attention Required')
+          ) {
+            const statusRow = page.locator('text=Fail with execution reverted').first();
+            await statusRow.waitFor({ state: 'visible', timeout: 8000 });
+            snowtraceSuccess = true;
+            await injectVisualEffects(page);
+            await showLowerThird(
+              page,
+              'SNOWTRACE EXPLORER',
+              'Avalanche Fuji C-Chain Transaction Receipt',
+              'Tx: 0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38',
+              2500
+            );
+            await showCaption(
+              page,
+              'On-chain proof: Snowtrace confirms execution reverted with PayeeNotInMissionSet.'
+            );
+            await triggerSpotlight(page, 'Fail', '❌ Transaction Reverted: PayeeNotInMissionSet', 3000);
+            await page.waitForTimeout(2000);
+          }
+        }
+      } catch {
+        snowtraceSuccess = false;
+      }
+    }
+
+    if (!snowtraceSuccess) {
+      // R14d-F1 fallback: load pre-captured real Snowtrace card labeled "Snowtrace, captured 14/11"
+      const fallbackCard = path.resolve(ROOT, 'artifacts/submission-s1/video/cards/snowtrace-tx.html');
+      await page.goto(`file://${fallbackCard}`);
       await injectVisualEffects(page);
       await showLowerThird(
         page,
-        'SNOWTRACE EXPLORER',
+        'SNOWTRACE EXPLORER · CAPTURED 14/11',
         'Avalanche Fuji C-Chain Transaction Receipt',
         'Tx: 0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38',
         2500
@@ -632,24 +687,7 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
         page,
         'On-chain proof: Snowtrace confirms execution reverted with PayeeNotInMissionSet.'
       );
-      await triggerSpotlight(page, 'Fail', '❌ Transaction Reverted: PayeeNotInMissionSet', 3000);
-      await page.waitForTimeout(1500);
-    } catch {
-      // Fallback if blocked/slow: show the twin table on-chain revert row for <= 7s
-      await page.goto('/#twin-heading');
-      await injectVisualEffects(page);
-      await showLowerThird(
-        page,
-        'ON-CHAIN AUDIT LOG',
-        'Twin Treasury Revert Receipt',
-        'Tx: 0x0ad53adcf579... (PayeeNotInMissionSet)',
-        2500
-      );
-      await showCaption(
-        page,
-        'On-chain proof: Snowtrace confirms execution reverted with PayeeNotInMissionSet.'
-      );
-      await triggerSpotlight(page, '0x0ad53adc', '❌ Status: Reverted with PayeeNotInMissionSet', 3000);
+      await triggerSpotlight(page, '#snowtrace-status-row', '❌ Transaction Reverted: PayeeNotInMissionSet', 3500);
       await page.waitForTimeout(2000);
     }
 

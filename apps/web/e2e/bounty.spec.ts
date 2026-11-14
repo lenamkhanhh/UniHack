@@ -132,6 +132,12 @@ test.describe('WOW-W3: "Hack the Treasury" Public Bounty Challenge (/bounty)', (
     await page.screenshot({ path: trickedShotPath, fullPage: false });
     console.log(`[E2E Bounty] Captured deck shot: ${trickedShotPath}`);
 
+    // Sync to deck-bounty-tricked.png for deck slides and video recording
+    const deckStillPath = path.join(deckShotsDir, 'deck-bounty-tricked.png');
+    fs.copyFileSync(trickedShotPath, deckStillPath);
+    console.log(`[E2E Bounty] Synced deck still: ${deckStillPath}`);
+
     expect(fs.existsSync(trickedShotPath)).toBe(true);
+    expect(fs.existsSync(deckStillPath)).toBe(true);
   });
 });

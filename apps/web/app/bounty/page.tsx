@@ -128,6 +128,20 @@ const RECORDED_TRICKED_RESULT: AttemptResponse = {
   },
 };
 
+function formatAddress(addr?: string | null): string {
+  if (!addr) return '';
+  if (addr.length <= 13) return addr;
+  if (/^0x[a-fA-F0-9]{40}$/i.test(addr)) {
+    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+  }
+  return addr;
+}
+
+function truncateAddressesInText(text?: string | null): string {
+  if (!text) return '';
+  return text.replace(/0x[a-fA-F0-9]{40}/gi, (m) => `${m.slice(0, 6)}…${m.slice(-4)}`);
+}
+
 export default function BountyPage() {
   const { t, lang } = useI18n();
   // The bounty API returns Vietnamese error text; map known messages so the English UI stays English.
@@ -461,7 +475,7 @@ export default function BountyPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Step 1: LLM (Red border when agent fooled/tricked) */}
               <div
-                className={`rounded-data border border-l-4 p-4 space-y-2 ${
+                className={`rounded-data border border-l-4 p-4 space-y-2 overflow-hidden break-words [overflow-wrap:anywhere] ${
                   lastResult.steps.step1_llm.status === 'TRICKED'
                     ? 'bg-blocked-bg border-blocked-rule border-l-brand'
                     : 'bg-paid-bg border-paid-rule border-l-paid'
@@ -479,19 +493,19 @@ export default function BountyPage() {
                     {lastResult.steps.step1_llm.status === 'TRICKED' ? t('bounty.step.tricked') : t('bounty.step.resilient')}
                   </span>
                 </div>
-                <p className="text-sm text-ink">{lastResult.steps.step1_llm.description}</p>
+                <p className="text-sm text-ink break-words [overflow-wrap:anywhere]">{truncateAddressesInText(lastResult.steps.step1_llm.description)}</p>
                 <div className="text-xs text-ink-2">
                   {t('bounty.step1.model')}{' '}
                   <span className="text-warn font-semibold">{lastResult.steps.step1_llm.model || 'gemini-3.5-flash-lite'}</span> ({lastResult.steps.step1_llm.mode || 'llm'})
                 </div>
-                <div className="text-xs font-mono text-ink-2 truncate">
-                  {t('bounty.step1.to')} {lastResult.steps.step1_llm.proposedTo}
+                <div className="text-xs font-mono text-ink-2 truncate break-all">
+                  {t('bounty.step1.to')} {formatAddress(lastResult.steps.step1_llm.proposedTo)}
                 </div>
               </div>
 
               {/* Step 2: Off-chain Guard (Amber border when validator blocked) */}
               <div
-                className={`rounded-data border border-l-4 p-4 space-y-2 ${
+                className={`rounded-data border border-l-4 p-4 space-y-2 overflow-hidden break-words [overflow-wrap:anywhere] ${
                   lastResult.steps.step2_offchain_guard.status === 'BLOCKED'
                     ? 'bg-warn-bg border-warn-rule border-l-amber'
                     : lastResult.steps.step2_offchain_guard.status === 'PASSED'
@@ -508,12 +522,12 @@ export default function BountyPage() {
                 <div className="text-xs text-warn font-bold">
                   {t('bounty.step2.rule')} {lastResult.steps.step2_offchain_guard.rule}
                 </div>
-                <p className="text-sm text-ink">{lastResult.steps.step2_offchain_guard.reason}</p>
+                <p className="text-sm text-ink break-words [overflow-wrap:anywhere]">{truncateAddressesInText(lastResult.steps.step2_offchain_guard.reason)}</p>
               </div>
 
               {/* Step 3: Contract Fuji (Green border when contract reverted / treasury safe) */}
               <div
-                className={`rounded-data border border-l-4 p-4 space-y-2 ${
+                className={`rounded-data border border-l-4 p-4 space-y-2 overflow-hidden break-words [overflow-wrap:anywhere] ${
                   lastResult.steps.step3_contract_fuji.status === 'REVERTED'
                     ? 'bg-paid-bg border-paid-rule border-l-paid'
                     : lastResult.steps.step3_contract_fuji.status === 'BYPASS'
@@ -537,22 +551,22 @@ export default function BountyPage() {
                     {lastResult.steps.step3_contract_fuji.status}
                   </span>
                 </div>
-                <div className="text-xs font-mono text-ink-2 font-bold truncate">
+                <div className="text-xs font-mono text-ink-2 font-bold truncate break-all">
                   {lastResult.steps.step3_contract_fuji.status === 'REVERTED'
-                    ? `${t('bounty.step3.revert')} ${lastResult.steps.step3_contract_fuji.revertReason}`
+                    ? `${t('bounty.step3.revert')} ${truncateAddressesInText(lastResult.steps.step3_contract_fuji.revertReason)}`
                     : lastResult.steps.step3_contract_fuji.status === 'BYPASS'
                     ? 'Simulation: Potential Bypass'
                     : lastResult.steps.step3_contract_fuji.status === 'RPC_ERROR'
                     ? 'RPC Error: Simulation Failed'
-                    : `Simulation: ${lastResult.steps.step3_contract_fuji.revertReason}`}
+                    : `Simulation: ${truncateAddressesInText(lastResult.steps.step3_contract_fuji.revertReason)}`}
                 </div>
                 <a
                   href={lastResult.steps.step3_contract_fuji.snowtraceUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs text-ink hover:underline block truncate focus:outline-none focus:ring-1 focus:ring-ink"
+                  className="text-xs text-ink hover:underline block truncate break-all focus:outline-none focus:ring-1 focus:ring-ink"
                 >
-                  {t('bounty.step3.contract')} {lastResult.steps.step3_contract_fuji.contractAddress}
+                  {t('bounty.step3.contract')} {formatAddress(lastResult.steps.step3_contract_fuji.contractAddress)}
                 </a>
               </div>
             </div>
