@@ -58,46 +58,77 @@ if not api_key:
 
 print("GEMINI_API_KEY loaded successfully.")
 
-# Cues definitions
-# Timestamps aligned with concat-silent.mp4 transitions
+# Cues definitions (Round 17b: 12 cues filling gaps, >=75% voice coverage)
 CUES = [
     {
         'id': 's0_intro',
         'file_base': 'clip_s0_puck',
         'start_s': 0.600,
-        'next_start_s': 5.000,
+        'next_start_s': 5.100,
         'text': 'Same vendor. Same treasury. Two outcomes.',
         'caption': 'MissionPay: Same vendor. Same treasury. Two outcomes.',
     },
     {
-        'id': 's1_home',
+        'id': 's1a_home',
         'file_base': 'clip_s1_puck',
-        'start_s': 5.000,
-        'next_start_s': 41.552,
+        'start_s': 5.200,
+        'next_start_s': 20.900,
         'text': 'Live on Avalanche Fuji, our Twin Treasury benchmark proves the difference. When an invoice attacks, the global allowlist leaks zero point zero one USDC... but MissionPay reverts on-chain, keeping funds completely safe.',
         'caption': 'Live on Avalanche Fuji: Twin Treasury compares Global Allowlist vs Mission Guard.',
     },
     {
-        'id': 's2_judge',
+        'id': 's1b_table',
+        'file_base': 'clip_s1b_puck',
+        'start_s': 21.000,
+        'next_start_s': 41.200,
+        'text': 'Twin allowlist paid the vendor zero point zero one USDC. Same vendor, twin mission reverted with Payee Not In Mission Set: zero USDC out. Control paid the owner. Every row links to a real Fuji transaction.',
+        'caption': 'Twin table: allowlist paid 0.01 USDC, mission reverted PayeeNotInMissionSet, 0 USDC lost.',
+    },
+    {
+        'id': 's2a_judge',
         'file_base': 'clip_s2_puck',
         'start_s': 41.552,
-        'next_start_s': 102.387,
+        'next_start_s': 54.000,
         'text': 'In Judge Mode, test any off-mission attacker yourself. The smart contract strictly reverts with Payee Not In Mission Set... while legitimate payouts execute instantly.',
         'caption': 'In Judge Mode, test any attacker: the contract strictly reverts with PayeeNotInMissionSet.',
     },
     {
-        'id': 's3_bounty',
+        'id': 's2b_sim',
+        'file_base': 'clip_s2b_puck',
+        'start_s': 54.100,
+        'next_start_s': 78.500,
+        'text': 'Random attacker: the contract reverts with Payee Not In Mission Set. Owner address: accepted and authorized. These are read-only eth call simulations: no gas, no keys.',
+        'caption': 'Random attacker reverts with PayeeNotInMissionSet; owner proposal succeeds via eth_call.',
+    },
+    {
+        'id': 's2c_cast',
+        'file_base': 'clip_s2c_puck',
+        'start_s': 79.000,
+        'next_start_s': 101.500,
+        'text': "Don't trust our UI: copy the cast call command and run it against public Fuji RPC. And on screen, updating the Merkle root requires owner approval.",
+        'caption': 'Verify directly: copy cast call to query Fuji RPC. Note: updating root needs owner sign.',
+    },
+    {
+        'id': 's3a_bounty',
         'file_base': 'clip_s3_puck',
         'start_s': 102.387,
-        'next_start_s': 136.772,
+        'next_start_s': 115.200,
         'text': 'In our public Bounty challenge, prompt injection tricks the autonomous agent. But in this recorded run on Fuji, our dual-layer guard blocks the diversion with zero dollars drained.',
-        'caption': 'Bounty Challenge: prompt injection fools the agent, but the contract preserves the treasury.',
+        'caption': 'Bounty Challenge: prompt injection fools the agent, but the contract preserves treasury.',
+    },
+    {
+        'id': 's3b_trace',
+        'file_base': 'clip_s3b_puck',
+        'start_s': 115.300,
+        'next_start_s': 136.000,
+        'text': 'The poisoned address came from tool output, so it is tainted. The validator blocks it immediately. And even if it slipped through, the contract would strictly revert.',
+        'caption': 'Tainted address from tool output is blocked by validator; contract provides hard backstop.',
     },
     {
         'id': 's4_snowtrace',
         'file_base': 'clip_s4_puck',
         'start_s': 136.772,
-        'next_start_s': 147.352,
+        'next_start_s': 147.000,
         'text': 'Snowtrace confirms the live receipt: execution strictly reverted on Avalanche Fuji, with Payee Not In Mission Set.',
         'caption': 'On-chain proof: Snowtrace confirms execution reverted with PayeeNotInMissionSet.',
     },
@@ -105,7 +136,7 @@ CUES = [
         'id': 's5_verify',
         'file_base': 'clip_s5_puck',
         'start_s': 147.352,
-        'next_start_s': 157.099,
+        'next_start_s': 157.000,
         'text': 'Anchored on-chain with an E R C eight thousand and four score of one hundred. Tamper with one byte, and verification breaks.',
         'caption': 'Independent verification: tamper with 1 single byte and the entire hash chain breaks.',
     },
@@ -120,7 +151,7 @@ CUES = [
     {
         'id': 's7_outro',
         'file_base': 'clip_s7_puck',
-        'start_s': 161.799,
+        'start_s': 162.000,
         'next_start_s': 168.000,
         'text': "LLMs can be fooled. Budgets on Avalanche can't.",
         'caption': "LLMs can be fooled. Budgets on Avalanche can't.",
@@ -499,11 +530,14 @@ def main():
     # Step 8: Validate output
     dur = get_audio_duration(FINAL_VIDEO)
     size_mb = FINAL_VIDEO.stat().st_size / (1024 * 1024)
+    total_voice_dur = sum(get_audio_duration(w) for w in wav_clips)
+    coverage_pct = (total_voice_dur / dur) * 100
     print("\n==================================================================")
-    print("   MISSIONPAY NARRATED VIDEO ASSEMBLY COMPLETE!                  ")
+    print("   MISSIONPAY NARRATED VIDEO ASSEMBLY COMPLETE (Round 17b)!      ")
     print("==================================================================")
     print(f"- Output File:    {FINAL_VIDEO}")
     print(f"- Duration:       {dur:.2f}s (Spec: 150s - 175s -> {'PASS ✅' if 150 <= dur <= 175 else 'FAIL ❌'})")
+    print(f"- Voice Coverage: {total_voice_dur:.2f}s / {dur:.2f}s ({coverage_pct:.1f}% -> {'PASS ✅ (>=75%)' if coverage_pct >= 75.0 else 'FAIL ❌'})")
     print(f"- File Size:      {size_mb:.2f} MB (< 50 MB threshold)")
     print(f"- Silent Backup:  {SILENT_BACKUP}")
     print(f"- Narration SRT:  {SRT_PATH}")
