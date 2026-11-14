@@ -2,6 +2,11 @@ import { test, expect } from './fixtures/wallet';
 import path from 'path';
 
 test.describe('WOW-0: Replay Vụ Bankr $174k Incident', () => {
+  test.beforeEach(async ({ page }) => {
+    // These assertions check Vietnamese UI copy: pin the UI language to Vietnamese (lib/i18n.tsx reads missionpay_lang from localStorage)
+    await page.addInitScript(() => localStorage.setItem('missionpay_lang', 'vi'));
+  });
+
   test('User clicks replay button, split-screen displays unguarded $174k drain vs guarded $0.00 loss', async ({ page }) => {
     // 1. Visit /bankr
     await page.goto('/bankr');

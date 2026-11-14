@@ -37,7 +37,8 @@ interface RegisteredKeyData {
 const LOCAL_STORAGE_KEY = 'missionpay_registered_passkey';
 
 export default function NewMissionPasskeyPage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const tr = (vi: string, en: string) => (lang === 'vi' ? vi : en);
   const [missionSlug, setMissionSlug] = useState('passkey-mission-live-01');
   const [agentAddress, setAgentAddress] = useState('0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c');
   const [payeeRoot, setPayeeRoot] = useState('0xa7409058b8f2c3bfbb2e9f0b5d56b0d9e8df34906a282f10b74108d8108a8a47');
@@ -98,11 +99,11 @@ export default function NewMissionPasskeyPage() {
   async function handleRegisterPasskey() {
     setLoading(true);
     setErrorMessage('');
-    setStatus('Khởi tạo đăng ký WebAuthn Passkey (P-256) trên thiết bị...');
+    setStatus(tr('Khởi tạo đăng ký WebAuthn Passkey (P-256) trên thiết bị...', 'Starting WebAuthn Passkey (P-256) registration on this device...'));
 
     try {
       if (!window.navigator?.credentials) {
-        throw new Error('WebAuthn không được hỗ trợ trong môi trường trình duyệt này');
+        throw new Error(tr('WebAuthn không được hỗ trợ trong môi trường trình duyệt này', 'WebAuthn is not supported in this browser environment'));
       }
 
       const challenge = new Uint8Array(32);
@@ -131,7 +132,7 @@ export default function NewMissionPasskeyPage() {
       })) as any;
 
       if (!credential || !credential.response) {
-        throw new Error('Người dùng đã hủy đăng ký Passkey');
+        throw new Error(tr('Người dùng đã hủy đăng ký Passkey', 'Passkey registration was canceled by the user'));
       }
 
       // Real P-256 public key extraction from SPKI / attestationObject
@@ -152,11 +153,11 @@ export default function NewMissionPasskeyPage() {
       }
 
       setRegisteredKey(keyData);
-      setStatus('Đã đăng ký Passkey thành công! Đã trích xuất tọa độ công khai P-256 (x, y).');
+      setStatus(tr('Đã đăng ký Passkey thành công! Đã trích xuất tọa độ công khai P-256 (x, y).', 'Passkey registered successfully! Extracted the P-256 public coordinates (x, y).'));
     } catch (err: any) {
       console.warn('Passkey registration error:', err);
       setRegisteredKey(null);
-      setErrorMessage(`Đăng ký Passkey thất bại hoặc bị hủy: ${err.message || 'Lỗi không xác định'}`);
+      setErrorMessage(`${tr('Đăng ký Passkey thất bại hoặc bị hủy', 'Passkey registration failed or was canceled')}: ${err.message || tr('Lỗi không xác định', 'Unknown error')}`);
       setStatus('');
     } finally {
       setLoading(false);
@@ -167,21 +168,21 @@ export default function NewMissionPasskeyPage() {
     setLoading(true);
     setErrorMessage('');
     setRelayResult(null);
-    setStatus('Đang chuẩn bị WebAuthn challenge & yêu cầu xác thực sinh trắc học...');
+    setStatus(tr('Đang chuẩn bị WebAuthn challenge & yêu cầu xác thực sinh trắc học...', 'Preparing the WebAuthn challenge and requesting biometric verification...'));
 
     try {
       if (!registeredKey || !registeredKey.id) {
-        throw new Error('Chưa đăng ký Passkey. Vui lòng bấm Đăng ký Passkey trước khi duyệt mission.');
+        throw new Error(tr('Chưa đăng ký Passkey. Vui lòng bấm Đăng ký Passkey trước khi duyệt mission.', 'No Passkey registered. Please register a Passkey before approving the mission.'));
       }
 
       // A2-R1: Always fetch fresh on-chain authority configuration before requesting assertion
       const configRes = await fetch('/api/passkey/relay');
       if (!configRes.ok) {
-        throw new Error('Không thể kết nối đến Relay API hoặc Passkey Authority chưa được cấu hình.');
+        throw new Error(tr('Không thể kết nối đến Relay API hoặc Passkey Authority chưa được cấu hình.', 'Cannot reach the Relay API, or the Passkey Authority is not configured.'));
       }
       const freshConfig = await configRes.json();
       if (!freshConfig.success || freshConfig.status !== 'CONFIGURED') {
-        throw new Error(freshConfig.error || 'Cấu hình Passkey Authority on-chain không khả dụng.');
+        throw new Error(freshConfig.error || tr('Cấu hình Passkey Authority on-chain không khả dụng.', 'On-chain Passkey Authority configuration is unavailable.'));
       }
       setAuthorityConfig(freshConfig);
 
@@ -193,7 +194,10 @@ export default function NewMissionPasskeyPage() {
 
       if (!keyMatches) {
         throw new Error(
-          `Tọa độ Passkey trên thiết bị không khớp với khóa công khai on-chain!\nThiết bị: (${registeredKey.x.slice(0, 10)}..., ${registeredKey.y.slice(0, 10)}...)\nOn-chain: (${freshConfig.passkeyX.slice(0, 10)}..., ${freshConfig.passkeyY.slice(0, 10)}...)\nVui lòng cập nhật khóa hợp đồng hoặc đăng ký đúng passkey.`
+          tr(
+            `Tọa độ Passkey trên thiết bị không khớp với khóa công khai on-chain!\nThiết bị: (${registeredKey.x.slice(0, 10)}..., ${registeredKey.y.slice(0, 10)}...)\nOn-chain: (${freshConfig.passkeyX.slice(0, 10)}..., ${freshConfig.passkeyY.slice(0, 10)}...)\nVui lòng cập nhật khóa hợp đồng hoặc đăng ký đúng passkey.`,
+            `The device Passkey coordinates do not match the on-chain public key!\nDevice: (${registeredKey.x.slice(0, 10)}..., ${registeredKey.y.slice(0, 10)}...)\nOn-chain: (${freshConfig.passkeyX.slice(0, 10)}..., ${freshConfig.passkeyY.slice(0, 10)}...)\nPlease update the contract key or register the correct passkey.`
+          )
         );
       }
 
@@ -201,7 +205,10 @@ export default function NewMissionPasskeyPage() {
       const browserOrigin = window.location.origin;
       if (freshConfig.expectedOrigin && freshConfig.expectedOrigin.toLowerCase() !== browserOrigin.toLowerCase()) {
         throw new Error(
-          `Origin không khớp! Hợp đồng yêu cầu "${freshConfig.expectedOrigin}" nhưng trình duyệt đang mở tại "${browserOrigin}".`
+          tr(
+            `Origin không khớp! Hợp đồng yêu cầu "${freshConfig.expectedOrigin}" nhưng trình duyệt đang mở tại "${browserOrigin}".`,
+            `Origin mismatch! The contract expects "${freshConfig.expectedOrigin}" but the browser is open at "${browserOrigin}".`
+          )
         );
       }
 
@@ -213,7 +220,10 @@ export default function NewMissionPasskeyPage() {
         const rpIdHashHex = '0x' + Array.from(new Uint8Array(rpIdDigest)).map((b) => b.toString(16).padStart(2, '0')).join('');
         if (rpIdHashHex.toLowerCase() !== freshConfig.rpIdHash.toLowerCase()) {
           throw new Error(
-            `RP ID không khớp! Hợp đồng yêu cầu rpIdHash "${freshConfig.rpIdHash}" nhưng trình duyệt tạo ra "${rpIdHashHex}" (RP ID: "${currentRpId}").`
+            tr(
+              `RP ID không khớp! Hợp đồng yêu cầu rpIdHash "${freshConfig.rpIdHash}" nhưng trình duyệt tạo ra "${rpIdHashHex}" (RP ID: "${currentRpId}").`,
+              `RP ID mismatch! The contract expects rpIdHash "${freshConfig.rpIdHash}" but the browser produced "${rpIdHashHex}" (RP ID: "${currentRpId}").`
+            )
           );
         }
       }
@@ -251,10 +261,10 @@ export default function NewMissionPasskeyPage() {
       const credentialIdBytes = base64UrlToBytes(registeredKey.id);
 
       if (!window.navigator?.credentials) {
-        throw new Error('WebAuthn không khả dụng trên trình duyệt này');
+        throw new Error(tr('WebAuthn không khả dụng trên trình duyệt này', 'WebAuthn is not available in this browser'));
       }
 
-      setStatus('Vui lòng chạm vân tay / Face ID / xác thực Passkey trên thiết bị...');
+      setStatus(tr('Vui lòng chạm vân tay / Face ID / xác thực Passkey trên thiết bị...', 'Touch your fingerprint / Face ID / verify the Passkey on your device...'));
 
       const assertion = (await window.navigator.credentials.get({
         publicKey: {
@@ -271,7 +281,7 @@ export default function NewMissionPasskeyPage() {
       })) as any;
 
       if (!assertion || !assertion.response) {
-        throw new Error('Người dùng đã hủy hoặc không hoàn tất xác thực Passkey');
+        throw new Error(tr('Người dùng đã hủy hoặc không hoàn tất xác thực Passkey', 'Passkey verification was canceled or not completed'));
       }
 
       // Real signature parsing and low-s normalization
@@ -300,7 +310,7 @@ export default function NewMissionPasskeyPage() {
         s: sHex,
       };
 
-      setStatus('Đang gửi chữ ký WebAuthn tới Relayer trên Avalanche Fuji...');
+      setStatus(tr('Đang gửi chữ ký WebAuthn tới Relayer trên Avalanche Fuji...', 'Sending the WebAuthn signature to the Relayer on Avalanche Fuji...'));
 
       const res = await fetch('/api/passkey/relay', {
         method: 'POST',
@@ -320,20 +330,20 @@ export default function NewMissionPasskeyPage() {
 
       const data = await res.json();
       if (!data.success) {
-        throw new Error(data.error || 'Relayer trả về lỗi khi xác thực');
+        throw new Error(data.error || tr('Relayer trả về lỗi khi xác thực', 'The Relayer returned an error during verification'));
       }
 
       setRelayResult(data);
       if (data.status === 'CONFIRMED' && data.txHash && data.blockNumber) {
-        setStatus('Mission Đã Duyệt On-Chain Thành Công!');
+        setStatus(tr('Mission Đã Duyệt On-Chain Thành Công!', 'Mission Approved On-Chain Successfully!'));
       } else if (data.status === 'SIMULATION_SUCCESS') {
-        setStatus('Mô Phỏng Thực Thi Thành Công (Chưa broadcast on-chain)');
+        setStatus(tr('Mô Phỏng Thực Thi Thành Công (Chưa broadcast on-chain)', 'Simulated Execution Succeeded (Not broadcast on-chain)'));
       } else {
-        setStatus(`Trạng thái: ${data.status || 'Đã xử lý'}${data.status === 'CONFIRMED' ? ' (Thiếu xác nhận block)' : ''}`);
+        setStatus(`${tr('Trạng thái', 'Status')}: ${data.status || tr('Đã xử lý', 'Processed')}${data.status === 'CONFIRMED' ? tr(' (Thiếu xác nhận block)', ' (Missing block confirmation)') : ''}`);
       }
     } catch (err: any) {
       console.error('Passkey approval error:', err);
-      setErrorMessage(`Duyệt Mission thất bại: ${err.message || 'Lỗi không xác định'}`);
+      setErrorMessage(`${tr('Duyệt Mission thất bại', 'Mission approval failed')}: ${err.message || tr('Lỗi không xác định', 'Unknown error')}`);
       setStatus('');
     } finally {
       setLoading(false);
@@ -410,15 +420,15 @@ export default function NewMissionPasskeyPage() {
         <div className="p-5 rounded-card bg-card border border-rule space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="card-title">
-              Thiết Bị Passkey Xác Thực (Owner Credential)
+              {tr('Thiết Bị Passkey Xác Thực (Owner Credential)', 'Authenticator Passkey Device (Owner Credential)')}
             </h2>
             {registeredKey ? (
               <span className="tag-paid border border-paid-rule">
-                Đã ghi nhận Passkey
+                {tr('Đã ghi nhận Passkey', 'Passkey recorded')}
               </span>
             ) : (
               <span className="tag-warn border border-warn-rule">
-                Chưa đăng ký
+                {tr('Chưa đăng ký', 'Not registered')}
               </span>
             )}
           </div>
@@ -438,11 +448,11 @@ export default function NewMissionPasskeyPage() {
               <div className="pt-2 flex flex-wrap items-center gap-3">
                 {isCoordinatesMatched ? (
                   <span className="px-2 py-1 rounded-tag bg-paid-bg border border-paid-rule text-paid text-xs">
-                    ✓ Khớp hoàn toàn với Passkey đăng ký trên Authority Contract
+                    {tr('✓ Khớp hoàn toàn với Passkey đăng ký trên Authority Contract', '✓ Fully matches the Passkey registered on the Authority Contract')}
                   </span>
                 ) : (
                   <span className="px-2 py-1 rounded-tag bg-warn-bg border border-warn-rule text-warn text-xs">
-                    ℹ Tọa độ khác Authority on-chain hiện tại (Sử dụng nút xuất cấu hình bên dưới cho script deploy)
+                    {tr('ℹ Tọa độ khác Authority on-chain hiện tại (Sử dụng nút xuất cấu hình bên dưới cho script deploy)', 'ℹ Coordinates differ from the current on-chain Authority (use the export button below for the deploy script)')}
                   </span>
                 )}
                 <button
@@ -450,13 +460,17 @@ export default function NewMissionPasskeyPage() {
                   onClick={handleCopyExport}
                   className="btn-ghost btn-sm"
                 >
-                  {copiedExport ? 'Đã sao chép!' : 'Xuất tọa độ cho script deploy'}
+                  {copiedExport ? tr('Đã sao chép!', 'Copied!') : tr('Xuất tọa độ cho script deploy', 'Export coordinates for the deploy script')}
                 </button>
               </div>
             </div>
           ) : (
             <p className="text-[15px] text-ink-2">
-              Nhấn nút &quot;{t('passkey.btn.register')}&quot; để khởi tạo cặp khóa P-256 phần cứng an toàn trên thiết bị (Touch ID, Face ID, Windows Hello). Không có private key nào được lưu trên máy chủ hay truyền qua mạng.
+              {lang === 'vi' ? (
+                <>Nhấn nút &quot;{t('passkey.btn.register')}&quot; để khởi tạo cặp khóa P-256 phần cứng an toàn trên thiết bị (Touch ID, Face ID, Windows Hello). Không có private key nào được lưu trên máy chủ hay truyền qua mạng.</>
+              ) : (
+                <>Press &quot;{t('passkey.btn.register')}&quot; to create a hardware-backed P-256 key pair on this device (Touch ID, Face ID, Windows Hello). No private key is stored on the server or sent over the network.</>
+              )}
             </p>
           )}
         </div>
@@ -662,7 +676,7 @@ export default function NewMissionPasskeyPage() {
               <span className="tag-info border border-info-rule">
                 Simulation Success
               </span>
-              <span>Xác thực mô phỏng thành công (Chưa broadcast on-chain)</span>
+              <span>{tr('Xác thực mô phỏng thành công (Chưa broadcast on-chain)', 'Simulated verification succeeded (Not broadcast on-chain)')}</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
@@ -676,7 +690,7 @@ export default function NewMissionPasskeyPage() {
               </div>
               <div className="sm:col-span-2">
                 <span className="text-ink-2">Evidence Note:</span>{' '}
-                <span className="text-ink-2">{relayResult.message || 'Mô phỏng RPC đã xác minh chữ ký passkey thành công.'}</span>
+                <span className="text-ink-2">{relayResult.message || tr('Mô phỏng RPC đã xác minh chữ ký passkey thành công.', 'The RPC simulation verified the passkey signature successfully.')}</span>
               </div>
             </div>
           </div>

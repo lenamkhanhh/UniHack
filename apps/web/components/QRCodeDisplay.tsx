@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
+import { useI18n } from '@/lib/i18n';
 
 interface QRCodeDisplayProps {
   url: string;
@@ -23,6 +24,7 @@ export default function QRCodeDisplay({
   showUrlText = true,
   testId = 'scannable-qr-code',
 }: QRCodeDisplayProps) {
+  const { lang } = useI18n();
   const [dataUrl, setDataUrl] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
@@ -51,7 +53,7 @@ export default function QRCodeDisplay({
       .catch((err) => {
         if (!cancelled) {
           console.error('Failed to generate QR code:', err);
-          setError('Không thể tạo mã QR');
+          setError(lang === 'vi' ? 'Không thể tạo mã QR' : 'Could not generate QR code');
         }
       });
 
@@ -81,7 +83,7 @@ export default function QRCodeDisplay({
             style={{ width: `${size}px`, height: `${size}px` }}
             className="flex items-center justify-center bg-mist text-ink-2 text-xs font-mono rounded-data animate-pulse"
           >
-            {error || 'Đang tạo QR...'}
+            {error || (lang === 'vi' ? 'Đang tạo QR...' : 'Generating QR...')}
           </div>
         )}
       </div>

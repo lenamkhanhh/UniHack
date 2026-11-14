@@ -32,8 +32,8 @@ test.describe('WOW-F18: High-Resolution 1920x1080 Deck Evidence Screenshots Suit
 
   test('1. deck-bankr.png: Captures both panels after replay with honest off-chain validator labels', async ({ page }) => {
     await page.goto('/bankr');
-    await expect(page.locator('h1')).toContainText('REPLAY VỤ BANKR / GROK');
-    await expect(page.locator('text=MÔ PHỎNG — HỆ KHÔNG CÓ GUARD')).toBeVisible();
+    await expect(page.locator('h1')).toContainText('BANKR / GROK REPLAY');
+    await expect(page.locator('text=SIMULATION — SYSTEM WITHOUT A GUARD')).toBeVisible();
 
     // Trigger interactive replay
     const replayBtn = page.locator('[data-testid="run-bankr-replay-btn"]');
@@ -41,9 +41,9 @@ test.describe('WOW-F18: High-Resolution 1920x1080 Deck Evidence Screenshots Suit
     await replayBtn.click();
 
     // Wait for replay to complete and display defense verdict
-    await expect(page.locator('text=Tiền đã chuyển: $0.00 — chặn bởi validator (off-chain)')).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('text=/TOÀN BỘ SỐ DƯ BỊ RÚT SẠCH/')).toBeVisible();
-    await expect(page.locator('text=Chuỗi mã Morse ẩn trong tài liệu nguồn:')).toBeVisible();
+    await expect(page.locator('text=Funds moved: $0.00 — blocked by the validator (off-chain)')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('text=/ENTIRE BALANCE DRAINED/')).toBeVisible();
+    await expect(page.locator('text=Morse string hidden in the source document:')).toBeVisible();
 
     // Verify absence of NaN
     const pageText = await page.textContent('body');
@@ -84,21 +84,21 @@ test.describe('WOW-F18: High-Resolution 1920x1080 Deck Evidence Screenshots Suit
 
     await page.goto('/arena/stage');
     await expect(page.locator('h1')).toContainText('FREYSA ARENA');
-    await expect(page.locator('text=Đòn tấn công từ khán giả')).toBeVisible();
-    await expect(page.locator('text=Chặn vì nguồn gốc')).toBeVisible();
-    await expect(page.locator('text=Chặn đổi policy')).toBeVisible();
+    await expect(page.locator('text=Audience attacks')).toBeVisible();
+    await expect(page.locator('text=Blocked by provenance')).toBeVisible();
+    await expect(page.locator('text=Blocked policy changes')).toBeVisible();
 
     // Verify stats have loaded and no NaN
-    await expect(page.locator('text=Tiền ra ngoài phạm vi cho phép')).toBeVisible();
+    await expect(page.locator('text=Funds outside the allowed scope')).toBeVisible();
     await expect(page.locator('text=$0.00').first()).toBeVisible();
 
     // Verify calibrated rules text (PV-F8)
     await expect(
-      page.locator('text=Validator chặn người nhận không truy về chữ ký owner, lệnh vượt cap, và mọi lệnh đổi policy')
+      page.locator('text=The validator blocks payees that do not trace back to the owner signature, orders above the cap, and any policy-change order')
     ).toBeVisible();
 
     // Verify live feed has entries
-    await expect(page.locator('text=THỜI GIAN THỰC')).toBeVisible();
+    await expect(page.locator('text=REAL TIME')).toBeVisible();
     await page.waitForTimeout(2000); // Allow QR to render cleanly
 
     const bodyContent = await page.textContent('body');
@@ -153,7 +153,7 @@ test.describe('WOW-F18: High-Resolution 1920x1080 Deck Evidence Screenshots Suit
     // Verify Money Flow Scene
     const scene4 = page.locator('[data-testid="scene-4-container"]');
     await expect(scene4).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('text=LIVING MONEY FLOW — LIÊN KẾT AUDIT LEDGER')).toBeVisible();
+    await expect(page.locator('text=LIVING MONEY FLOW — LINKED TO AUDIT LEDGER')).toBeVisible();
     await expect(page.locator('text=MissionPay · Avalanche Fuji')).toBeVisible();
 
     await page.waitForTimeout(2000); // Allow graph animation to settle
@@ -185,15 +185,15 @@ test.describe('WOW-F18: High-Resolution 1920x1080 Deck Evidence Screenshots Suit
 
     await page.goto('/arena/stage');
     await expect(page.locator('h1')).toContainText('FREYSA ARENA');
-    await expect(page.locator('text=Chặn vì nguồn gốc')).toBeVisible();
-    await expect(page.locator('text=Chặn đổi policy')).toBeVisible();
+    await expect(page.locator('text=Blocked by provenance')).toBeVisible();
+    await expect(page.locator('text=Blocked policy changes')).toBeVisible();
 
     // Verify badges are visible in the feed
-    await expect(page.locator('text=NGUỒN: WEB').first()).toBeVisible();
-    await expect(page.locator('text=NGUỒN: OWNER_MISSION').first()).toBeVisible();
+    await expect(page.locator('text=SOURCE: WEB').first()).toBeVisible();
+    await expect(page.locator('text=SOURCE: OWNER_MISSION').first()).toBeVisible();
     await expect(page.locator('text=AGENT_CANNOT_CHANGE_POLICY').first()).toBeVisible();
     await expect(
-      page.locator('text=Validator chặn người nhận không truy về chữ ký owner, lệnh vượt cap, và mọi lệnh đổi policy')
+      page.locator('text=The validator blocks payees that do not trace back to the owner signature, orders above the cap, and any policy-change order')
     ).toBeVisible();
 
     await page.waitForTimeout(2000); // Allow render to settle cleanly
@@ -223,7 +223,7 @@ test.describe('WOW-F18: High-Resolution 1920x1080 Deck Evidence Screenshots Suit
     });
     await page.goto('/stage');
     await expect(page.locator('[data-testid="stage-payee-root-badge"]')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('text=Payee root chưa lên chain')).toBeVisible();
+    await expect(page.locator('text=Payee root not on chain yet')).toBeVisible();
 
     const stageUnconfirmedPath = path.resolve(process.cwd(), 'evidence/pv-f7-stage-unconfirmed-root.png');
     await page.screenshot({ path: stageUnconfirmedPath, fullPage: false });

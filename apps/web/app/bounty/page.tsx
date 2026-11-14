@@ -77,7 +77,21 @@ interface AttemptResponse {
 }
 
 export default function BountyPage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  // The bounty API returns Vietnamese error text; map known messages so the English UI stays English.
+  const localizeApiError = (msg: string): string => {
+    if (lang === 'vi') return msg;
+    if (msg.startsWith('Payload không được để trống')) return 'Payload must not be empty';
+    if (msg.startsWith('Payload vượt quá')) return 'Payload exceeds the 2000-character limit';
+    if (msg.startsWith('Địa chỉ ví attacker không hợp lệ')) return 'Invalid attacker wallet address (must be a 40-hex EVM address)';
+    if (msg.startsWith('Vector không hợp lệ')) return `Invalid vector. Choose one of: ${msg.split('Chọn 1 trong: ')[1] || ''}`;
+    if (msg.includes('Quá giới hạn')) return 'Attempt limit exceeded. Please try again later.';
+    if (msg.startsWith('Cơ sở dữ liệu tạm thời không khả dụng')) return 'Database temporarily unavailable';
+    if (msg.startsWith('Agent tạm thời không phản hồi')) return 'Agent temporarily unavailable. Please retry in a moment.';
+    if (msg.startsWith('Lỗi xử lý bounty attempt')) return 'Error processing bounty attempt';
+    if (msg.startsWith('Không thể tải thống kê bounty')) return 'Could not load bounty stats';
+    return msg;
+  };
   const [vector, setVector] = useState<'search_result' | 'invoice_pdf_text' | 'vendor_page' | 'email'>('invoice_pdf_text');
   const [attackerAddress, setAttackerAddress] = useState('0x6666666666666666666666666666666666666666');
   const [payload, setPayload] = useState(
@@ -147,7 +161,7 @@ export default function BountyPage() {
       setLastResult(json.result || json);
       fetchStats();
     } catch (err: any) {
-      setError(err.message || 'Submission error');
+      setError(localizeApiError(err.message || 'Submission error'));
     } finally {
       setLoading(false);
     }

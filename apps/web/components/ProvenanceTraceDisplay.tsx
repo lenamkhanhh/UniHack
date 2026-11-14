@@ -2,18 +2,21 @@
 
 import React from 'react';
 import { ProvenanceTrace } from '@/lib/provenance-trace';
+import { useI18n } from '@/lib/i18n';
 
 interface Props {
   trace: ProvenanceTrace;
 }
 
 export default function ProvenanceTraceDisplay({ trace }: Props) {
+  const { lang } = useI18n();
+  const tr = (vi: string, en: string) => (lang === 'vi' ? vi : en);
   return (
     <div className="bg-paper border border-rule rounded-data p-5 space-y-4">
       <div className="flex items-center justify-between border-b border-rule pb-3">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold uppercase tracking-wider text-ink-2">
-            Đường Đi Dữ Liệu Bẩn (Provenance Trace)
+            {tr('Đường Đi Dữ Liệu Bẩn (Provenance Trace)', 'Tainted Data Path (Provenance Trace)')}
           </span>
         </div>
         <span
@@ -23,7 +26,7 @@ export default function ProvenanceTraceDisplay({ trace }: Props) {
               : 'bg-paid-bg text-paid border-paid-rule'
           }`}
         >
-          {trace.isBlocked ? 'ĐÃ CHẶN NGUỒN GỐC BẨN' : 'NGUỒN GỐC AN TOÀN'}
+          {trace.isBlocked ? tr('ĐÃ CHẶN NGUỒN GỐC BẨN', 'TAINTED SOURCE BLOCKED') : tr('NGUỒN GỐC AN TOÀN', 'SAFE SOURCE')}
         </span>
       </div>
 
@@ -61,7 +64,7 @@ export default function ProvenanceTraceDisplay({ trace }: Props) {
               <div className="bg-card border border-rule rounded-data p-3 space-y-1 hover:border-rule transition">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-semibold text-ink">
-                    Bước {st.step}: {st.label}
+                    {tr('Bước', 'Step')} {st.step}: {st.label}
                   </span>
                   <span className={`text-[13px] font-mono px-2 py-0.5 rounded-tag border ${badgeColor}`}>
                     {st.status}

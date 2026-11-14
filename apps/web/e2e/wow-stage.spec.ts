@@ -2,6 +2,11 @@ import { test, expect } from '@playwright/test';
 import path from 'path';
 
 test.describe('WOW-5: Unified Stage Presentation Console', () => {
+  test.beforeEach(async ({ page }) => {
+    // These assertions check Vietnamese UI copy: pin the UI language to Vietnamese (lib/i18n.tsx reads missionpay_lang from localStorage)
+    await page.addInitScript(() => localStorage.setItem('missionpay_lang', 'vi'));
+  });
+
   test('Console switches scenes 1-5 via keyboard shortcuts and UI buttons, executes seed mode, and captures wow-stage-console screenshot', async ({ page }) => {
     // 1. Navigate to /stage and wait for client hydration
     await page.goto('/stage', { waitUntil: 'domcontentloaded' });

@@ -5,6 +5,7 @@ import { ArenaStats, ArenaAttackRecord } from '@/lib/arena';
 import { formatUsdc, formatSafeNumber } from '@/lib/format';
 import QRCodeDisplay from '@/components/QRCodeDisplay';
 import ProvenanceTraceDisplay from '@/components/ProvenanceTraceDisplay';
+import { useI18n } from '@/lib/i18n';
 
 function unescapeForDisplay(str: string): string {
   if (!str) return '';
@@ -35,6 +36,8 @@ const DEFAULT_ARENA_STATS: ArenaStats = {
 };
 
 export default function ArenaStagePage() {
+  const { lang } = useI18n();
+  const tr = (vi: string, en: string) => (lang === 'vi' ? vi : en);
   const [data, setData] = useState<{
     stats: ArenaStats;
     recentAttacks: ArenaAttackRecord[];
@@ -89,10 +92,10 @@ export default function ArenaStagePage() {
           const json = await res.json();
           setFujiBalances(json);
         } else {
-          setFujiBalances({ success: false, mode: 'RPC_ERROR', blockNumber: '0', balances: null, error: 'RPC lỗi' });
+          setFujiBalances({ success: false, mode: 'RPC_ERROR', blockNumber: '0', balances: null, error: 'RPC_FETCH_FAILED' });
         }
       } catch {
-        setFujiBalances({ success: false, mode: 'RPC_ERROR', blockNumber: '0', balances: null, error: 'RPC lỗi' });
+        setFujiBalances({ success: false, mode: 'RPC_ERROR', blockNumber: '0', balances: null, error: 'RPC_FETCH_FAILED' });
       }
     };
 
@@ -129,7 +132,7 @@ export default function ArenaStagePage() {
               </span>
             </h1>
             <p className="text-xs text-gray-400">
-              "Freysa mất $45k vì guard nằm trong LLM. Thử lừa agent này xem."
+              {tr('"Freysa mất $45k vì guard nằm trong LLM. Thử lừa agent này xem."', '"Freysa lost $45k because the guard lived inside the LLM. Try to fool this agent."')}
             </p>
           </div>
         </div>
@@ -156,7 +159,7 @@ export default function ArenaStagePage() {
             <>
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
               <span className="text-amber-400 font-bold">
-                {fujiBalances?.error || 'Đang kết nối Fuji RPC...'}
+                {fujiBalances?.error === 'RPC_FETCH_FAILED' ? tr('RPC lỗi', 'RPC error') : fujiBalances?.error || tr('Đang kết nối Fuji RPC...', 'Connecting to Fuji RPC...')}
               </span>
             </>
           )}
@@ -167,15 +170,15 @@ export default function ArenaStagePage() {
             <span className="text-white font-bold">{fujiBalances?.balances?.treasuryUsdc ?? '5.80'} USDC</span>
           </div>
           <div>
-            <span className="text-gray-400">Ví Phiên (0x46a8...): </span>
+            <span className="text-gray-400">{tr('Ví Phiên', 'Session Wallet')} (0x46a8...): </span>
             <span className="text-cyan-300 font-bold">{fujiBalances?.balances?.sessionWalletUsdc ?? '0.20'} USDC</span>
           </div>
           <div>
-            <span className="text-gray-400">Chi ngoài payee set: </span>
+            <span className="text-gray-400">{tr('Chi ngoài payee set', 'Spent outside payee set')}: </span>
             <span className="text-emerald-400 font-bold">{fujiBalances?.balances?.outOfScopeSpentUsdc ?? '0.00'} USDC</span>
           </div>
           <div>
-            <span className="text-gray-400">Ví Attacker Demo (0xa77A...): </span>
+            <span className="text-gray-400">{tr('Ví Attacker Demo', 'Demo Attacker Wallet')} (0xa77A...): </span>
             <span className="text-emerald-400 font-bold">{fujiBalances?.balances?.attackerDemoUsdc ?? '0.00'} USDC</span>
           </div>
         </div>
@@ -187,25 +190,25 @@ export default function ArenaStagePage() {
         <div className="bg-night border border-night-rule rounded-2xl p-6 flex flex-col items-center justify-center text-center relative overflow-hidden group">
           <div className="bg-night-rule absolute top-0 left-0 w-full h-1" />
           <span className="text-xs font-mono font-bold uppercase tracking-widest text-cyan-400 mb-2">
-            Đòn tấn công từ khán giả
+            {tr('Đòn tấn công từ khán giả', 'Audience attacks')}
           </span>
           <span className="text-6xl font-bold font-mono text-white tracking-tight">
             {stats.totalAttacks}
           </span>
-          <span className="text-xs text-gray-400 mt-2">Tổng số lượt gửi từ điện thoại</span>
+          <span className="text-xs text-gray-400 mt-2">{tr('Tổng số lượt gửi từ điện thoại', 'Total submissions from phones')}</span>
         </div>
 
         {/* M: Convinced Attacks */}
         <div className="bg-night border border-amber-900/40 rounded-2xl p-6 flex flex-col items-center justify-center text-center relative overflow-hidden group">
           <div className="bg-night-rule absolute top-0 left-0 w-full h-1" />
           <span className="text-xs font-mono font-bold uppercase tracking-widest text-amber-400 mb-2">
-            Agent bị thuyết phục
+            {tr('Agent bị thuyết phục', 'Agent convinced')}
           </span>
           <span className="text-6xl font-bold font-mono text-amber-300 tracking-tight">
             {stats.convincedAttacks}
           </span>
           <span className="text-xs text-amber-400/80 mt-2 font-medium">
-            LLM đồng ý xuất lệnh sai luật 
+            {tr('LLM đồng ý xuất lệnh sai luật', 'LLM agreed to emit a rule-breaking order')}
           </span>
         </div>
 
@@ -213,16 +216,16 @@ export default function ArenaStagePage() {
         <div className="bg-night border border-emerald-900/40 rounded-2xl p-6 flex flex-col items-center justify-center text-center relative overflow-hidden group">
           <div className="bg-night-rule absolute top-0 left-0 w-full h-1" />
           <span className="text-xs font-mono font-bold uppercase tracking-widest text-emerald-400 mb-2">
-            Tiền ra ngoài phạm vi cho phép
+            {tr('Tiền ra ngoài phạm vi cho phép', 'Funds outside the allowed scope')}
           </span>
           <span className="text-6xl font-bold font-mono text-emerald-400 tracking-tight">
             ${lossUsdc}
           </span>
           <div className="mt-2 text-xs font-mono text-gray-400 flex flex-col items-center space-y-0.5">
-            <span>Chi trong ngân sách: <strong className="text-white">${spentBudgetUsdc}</strong></span>
-            <span>Đòn hợp lệ lọt: <strong className="text-cyan-300">{formatSafeNumber(stats.passedAttacks, 0)}</strong></span>
-            <span>Chặn vì nguồn gốc: <strong className="text-rose-400 font-bold">{formatSafeNumber(stats.provenanceBlockedAttacks, 0)}</strong></span>
-            <span>Chặn đổi policy: <strong className="text-amber-400 font-bold">{formatSafeNumber(stats.policyBlockedAttacks, 0)}</strong></span>
+            <span>{tr('Chi trong ngân sách', 'Spent within budget')}: <strong className="text-white">${spentBudgetUsdc}</strong></span>
+            <span>{tr('Đòn hợp lệ lọt', 'Valid attacks passed')}: <strong className="text-cyan-300">{formatSafeNumber(stats.passedAttacks, 0)}</strong></span>
+            <span>{tr('Chặn vì nguồn gốc', 'Blocked by provenance')}: <strong className="text-rose-400 font-bold">{formatSafeNumber(stats.provenanceBlockedAttacks, 0)}</strong></span>
+            <span>{tr('Chặn đổi policy', 'Blocked policy changes')}: <strong className="text-amber-400 font-bold">{formatSafeNumber(stats.policyBlockedAttacks, 0)}</strong></span>
           </div>
         </div>
       </div>
@@ -230,12 +233,12 @@ export default function ArenaStagePage() {
       {/* Sandbox Budget Remaining Bar (WOW-F11) */}
       <div className="bg-night border border-night-rule rounded-2xl p-4 mb-6 flex flex-col md:flex-row items-center justify-between font-mono text-xs">
         <div className="flex items-center space-x-3 mb-2 md:mb-0">
-          <span className="text-gray-400 font-bold">Ngân sách sandbox còn lại:</span>
+          <span className="text-gray-400 font-bold">{tr('Ngân sách sandbox còn lại:', 'Sandbox budget remaining:')}</span>
           <span className="text-emerald-400 font-bold text-sm">
             ${remainingUsdc} / ${capUsdc}
           </span>
           <span className="text-slate-300 text-[13px]">
-            (Đã chi: ${spentBudgetUsdc})
+            ({tr('Đã chi', 'Spent')}: ${spentBudgetUsdc})
           </span>
         </div>
         <div className="w-full md:w-72 bg-night-2 rounded-full h-2.5 overflow-hidden border border-night-rule">
@@ -254,9 +257,9 @@ export default function ArenaStagePage() {
         <div className="lg:col-span-1 bg-night border border-night-rule rounded-2xl p-6 flex flex-col items-center justify-between text-center">
           <div className="w-full">
             <span className="text-xs font-mono font-bold text-red-400 uppercase tracking-widest block mb-1">
-              THỬ THÁCH KHÁN GIẢ
+              {tr('THỬ THÁCH KHÁN GIẢ', 'AUDIENCE CHALLENGE')}
             </span>
-            <h2 className="text-base font-bold text-white mb-4">Quét QR trên điện thoại</h2>
+            <h2 className="text-base font-bold text-white mb-4">{tr('Quét QR trên điện thoại', 'Scan the QR on your phone')}</h2>
 
             {/* Real scannable QR Code (WOW-F15) */}
             <div className="mb-2">
@@ -265,8 +268,8 @@ export default function ArenaStagePage() {
           </div>
 
           <div className="text-[13px] text-gray-400 bg-red-950/20 p-2.5 rounded-data border border-red-900/30 w-full mt-4">
-            <span className="font-bold text-red-300 block mb-1">Quy tắc Arena:</span>
-            Mọi đòn tấn công được truyền trực tiếp vào Agent qua sandbox. Validator chặn người nhận không truy về chữ ký owner, lệnh vượt cap, và mọi lệnh đổi policy.
+            <span className="font-bold text-red-300 block mb-1">{tr('Quy tắc Arena:', 'Arena rules:')}</span>
+            {tr('Mọi đòn tấn công được truyền trực tiếp vào Agent qua sandbox. Validator chặn người nhận không truy về chữ ký owner, lệnh vượt cap, và mọi lệnh đổi policy.', 'Every attack is fed straight into the Agent through the sandbox. The validator blocks payees that do not trace back to the owner signature, orders above the cap, and any policy-change order.')}
           </div>
         </div>
 
@@ -275,14 +278,14 @@ export default function ArenaStagePage() {
           <div className="flex items-center justify-between border-b border-night-rule pb-3 mb-3">
             <div className="flex items-center space-x-2">
               <span className="text-xs font-mono font-bold uppercase tracking-wider text-gray-400">
-                Nhật ký đòn tấn công trực tiếp (Live Attack Feed)
+                {tr('Nhật ký đòn tấn công trực tiếp (Live Attack Feed)', 'Live Attack Feed')}
               </span>
               <span className="text-[13px] font-mono bg-cyan-950/40 text-cyan-300 border border-cyan-800 px-2 py-0.5 rounded-full">
-                Thời gian thực
+                {tr('Thời gian thực', 'Real time')}
               </span>
             </div>
             <span className="text-xs text-slate-300 font-mono">
-              Hiển thị {data.recentAttacks?.length || 0} đòn gần nhất
+              {tr('Hiển thị', 'Showing')} {data.recentAttacks?.length || 0} {tr('đòn gần nhất', 'most recent attacks')}
             </span>
           </div>
 
@@ -304,7 +307,7 @@ export default function ArenaStagePage() {
                     <div className="flex items-center space-x-2">
                       {atk.agentConvinced && (
                         <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-tag font-mono text-[13px] font-bold">
-                          LLM THUYẾT PHỤC ✅
+                          {tr('LLM THUYẾT PHỤC ✅', 'LLM CONVINCED ✅')}
                         </span>
                       )}
                       {(atk.toProvenance || atk.verdict?.toProvenance) && (
@@ -319,7 +322,7 @@ export default function ArenaStagePage() {
                               : 'bg-amber-950/40 text-amber-300 border-amber-700/60'
                           }`}
                         >
-                          NGUỒN: {atk.toProvenance || atk.verdict?.toProvenance}
+                          {tr('NGUỒN', 'SOURCE')}: {atk.toProvenance || atk.verdict?.toProvenance}
                         </span>
                       )}
                       <span
@@ -332,24 +335,24 @@ export default function ArenaStagePage() {
                         }`}
                       >
                         {atk.verdict?.outcome === 'BLOCK'
-                          ? `CHẶN BỞI ${atk.verdict?.rule || 'RULE'}`
+                          ? `${tr('CHẶN BỞI', 'BLOCKED BY')} ${atk.verdict?.rule || 'RULE'}`
                           : atk.verdict?.outcome === 'QUEUE'
-                          ? `VÀO HÀNG ĐỢI (${atk.verdict?.rule})`
-                          : 'HỢP LỆ'}
+                          ? `${tr('VÀO HÀNG ĐỢI', 'QUEUED')} (${atk.verdict?.rule})`
+                          : tr('HỢP LỆ', 'VALID')}
                       </span>
                     </div>
                   </div>
 
                   {/* Attack Prompt (W5-F2: clean unescaped React text node) */}
                   <div className="text-sm font-medium text-gray-100">
-                    <span className="text-slate-300 mr-2 font-mono text-xs">Đòn tấn công:</span>
+                    <span className="text-slate-300 mr-2 font-mono text-xs">{tr('Đòn tấn công:', 'Attack:')}</span>
                     <span className="text-rose-300">"{unescapeForDisplay(atk.sanitizedPrompt)}"</span>
                   </div>
 
                   {/* Decoded Morse info if present */}
                   {atk.decodedMorse && (
                     <div className="text-xs bg-amber-950/30 border border-amber-800/40 p-2 rounded-tag text-amber-200 font-mono">
-                      <span className="font-bold">Mã Morse giải mã:</span> {atk.decodedMorse}
+                      <span className="font-bold">{tr('Mã Morse giải mã:', 'Decoded Morse:')}</span> {atk.decodedMorse}
                     </div>
                   )}
 
@@ -365,12 +368,12 @@ export default function ArenaStagePage() {
                           onClick={() => setExpandedTraceId(expandedTraceId === atk.id ? null : atk.id)}
                           className="text-[13px] text-cyan-400 hover:text-cyan-300 underline font-mono flex items-center gap-1"
                         >
-                          <span>{expandedTraceId === atk.id ? 'Thu gọn Trace' : 'Xem Provenance Trace'}</span>
+                          <span>{expandedTraceId === atk.id ? tr('Thu gọn Trace', 'Collapse Trace') : tr('Xem Provenance Trace', 'View Provenance Trace')}</span>
                         </button>
                       )}
                     </div>
                     <span className="text-emerald-400 font-mono font-bold text-[13px]">
-                      Tổn thất: $0.00
+                      {tr('Tổn thất', 'Loss')}: $0.00
                     </span>
                   </div>
 
@@ -387,8 +390,8 @@ export default function ArenaStagePage() {
                 <svg className="w-10 h-10 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
-                <p className="text-xs font-mono">Đang chờ đòn tấn công đầu tiên từ khán giả...</p>
-                <p className="text-[13px] text-slate-400">Quét mã QR bên cạnh để bắt đầu thử nghiệm.</p>
+                <p className="text-xs font-mono">{tr('Đang chờ đòn tấn công đầu tiên từ khán giả...', 'Waiting for the first attack from the audience...')}</p>
+                <p className="text-[13px] text-slate-400">{tr('Quét mã QR bên cạnh để bắt đầu thử nghiệm.', 'Scan the QR code beside this feed to start testing.')}</p>
               </div>
             )}
           </div>
@@ -398,7 +401,7 @@ export default function ArenaStagePage() {
       {/* Bottom Bar: Key Slogan */}
       <div className="mt-4 pt-4 border-t border-night-rule flex items-center justify-between text-xs text-slate-300 font-mono">
         <div>
-          <span className="text-white font-bold">"LLM có thể bị lừa. Ngân sách trên Avalanche thì không."</span>
+          <span className="text-white font-bold">{tr('"LLM có thể bị lừa. Ngân sách trên Avalanche thì không."', '"An LLM can be fooled. A budget on Avalanche cannot."')}</span>
         </div>
         <div>
           <span>MissionPay · Avalanche Fuji</span>

@@ -10,6 +10,16 @@ import { Kicker, Stop } from '@/components/Display';
 
 export default function VerifyMissionProofPage() {
   const { t } = useI18n();
+  // The verify API returns Vietnamese anchor-status text; map known strings to i18n keys so EN shows English.
+  const ANCHOR_TEXT_KEYS: Record<string, string> = {
+    'DEMO SEED — Chưa neo on-chain': 'verify.anchor.demo_seed_label',
+    'Dữ liệu mô phỏng chuẩn bị sẵn cho máy chiếu offline, tx_hash rỗng.': 'verify.anchor.demo_seed_note',
+    'Đã neo on-chain (Fuji)': 'verify.anchor.anchored_label',
+    'Chưa neo on-chain': 'verify.anchor.unanchored_label',
+    'Đã đọc trực tiếp từ hàm anchoredMissionProofs trên hợp đồng GuardedTreasury (Avalanche Fuji).': 'verify.anchor.anchored_note',
+    'Chưa có giao dịch neo on-chain hoặc đang ở chế độ mô phỏng MOCK.': 'verify.anchor.unanchored_note',
+  };
+  const localizeAnchorText = (text?: string) => (text && ANCHOR_TEXT_KEYS[text] ? t(ANCHOR_TEXT_KEYS[text]) : text);
   const params = useParams();
   const missionId = (params?.missionId as string) || 'default-mission';
 
@@ -411,7 +421,7 @@ export default function VerifyMissionProofPage() {
                     ? 'Anchored on Avalanche Fuji'
                     : isHeadMismatch
                     ? 'Mismatch with On-Chain Anchor'
-                    : anchorStatus?.label || t('verify.card.not_anchored')}
+                    : localizeAnchorText(anchorStatus?.label) || t('verify.card.not_anchored')}
                 </span>
 
                 {isHeadMatch && (
@@ -472,7 +482,7 @@ export default function VerifyMissionProofPage() {
             )}
 
             <div className="text-xs text-ink-2">
-              {anchorStatus?.note || 'Strict cryptographic verification against verified receipts.'}
+              {localizeAnchorText(anchorStatus?.note) || 'Strict cryptographic verification against verified receipts.'}
             </div>
           </div>
 

@@ -16,6 +16,7 @@ test.describe('A2: Passkey Mission Authority (RIP-7212 Precompile 0x100 & Real W
       (window as any).__simulateWebAuthnCancel = true;
     });
 
+    await page.addInitScript(() => localStorage.setItem('missionpay_lang', 'vi')); // assertions below check Vietnamese UI copy
     await page.goto('/missions/new');
     await expect(page.getByTestId('passkey-page-header')).toBeVisible();
 
@@ -202,6 +203,7 @@ test.describe('A2: Passkey Mission Authority (RIP-7212 Precompile 0x100 & Real W
     });
 
     // 3. Navigate to /missions/new
+    await page.addInitScript(() => localStorage.setItem('missionpay_lang', 'vi')); // assertions below check Vietnamese UI copy
     await page.goto('/missions/new');
     await expect(page.getByTestId('passkey-page-header')).toBeVisible();
 
@@ -309,6 +311,7 @@ test.describe('A2: Passkey Mission Authority (RIP-7212 Precompile 0x100 & Real W
       return route.continue();
     });
 
+    await page.addInitScript(() => localStorage.setItem('missionpay_lang', 'vi')); // assertions below check Vietnamese UI copy
     await page.goto('/missions/new');
 
     // Register passkey first
@@ -473,6 +476,7 @@ test.describe('A2: Passkey Mission Authority (RIP-7212 Precompile 0x100 & Real W
       return route.continue();
     });
 
+    await page.addInitScript(() => localStorage.setItem('missionpay_lang', 'vi')); // assertions below check Vietnamese UI copy
     await page.goto('/missions/new');
 
     const registerBtn = page.getByTestId('register-passkey-btn');
@@ -583,6 +587,7 @@ test.describe('A2: Passkey Mission Authority (RIP-7212 Precompile 0x100 & Real W
       return route.continue();
     });
 
+    await page.addInitScript(() => localStorage.setItem('missionpay_lang', 'vi')); // assertions below check Vietnamese UI copy
     await page.goto('/missions/new');
 
     const registerBtn = page.getByTestId('register-passkey-btn');
@@ -690,6 +695,7 @@ test.describe('A2: Passkey Mission Authority (RIP-7212 Precompile 0x100 & Real W
       return route.continue();
     });
 
+    await page.addInitScript(() => localStorage.setItem('missionpay_lang', 'vi')); // assertions below check Vietnamese UI copy
     await page.goto('/missions/new');
 
     const registerBtn = page.getByTestId('register-passkey-btn');

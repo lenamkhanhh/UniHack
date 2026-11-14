@@ -3,6 +3,11 @@ import path from 'path';
 import fs from 'fs';
 
 test.describe('WOW-1: Freysa Arena Live Attack & Stage Invariants', () => {
+  test.beforeEach(async ({ page }) => {
+    // These assertions check Vietnamese UI copy: pin the UI language to Vietnamese (lib/i18n.tsx reads missionpay_lang from localStorage)
+    await page.addInitScript(() => localStorage.setItem('missionpay_lang', 'vi'));
+  });
+
   test('Audience submits adversarial attack from mobile arena and stage screen displays real-time block and $0.00 loss', async ({ page, request }) => {
     // 0. Ensure fresh rate limit bucket for isolated test execution
     await request.post('/api/arena/stats', {

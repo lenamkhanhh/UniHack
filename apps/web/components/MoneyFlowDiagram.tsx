@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { DEMO_SEED_MONEY_FLOW_ENTRIES, SeedLedgerEntry } from '@/lib/demo-seeds';
+import { useI18n } from '@/lib/i18n';
 
 interface MoneyFlowProps {
   mode?: 'LIVE' | 'DEMO SEED' | 'MOCK';
@@ -20,6 +21,8 @@ interface ParsedEntry {
 }
 
 export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, autoSimulate = false }: MoneyFlowProps) {
+  const { lang } = useI18n();
+  const tr = (vi: string, en: string) => (lang === 'vi' ? vi : en);
   const [animationState, setAnimationState] = useState<'IDLE' | 'FLOWING_VALID' | 'FLOWING_BLOCKED' | 'BOUNCED'>('IDLE');
   const [blockedRule, setBlockedRule] = useState<string>('RECIPIENT_NOT_ALLOWLISTED');
   const [realEntries, setRealEntries] = useState<ParsedEntry[]>([]);
@@ -135,7 +138,7 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
         <div className="flex items-center space-x-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
           <h3 className="text-sm font-bold tracking-wide text-white uppercase">
-            LIVING MONEY FLOW — LIÊN KẾT AUDIT LEDGER
+            {tr('LIVING MONEY FLOW — LIÊN KẾT AUDIT LEDGER', 'LIVING MONEY FLOW — LINKED TO AUDIT LEDGER')}
           </h3>
         </div>
         <div className="flex items-center space-x-2">
@@ -149,7 +152,7 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
             </span>
           ) : (
             <span className="text-[13px] bg-night-rule text-gray-300 border border-night-rule px-2.5 py-0.5 rounded-tag font-bold">
-              MOCK — chưa gửi lên chain
+              {tr('MOCK — chưa gửi lên chain', 'MOCK — not sent on-chain')}
             </span>
           )}
         </div>
@@ -158,7 +161,7 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
       {/* DEMO SEED Banner if in seed mode */}
       {mode === 'DEMO SEED' && (
         <div className="mb-4 p-2.5 bg-amber-950/40 border border-amber-500/40 rounded-data text-[13px] text-amber-200 text-center font-bold">
-          DEMO SEED — DỮ LIỆU MÔ PHỎNG DETERMINISTIC, KHÔNG PHẢI GIAO DỊCH THẬT
+          {tr('DEMO SEED — DỮ LIỆU MÔ PHỎNG DETERMINISTIC, KHÔNG PHẢI GIAO DỊCH THẬT', 'DEMO SEED — DETERMINISTIC SIMULATED DATA, NOT REAL TRANSACTIONS')}
         </div>
       )}
 
@@ -186,7 +189,7 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
           <div className="w-14 h-14 rounded-2xl bg-emerald-950/60 border-2 border-emerald-500 flex items-center justify-center">
             <span className="font-mono text-sm font-bold text-emerald-300">EOA</span>
           </div>
-          <span className="text-xs font-bold text-emerald-300 mt-2">Ví Phiên</span>
+          <span className="text-xs font-bold text-emerald-300 mt-2">{tr('Ví Phiên', 'Session Wallet')}</span>
           <span className="text-[13px] text-gray-400">Session EOA</span>
           <span className="text-[13px] text-emerald-400 font-bold">Cap: 5.00 USDC</span>
         </div>
@@ -263,24 +266,24 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
             disabled={animationState !== 'IDLE'}
             className="bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/50 text-emerald-300 px-3 py-1.5 rounded-data text-xs font-bold transition disabled:opacity-50"
           >
-            ▶️ Mô Phỏng Luồng Hợp Lệ ($0.05)
+            {tr('▶️ Mô Phỏng Luồng Hợp Lệ ($0.05)', '▶️ Simulate Valid Flow ($0.05)')}
           </button>
           <button
             onClick={triggerBlockedFlow}
             disabled={animationState !== 'IDLE'}
             className="bg-red-600/20 hover:bg-red-600/30 border border-red-500/50 text-red-300 px-3 py-1.5 rounded-data text-xs font-bold transition disabled:opacity-50"
           >
-            Mô Phỏng Đòn Tấn Công Bị Chặn
+            {tr('Mô Phỏng Đòn Tấn Công Bị Chặn', 'Simulate Blocked Attack')}
           </button>
         </div>
 
         <div className="text-[13px] text-gray-400">
-          Hiệu ứng:{' '}
+          {tr('Hiệu ứng', 'Animation')}:{' '}
           <span className="text-white font-bold">
-            {animationState === 'IDLE' && 'Sẵn sàng'}
-            {animationState === 'FLOWING_VALID' && 'Hạt tiền đang chuyển đến Merchant...'}
-            {animationState === 'FLOWING_BLOCKED' && 'Attacker đang cố gắng rút...'}
-            {animationState === 'BOUNCED' && `BẬT NGƯỢC! Khiên chặn: ${blockedRule}`}
+            {animationState === 'IDLE' && tr('Sẵn sàng', 'Ready')}
+            {animationState === 'FLOWING_VALID' && tr('Hạt tiền đang chuyển đến Merchant...', 'Funds are moving to the Merchant...')}
+            {animationState === 'FLOWING_BLOCKED' && tr('Attacker đang cố gắng rút...', 'Attacker is trying to withdraw...')}
+            {animationState === 'BOUNCED' && `${tr('BẬT NGƯỢC! Khiên chặn', 'BOUNCED! Shield blocked')}: ${blockedRule}`}
           </span>
         </div>
       </div>
@@ -289,14 +292,14 @@ export default function MoneyFlowDiagram({ mode = 'DEMO SEED', missionSlug, auto
       <div className="mt-4 pt-3 border-t border-night-rule">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[13px] text-gray-400 uppercase tracking-wider font-bold">
-            Sổ Cái Ledger ({activeEntries.length} bản ghi):
+            {tr('Sổ Cái Ledger', 'Ledger')} ({activeEntries.length} {tr('bản ghi', 'records')}):
           </span>
-          {loading && <span className="text-[13px] text-cyan-400">Đang tải ledger...</span>}
+          {loading && <span className="text-[13px] text-cyan-400">{tr('Đang tải ledger...', 'Loading ledger...')}</span>}
         </div>
 
         {activeEntries.length === 0 ? (
           <div className="p-4 bg-night border border-night-rule rounded-data text-center text-xs text-gray-500 font-mono">
-            Sổ cái ledger hiện chưa có giao dịch nào.
+            {tr('Sổ cái ledger hiện chưa có giao dịch nào.', 'The ledger has no transactions yet.')}
           </div>
         ) : (
           <div className="space-y-1.5 max-h-48 overflow-y-auto">

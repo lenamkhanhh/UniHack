@@ -53,7 +53,7 @@ export default function DemoPage() {
   const [systemPaused, setSystemPaused] = useState(false);
 
   // Autonomous AI Agent State (AGENT-01)
-  const [agentGoal, setAgentGoal] = useState('Tóm tắt 3 nguồn về Avalanche blockchain architecture và transaction fees');
+  const [agentGoal, setAgentGoal] = useState('Summarize 3 sources on Avalanche blockchain architecture and transaction fees');
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentSteps, setAgentSteps] = useState<any[]>([]);
   const [agentDeliverable, setAgentDeliverable] = useState<any>(null);
@@ -1120,7 +1120,7 @@ export default function DemoPage() {
                 />
                 <button
                   type="button"
-                  onClick={() => setAgentGoal('Tóm tắt 3 nguồn về Avalanche blockchain architecture và transaction fees')}
+                  onClick={() => setAgentGoal('Summarize 3 sources on Avalanche blockchain architecture and transaction fees')}
                   className="bg-mist hover:bg-mist-2 text-ink-2 text-[13px] px-2.5 py-1.5 rounded-full border border-rule whitespace-nowrap"
                 >
                   Preset: Avalanche

@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
     const goal =
       typeof body.goal === 'string' && body.goal.trim().length > 0
         ? body.goal.trim()
-        : 'Tóm tắt 3 nguồn về Avalanche blockchain architecture và transaction fees';
+        : 'Summarize 3 sources on Avalanche blockchain architecture and transaction fees';
 
     const history: AgentHistoryStep[] = [];
     const stepLogs: any[] = [];
