@@ -11,6 +11,46 @@ interface Props {
 export default function ProvenanceTraceDisplay({ trace }: Props) {
   const { lang } = useI18n();
   const tr = (vi: string, en: string) => (lang === 'vi' ? vi : en);
+
+  const translateLabel = (label: string) => {
+    if (lang === 'vi') return label;
+    if (label.includes('Dữ Liệu Đầu Vào Không Tin Cậy')) return 'Untrusted Input Data';
+    if (label.includes('Số Tiền Bị Đầu Độc Trong Dữ Liệu')) return 'Poisoned Amount in Data';
+    if (label.includes('Nguồn Dữ Liệu Hợp Lệ')) return 'Legitimate Data Source';
+    if (label.includes('Trích Xuất Trường Recipient')) return 'Extracted Recipient Field';
+    if (label.includes('Trích Xuất Trường Amount')) return 'Extracted Amount Field';
+    if (label.includes('Trường Thanh Toán Hợp Lệ')) return 'Valid Payment Field';
+    if (label.includes('Đề Xuất Payout Của Agent')) return 'Agent Payout Proposal';
+    if (label.includes('Đề Xuất Hợp Lệ Của Agent')) return 'Valid Agent Proposal';
+    if (label.includes('Validator Off-Chain Chặn Giao Dịch')) return 'Off-Chain Validator Blocks Transaction';
+    if (label.includes('Validator Off-Chain Phê Duyệt')) return 'Off-Chain Validator Approves';
+    if (label.includes('Hợp Đồng Thông Minh')) return 'Smart Contract on Avalanche Fuji';
+    return label;
+  };
+
+  const translateSummary = (s: string) => {
+    if (lang === 'vi') return s;
+    return s
+      .replace('Dữ liệu bẩn từ', 'Tainted data from')
+      .replace('bị chặn bởi', 'blocked by')
+      .replace('và được bảo đảm revert on-chain bởi', 'and guaranteed to revert on-chain via')
+      .replace('Lớp on-chain: Chưa kiểm tra trực tiếp cho lượt này.', 'On-chain layer: Not tested directly for this run.')
+      .replace('Dữ liệu hợp lệ từ [OWNER_MISSION] được phê duyệt an toàn.', 'Legitimate data from [OWNER_MISSION] safely authorized.');
+  };
+
+  const translateDetail = (d: string) => {
+    if (lang === 'vi') return d;
+    return d
+      .replace('Taint registry phát hiện địa chỉ', 'Taint registry detected address')
+      .replace('xuất hiện trong nội dung không được xác thực từ bên ngoài.', 'appearing in untrusted external content.')
+      .replace("Trường 'recipient' chứa địa chỉ kẻ tấn công:", "Field 'recipient' contains attacker address:")
+      .replace('Agent bị thuyết phục bởi nội dung độc hại và tạo đề xuất payout', 'Agent deceived by untrusted input, proposing payout of')
+      .replace('tới', 'to')
+      .replace('Kích hoạt quy tắc bảo vệ:', 'Validator policy check:')
+      .replace('Lý do:', 'Reason:')
+      .replace('Mô phỏng server bị chiếm: Gọi thẳng proposeWithProof lên Fuji -> Kết quả mô phỏng:', 'Simulated compromised server: direct proposeWithProof call to Fuji -> Result:');
+  };
+
   return (
     <div className="bg-paper border border-rule rounded-data p-5 space-y-4">
       <div className="flex items-center justify-between border-b border-rule pb-3">
@@ -31,27 +71,27 @@ export default function ProvenanceTraceDisplay({ trace }: Props) {
       </div>
 
       <p className="text-xs text-ink-2 font-mono bg-card p-2.5 rounded-data border border-rule">
-        {trace.summary}
+        {translateSummary(trace.summary)}
       </p>
 
       {/* Visual Step-by-Step Flow */}
       <div className="relative pl-6 space-y-4 border-l-2 border-rule ml-3">
         {trace.steps.map((st) => {
-          let badgeColor = 'bg-slate-800 text-slate-300 border-slate-700';
-          let dotColor = 'bg-slate-500';
+          let badgeColor = 'bg-mist text-ink-2 border-rule';
+          let dotColor = 'bg-slate-400';
 
           if (st.status === 'TAINTED') {
-            badgeColor = 'bg-amber-950/80 text-amber-300 border-amber-800/70';
-            dotColor = 'bg-amber-400';
+            badgeColor = 'bg-warn-bg text-warn border-warn-rule';
+            dotColor = 'bg-amber';
           } else if (st.status === 'BLOCKED') {
-            badgeColor = 'bg-red-950/80 text-red-300 border-red-800/70';
-            dotColor = 'bg-red-500';
+            badgeColor = 'bg-blocked-bg text-blocked border-blocked-rule';
+            dotColor = 'bg-brand';
           } else if (st.status === 'REVERTED') {
-            badgeColor = 'bg-emerald-950/80 text-emerald-300 border-emerald-800/70';
-            dotColor = 'bg-emerald-400';
+            badgeColor = 'bg-paid-bg text-paid border-paid-rule';
+            dotColor = 'bg-paid';
           } else if (st.status === 'SAFE') {
-            badgeColor = 'bg-emerald-950/60 text-emerald-300 border-emerald-800/50';
-            dotColor = 'bg-emerald-500';
+            badgeColor = 'bg-paid-bg text-paid border-paid-rule';
+            dotColor = 'bg-paid';
           }
 
           return (
@@ -64,14 +104,14 @@ export default function ProvenanceTraceDisplay({ trace }: Props) {
               <div className="bg-card border border-rule rounded-data p-3 space-y-1 hover:border-rule transition">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-semibold text-ink">
-                    {tr('Bước', 'Step')} {st.step}: {st.label}
+                    {tr('Bước', 'Step')} {st.step}: {translateLabel(st.label)}
                   </span>
                   <span className={`text-[13px] font-mono px-2 py-0.5 rounded-tag border ${badgeColor}`}>
                     {st.status}
                   </span>
                 </div>
                 <div className="text-[13px] font-mono text-ink-2">{st.source}</div>
-                <div className="text-xs text-ink-2">{st.detail}</div>
+                <div className="text-xs text-ink-2">{translateDetail(st.detail)}</div>
               </div>
             </div>
           );

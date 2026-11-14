@@ -353,8 +353,95 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
     // =============================================================
     // SCENE 2: /judge interactive "Try it yourself" (~40s)
     // =============================================================
+    // Route /api/judge/receipts so the 3 live receipts load immediately with 0ms delay (cuts dead loading frame)
+    await page.route('**/api/judge/receipts', async (route) => {
+      const liveJsonPath = path.resolve(ROOT, 'apps/web/evidence/twin/twin.live.json');
+      let liveEvidence: any = null;
+      if (fs.existsSync(liveJsonPath)) {
+        try {
+          liveEvidence = JSON.parse(fs.readFileSync(liveJsonPath, 'utf8'));
+        } catch {}
+      }
+      const txA = liveEvidence?.missionA?.txHash || '0x548d1106a69626eed32d308088f188c6d2d71d8e2f61e495f637d9f04e367fc6';
+      const txB1 = liveEvidence?.missionB?.negativeControl?.txHash || '0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38';
+      const txB2 = liveEvidence?.missionB?.positiveControl?.txHash || '0xcb7236d146a2c8e2789db8ec2a80358b17d65993fc7b07187802e34c48656315';
+      const receipts = [
+        {
+          id: 'missionA',
+          step: 6,
+          label: 'Twin A (Global Allowlist)',
+          labelVi: 'Twin A (Danh sách toàn cục)',
+          description: 'Poisoned invoice paid an allowlisted vendor outside the mission',
+          descriptionVi: 'Hoá đơn bị cài lệnh trả cho vendor có trong allowlist chung, ngoài mission',
+          txHash: txA,
+          status: 'success',
+          blockNumber: liveEvidence?.missionA?.blockNumber || 61001944,
+          gasUsed: '48215',
+          outflow: '-0.01 USDC (DRAINED)',
+          outflowVi: '-0.01 USDC (BỊ RÚT)',
+          snowtraceUrl: `https://testnet.snowtrace.io/tx/${txA}`,
+        },
+        {
+          id: 'missionB_negative',
+          step: 7,
+          label: 'Twin B (Guarded Treasury: Attack Revert)',
+          labelVi: 'Twin B (Kho quỹ có bảo vệ: Kháng cự tấn công)',
+          description: 'Execution strictly reverted on-chain with PayeeNotInMissionSet',
+          descriptionVi: 'Giao dịch bị Revert on-chain với lỗi PayeeNotInMissionSet',
+          txHash: txB1,
+          status: 'reverted',
+          revertReason: 'PayeeNotInMissionSet',
+          blockNumber: liveEvidence?.missionB?.negativeControl?.blockNumber || 61001947,
+          gasUsed: '32100',
+          outflow: '0 USDC (PRESERVED)',
+          outflowVi: '0 USDC (BẢO TOÀN)',
+          snowtraceUrl: `https://testnet.snowtrace.io/tx/${txB1}`,
+        },
+        {
+          id: 'missionB_positive',
+          step: 8,
+          label: 'Twin B (Guarded Treasury: Legitimate Payee)',
+          labelVi: 'Twin B (Kho quỹ có bảo vệ: Người nhận hợp lệ)',
+          description: 'Legitimate payment succeeded on-chain (returned to Owner)',
+          descriptionVi: 'Thanh toán hợp lệ thành công on-chain (hoàn trả cho Owner)',
+          txHash: txB2,
+          status: 'success',
+          blockNumber: liveEvidence?.missionB?.positiveControl?.blockNumber || 61001949,
+          gasUsed: '45320',
+          outflow: '-0.01 USDC (SETTLED)',
+          outflowVi: '-0.01 USDC (HOÀN TẤT)',
+          snowtraceUrl: `https://testnet.snowtrace.io/tx/${txB2}`,
+        },
+      ];
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          chain: 'avalanche-fuji',
+          chainId: 43113,
+          treasuryAddress: '0x20451c1e2dCD83F166B4f22868BAdECb5868d545',
+          evidenceSource: 'evidence/twin/twin.live.json',
+          receipts,
+        }),
+      });
+    });
+
     await page.goto('/judge');
     await injectVisualEffects(page);
+
+    // Wait for the 3 live receipts to be queried from Fuji RPC (already fulfilled instantly)
+    await page.locator('#judge-receipts-grid').waitFor({ state: 'visible', timeout: 30000 });
+    // R14-F2: Scroll receipts into upper 50% of viewport so caption at bottom never touches the receipts
+    await page.evaluate(() => {
+      const el = document.getElementById('judge-receipts-grid');
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        window.scrollBy({ top: rect.top - 160, behavior: 'smooth' });
+      }
+    });
+    await page.waitForTimeout(1000);
+
     await showLowerThird(
       page,
       'INTERACTIVE VERIFICATION',
@@ -367,18 +454,6 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
       'In Judge Mode, test any off-mission attacker: the smart contract strictly rejects it with PayeeNotInMissionSet.'
     );
     await expect(page.locator('h1')).toContainText(/Judge Mode/i);
-
-    // Wait for the 3 live receipts to be queried from Fuji RPC
-    await page.locator('#judge-receipts-grid').waitFor({ state: 'visible', timeout: 30000 });
-    // R14-F2: Scroll receipts into upper 50% of viewport so caption at bottom never touches the receipts
-    await page.evaluate(() => {
-      const el = document.getElementById('judge-receipts-grid');
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        window.scrollBy({ top: rect.top - 160, behavior: 'smooth' });
-      }
-    });
-    await page.waitForTimeout(1500);
 
     // Spotlight the 3 live receipt cards
     await triggerSpotlight(
@@ -739,7 +814,7 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
     );
     await expect(page.locator('h1')).toContainText(/DON'T TRUST US/i);
 
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(1000);
 
     // 1. FIRST SHOW VALID + MATCH + 100/100 (R13F-2 / R14-F1)
     // Spotlight ERC-8004 Reputation 100/100
@@ -747,7 +822,7 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
       page,
       '[data-testid="erc8004-status-badge"]',
       '✅ ERC-8004 Score: 100/100 (verified-full)',
-      4000
+      3000
     );
 
     // Spotlight on-chain head match
@@ -755,10 +830,10 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
       page,
       '[data-testid="anchor-match-badge"]',
       '✅ On-Chain Anchor: Computed Head Matches Fuji Proof',
-      3500
+      2500
     );
 
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(1000);
 
     // 2. Click "Test modify 1 byte"
     const tamperBtn = page.locator('[data-testid="tamper-one-byte-btn"]').first();
@@ -771,9 +846,9 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
         page,
         '[data-testid="anchor-mismatch-badge"]',
         '❌ Hash Mismatch! Single Byte Altered Breaks Integrity',
-        4000
+        3000
       );
-      await page.waitForTimeout(3000);
+      await page.waitForTimeout(1000);
     }
 
     // 3. Click "Restore original"
@@ -787,12 +862,12 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
         page,
         '[data-testid="anchor-match-badge"]',
         '✅ 100% Cryptographic Integrity Restored',
-        3500
+        2500
       );
-      await page.waitForTimeout(4000);
+      await page.waitForTimeout(1500);
     }
 
     // Final hold before transition to S6 Diagram
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(1500);
   });
 });

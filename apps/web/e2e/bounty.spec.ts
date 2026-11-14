@@ -61,7 +61,13 @@ test.describe('WOW-W3: "Hack the Treasury" Public Bounty Challenge (/bounty)', (
     console.log(`[E2E Bounty] Captured deck shot: ${blockedShotPath}`);
 
     // Scroll to focus on the 3-step result card and capture bounty-result.png
-    await resultCard.scrollIntoViewIfNeeded();
+    await page.evaluate(() => {
+      const el = document.getElementById('bounty-evaluation-result');
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        window.scrollBy({ top: rect.top - 100, behavior: 'instant' });
+      }
+    });
     await page.waitForTimeout(500);
     const resultShotPath = path.join(deckShotsDir, 'bounty-result.png');
     await page.screenshot({ path: resultShotPath, fullPage: false });
@@ -114,7 +120,13 @@ test.describe('WOW-W3: "Hack the Treasury" Public Bounty Challenge (/bounty)', (
 
     // 6. Capture 1920x1080 screenshot of the fooled LLM + guard block
     const deckShotsDir = path.resolve(process.cwd(), '../../artifacts/submission-s1/deck-shots');
-    await resultCard.scrollIntoViewIfNeeded();
+    await page.evaluate(() => {
+      const el = document.getElementById('bounty-evaluation-result');
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        window.scrollBy({ top: rect.top - 100, behavior: 'instant' });
+      }
+    });
     await page.waitForTimeout(500);
     const trickedShotPath = path.join(deckShotsDir, 'bounty-result-tricked.png');
     await page.screenshot({ path: trickedShotPath, fullPage: false });

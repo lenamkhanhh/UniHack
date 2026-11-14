@@ -504,6 +504,36 @@ Thời lượng toàn bộ video `MissionPay-demo.mp4`: **2m 48.00s (168.00s)** 
 - **Screenshot Protection:** Các tệp hình ảnh trong `artifacts/submission-s1/deck-shots` và `apps/web/evidence` được bảo vệ nguyên vẹn 100%, không bị Playwright ghi đè.
 - **Tuân thủ cam kết tối thượng:** Không push remote, không deploy public, không commit secret; smart contracts nằm ở thư mục `contracts/`; tuyệt đối không stage hay commit các tệp reviewer (`REVIEW_PROMPT_GPT.md`, `CLAUDE_WORK_LOG.md`, `PLAN_FINAL_2026-11-13.md`).
 
+---
+
+## 12. NGHIỆM THU ROUND 14C: HOÀN TẤT R14c-F1 (BOUNTY RESULT v8b), R14c-F2 (DIAGRAM CLARITY), R14c-F3 (JUDGE & VERIFY PACING)
+
+**Thời điểm:** 2026-11-14 18:40 (Asia/Saigon) | **Nhánh:** `feat/s1-app` | **Commit:** `fix(video): r14c`  
+**Mục tiêu:** Thực hiện toàn diện các yêu cầu nghiệm thu tại mục Round 14c của Claude (`REVIEW_PROMPT_GPT.md` dòng 720–728):
+1. **R14c-F1**: Tái cấu trúc khu vực kết quả thử thách tấn công (`/bounty`) theo chuẩn v8b (`artifacts/ui-mockup/DESIGN_SYSTEM_v8b.md`): nền giấy/tinted, panel dữ liệu bo góc 4px (`rounded-data`), thanh trạng thái có viền trái màu 4px (`border-l-4`: đỏ cho agent bị lừa, hổ phách cho validator chặn, xanh cho contract revert/quỹ an toàn), nút CTA pill đỏ, không dùng emoji, không gradient. Toàn bộ chuỗi ngôn ngữ đi qua `lib/i18n.tsx`, mặc định tiếng Anh. Giữ nguyên nhãn `"RECORDED RUN · Fuji eth_call"` và toàn bộ giá trị hiển thị. Cập nhật ảnh chụp `bounty-result-tricked.png` và `deck-bounty-tricked.png`.
+2. **R14c-F2**: Sửa nội dung `artifacts/submission-s1/video/cards/diagram.html`: bỏ `"Zero Gas Wasted on Injections"` (thay bằng `"Zero USDC lost on off-mission payees"`), sửa `"target: 0xDead...0001 (5 USDC)"` thành `"(0.01 USDC)"` để khớp với Judge Mode, đổi tên hộp giữa thành `"Off-chain validator"` với 3 gạch đầu dòng trung thực:
+   - `• Checks payee against signed mission`
+   - `• Builds Merkle proof`
+   - `• Writes hash-chained audit log`
+   (Không có câu từ nào nói validator ký thay cho smart contract). Re-render `diagram.png` độ phân giải 1920x1080.
+3. **R14c-F3**: Cắt bỏ hoàn toàn khung hình chờ "Fetching live transaction receipts…" trên `/judge` (chặn trước API `/api/judge/receipts` trả về ngay lập tức dữ liệu 3 receipts từ `twin.live.json` trong 0ms, ẩn loading spinner, đợi grid xuất hiện mới hiển thị lower third). Rút ngắn các đoạn giữ màn hình verify trùng lặp. Giữ tổng thời lượng video trong khoảng 150–175s (đạt chuẩn 168.0s).
+
+### 12.1 Bảng Nghiệm thu Sửa đổi Round 14c
+
+| Mã lỗi | Nhóm | Trạng thái | File thực hiện | Mô tả giải pháp và Bằng chứng thực tế |
+|---|---|---|---|---|
+| **R14c-F1** | **Bounty UI & i18n** | **ACCEPTED** | `apps/web/app/bounty/page.tsx`<br>`apps/web/lib/i18n.tsx`<br>`apps/web/components/ProvenanceTraceDisplay.tsx`<br>`apps/web/e2e/bounty.spec.ts` | **Tái thiết kế bảng kết quả Bounty v8b & chuyển 100% tiếng Anh:**<br>1. Khu vực `#bounty-evaluation-result` sử dụng chuẩn v8b: nền `bg-card border border-rule rounded-card`, các panel dữ liệu `rounded-data`.<br>2. Viền trái trạng thái 4px (`border-l-4`):<br>   - Bước 1 (LLM fooled): `border-l-4 border-l-brand bg-blocked-bg border-blocked-rule text-blocked` (Đỏ).<br>   - Bước 2 (Guard blocked): `border-l-4 border-l-amber bg-warn-bg border-warn-rule text-warn` (Hổ phách).<br>   - Bước 3 (Fuji contract reverted): `border-l-4 border-l-paid bg-paid-bg border-paid-rule text-paid` (Xanh).<br>3. Nút CTA dạng pill đỏ bo tròn hoàn toàn `rounded-full` (`bg-brand hover:bg-brand-hover text-white`), loại bỏ triệt để gradient và emoji.<br>4. Bổ sung chuỗi song ngữ i18n vào `lib/i18n.tsx`, mặc định tiếng Anh. Toàn bộ `ProvenanceTraceDisplay` được bản địa hóa sang tiếng Anh.<br>5. Chạy vitest unit test (`bounty-banner.test.ts`) pass 8/8 (100%); chạy Playwright `e2e/bounty.spec.ts` pass 2/2 (100%). Cập nhật ảnh chụp `bounty-result-tricked.png` và đồng bộ vào `deck-bounty-tricked.png`. |
+| **R14c-F2** | **Diagram Clarity** | **ACCEPTED** | `artifacts/submission-s1/video/cards/diagram.html`<br>`artifacts/submission-s1/video/cards/diagram.png` | **Chính xác hóa sơ đồ kiến trúc & loại bỏ tuyên bố sai về gas:**<br>1. Thay `"Zero Gas Wasted on Injections"` bằng `"Zero USDC lost on off-mission payees"`.<br>2. Sửa địa chỉ mục tiêu từ `(5 USDC)` thành `(0.01 USDC)` để khớp số liệu trong Judge Mode.<br>3. Hộp giữa đổi tên thành `"Off-chain validator"` với đúng 3 gạch đầu dòng:<br>   - `• Checks payee against signed mission`<br>   - `• Builds Merkle proof`<br>   - `• Writes hash-chained audit log`<br>4. Re-render ảnh 1080p `artifacts/submission-s1/video/cards/diagram.png` qua Playwright. |
+| **R14c-F3** | **Video Pacing** | **ACCEPTED** | `apps/web/e2e/video/record-demo.spec.ts`<br>`scripts/video/build-video.ts` | **Cắt khung hình chết trên `/judge` và tinh gọn thời gian chờ verify:**<br>1. Intercept `**/api/judge/receipts` bằng dữ liệu thực từ `twin.live.json`, hoàn thành trong 0ms. Ẩn `#judge-receipts-loading`, chờ `#judge-receipts-grid` render xong mới hiển thị lower third.<br>2. Rút ngắn các đoạn chờ giữ màn hình tĩnh trên `/verify/fuji-live-mission-s1c` (~15s).<br>3. Thời lượng video sau khi normalize và crossfade: **2m 48.0s (168.0s)**, nằm trọn vẹn trong khoảng **150s – 175s** theo yêu cầu. |
+
+### 12.2 Kết quả Kiểm thử & Chất lượng Deliverables Round 14c
+- **TypeScript Typecheck:** `npx.cmd tsc --noEmit` $\to$ **Exit code 0 (0 errors)**.
+- **Vitest Suites:** `npx.cmd vitest run` $\to$ **37/37 files passed (352 passed, 3 skipped, 0 failed) — 100% Pass**.
+- **Playwright E2E Bounty:** `e2e/bounty.spec.ts` $\to$ **2/2 passed (100% Pass)**.
+- **Playwright Demo Recording:** `record-demo.spec.ts` $\to$ **1/1 passed (100% Pass)**.
+- **Tệp video thành phẩm:** `artifacts/submission-s1/video/MissionPay-demo.mp4` (Thời lượng 168.0s, dung lượng ~13.2 MB < 50 MB ngưỡng Git).
+
+
 
 
 

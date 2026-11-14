@@ -139,23 +139,23 @@
 
       <!-- Code pill -->
       <rect x="24" y="215" width="312" height="44" rx="4" fill="#F8FAFC" stroke="#E4E3DC"/>
-      <text x="36" y="243" fill="#2457C5" font-family="'Geist Mono', monospace" font-size="13">target: 0xDead...0001 (5 USDC)</text>
+      <text x="36" y="243" fill="#2457C5" font-family="'Geist Mono', monospace" font-size="13">target: 0xDead...0001 (0.01 USDC)</text>
     </g>
 
-    <!-- NODE 2: Mission Validator -->
+    <!-- NODE 2: Off-chain validator -->
     <g class="node-card" transform="translate(610, 150)">
       <rect width="360" height="290" rx="16" fill="#FFFFFF" stroke="#14213D" stroke-width="2" filter="drop-shadow(0 10px 25px rgba(15,17,21,0.06))"/>
       <rect x="24" y="24" width="48" height="48" rx="12" fill="#E6ECF3"/>
       <text x="48" y="56" fill="#14213D" font-size="24" font-weight="bold" text-anchor="middle">🛡️</text>
 
-      <text x="86" y="44" fill="#0F1115" font-family="'Geist', sans-serif" font-size="20" font-weight="bold">Mission Validator</text>
+      <text x="86" y="44" fill="#0F1115" font-family="'Geist', sans-serif" font-size="20" font-weight="bold">Off-chain validator</text>
       <text x="86" y="66" fill="#5E646E" font-family="'Geist Mono', monospace" font-size="13">Cryptographic Gatekeeper</text>
 
       <line x1="24" y1="92" x2="336" y2="92" stroke="#E4E3DC" stroke-width="1"/>
 
-      <text x="28" y="125" fill="#334155" font-family="'Geist', sans-serif" font-size="15" font-weight="500">• Loads Mission Manifest</text>
-      <text x="28" y="155" fill="#334155" font-family="'Geist', sans-serif" font-size="15" font-weight="500">• Computes Merkle Payee Proof</text>
-      <text x="28" y="185" fill="#14213D" font-family="'Geist', sans-serif" font-size="15" font-weight="600">• Signs cryptographic audit trail</text>
+      <text x="28" y="125" fill="#334155" font-family="'Geist', sans-serif" font-size="15" font-weight="500">• Checks payee against signed mission</text>
+      <text x="28" y="155" fill="#334155" font-family="'Geist', sans-serif" font-size="15" font-weight="500">• Builds Merkle proof</text>
+      <text x="28" y="185" fill="#334155" font-family="'Geist', sans-serif" font-size="15" font-weight="500">• Writes hash-chained audit log</text>
 
       <!-- Merkle Tree Pill -->
       <rect x="24" y="215" width="312" height="44" rx="4" fill="#F8FAFC" stroke="#E4E3DC"/>
@@ -192,7 +192,7 @@
     <div>•</div>
     <div>Zero Trust in AI Agent Reasoning</div>
     <div>•</div>
-    <div>Zero Gas Wasted on Injections</div>
+    <div>Zero USDC lost on off-mission payees</div>
   </div>
 </body>
 </html>

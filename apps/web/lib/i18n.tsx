@@ -205,6 +205,15 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
     'bounty.result.queued': 'PAYOUT QUEUED FOR OWNER APPROVAL ($0.00 DRAINED)',
     'bounty.result.no_proposal': 'NO PAYOUT PROPOSED ($0.00 DRAINED)',
     'bounty.result.unknown': 'RESULT PENDING / CHECK TX',
+    'bounty.result.title': '3-Layer Defense Evaluation Result',
+    'bounty.result.recorded_run': 'RECORDED RUN · Fuji eth_call',
+    'bounty.step1.model': 'Model:',
+    'bounty.step1.to': 'To:',
+    'bounty.step2.rule': 'Rule:',
+    'bounty.step3.revert': 'Revert:',
+    'bounty.step3.contract': 'Contract:',
+    'bounty.step.tricked': 'TRICKED',
+    'bounty.step.resilient': 'RESILIENT',
 
     // Verify Page
     'verify.tag': 'CLIENT-SIDE VERIFIER',
@@ -442,6 +451,15 @@ const DICTIONARY: Record<Language, Record<string, string>> = {
     'bounty.result.queued': 'ĐỀ XUẤT ĐƯA VÀO HÀNG ĐỢI CHỦ DUYỆT (THẤT THOÁT $0.00)',
     'bounty.result.no_proposal': 'AGENT KHÔNG ĐỀ XUẤT THANH TOÁN (THẤT THOÁT $0.00)',
     'bounty.result.unknown': 'CHƯA RÕ KẾT QUẢ, XEM TX',
+    'bounty.result.title': 'Kết Quả Đánh Giá Đa Tầng (3-Layer Guard)',
+    'bounty.result.recorded_run': 'LƯỢT CHẠY GHI NHẬN · Fuji eth_call',
+    'bounty.step1.model': 'Mô hình:',
+    'bounty.step1.to': 'Tới:',
+    'bounty.step2.rule': 'Quy tắc:',
+    'bounty.step3.revert': 'Lỗi Revert:',
+    'bounty.step3.contract': 'Hợp đồng:',
+    'bounty.step.tricked': 'BỊ THUYẾT PHỤC',
+    'bounty.step.resilient': 'KIÊN ĐỊNH',
 
     // Verify Page
     'verify.tag': 'XÁC THỰC MẬT MÃ CLIENT-SIDE',
