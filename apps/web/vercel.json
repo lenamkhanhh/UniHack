@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "cd ../.. && npm ci",
+  "buildCommand": "cd ../.. && npx prisma generate --schema apps/web/prisma/schema.prisma && npm run build",
+  "functions": {
+    "app/api/bounty/attempt/route.ts": { "maxDuration": 60 }
+  }
+}

@@ -2,6 +2,9 @@
 
 **Mục tiêu:** Tài liệu hướng dẫn cấu hình, kiểm tra môi trường và sẵn sàng triển khai (Production Readiness) cho ứng dụng MissionPay trên hạ tầng đám mây (Vercel / AWS / GCP) và Hosted PostgreSQL (Supabase / Neon), tuân thủ nguyên tắc không deploy thực tế khi chưa có lệnh phê duyệt của Owner.
 
+> **Public deploy (Vercel + Neon, ~15 phút):** làm theo [`docs/DEPLOY_RUNBOOK.md`](docs/DEPLOY_RUNBOOK.md) (các bước, bảng env REQUIRED / OPTIONAL / MUST NOT, smoke test, rollback). Tài liệu này là bảng tham chiếu đầy đủ cho Full App; **trang public cho giám khảo chỉ cần `DATABASE_URL`, `DIRECT_URL`, `PAYMENT_MODE=LIVE_FUJI` và KHÔNG được đặt bất kỳ private key nào** (`AGENT_PRIVATE_KEY`, `RELAYER_PRIVATE_KEY`, `VALIDATOR_PRIVATE_KEY`, `FACILITATOR_PRIVATE_KEY`).
+> Cấu hình Vercel nằm ở `apps/web/vercel.json` (Root Directory `apps/web`, build `@missionpay/guard` trước web, `prisma generate`). Font dùng `next/font/google` (Geist, Geist Mono, Archivo) và được tải lúc build.
+
 ---
 
 ## 1. Yêu Cầu Biến Môi Trường (Environment Variables)
@@ -28,7 +31,7 @@ Mọi biến môi trường dưới đây phải được cấu hình bằng gi�
 | `VALIDATOR_PRIVATE_KEY` | `getValidatorPrivateKey` | Khóa riêng của Validator độc lập (M7 runner): `0x<64-hex-characters-validator-key>` | **Secret (Tuyệt mật)** |
 | `VALIDATOR_ADDRESS`<br>`NEXT_PUBLIC_VALIDATOR_ADDRESS` | `runMissionValidatorJob` | Địa chỉ công khai của Validator độc lập: `0x<40-hex-characters-validator-address>` | Public |
 | `RELAYER_PRIVATE_KEY` | `/api/passkey/relay` | Khóa riêng EOA Relayer tài trợ gas cho WebAuthn passkey (tách biệt khỏi Owner): `0x<64-hex-characters-relayer-key>` | **Secret (Tuyệt mật)** |
-| `LLM_API_KEY` | `agent.ts`, `bounty.ts` | API Key Google Gemini cho LLM Planner và Bounty Challenge: `<google-ai-studio-gemini-key>`. *Nếu vắng mặt: hệ thống tự động kích hoạt fallback deterministic có gắn nhãn trung thực, không làm hỏng static build.* | **Secret (Tuyệt mật)** |
+| `LLM_API_KEY` | `agent.ts`, `bounty.ts` | API Key Google Gemini cho LLM Planner và Bounty Challenge: `<google-ai-studio-gemini-key>`. *Nếu vắng mặt: `/bounty` trả 503 `LLM_UNAVAILABLE` (KHÔNG có fallback deterministic ở `lib/bounty.ts`); build và các trang khác không bị ảnh hưởng.* | **Secret (Tuyệt mật)** |
 | `BOUNTY_INTERNAL_SECRET` | `/api/bounty/attempt` | Khóa bí mật dùng cho internal test harness phân loại source=test/smoke (x-bounty-auth-key): `<min-32-chars-bounty-secret>`. *Không có key mặc định.* | **Secret (Harness)** |
 | `TRUSTED_INGRESS` | `resolveClientIp` | Xác định nền tảng reverse proxy tin cậy để đọc IP client (`cloudflare`, `gcp`, `none`). Khi vắng mặt hoặc `none`, các IP unverified tự động gom vào shared bucket an toàn để chống xoay vòng header bypass rate limit. | Config |
 | `ARENA_PRESENTER_KEY` | `arena.ts` | Khóa bí mật dùng cho người thuyết trình đặt lại bộ đếm Stage (`/stage`): `<presenter-passcode>` | **Secret (Presenter)** |
@@ -39,6 +42,7 @@ Mọi biến môi trường dưới đây phải được cấu hình bằng gi�
 
 1. **Serverless Function Timeout:**
    - Các route agent orchestration (`/api/agent/run`), x402 settlement polling (`/api/tools/orchestrate`), và bounty challenge (`/api/bounty/attempt`) cần thời gian chờ tối thiểu **60 giây** để xử lý suy luận LLM và xác nhận transaction trên Fuji.
+   - Trên Vercel: `apps/web/vercel.json` đặt `maxDuration: 60` cho `/api/bounty/attempt`; các route khác dùng `export const maxDuration` trong route (hiện chỉ `/api/health` = 15).
    - Cấu hình trong route Next.js:
      ```typescript
      export const maxDuration = 60; // 60 seconds (Vercel Pro/Hobby)
@@ -62,6 +66,7 @@ Mọi biến môi trường dưới đây phải được cấu hình bằng gi�
 4. **Yêu Cầu Môi Trường Cho Triển Khai Công Khai (Public Deploy Matrix):**
    - **Chế độ Giám Khảo Công Khai (Judge Mode: `/judge`, `/api/judge/receipts`, `/api/judge/simulate`):**
      - Hoạt động độc lập và hoàn toàn an toàn mà **KHÔNG CẦN BẤT KỲ PRIVATE KEY NÀO** và **KHÔNG CẦN DATABASE**.
+     - `/arena/twin` (`/api/arena/twin`) cũng không cần DB nhưng đọc `evidence/twin/*.json` từ `apps/web/evidence/twin/` (phải được commit; xem runbook mục 3). `/` và `/verify/<slug>` cần DB đã seed (`scripts/seed-mission-audit.ts --slug fuji-live-mission-s1c`).
      - Chỉ yêu cầu biến duy nhất: `AVALANCHE_FUJI_RPC_URL` (nếu không cung cấp, hệ thống tự động fallback về endpoint RPC công khai của Ava Labs `https://api.avax-test.network/ext/bc/C/rpc`).
      - Tất cả các địa chỉ hợp đồng (`0x2045...d545`), agent (`0x374b...3D72`), owner (`0x4BC9...8F7c`), và mission ID là thông tin công khai đã được xác minh trên Fuji testnet.
    - **Chế độ Đầy Đủ Ứng Dụng (Full App: Dashboard, Passkey, Bounty, Validator M7):**
@@ -101,7 +106,7 @@ npm --prefix apps/web run worker:validation
 # WORKER_LIMIT=10 (số lượng job tối đa quét mỗi lượt)
 # WORKER_LEASE_SECONDS=60 (thời hạn giữ lease cho worker trước khi reclaim)
 ```
-- Kết quả: Build thành công (Exit code 0), tất cả các trang SSG/SSR compile sạch, không có cảnh báo Type error hay ESLint error.
+- Kết quả (2026-11-14, `npm run build` từ root với `DATABASE_URL` giả, không kết nối mạng ngoài ngoại trừ tải font): Build thành công, các route `/`, `/judge`, `/bounty`, `/arena`, `/arena/twin`, `/arena/stage`, `/stage`, `/bankr`, `/demo`, `/audit`, `/queue`, `/missions/new`, `/verify/[missionId]` compile sạch. Lưu ý `PAYMENT_MODE` được đọc lúc build (`app/layout.tsx`), đổi giá trị cần redeploy.
 
 ---
 
