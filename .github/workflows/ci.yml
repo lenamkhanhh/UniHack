@@ -72,6 +72,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -89,6 +91,9 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: stable
+
+      - name: Build contracts (ABI artifacts for m9-abi tests)
+        run: cd contracts && forge build
 
       - name: Generate Prisma Client
         run: npm --workspace=apps/web run prisma:generate

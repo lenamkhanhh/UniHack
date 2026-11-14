@@ -1729,7 +1729,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
     const webDir = path.resolve(__dirname, '..');
 
     // 1. Dry run with empty queue -> exits 0 and logs properly
-    const dryRunOutput = execSync('npx.cmd tsx scripts/process-validation-jobs.ts', {
+    const dryRunOutput = execSync(`${process.platform === 'win32' ? 'npx.cmd' : 'npx'} tsx scripts/process-validation-jobs.ts`, {
       cwd: webDir,
       env: { ...process.env, WORKER_LIMIT: '5' },
       encoding: 'utf8',
@@ -1751,7 +1751,7 @@ describe('MAX-M7: Post-Mission Automated Validator Runner Suite', () => {
 
     let exitCode = 0;
     try {
-      execSync('npx.cmd tsx scripts/process-validation-jobs.ts', {
+      execSync(`${process.platform === 'win32' ? 'npx.cmd' : 'npx'} tsx scripts/process-validation-jobs.ts`, {
         cwd: webDir,
         env: { ...process.env, WORKER_LIMIT: '1' },
         encoding: 'utf8',
