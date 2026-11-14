@@ -1,0 +1,124 @@
+{
+  "timestamp": "2026-11-13T10:11:57.647Z",
+  "contractAddress": "0x20451c1e2dCD83F166B4f22868BAdECb5868d545",
+  "chainId": 43113,
+  "mode": "dry-run",
+  "forkBlockNumber": 60998116,
+  "controlledVendorAddress": "0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA",
+  "legitPayeeAddress": "0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c",
+  "agentAddress": "0x374b8A126FDb9e5deEc8307da385076155Af3D72",
+  "ownerAddress": "0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c",
+  "perTxCapUsdc": "5 USDC (5000000 atomic units)",
+  "autoPayoutRule": "On deployed bytecode (0x2045...d545), amounts <= perTxCap execute immediate safeTransfer inside propose/proposeWithProof. No separate approve/execute transaction needed.",
+  "missionA": {
+    "id": "0x7477696e2e616c6c6f776c6973742e7631000000000000000000000000000000",
+    "name": "Global Allowlist Mode",
+    "description": "This contract in global-allowlist mode (payee root = 0x0)",
+    "capUsdc": "0.02 USDC",
+    "payeeRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "recipientAllowlisted": true,
+    "simulationOutcome": "SUCCESS",
+    "statusDescription": "VULNERABLE: Diverted invoice payment approved because recipient is on global allowlist. Immediate auto-payout transferred 0.01 USDC.",
+    "balanceDeltaUsdc": "+0.01 USDC"
+  },
+  "missionB": {
+    "id": "0x7477696e2e6d697373696f6e2e76310000000000000000000000000000000000",
+    "name": "Mission-Scoped Guard",
+    "description": "Owner-signed Merkle payee set",
+    "capUsdc": "0.02 USDC",
+    "payeeRoot": "0x3011ac814b7ad5d2788091d9bf42b719e566fdf9ebe5c18dd3ea556dee6b71dd",
+    "negativeControl": {
+      "recipient": "0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA",
+      "isAllowlistedGlobally": true,
+      "isInMissionRoot": false,
+      "simulationOutcome": "REVERT",
+      "revertReason": "PayeeNotInMissionSet",
+      "balanceDeltaUsdc": "0 USDC",
+      "statusDescription": "PROTECTED: Contract rejected off-mission payment on-chain with PayeeNotInMissionSet despite recipient being on global allowlist. 0 USDC leaked."
+    },
+    "positiveControl": {
+      "recipient": "0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c",
+      "isAllowlistedGlobally": true,
+      "isInMissionRoot": true,
+      "simulationOutcome": "SUCCESS",
+      "balanceDeltaUsdc": "+0.01 USDC",
+      "statusDescription": "APPROVED: Legitimate mission payee with valid Merkle proof received 0.01 USDC auto-payout (returned to Owner)."
+    }
+  },
+  "plannedTransactions": [
+    {
+      "step": 1,
+      "description": "Owner enables global allowlist for controlled vendor (0xE90cf574...)",
+      "signer": "Owner (0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c)",
+      "gasLimit": "54154 gas",
+      "estimatedCostAvax": "~0.000054154000487386 AVAX",
+      "usdcOutflow": "0.00 USDC"
+    },
+    {
+      "step": 2,
+      "description": "Owner enables global allowlist for legitimate payee (0x4BC93356...)",
+      "signer": "Owner (0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c)",
+      "gasLimit": "54154 gas",
+      "estimatedCostAvax": "~0.000054154000487386 AVAX",
+      "usdcOutflow": "0.00 USDC"
+    },
+    {
+      "step": 3,
+      "description": "Owner initializes Mission A (twin.allowlist.v1, cap=0.02 USDC, root=0x0)",
+      "signer": "Owner (0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c)",
+      "gasLimit": "144933 gas",
+      "estimatedCostAvax": "~0.000144933001304397 AVAX",
+      "usdcOutflow": "0.00 USDC"
+    },
+    {
+      "step": 4,
+      "description": "Owner initializes Mission B (twin.mission.v1, cap=0.02 USDC)",
+      "signer": "Owner (0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c)",
+      "gasLimit": "144909 gas",
+      "estimatedCostAvax": "~0.000144909001304181 AVAX",
+      "usdcOutflow": "0.00 USDC"
+    },
+    {
+      "step": 5,
+      "description": "Owner sets Mission B payee root to legit payee Merkle leaf",
+      "signer": "Owner (0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c)",
+      "gasLimit": "59401 gas",
+      "estimatedCostAvax": "~0.000059401000534609 AVAX",
+      "usdcOutflow": "0.00 USDC"
+    },
+    {
+      "step": 6,
+      "description": "Agent proposes 0.01 USDC to vendor under Mission A (Vulnerable: Auto-payout executes)",
+      "signer": "Agent (0x374b8A126FDb9e5deEc8307da385076155Af3D72)",
+      "gasLimit": "461740 gas",
+      "estimatedCostAvax": "~0.00046174000415566 AVAX",
+      "usdcOutflow": "0.01 USDC (to controlled vendor)"
+    },
+    {
+      "step": 7,
+      "description": "Agent proposes 0.01 USDC to vendor under Mission B (Protected: Reverts PayeeNotInMissionSet)",
+      "signer": "Agent (0x374b8A126FDb9e5deEc8307da385076155Af3D72)",
+      "gasLimit": "32049 gas",
+      "estimatedCostAvax": "~0.000032049000288441 AVAX",
+      "usdcOutflow": "0.00 USDC (Reverted)"
+    },
+    {
+      "step": 8,
+      "description": "Agent proposes 0.01 USDC to legit payee under Mission B (Positive Control: Auto-payout executes)",
+      "signer": "Agent (0x374b8A126FDb9e5deEc8307da385076155Af3D72)",
+      "gasLimit": "406027 gas",
+      "estimatedCostAvax": "~0.000406027003654243 AVAX",
+      "usdcOutflow": "0.01 USDC (to Owner)"
+    },
+    {
+      "step": 9,
+      "description": "Owner revokes global allowlist for controlled vendor (Cleanup)",
+      "signer": "Owner (0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c)",
+      "gasLimit": "32242 gas",
+      "estimatedCostAvax": "~0.000032242000290178 AVAX",
+      "usdcOutflow": "0.00 USDC"
+    }
+  ],
+  "totalEstimatedGasAvax": "~0.00138961 AVAX",
+  "totalUsdcBudget": "0.02 USDC"
+}

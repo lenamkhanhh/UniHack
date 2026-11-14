@@ -1,0 +1,1 @@
+Three objects govern payouts: the owner's signed intent, a cryptographic Merkle proof, and our Avalanche Fuji smart contract.

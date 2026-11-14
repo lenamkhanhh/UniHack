@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-11-13T11:44:45.357Z",
+  "contractAddress": "0x20451c1e2dCD83F166B4f22868BAdECb5868d545",
+  "chainId": 43113,
+  "mode": "broadcast",
+  "controlledVendorAddress": "0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA",
+  "legitPayeeAddress": "0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c",
+  "agentAddress": "0x374b8A126FDb9e5deEc8307da385076155Af3D72",
+  "ownerAddress": "0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c",
+  "perTxCapUsdc": "5 USDC (5000000 atomic units)",
+  "autoPayoutRule": "Auto-payout executed via safeTransfer directly in propose().",
+  "missionA": {
+    "id": "0x7477696e2e616c6c6f776c6973742e7631000000000000000000000000000000",
+    "name": "Global Allowlist Mode",
+    "description": "This contract in global-allowlist mode (payee root = 0x0)",
+    "capUsdc": "0.02 USDC",
+    "payeeRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "recipientAllowlisted": true,
+    "simulationOutcome": "SUCCESS",
+    "statusDescription": "CONFIRMED ON FUJI: Payout drained to controlled vendor.",
+    "balanceDeltaUsdc": "+0.01 USDC",
+    "txHash": "0x548d1106a69626eed32d308088f188c6d2d71d8e2f61e495f637d9f04e367fc6",
+    "blockNumber": 61001944
+  },
+  "missionB": {
+    "id": "0x7477696e2e6d697373696f6e2e76310000000000000000000000000000000000",
+    "name": "Mission-Scoped Guard",
+    "description": "Owner-signed Merkle payee set",
+    "capUsdc": "0.02 USDC",
+    "payeeRoot": "0x3011ac814b7ad5d2788091d9bf42b719e566fdf9ebe5c18dd3ea556dee6b71dd",
+    "negativeControl": {
+      "recipient": "0xE90cf574D332658f9dfB950d899610Fb2F6e1aEA",
+      "isAllowlistedGlobally": true,
+      "isInMissionRoot": false,
+      "simulationOutcome": "REVERT",
+      "revertReason": "PayeeNotInMissionSet",
+      "balanceDeltaUsdc": "0 USDC",
+      "statusDescription": "CONFIRMED ON FUJI: Transaction reverted on-chain with PayeeNotInMissionSet.",
+      "txHash": "0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38",
+      "blockNumber": 61001947
+    },
+    "positiveControl": {
+      "recipient": "0x4BC93356C180Ba2Dd13A4a1Cf43405Bd0eb58F7c",
+      "isAllowlistedGlobally": true,
+      "isInMissionRoot": true,
+      "simulationOutcome": "SUCCESS",
+      "balanceDeltaUsdc": "+0.01 USDC",
+      "statusDescription": "CONFIRMED ON FUJI: Legitimate payment succeeded on-chain (returned to Owner).",
+      "txHash": "0xcb7236d146a2c8e2789db8ec2a80358b17d65993fc7b07187802e34c48656315",
+      "blockNumber": 61001949
+    }
+  },
+  "plannedTransactions": [],
+  "totalEstimatedGasAvax": "N/A (Executed on-chain)",
+  "totalUsdcBudget": "0.02 USDC"
+}

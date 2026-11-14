@@ -1,51 +1,117 @@
-# UniHack — Guarded Agent Economy
+# MissionPay
 
-**Trạng thái: specification only.** Chưa có app/contracts được implement, chưa deploy, chưa có runtime test pass.
-Research snapshot: 4 November 2026. Competition: [Avalanche Team1 Vietnam UniHack](https://team1vn.xyz/).
+> **AI agents get fooled. Budgets on Avalanche don't.** The owner signs who a mission may pay; the agent can only propose; GuardedTreasury on Avalanche rejects every payout outside the signed set, even to a vendor already on the company allowlist.
 
-Một nhóm nghiên cứu/CLB giao agent mission có ngân sách. Agent mua search/summary tools bằng USDC Fuji,
-người giao nhận deliverable và đối chiếu quyền chi, payment và result. TalkMeter minh họa billing theo phút.
-S2 bổ sung treasury guard + human queue; S1 payment slice vẫn là release nộp độc lập.
+[![CI](https://github.com/lenamkhanhh/UniHack/actions/workflows/ci.yml/badge.svg)](https://github.com/lenamkhanhh/UniHack/actions/workflows/ci.yml)
 
-## Bắt đầu cho Gemini
+- **Live Demo:** [https://unihack-missionpay.vercel.app](https://unihack-missionpay.vercel.app)
+- **Video Presentation:** `TODO(owner): link video`
+- **Judge mode (verify in 30 s):** `/judge` asks the live Fuji contract about any address you type (read-only `eth_call`, no key, no gas).
+- **Twin Treasury, live on Fuji (13/11/2026):** same allowlisted vendor, same treasury. Allowlist-only mission paid it ([0x548d…7fc6](https://testnet.snowtrace.io/tx/0x548d1106a69626eed32d308088f188c6d2d71d8e2f61e495f637d9f04e367fc6)); payee-set mission reverted `PayeeNotInMissionSet` ([0x0ad5…3e38](https://testnet.snowtrace.io/tx/0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38)); approved payee still paid ([0xcb72…6315](https://testnet.snowtrace.io/tx/0xcb7236d146a2c8e2789db8ec2a80358b17d65993fc7b07187802e34c48656315)).
+- **Snowtrace GuardedTreasury Contract:** [`0x20451c1e2dCD83F166B4f22868BAdECb5868d545`](https://testnet.snowtrace.io/address/0x20451c1e2dCD83F166B4f22868BAdECb5868d545)
 
-Đọc [handoff](pipeline/11-gemini-handoff.md), rồi [overview/constants](pipeline/00-overview.md).
-Implement S0 → S1 → S2 → S3; giữ passing S1 release. Các checklist là yêu cầu phải chạy, không phải evidence đã pass.
+---
 
-| Spec | Nội dung |
-|---|---|
-| [00](pipeline/00-overview.md) | Use case, stages, constants, ownership của từng spec |
-| [01](pipeline/01-contracts.md) | Treasury mission/queue, hard vs soft, idempotent propose |
-| [02](pipeline/02-x402-tools.md) | Quote/reservation/authorization/receipt/recovery, TalkMeter |
-| [03](pipeline/03-erc8004.md) | Deployed ABI, identity roles, owner quality feedback |
-| [04](pipeline/04-agent.md) | Validator, canonical audit, result/proof export |
-| [05](pipeline/05-app.md) | PostgreSQL schema/constraints, owner auth, spend/read, API/cutover |
-| [06](pipeline/06-tests-security.md) | C/P/V/E/L acceptance matrix + threat model |
-| [07](pipeline/07-demo-submission.md) | S1/full demo, 12-slide outline và submission |
-| [08](pipeline/08-build-plan.md) | Execution order, release gates, freeze/fallback |
-| [09](pipeline/09-breakthroughs.md) | Core evidence và optional simulation/replay |
-| [10](pipeline/10-review-response.md) | Historical review responses; không override owning specs |
-| [11](pipeline/11-gemini-handoff.md) | Handoff ngắn, invariants và remaining live checks |
+## 1. Evidence by Rubric (Judge in 60 Seconds)
 
-## Competition và nguồn
+| Criterion (Points) | Implementation & Artifacts | Primary Files | Exact Test / Verification Command | On-Chain Address / Tx Hash |
+|---|---|---|---|---|
+| **Tech (25)** | Full-stack agent budgeting architecture: GuardedTreasury with Merkle payee snapshotting & invariant fuzzing, gasless micropayment session rails (x402 / EIP-3009), WebAuthn P-256 passkey authority, and provenance SDK. | `contracts/src/GuardedTreasury.sol`<br>`apps/web/lib/`<br>`packages/guard/` | `forge test --summary` (111 passed, 512 invariant runs / 32,768 calls)<br>`npx vitest run --root apps/web` (350 passed)<br>`npx vitest run --root packages/guard` (19 passed) | GuardedTreasury: [`0x20451c1e...`](https://testnet.snowtrace.io/address/0x20451c1e2dCD83F166B4f22868BAdECb5868d545)<br>Audit head anchor tx: [`0x43bd21b8...`](https://testnet.snowtrace.io/tx/0x43bd21b81248a9f1a4dc2ff037a3df8119ae098690cd4e353bdbb4ce6ceb0547) |
+| **Avalanche (25)** | Avalanche C-Chain settlement: GuardedTreasury on Fuji (`ChainID 43113`), gasless EIP-3009 facilitator rails, ERC-8004 Identity & Reputation registries, and ICM hub and gateway contracts (local mock tests; not yet live) between Fuji and Dispatch L1 (`ChainID 779672`). | `contracts/src/MissionBudgetHub.sol`<br>`contracts/src/MissionSpendGateway.sol`<br>`contracts/src/ValidationRegistry.sol`<br>`apps/web/lib/erc8004.ts` | `forge test --match-contract MissionCrossChainICMTest` (12 passed)<br>`npx vitest run --root apps/web tests/erc8004.test.ts` (11 passed) | Attack revert tx (`PayeeNotInMissionSet`): [`0xc5f13e5d...`](https://testnet.snowtrace.io/tx/0xc5f13e5d2986633182ba8d69d5560429b063c5bf5f871c6908962933fea4f1ff)<br>ValidationRegistry: [`0x4c5ccda2...`](https://testnet.snowtrace.io/address/0x4c5ccda2a630cd1cb706799deadcc8483d06697e)<br>Agent #294 on Fuji IdentityRegistry: [`0xb5646950...`](https://testnet.snowtrace.io/tx/0xb5646950b8a1541b5b18a3812b8c17b7c3abc88fb91b0857bd142dd9991507c8) |
+| **Creativity (15)** | Mission-scoped cryptographic payee Merkle tree where owner signs policy once with passkey (WebAuthn P-256), while EVM bytecode enforces payment caps; Public Bounty arena demonstrating attack attempts where LLM is fooled but on-chain contract rejects off-mission payouts. | `apps/web/app/bounty/`<br>`contracts/src/PasskeyMissionAuthority.sol`<br>`eval/agentdojo/` | `npx vitest run --root apps/web tests/bounty.test.ts` (18 passed)<br>`forge test --match-contract PasskeyGovernanceTest` (32 passed) | Live Bounty contract state on Fuji (`0x20451c1e...`)<br>Revert proof tx: [`0xc5f13e5d...`](https://testnet.snowtrace.io/tx/0xc5f13e5d2986633182ba8d69d5560429b063c5bf5f871c6908962933fea4f1ff) |
+| **Impact (15)** | Evaluated defense benchmarks: AgentDojo banking replay blocked 120/128 financial injections (all 8 misses: `user_task_15`); benign false positives 3/16 (same as ProvGuard policy v1); Fuji fork agreement 169/169 (with attacker on allowlist contract reverts 150/150). AgentDojo live (Gemini 3.1 Flash-Lite) is being re-measured: an executor bug (fixed in b8152d6, regression test `eval/agentdojo/test_defense_tool_output.py`) invalidated the earlier live run, so no live number is claimed yet. PayBench-ADI: 0/277 attack runs moved money. | `eval/agentdojo/SUMMARY.md`<br>`eval/agentdojo/LIVE_SUMMARY.md`<br>`eval/README.md` | `python -m unittest eval/agentdojo/test_provguard_pairs.py` (14 passed) | Replay JSON: `eval/agentdojo/results/replay-ground-truth-20261109-035811.json`<br>Live rerun (partial, in progress): `eval/agentdojo/LIVE_SUMMARY.md` |
+| **Pitch (10)** | Pitch Deck v2 (14 native 16:9 widescreen slides in PPTX + rendered PDF + slide shots) in the same paper/ink design as the web app; video script with timed cues and English voiceover for demo presentation. | `artifacts/submission-s1/MissionPay-pitch-deck-v2.pdf`<br>`artifacts/submission-s1/deck-shots/`<br>`VIDEO_SCRIPT.md` | `node artifacts/submission-s1/deck-v2/build_deck.js` | Deck PDF: `artifacts/submission-s1/MissionPay-pitch-deck-v2.pdf`<br>Slide 9 benchmark shot: `artifacts/submission-s1/deck-shots/slide-9-benchmark.png` |
+| **UI/UX (10)** | Bilingual Next.js app (EN/VI), light paper/ink design with colour by meaning (red = blocked, green = paid), Judge mode that queries the live contract, passkey onboarding, live audit verification. Playwright E2E 40/40; Lighthouse accessibility 100 measured 09/11 before the redesign (not re-measured). | `apps/web/app/`<br>`apps/web/lib/i18n.tsx`<br>`apps/web/e2e/passkey.spec.ts` | `npx playwright test e2e/passkey.spec.ts` (7 passed)<br>`npx vitest run --root apps/web tests/m7-validator-automation.test.ts` (41 passed) | Live mission with anchor + ERC-8004 100/100: `/verify/fuji-live-mission-s1c` ([validation tx](https://testnet.snowtrace.io/tx/0xa9f7faddb9e15f0efdb94349f49aed63a5af30666a9edeeffbb5fe8814af5ffa))<br>Live bounty route: `/bounty` |
 
-- [Competition context](context/competition-context.md): lịch, eligibility, requirements, prizes và official-source conflicts.
-- [20 optional ideas](context/idea-catalog.md), [source/Luma index](context/source-index.md).
-- [Build references](context/build-sources.md), [spike checklist](context/spike-checklist.md).
-- [Luma calendar](https://luma.com/Team1VN), [Builder Hub event](https://build.avax.network/events/596c0b2d-63aa-4cf0-a0ad-a7e34ddbfdc0).
+---
 
-Planning deadline 21 November 2026 23:59 Vietnam time; target submit 20/11, feature freeze 17/11.
-Team1/Luma và Builder Hub khác deadline/venue/route trong research snapshot; xác nhận organizer instructions trước submit.
-Public repo lược bỏ email cá nhân, member/applicant identities, invite tokens và liên hệ riêng.
+## 2. Known Limitations & Operating Boundaries
 
-## Giới hạn cần giữ trong demo
+1. **Avalanche Inter-Chain Messaging (ICM):** The cross-chain hub and spend gateway contracts are fully tested and verified locally using Foundry mock messengers (`contracts/test/MissionCrossChainICM.t.sol`, 12 tests) and fork-simulated against Fuji and Dispatch RPC endpoints. Live cross-chain message delivery across testnets is currently roadmap-staged, pending Dispatch testnet faucet tokens and relayer infrastructure.
+2. **AgentDojo Replay Misses (user_task_15):** In the AgentDojo banking replay benchmark, 8 of 128 attacks bypassed automated checks. In all 8 cases (`user_task_15`), the user prompt itself explicitly directs the agent to set the attacker's IBAN as the new landlord. MissionPay treats the human owner's one-time cryptographic mission authorization as the intentional security boundary; an agent cannot distinguish user intent from user error without human review.
+3. **Owner Policy Reset to Root 0:** A contract owner has the administrative authority to reset a mission's payee Merkle root to `bytes32(0)` to fall back to the global allowlist mode. This operation is fully public and transparent on-chain: it emits a `MissionPayeeRootSet` event and increments `policyVersion` on the smart contract.
+4. **On-Chain Contract Patches on Fuji:** The contract code in `contracts/src/` has been updated with root snapshotting at proposal time (A1) and passkey governance actions (A3), verified with 111 Foundry tests and 6 stateful invariants. The deployed contract on Avalanche Fuji ([`0x20451c1e...`](https://testnet.snowtrace.io/address/0x20451c1e2dCD83F166B4f22868BAdECb5868d545)) is the historical deployment; new bytecode deployment is pending owner broadcast authorization.
+5. **Hardware Biometric Devices:** Passkey verification is cryptographically verified in tests using exact P-256 curve algorithms, WebAuthn virtual authenticators, and dynamic RP origin adapters (`LOCAL_BROWSER_CRYPTO_BOUNDARY`). Direct physical biometric hardware prompt verification on live Fuji is marked `NOT_RUN` pending physical device sign-off.
 
-Hai budget riêng: treasury on-chain, tool budget off-chain khi signer/backend an toàn.
-Key agent bị lộ có thể rút toàn bộ tool wallet; không auto-refill. Pause không recall authorization đã ký.
-Mission hết hạn cấm spend mới nhưng owner vẫn read/reconcile/lấy kết quả đã trả tiền.
-UTC day không rolling 24h; owner có soft-cap override và emergency withdraw.
-Hash chain/checkpoint chứng minh consistency, không chất lượng câu trả lời/trustlessness.
-Reputation không Sybil-proof. Mock/scripted/live luôn ghi đúng mode.
+---
 
-Không cần chạy install/forge từ README ở trạng thái này: chưa có implementation.
-Khi implement, thêm lockfiles, env template rỗng, migrations, commands/results thật và receipt manifest đã sanitize.
+## 3. Quickstart & Verification Runbook
+
+### Prerequisites
+- Node.js >= 20.x, npm >= 10.x, Foundry (`forge`), Python >= 3.10
+- Local PostgreSQL instance (or PGlite in-memory test runner)
+
+### One-Command Full Suite Verification
+Run the unified verification command at the repository root:
+
+```bash
+npm run verify:all
+```
+
+This runs:
+1. Smart contract test suites: `forge test --summary` in `contracts/`
+2. SDK unit and parity tests: `vitest run` in `packages/guard/`
+3. Web application unit tests: `vitest run` in `apps/web/`
+4. TypeScript compilation check: `tsc --noEmit` in `apps/web/`
+5. AgentDojo benchmark unit tests: `python -m unittest test_provguard_pairs.py` in `eval/agentdojo/`
+
+### Local Development Mode
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Setup database migrations
+cd apps/web && npx prisma migrate deploy && cd ../..
+
+# 3. Start development server
+npm run dev -- -p 3100
+```
+
+Open `http://localhost:3100` to interact with MissionPay, `/bounty` for the public challenge, and `/verify/demo-seed` for cryptographic audit trail inspection.
+
+---
+
+## 4. Architecture Overview
+
+```
+                                  +------------------------------+
+                                  | Human Owner / Hardware Key   |
+                                  | WebAuthn P-256 (RIP-7212)    |
+                                  +--------------+---------------+
+                                                 | Authorizes Mission & Policy
+                                                 v
+  +--------------------+         +---------------+---------------+
+  | Off-Chain AI Agent | ------> | Provenance Guard & Validator  |
+  | (Prompt Injected)  |         | (Tracks Source & Merkle Set)  |
+  +--------------------+         +---------------+---------------+
+                                                 | Proposes Payout
+                                                 v
+                     ===========================================================
+                                Avalanche Fuji C-Chain Smart Contracts
+                     ===========================================================
+                                                 |
+                                                 v
+                                  +------------------------------+
+                                  |     GuardedTreasury.sol      |
+                                  | - Merkle Payee Snapshot Check|
+                                  | - Per-Mission Budget Caps    |
+                                  | - Gasless EIP-3009 Sweep     |
+                                  +------------------------------+
+                                                 |
+                     +---------------------------+---------------------------+
+                     |                                                       |
+                     v (Legitimate Payee)                                    v (Injected Attacker Payee)
+      [SUCCESS: Payout Executed]                                [REVERT: PayeeNotInMissionSet]
+```
+
+### Security & Loss Containment Model
+- **Prompt Injection Containment:** If an LLM agent is tricked via indirect prompt injection to pay an unauthorized address, the off-chain guard rejects the transaction. Even if the off-chain guard or agent server is entirely compromised, the transaction submitted to `GuardedTreasury` reverts on-chain because the attacker cannot forge a valid Merkle proof against the owner-signed Merkle root.
+- **Session Wallet Loss Bounding:** Session wallets derived for automated tool micropayments are funded only up to the mission's `toolCap` (e.g. 0.50 USDC). Unspent balances are reclaimed via gasless EIP-3009 sweeps without requiring AVAX for gas. Main treasury balances cannot be accessed by session keys.
+
+---
+
+## 5. Review History & Prior Art
+Historical review logs, development notes, and milestone progression are archived in [`docs/review-history/`](docs/review-history/):
+- [`docs/review-history/REPORT_REVIEW_AND_FIX_COMPLETION.md`](docs/review-history/REPORT_REVIEW_AND_FIX_COMPLETION.md) — Comprehensive test and acceptance logs (Rounds 1–8)
+- [`docs/review-history/PLAN_FINAL_2026-11-13.md`](PLAN_FINAL_2026-11-13.md) — Final submission roadmap and judge rubric strategy
+- [`JUDGE_QA.md`](JUDGE_QA.md) — Verified metrics and answers to technical evaluation questions

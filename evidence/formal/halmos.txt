@@ -1,0 +1,8 @@
+﻿No files changed, compilation skipped
+
+Running 4 tests for test/halmos/GuardedTreasury.halmos.t.sol:GuardedTreasuryHalmos
+[32m[PASS][0m check_amountNeverExceedsPerTxCap(uint256) (paths: 3, time: 0.39s, bounds: [])
+[32m[PASS][0m check_onlyOwnerSetsCaps(address,uint256,uint256) (paths: 5, time: 0.17s, bounds: [])
+[32m[PASS][0m check_onlyOwnerSetsRoot(address,bytes32,bytes32) (paths: 6, time: 0.26s, bounds: [])
+[32m[PASS][0m check_proposeWithProof_rejectsNonMember(address,uint256,bytes32[2]) (paths: 53, time: 3.42s, bounds: [])
+Symbolic test result: 4 passed; 0 failed; time: 4.44s

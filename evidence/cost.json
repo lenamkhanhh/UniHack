@@ -1,0 +1,78 @@
+{
+  "network": "Avalanche Fuji Testnet",
+  "chainId": 43113,
+  "recordedAt": "2026-11-08T09:15:47.176Z",
+  "transactions": [
+    {
+      "name": "proposeWithProof",
+      "hash": "0x769484bb45b13a42917972dabb206697ec4f21acd117394017a62e0046cd6c9a",
+      "blockNumber": 60689765,
+      "gasUsed": 437239,
+      "effectiveGasPriceWei": 160,
+      "feeAvax": "0.00000000006995824",
+      "status": "success",
+      "receiptFetchMs": 570
+    },
+    {
+      "name": "x402_settlement",
+      "hash": "0x8c898c904fef42c9a2e5d45b18549bd48dce285ef81d497f588ae41320dc8208",
+      "blockNumber": 60689764,
+      "gasUsed": 92392,
+      "effectiveGasPriceWei": 2000010,
+      "feeAvax": "0.00000018478492392",
+      "status": "success",
+      "receiptFetchMs": 128
+    },
+    {
+      "name": "proof_anchor",
+      "hash": "0x43bd21b81248a9f1a4dc2ff037a3df8119ae098690cd4e353bdbb4ce6ceb0547",
+      "blockNumber": 60689767,
+      "gasUsed": 33687,
+      "effectiveGasPriceWei": 160,
+      "feeAvax": "0.00000000000538992",
+      "status": "success",
+      "receiptFetchMs": 105
+    },
+    {
+      "name": "passkey_approveMission_pre_hardening",
+      "hash": "0x9885664fcfc45539af1183fa3768f6e2dbfb52c76544b7b6f1ee14833790cf45",
+      "blockNumber": 60712056,
+      "gasUsed": 281498,
+      "effectiveGasPriceWei": 103,
+      "feeAvax": "0.000000000028994294",
+      "status": "success",
+      "receiptFetchMs": 95,
+      "note": "Initial deployment without origin/rpId/UV enforcement"
+    },
+    {
+      "name": "passkey_approveMission_hardened",
+      "hash": "0x494b664be33d2c2d08575884f3ceb546779e8c7eb8eaec0bed171a11f0d7a929",
+      "blockNumber": 60724328,
+      "gasUsed": 400354,
+      "effectiveGasPriceWei": 103,
+      "feeAvax": "0.000000000041236462",
+      "status": "success",
+      "receiptFetchMs": 85,
+      "note": "PK-F1 hardened: rpIdHash, exact origin match, UP+UV flags, RIP-7212 precompile 0x100"
+    },
+    {
+      "name": "erc8004_validationResponse",
+      "hash": "0xb641353c51d0f44192bcbf40743c20940b88a83c52a2c41f5852aea1ebe4d059",
+      "blockNumber": 60712718,
+      "gasUsed": 50747,
+      "effectiveGasPriceWei": 103,
+      "feeAvax": "0.000000000005226941",
+      "status": "success",
+      "receiptFetchMs": 94
+    }
+  ],
+  "finality": {
+    "method": "real sendTransaction to receipt confirmation on Fuji C-Chain",
+    "samplesMs": [
+      6330,
+      6409,
+      6714
+    ],
+    "medianMs": 6409
+  }
+}

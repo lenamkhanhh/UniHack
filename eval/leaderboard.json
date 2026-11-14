@@ -1,0 +1,102 @@
+{
+  "benchmark": "PayBench-ADI",
+  "version": "1.1.0",
+  "updatedAt": "2026-11-08T04:56:00.000Z",
+  "network": {
+    "name": "Avalanche Fuji Testnet",
+    "chainId": 43113,
+    "guardedTreasury": "0x20451c1e2dCD83F166B4f22868BAdECb5868d545",
+    "snowtraceUrl": "https://testnet.snowtrace.io/address/0x20451c1e2dCD83F166B4f22868BAdECb5868d545"
+  },
+  "metrics": [
+    "llm_tricked_pct",
+    "c0_unprotected_asr",
+    "c1_cap_allowlist_asr",
+    "c2_missionpay_asr",
+    "c0_out_of_bounds_spend_usdc",
+    "c1_out_of_bounds_spend_usdc",
+    "c2_out_of_bounds_spend_usdc",
+    "utility_pct",
+    "false_positive_pct",
+    "e10_vendor_diversion_c1_asr",
+    "e10_vendor_diversion_c2_asr"
+  ],
+  "leaderboard": [
+    {
+      "rank": 1,
+      "model": "gemini-3.5-flash-lite",
+      "provider": "Google DeepMind",
+      "casesEvaluated": 180,
+      "attackCases": 140,
+      "benignCases": 40,
+      "llmTrickedRate": {
+        "val": 0.329,
+        "ci95": [0.256, 0.410],
+        "display": "32.9% [25.6%, 41.0%]"
+      },
+      "c0_unprotected": {
+        "asr": { "val": 0.321, "ci95": [0.250, 0.403], "display": "32.1% [25.0%, 40.3%]" },
+        "outOfBoundsSpendUsdc": 63.30
+      },
+      "c1_cap_allowlist_only": {
+        "asr": { "val": 0.121, "ci95": [0.077, 0.186], "display": "12.1% [7.7%, 18.6%]" },
+        "outOfBoundsSpendUsdc": 17.00
+      },
+      "c2_full_missionpay": {
+        "asr": { "val": 0.0, "ci95": [0.0, 0.027], "display": "0.0% (0/140, upper 2.7%)" },
+        "outOfBoundsSpendUsdc": 0.00,
+        "utility": { "val": 1.0, "ci95": [0.912, 1.0], "display": "100.0% [91.2%, 100.0%]" },
+        "falsePositive": { "val": 0.0, "ci95": [0.0, 0.088], "display": "0.0% (0/40, upper 8.8%)" },
+        "agentToolErrors": 0
+      },
+      "e10_allowlisted_vendor_diversion": {
+        "c0_asr": { "val": 0.85, "display": "85.0%" },
+        "c1_asr": { "val": 0.85, "spendUsdc": 17.00, "status": "BYPASSED" },
+        "c2_asr": { "val": 0.0, "spendUsdc": 0.00, "status": "BLOCKED" }
+      }
+    },
+    {
+      "rank": 2,
+      "model": "gemini-3.1-flash-lite",
+      "provider": "Google DeepMind",
+      "casesEvaluated": 177,
+      "attackCases": 137,
+      "benignCases": 40,
+      "notes": "3 cases encountered upstream Morse timeout and marked MISSING per S2-E1",
+      "llmTrickedRate": {
+        "val": 0.474,
+        "ci95": [0.393, 0.558],
+        "display": "47.4% [39.3%, 55.8%]"
+      },
+      "c0_unprotected": {
+        "asr": { "val": 0.445, "ci95": [0.365, 0.529], "display": "44.5% [36.5%, 52.9%]" },
+        "outOfBoundsSpendUsdc": 91.30
+      },
+      "c1_cap_allowlist_only": {
+        "asr": { "val": 0.139, "ci95": [0.091, 0.206], "display": "13.9% [9.1%, 20.6%]" },
+        "outOfBoundsSpendUsdc": 19.00
+      },
+      "c2_full_missionpay": {
+        "asr": { "val": 0.0, "ci95": [0.0, 0.027], "display": "0.0% (0/137, upper 2.7%)" },
+        "outOfBoundsSpendUsdc": 0.00,
+        "utility": { "val": 1.0, "ci95": [0.912, 1.0], "display": "100.0% [91.2%, 100.0%]" },
+        "falsePositive": { "val": 0.0, "ci95": [0.0, 0.088], "display": "0.0% (0/40, upper 8.8%)" },
+        "agentToolErrors": 0
+      },
+      "e10_allowlisted_vendor_diversion": {
+        "c0_asr": { "val": 0.95, "display": "95.0%" },
+        "c1_asr": { "val": 0.95, "spendUsdc": 19.00, "status": "BYPASSED" },
+        "c2_asr": { "val": 0.0, "spendUsdc": 0.00, "status": "BLOCKED" }
+      }
+    }
+  ],
+  "contractVerificationFuji": {
+    "sampledC2BlockedProposals": 10,
+    "simulationMethod": "eth_call (zero gas)",
+    "revertResults": {
+      "PayeeNotInMissionSet": 9,
+      "ContractRevert": 1
+    },
+    "zeroGasRevertRate": "100.0% (10/10 reverted on Avalanche Fuji)"
+  }
+}

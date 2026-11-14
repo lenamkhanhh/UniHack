@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MissionPay Demo - Outro Card (v8b)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@800;900&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      width: 1920px;
+      height: 1080px;
+      background: #F7F6F2;
+      color: #0F1115;
+      font-family: 'Geist', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: 'Geist Mono', monospace;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #0F1115;
+      margin-bottom: 24px;
+    }
+
+    .red-sq {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      background: #E84142;
+      flex-shrink: 0;
+    }
+
+    .punchline-top {
+      font-family: 'Archivo', sans-serif;
+      font-size: 72px;
+      font-weight: 900;
+      line-height: 1.1;
+      color: #0F1115;
+      letter-spacing: -0.02em;
+      text-transform: uppercase;
+    }
+
+    .punchline-bot {
+      font-family: 'Archivo', sans-serif;
+      font-size: 72px;
+      font-weight: 900;
+      line-height: 1.1;
+      color: #E84142;
+      letter-spacing: -0.02em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .dot-accent {
+      color: #E84142;
+    }
+
+    .tagline {
+      font-size: 24px;
+      color: #5E646E;
+      max-width: 900px;
+      margin-bottom: 48px;
+      line-height: 1.5;
+      font-weight: 500;
+    }
+
+    .cards-row {
+      display: flex;
+      gap: 32px;
+      align-items: stretch;
+      margin-bottom: 48px;
+    }
+
+    .info-card {
+      background: #FFFFFF;
+      border: 1px solid #E4E3DC;
+      border-radius: 16px;
+      padding: 24px 36px;
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      text-align: left;
+      box-shadow: 0 10px 25px rgba(15, 17, 21, 0.05);
+      min-width: 450px;
+    }
+
+    .card-icon {
+      width: 58px;
+      height: 58px;
+      border-radius: 14px;
+      background: #FCE8EB;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .card-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #0F1115;
+      margin-bottom: 4px;
+    }
+
+    .card-desc {
+      font-size: 14px;
+      color: #5E646E;
+      margin-bottom: 8px;
+    }
+
+    .card-url {
+      font-size: 15px;
+      color: #E84142;
+      font-family: 'Geist Mono', monospace;
+      font-weight: 700;
+    }
+
+    .navy-band {
+      background: #14213D;
+      border-top: 4px solid #E84142;
+      border-radius: 14px;
+      padding: 18px 48px;
+      display: flex;
+      align-items: center;
+      gap: 36px;
+      font-family: 'Geist Mono', monospace;
+      font-size: 14px;
+      color: #FFFFFF;
+      font-weight: 500;
+      box-shadow: 0 20px 40px -10px rgba(20, 33, 61, 0.35);
+    }
+
+    .navy-band .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #0B7A4B;
+      display: inline-block;
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="kicker">
+    <span class="red-sq"></span>MISSIONPAY · AUTONOMOUS AI SPEND GOVERNANCE
+  </div>
+
+  <div class="punchline-top">
+    LLMS CAN BE FOOLED<span class="dot-accent">.</span>
+  </div>
+
+  <div class="punchline-bot">
+    BUDGETS ON AVALANCHE CAN'T<span class="dot-accent">.</span>
+  </div>
+
+  <div class="tagline">
+    Sign once, chain enforces. Deterministic cryptographic spend governance on Avalanche Fuji.
+  </div>
+
+  <div class="cards-row">
+    <!-- Card 1: Judge Mode -->
+    <div class="info-card">
+      <div class="card-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#E84142" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+      </div>
+      <div>
+        <div class="card-title">Interactive Judge Mode</div>
+        <div class="card-desc">Instant eth_call contract simulation on Avalanche Fuji</div>
+        <div class="card-url">/judge</div>
+      </div>
+    </div>
+
+    <!-- Card 2: Bounty Arena -->
+    <div class="info-card">
+      <div class="card-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#E84142" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="22" y1="12" x2="18" y2="12"/>
+          <line x1="6" y1="12" x2="2" y2="12"/>
+          <line x1="12" y1="6" x2="12" y2="2"/>
+          <line x1="12" y1="22" x2="12" y2="18"/>
+        </svg>
+      </div>
+      <div>
+        <div class="card-title">Hack Treasury Bounty</div>
+        <div class="card-desc">Prompt injection challenge against 3-layer guard</div>
+        <div class="card-url">/bounty</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="navy-band">
+    <div><span class="dot"></span>Avalanche Fuji Testnet</div>
+    <div style="opacity: 0.4;">|</div>
+    <div>GuardedTreasury: <span style="color: #60A5FA;">0x20451c1e2dCD83F166B4f22868BAdECb5868d545</span></div>
+    <div style="opacity: 0.4;">|</div>
+    <div>Sign once, chain enforces.</div>
+  </div>
+</body>
+</html>

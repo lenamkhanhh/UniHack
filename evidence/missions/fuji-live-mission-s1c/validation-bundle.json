@@ -1,0 +1,16 @@
+{
+  "version": "MissionPay-validation-v1",
+  "missionId": "0x7ca63fa6dca87866cb82b55af0c48f462f5f1fe08c3fa4e9dcd78885e982f850",
+  "missionSlug": "fuji-live-mission-s1c",
+  "payeeRoot": "0x3011ac814b7ad5d2788091d9bf42b719e566fdf9ebe5c18dd3ea556dee6b71dd",
+  "auditHead": "0xb6383cfec46d06ac2f6ba3c83b122baa48cf9bcd8b748cc4e2c6c7ad40814158",
+  "anchorTxHash": "0xeaa2b191dede374d002770a22ca3a6d867123bce34f6fc83c01802daea87aabd",
+  "chainId": 43113,
+  "treasury": "0x20451c1e2dCD83F166B4f22868BAdECb5868d545",
+  "payees": [
+    "0x4bc93356c180ba2dd13a4a1cf43405bd0eb58f7c"
+  ],
+  "cap": "100000",
+  "ownerAddress": "0x4bc93356c180ba2dd13a4a1cf43405bd0eb58f7c",
+  "creationBlock": "61010471"
+}

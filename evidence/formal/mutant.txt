@@ -1,0 +1,23 @@
+﻿No files changed, compilation skipped
+
+Ran 1 test for test/invariant/mutants/Mutant.t.sol:MutantInvariantTest
+[FAIL: Assertion failed: condition not true]
+	[Sequence] (original: 1, shrunk: 1)
+		sender=0x00000000000000000000000000000000000012B3 addr=[test/invariant/Handler.sol:Handler]0x5991A2dF15A8F6A256D3Ec51E99254Cd3fb576A9 calldata=actionProposeWithProof(uint256,uint256,uint256,uint256,uint256) args=[7200, 2816, 1637576039468791966295312546829371440538477414 [1.637e45], 4000000 [4e6], 1251]
+ invariant_payeeAlwaysInRoot() (runs: 1, calls: 1, reverts: 0)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 8.54ms (4.19ms CPU time)
+
+Ran 1 test suite in 10.87ms (8.54ms CPU time): 0 tests passed, 1 failed, 0 skipped (1 total tests)
+
+Failing tests:
+Encountered 1 failing test in test/invariant/mutants/Mutant.t.sol:MutantInvariantTest
+[FAIL: Assertion failed: condition not true]
+	[Sequence] (original: 1, shrunk: 1)
+		sender=0x00000000000000000000000000000000000012B3 addr=[test/invariant/Handler.sol:Handler]0x5991A2dF15A8F6A256D3Ec51E99254Cd3fb576A9 calldata=actionProposeWithProof(uint256,uint256,uint256,uint256,uint256) args=[7200, 2816, 1637576039468791966295312546829371440538477414 [1.637e45], 4000000 [4e6], 1251]
+ invariant_payeeAlwaysInRoot() (runs: 1, calls: 1, reverts: 0)
+
+Encountered a total of 1 failing tests, 0 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 1 failed test
+
+Fuzz seed: 0xc40e4d6aee8a92fce439c9353bfbf30145175277376dcd43c7cc9c723e99bf9f (use `--fuzz-seed` to reproduce)

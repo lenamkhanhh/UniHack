@@ -1,0 +1,1 @@
+Snowtrace confirms the live receipt: execution strictly reverted on Avalanche Fuji, with Payee Not In Mission Set.

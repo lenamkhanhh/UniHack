@@ -1,0 +1,63 @@
+[
+  {
+    "id": "S0",
+    "name": "Title Card",
+    "startTime": "00:00:00,000",
+    "endTime": "00:00:03,500",
+    "caption": "MissionPay: Same vendor. Same treasury. Two outcomes."
+  },
+  {
+    "id": "S1",
+    "name": "Twin Treasury Benchmark on Home",
+    "startTime": "00:00:03,500",
+    "endTime": "00:00:38,000",
+    "lowerThird": "Live on Avalanche Fuji · Twin Treasury Benchmark",
+    "caption": "Live on Avalanche Fuji: Twin Treasury compares Global Allowlist vs Mission Guard."
+  },
+  {
+    "id": "S2",
+    "name": "Judge Mode: Contract Simulation",
+    "startTime": "00:00:38,000",
+    "endTime": "00:01:18,000",
+    "lowerThird": "Interactive Verification · Judge Mode eth_call",
+    "caption": "In Judge Mode, test any off-mission attacker: the smart contract strictly rejects it with PayeeNotInMissionSet, while legitimate payees succeed."
+  },
+  {
+    "id": "S3",
+    "name": "Bounty Challenge: Prompt Injection",
+    "startTime": "00:01:18,000",
+    "endTime": "00:01:46,000",
+    "lowerThird": "Bounty Challenge · Live Prompt Injection vs Dual-Layer Defense",
+    "caption": "Bounty Challenge: prompt injection fools the agent, but the contract preserves the treasury."
+  },
+  {
+    "id": "S4",
+    "name": "Snowtrace Live Revert Receipt",
+    "startTime": "00:01:46,000",
+    "endTime": "00:01:54,000",
+    "lowerThird": "Snowtrace Explorer · Avalanche Fuji C-Chain Revert",
+    "caption": "On-chain proof: Snowtrace confirms execution reverted with PayeeNotInMissionSet."
+  },
+  {
+    "id": "S5",
+    "name": "Client-Side Cryptographic Verifier",
+    "startTime": "00:01:54,000",
+    "endTime": "00:02:32,000",
+    "lowerThird": "Independent Verifier · ERC-8004 Score 100/100",
+    "caption": "Independent verification: tamper with 1 single byte and the entire cryptographic chain breaks."
+  },
+  {
+    "id": "S6",
+    "name": "Dual-Layer Security Architecture Diagram",
+    "startTime": "00:02:32,000",
+    "endTime": "00:02:37,000",
+    "caption": "Dual-Layer Defense: LLM agents propose, while Avalanche Fuji contracts enforce."
+  },
+  {
+    "id": "S7",
+    "name": "Outro & Call to Action",
+    "startTime": "00:02:37,000",
+    "endTime": "00:02:45,000",
+    "caption": "LLMs can be fooled. Budgets on Avalanche can't. Sign once, chain enforces."
+  }
+]

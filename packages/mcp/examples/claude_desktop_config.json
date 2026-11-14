@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "missionpay-guard": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@missionpay/mcp"
+      ],
+      "env": {
+        "AVALANCHE_FUJI_RPC": "https://api.avax-test.network/ext/bc/C/rpc",
+        "GUARDED_TREASURY_ADDRESS": "0x20451c1e2dCD83F166B4f22868BAdECb5868d545"
+      }
+    }
+  }
+}

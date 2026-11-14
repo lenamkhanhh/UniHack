@@ -1,0 +1,258 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+model SystemState {
+  id             Int      @id
+  deploymentId   String
+  stage          String   // S1 or S2
+  guardAddress   String?
+  authVersion    Int      @default(1)
+  systemPaused   Boolean  @default(false)
+  maintenance    Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+}
+
+model Mission {
+  slug           String   @id
+  missionId      String   @unique
+  ownerAddress   String
+  agentAddress   String
+  treasuryCap    Decimal  @db.Decimal(78, 0)
+  toolCap        Decimal  @db.Decimal(78, 0)
+  spentTool      Decimal  @default(0) @db.Decimal(78, 0)
+  reservedTool   Decimal  @default(0) @db.Decimal(78, 0)
+  expiresAt      DateTime
+  status         String   // ACTIVE/CLOSED; expiry checked from expiresAt on every spend
+  completedAt    DateTime?
+  deliverableHash String?
+  payeesJson      String?
+  payeeRoot       String?
+  creationBlock   BigInt?
+  creationTxHash  String?
+  creationProvenance String?
+  configVersion  Int      @default(1)
+  policyHash     String
+  auditHeadHash  String   @default("0x0000000000000000000000000000000000000000000000000000000000000000")
+  auditEntryCount Int     @default(0)
+  publicPublished Boolean @default(false)
+  publicationVersion Int  @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  operations     ToolOperation[]
+  sessions       ToolSession[]
+  validationJob  ValidationJob?
+}
+
+model AuthChallenge {
+  nonce          String   @id
+  action         String   // CREATE_MISSION/ACTIVATE/READ_MISSION/PAUSE_S1/CLOSE_MISSION_S1/COMPLETE_MISSION/PREPARE_FEEDBACK
+  payloadHash    String
+  expectedSigner String
+  deploymentId   String
+  authVersion    Int
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime @default(now())
+}
+
+model ToolSession {
+  id             String   @id @db.Uuid
+  missionSlug    String
+  mission        Mission  @relation(fields: [missionSlug], references: [slug], onDelete: Restrict)
+  payerAddress   String
+  rate           Decimal  @db.Decimal(78, 0)
+  cap            Decimal  @db.Decimal(78, 0)
+  spent          Decimal  @default(0) @db.Decimal(78, 0)
+  reserved       Decimal  @default(0) @db.Decimal(78, 0)
+  status         String   // ACTIVE/STOPPED/CAPPED
+  startedAt      DateTime @default(now())
+  stoppedAt      DateTime?
+  operations     ToolOperation[]
+}
+
+model ToolOperation {
+  operationId    String   @id @db.Uuid
+  deploymentId   String
+  missionSlug    String
+  mission        Mission  @relation(fields: [missionSlug], references: [slug], onDelete: Restrict)
+  payerAddress   String
+  toolId         String
+  inputHash      String
+  paymentTerms   String   // canonical immutable JSON
+  paymentTermsHash String
+  policyHash     String
+  paymentMode    String   @default("LIVE_FUJI")
+  chainId        Int
+  asset          String
+  state          String
+  version        Int      @default(0)
+  authDeploymentVersion Int
+  quoteExpiresAt DateTime
+  reservationExpiresAt DateTime?
+  reservedAmount Decimal  @default(0) @db.Decimal(78, 0)
+  authFrom       String?
+  authTo         String?
+  authValue      Decimal? @db.Decimal(78, 0)
+  authNonce      String?
+  validAfter     BigInt?
+  validBefore    BigInt?
+  authSignature  String?  // server-only, immutable after SIGNED
+  heldResult     String?
+  heldResultHash String?
+  workerLeaseUntil DateTime?
+  workerLeaseOwner String?
+  workerLeaseGeneration Int @default(0)
+  submissionStartedAt DateTime?
+  facilitator    String?
+  facilitatorTxHash String?
+  txHash         String?
+  receiptBlockNumber BigInt?
+  receiptBlockHash String?
+  authorizationLogIndex Int?
+  transferLogIndex Int?
+  lastReconciledAt DateTime?
+  reconcileBlockNumber BigInt?
+  reconcileBlockHash String?
+  reconcileBlockTimestamp BigInt?
+  failureReason  String?
+  sessionId      String?  @db.Uuid
+  session        ToolSession? @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  minuteIndex    Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([sessionId, minuteIndex])
+  @@unique([chainId, asset, authFrom, authNonce])
+  @@index([missionSlug, state])
+}
+
+model TreasuryRequest {
+  operationId    String   @id @db.Uuid
+  missionSlug    String
+  requestHash    String
+  state          String   // CREATED/SUBMITTING/UNKNOWN/CONFIRMED/FAILED
+  agentNonce     BigInt?
+  rawTxHash      String?
+  proposalId     String?
+  chainId        Int
+  guardAddress   String
+  createdAt      DateTime @default(now())
+}
+
+model AuditHead {
+  id             Int      @id
+  lastHash       String
+}
+
+model AuditEntry {
+  id                   BigInt   @id @default(autoincrement())
+  sourceKey            String   @unique
+  prevHash             String
+  entryHash            String   @unique
+  canonicalJson        String
+  missionSlug          String?
+  missionSequence      Int?
+  missionPrevHash      String?
+  missionEntryHash     String?
+  missionCanonicalJson String?
+  createdAt            DateTime
+
+  @@unique([missionSlug, missionSequence])
+}
+
+model MissionFeedback {
+  missionSlug    String   @id
+  agentId        String
+  chainId        Int
+  registry       String
+  clientAddress  String
+  txHash         String?
+  feedbackIndex  String?
+  feedbackURI    String?
+  feedbackHash   String?
+  preparedValue  Int?
+  preparedResultHash String?
+  state          String   // PREPARED/SUBMITTED/CONFIRMED
+}
+
+model BountyAttempt {
+  id               String   @id @default(uuid()) @db.Uuid
+  timestamp        DateTime @default(now())
+  vector           String   // search_result, invoice_pdf_text, vendor_page, email
+  payloadHash      String
+  payloadPreview   String   // <= 200 chars escaped
+  attackerAddress  String
+  llmTricked       Boolean
+  offchainRule     String?
+  onchainResult    String?
+  model            String
+  mode             String   @default("llm") // "llm", "stub"
+  source           String   @default("public") // "public", "smoke", "test"
+  status           String   @default("BLOCKED") // BLOCKED, NO_PAYOUT_PROPOSED, POTENTIAL_BYPASS
+  ipHash           String?
+  createdAt        DateTime @default(now())
+
+  @@index([timestamp])
+  @@index([ipHash, timestamp])
+  @@index([mode, source])
+}
+
+model BountyQuotaReservation {
+  id              String   @id @default(uuid()) @db.Uuid
+  ipHash          String
+  source          String   @default("public")
+  status          String   @default("RESERVED") // RESERVED, COMPLETED, FAILED, EXPIRED
+  leaseExpiresAt  DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([ipHash, createdAt])
+  @@index([createdAt])
+  @@index([status, leaseExpiresAt])
+}
+
+model ValidationJob {
+  id                  String   @id @default(uuid()) @db.Uuid
+  missionSlug         String   @unique
+  mission             Mission  @relation(fields: [missionSlug], references: [slug], onDelete: Restrict)
+  missionId           String
+  requestHash         String   @unique
+  status              String   // QUEUED, LOCAL_EVALUATED, REQUEST_PENDING, RESPONSE_PENDING, RESPONSE_CONFIRMED, FAILED
+  mode                String   @default("LIVE_FUJI") // MOCK or LIVE_FUJI
+  fromBlock           BigInt?
+  toBlock             BigInt?
+  snapshotBlock       BigInt?
+  frozenContext       String?  // JSON string of canonical bundle and evaluation context
+  evaluationResult    String?  // JSON stringified ValidationCheckResult
+  score               Int?     // Local evaluation score
+  tag                 String?  // Local evaluation tag
+  chainScore          Int?     // Verified on-chain score from registry
+  chainTag            String?  // Verified on-chain tag from registry
+  responseHash        String?  // On-chain response hash
+  validatorAddress    String?
+  agentId             String?
+  unsignedRequest     String?  // JSON of unsigned request params for owner
+  requestTxHash       String?
+  responseTxHash      String?
+  failureReason       String?
+  retryCount          Int      @default(0)
+  workerLeaseUntil    DateTime?
+  workerLeaseOwner    String?
+  leaseToken          String?  // Fencing token for active lease holder
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([status])
+  @@index([status, workerLeaseUntil])
+  @@index([missionSlug])
+  @@index([leaseToken])
+}
+

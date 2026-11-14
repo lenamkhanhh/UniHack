@@ -1,0 +1,48 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy",
+    "worker:validation": "tsx scripts/process-validation-jobs.ts"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.2.16",
+    "@missionpay/guard": "*",
+    "@openzeppelin/merkle-tree": "^1.0.8",
+    "@prisma/client": "5.22.0",
+    "@types/qrcode": "^1.5.6",
+    "@x402/core": "^2.30.0",
+    "@x402/evm": "^2.30.0",
+    "jose": "^5.9.6",
+    "jsqr": "^1.4.0",
+    "next": "15.5.29",
+    "pg": "^8.13.1",
+    "pg-gateway": "^0.3.0-beta.4",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "viem": "^2.21.44"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^20.17.6",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "prisma": "5.22.0",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}

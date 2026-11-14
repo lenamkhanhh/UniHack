@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "ledgerScope": "mission",
+  "missionSlug": "demo-805909",
+  "mission": {
+    "slug": "demo-805909",
+    "missionId": "0xc5db5974b78bcf5121f94a0bdb0f1e1a7c75a679ed6fc5a8e1d3648947ee44f2",
+    "ownerAddress": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+    "agentAddress": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+    "treasuryCap": "10000000",
+    "toolCap": "5000000",
+    "spentTool": "100000",
+    "reservedTool": "0",
+    "expiresAt": "2026-11-07T17:23:28.255Z",
+    "status": "ACTIVE",
+    "completedAt": "2026-11-06T17:23:43.484Z",
+    "deliverableHash": "0xd055fb009dc592fe43e5dff22682ea3f76b2069bd19fc382759487859ec78764",
+    "configVersion": 1,
+    "policyHash": "0xdf5c1145b9a11f4bc24521da81b70be4aebfc77db62358dd87938634f6624286",
+    "publicPublished": false,
+    "createdAt": "2026-11-06T17:23:28.400Z",
+    "updatedAt": "2026-11-06T17:23:43.593Z"
+  },
+  "operations": [
+    {
+      "operationId": "c13fb97b-1fa6-44d8-86cd-9cea2638da78",
+      "toolId": "tool:search",
+      "state": "SETTLED",
+      "paymentMode": "MOCK",
+      "reservedAmount": "0",
+      "authFrom": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+      "authTo": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+      "authValue": "100000",
+      "authNonce": "0x3bb2b1fda15cbcdf2eec0768c7e3033fdaa55a5c135f65eddd999b99e653f0a9",
+      "validAfter": "1793985803",
+      "validBefore": "1793985873",
+      "txHash": "mock:c13fb97b-1fa6-44d8-86cd-9cea2638da78",
+      "receiptBlockNumber": null,
+      "receiptBlockHash": null,
+      "failureReason": null,
+      "result": {
+        "provider": "deterministic-fixture",
+        "fixture": true,
+        "query": "Avalanche Fuji settlement architecture",
+        "points": [
+          "Avalanche consensus provides sub-second finality and high throughput for: Avalanche Fuji settlement architecture",
+          "EIP-3009 transferWithAuthorization enables gasless meta-transactions for USDC",
+          "Guarded treasury models separate autonomous agent spend from human-supervised disbursements"
+        ],
+        "sources": [
+          "https://docs.avax.network/learn/avalanche-consensus",
+          "https://github.com/circlefin/stablecoin-evm",
+          "https://testnet.snowtrace.io"
+        ]
+      },
+      "heldResultHash": "0xe9944109a4361d40535c4e50559bc599ba9dbdf3cd6cfa08a5434f8c13259064",
+      "sessionId": null,
+      "minuteIndex": null,
+      "createdAt": "2026-11-06T17:23:33.672Z",
+      "updatedAt": "2026-11-06T17:23:34.166Z"
+    }
+  ],
+  "audit": {
+    "checkpoint": {
+      "headHash": "0x9af2b68ab37f841bbe02428291a231892f4e21bbaa75945fec89c0f169833aee",
+      "entryCount": 3,
+      "lastIndexedSequence": 3,
+      "checkpointTimestamp": "2026-11-06T17:23:34.176Z"
+    },
+    "entries": [
+      {
+        "sourceKey": "c13fb97b-1fa6-44d8-86cd-9cea2638da78:reserve",
+        "prevHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "entryHash": "0x84e736cb86a4208fcc28e2b8e8ff9620fe077c3161dd248ec614fd3793df65ed",
+        "canonicalJson": "{\"actor\":\"0x70997970c51812dc3a010c7d01b50e0d17dc79c8\",\"amount\":\"100000\",\"chain_id\":\"43113\",\"created_at\":\"2026-11-06T17:23:33.796Z\",\"kind\":\"TOOL_RESERVED\",\"mission_id\":\"demo-805909\",\"operation_id\":\"c13fb97b-1fa6-44d8-86cd-9cea2638da78\",\"policy_hash\":\"0xdf5c1145b9a11f4bc24521da81b70be4aebfc77db62358dd87938634f6624286\",\"policy_version\":\"1\",\"prev_hash\":\"0x0000000000000000000000000000000000000000000000000000000000000000\",\"reason\":\"Budget reserved atomically\",\"result_hash\":\"\",\"rule\":\"RESERVE_OK\",\"source_key\":\"c13fb97b-1fa6-44d8-86cd-9cea2638da78:reserve\",\"to\":\"0x70997970c51812dc3a010c7d01b50e0d17dc79c8\",\"tx_hash\":\"\"}"
+      },
+      {
+        "sourceKey": "c13fb97b-1fa6-44d8-86cd-9cea2638da78:sign",
+        "prevHash": "0x84e736cb86a4208fcc28e2b8e8ff9620fe077c3161dd248ec614fd3793df65ed",
+        "entryHash": "0x0c5720e9051ad400e0063b103c067729faec4053b1a61b782b5345c3b520f363",
+        "canonicalJson": "{\"actor\":\"0x70997970c51812dc3a010c7d01b50e0d17dc79c8\",\"amount\":\"100000\",\"chain_id\":\"43113\",\"created_at\":\"2026-11-06T17:23:34.047Z\",\"kind\":\"TOOL_SIGNED\",\"mission_id\":\"demo-805909\",\"operation_id\":\"c13fb97b-1fa6-44d8-86cd-9cea2638da78\",\"policy_hash\":\"0xdf5c1145b9a11f4bc24521da81b70be4aebfc77db62358dd87938634f6624286\",\"policy_version\":\"1\",\"prev_hash\":\"0x84e736cb86a4208fcc28e2b8e8ff9620fe077c3161dd248ec614fd3793df65ed\",\"reason\":\"EIP-3009 authorization created and persisted before transmission\",\"result_hash\":\"\",\"rule\":\"SIGN_OK\",\"source_key\":\"c13fb97b-1fa6-44d8-86cd-9cea2638da78:sign\",\"to\":\"0x70997970c51812dc3a010c7d01b50e0d17dc79c8\",\"tx_hash\":\"\"}"
+      },
+      {
+        "sourceKey": "c13fb97b-1fa6-44d8-86cd-9cea2638da78:settle",
+        "prevHash": "0x0c5720e9051ad400e0063b103c067729faec4053b1a61b782b5345c3b520f363",
+        "entryHash": "0x9af2b68ab37f841bbe02428291a231892f4e21bbaa75945fec89c0f169833aee",
+        "canonicalJson": "{\"actor\":\"0x70997970c51812dc3a010c7d01b50e0d17dc79c8\",\"amount\":\"100000\",\"chain_id\":\"43113\",\"created_at\":\"2026-11-06T17:23:34.176Z\",\"kind\":\"TOOL_PAID\",\"mission_id\":\"demo-805909\",\"operation_id\":\"c13fb97b-1fa6-44d8-86cd-9cea2638da78\",\"policy_hash\":\"0xdf5c1145b9a11f4bc24521da81b70be4aebfc77db62358dd87938634f6624286\",\"policy_version\":\"1\",\"prev_hash\":\"0x0c5720e9051ad400e0063b103c067729faec4053b1a61b782b5345c3b520f363\",\"reason\":\"SETTLED_NORMAL\",\"result_hash\":\"0xe9944109a4361d40535c4e50559bc599ba9dbdf3cd6cfa08a5434f8c13259064\",\"rule\":\"SETTLEMENT_VERIFIED\",\"source_key\":\"c13fb97b-1fa6-44d8-86cd-9cea2638da78:settle\",\"to\":\"0x70997970c51812dc3a010c7d01b50e0d17dc79c8\",\"tx_hash\":\"mock:c13fb97b-1fa6-44d8-86cd-9cea2638da78\"}"
+      }
+    ]
+  }
+}

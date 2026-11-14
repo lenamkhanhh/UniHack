@@ -1,0 +1,30 @@
+{
+  "requestHash": "0x0630a9536a534d604b359a41c92213c6df0cb0f905f56ec5142c12a7609d9a84",
+  "missionId": "0xd99efb71ad65b53de2b089b7327dc535f9f04bdbb0723dc4988d02d639e7a633",
+  "missionSlug": "fork-dryrun-s1c",
+  "evaluatedAt": "2026-11-13T15:24:21.078Z",
+  "validatorAddress": "0x83F5E5F17eE8D7BeC1968f100A11824E9c3713B5",
+  "agentId": "294",
+  "score": 100,
+  "tag": "verified-full",
+  "checks": {
+    "headMatchesOnChain": true,
+    "rootMatchesOnChain": true,
+    "payeesGenerateRoot": true,
+    "executedPayeesValid": true,
+    "totalSpendWithinCap": true,
+    "hasExecutions": true
+  },
+  "details": {
+    "onChainHead": "0x6acb73120767e806277f598f2bd84f42c572c8e6e53cd53fe97a6201893ac276",
+    "onChainRoot": "0x3011ac814b7ad5d2788091d9bf42b719e566fdf9ebe5c18dd3ea556dee6b71dd",
+    "computedRoot": "0x3011ac814b7ad5d2788091d9bf42b719e566fdf9ebe5c18dd3ea556dee6b71dd",
+    "executedCount": 1,
+    "totalExecutedAmount": "10000",
+    "missionCap": "100000",
+    "snapshotBlock": "61010185",
+    "fromBlock": "61010179",
+    "toBlock": "61010185",
+    "failedChecks": []
+  }
+}

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MissionPay Demo - Architecture Diagram (v8b)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@800;900&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      width: 1920px;
+      height: 1080px;
+      background: #F7F6F2;
+      color: #0F1115;
+      font-family: 'Geist', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .top-header {
+      position: absolute;
+      top: 50px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'Geist Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #0F1115;
+      margin-bottom: 10px;
+    }
+
+    .red-sq {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: #E84142;
+      flex-shrink: 0;
+    }
+
+    .title {
+      font-family: 'Archivo', sans-serif;
+      font-size: 46px;
+      font-weight: 900;
+      color: #0F1115;
+      letter-spacing: -0.02em;
+      text-transform: uppercase;
+    }
+
+    .dot-accent {
+      color: #E84142;
+    }
+
+    .subtitle {
+      font-size: 19px;
+      color: #5E646E;
+      margin-top: 8px;
+      font-weight: 500;
+    }
+
+    .diagram-svg {
+      width: 1680px;
+      height: 640px;
+      margin-top: 70px;
+    }
+
+    .flow-line {
+      stroke-dasharray: 8 6;
+      animation: flowAnim 1.2s linear infinite;
+    }
+
+    @keyframes flowAnim {
+      from { stroke-dashoffset: 28; }
+      to { stroke-dashoffset: 0; }
+    }
+
+    .bottom-meta {
+      position: absolute;
+      bottom: 36px;
+      display: flex;
+      gap: 32px;
+      font-family: 'Geist Mono', monospace;
+      font-size: 14px;
+      color: #5E646E;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-header">
+    <div class="kicker"><span class="red-sq"></span>DUAL-LAYER SECURITY ARCHITECTURE</div>
+    <div class="title">HOW MISSIONPAY PROTECTS AGENT TREASURIES<span class="dot-accent">.</span></div>
+    <div class="subtitle">Off-chain LLMs can be tricked by prompt injection — on-chain smart contracts enforce deterministic limits</div>
+  </div>
+
+  <svg class="diagram-svg" viewBox="0 0 1680 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- CONNECTIONS -->
+    <!-- Line 1: Agent -> Validator -->
+    <path d="M 420 300 L 590 300" stroke="#2457C5" stroke-width="4" stroke-linecap="round" class="flow-line"/>
+    <polygon points="590,294 606,300 590,306" fill="#2457C5"/>
+    <text x="505" y="278" fill="#2457C5" font-family="'Geist Mono', monospace" font-size="13" font-weight="bold" text-anchor="middle">Payment Proposal</text>
+
+    <!-- Line 2: Validator -> Contract -->
+    <path d="M 970 300 L 1140 300" stroke="#14213D" stroke-width="4" stroke-linecap="round" class="flow-line"/>
+    <polygon points="1140,294 1156,300 1140,306" fill="#14213D"/>
+    <text x="1055" y="278" fill="#14213D" font-family="'Geist Mono', monospace" font-size="13" font-weight="bold" text-anchor="middle">proposeWithProof()</text>
+
+    <!-- NODE 1: Autonomous Agent (LLM) -->
+    <g class="node-card" transform="translate(60, 150)">
+      <rect width="360" height="290" rx="16" fill="#FFFFFF" stroke="#2457C5" stroke-width="2" filter="drop-shadow(0 10px 25px rgba(15,17,21,0.06))"/>
+      <rect x="24" y="24" width="48" height="48" rx="12" fill="#E7EEFB"/>
+      <text x="48" y="56" fill="#2457C5" font-size="24" font-weight="bold" text-anchor="middle">🤖</text>
+      
+      <text x="86" y="44" fill="#0F1115" font-family="'Geist', sans-serif" font-size="20" font-weight="bold">Autonomous Agent</text>
+      <text x="86" y="66" fill="#5E646E" font-family="'Geist Mono', monospace" font-size="13">Off-Chain LLM Planner</text>
+
+      <line x1="24" y1="92" x2="336" y2="92" stroke="#E4E3DC" stroke-width="1"/>
+
+      <text x="28" y="125" fill="#334155" font-family="'Geist', sans-serif" font-size="15" font-weight="500">• Processes incoming invoices</text>
+      <text x="28" y="155" fill="#334155" font-family="'Geist', sans-serif" font-size="15" font-weight="500">• Subject to prompt injections</text>
+      <text x="28" y="185" fill="#E84142" font-family="'Geist', sans-serif" font-size="15" font-weight="700">⚠️ Vulnerable to social engineering</text>
+
+      <!-- Code pill -->
+      <rect x="24" y="215" width="312" height="44" rx="4" fill="#F8FAFC" stroke="#E4E3DC"/>
+      <text x="36" y="243" fill="#2457C5" font-family="'Geist Mono', monospace" font-size="13">target: 0xDead...0001 (0.01 USDC)</text>
+    </g>
+
+    <!-- NODE 2: Off-chain validator -->
+    <g class="node-card" transform="translate(610, 150)">
+      <rect width="360" height="290" rx="16" fill="#FFFFFF" stroke="#14213D" stroke-width="2" filter="drop-shadow(0 10px 25px rgba(15,17,21,0.06))"/>
+      <rect x="24" y="24" width="48" height="48" rx="12" fill="#E6ECF3"/>
+      <text x="48" y="56" fill="#14213D" font-size="24" font-weight="bold" text-anchor="middle">🛡️</text>
+
+      <text x="86" y="44" fill="#0F1115" font-family="'Geist', sans-serif" font-size="20" font-weight="bold">Off-chain validator</text>
+      <text x="86" y="66" fill="#5E646E" font-family="'Geist Mono', monospace" font-size="13">Cryptographic Gatekeeper</text>
+
+      <line x1="24" y1="92" x2="336" y2="92" stroke="#E4E3DC" stroke-width="1"/>
+
+      <text x="28" y="125" fill="#334155" font-family="'Geist', sans-serif" font-size="15" font-weight="500">• Checks payee against signed mission</text>
+      <text x="28" y="155" fill="#334155" font-family="'Geist', sans-serif" font-size="15" font-weight="500">• Builds Merkle proof</text>
+      <text x="28" y="185" fill="#334155" font-family="'Geist', sans-serif" font-size="15" font-weight="500">• Writes hash-chained audit log</text>
+
+      <!-- Merkle Tree Pill -->
+      <rect x="24" y="215" width="312" height="44" rx="4" fill="#F8FAFC" stroke="#E4E3DC"/>
+      <text x="36" y="243" fill="#14213D" font-family="'Geist Mono', monospace" font-size="13">MerkleRoot: 0x3011ac81...71dd</text>
+    </g>
+
+    <!-- NODE 3: GuardedTreasury (Fuji C-Chain) - v8b Navy Band Card -->
+    <g class="node-card" transform="translate(1160, 135)">
+      <rect width="360" height="320" rx="16" fill="#14213D" stroke="#E84142" stroke-width="3" filter="drop-shadow(0 14px 30px rgba(20,33,61,0.4))"/>
+      <rect x="24" y="24" width="48" height="48" rx="12" fill="#E84142"/>
+      <text x="48" y="56" fill="#FFFFFF" font-size="24" font-weight="bold" text-anchor="middle">🔺</text>
+
+      <text x="86" y="44" fill="#FFFFFF" font-family="'Geist', sans-serif" font-size="20" font-weight="bold">GuardedTreasury</text>
+      <text x="86" y="66" fill="#FF8593" font-family="'Geist Mono', monospace" font-size="13" font-weight="600">Avalanche Fuji C-Chain</text>
+
+      <line x1="24" y1="92" x2="336" y2="92" stroke="#2A3859" stroke-width="1"/>
+
+      <text x="28" y="122" fill="#FFFFFF" font-family="'Geist', sans-serif" font-size="15" font-weight="700">Contract Invariants Enforced:</text>
+      <text x="28" y="148" fill="#CBD5E1" font-family="'Geist', sans-serif" font-size="14">• Merkle payee membership</text>
+      <text x="28" y="172" fill="#CBD5E1" font-family="'Geist', sans-serif" font-size="14">• Per-mission budget ceiling</text>
+      <text x="28" y="196" fill="#CBD5E1" font-family="'Geist', sans-serif" font-size="14">• Expiry timestamp validation</text>
+
+      <!-- Outcome boxes (square-ish 4px radius as per v8b) -->
+      <rect x="20" y="218" width="320" height="38" rx="4" fill="#FCE8EB" stroke="#E84142"/>
+      <text x="32" y="242" fill="#D3102E" font-family="'Geist Mono', monospace" font-size="12" font-weight="bold">❌ PayeeNotInMissionSet → REVERT</text>
+
+      <rect x="20" y="264" width="320" height="38" rx="4" fill="#E3F2EA" stroke="#0B7A4B"/>
+      <text x="32" y="288" fill="#0B7A4B" font-family="'Geist Mono', monospace" font-size="12" font-weight="bold">✅ Verified Payee → TRANSFER 0.01 USDC</text>
+    </g>
+  </svg>
+
+  <div class="bottom-meta">
+    <div>Deterministic On-Chain Verification</div>
+    <div>•</div>
+    <div>Zero Trust in AI Agent Reasoning</div>
+    <div>•</div>
+    <div>Zero USDC lost on off-mission payees</div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,348 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/db';
+import { verifyToken, computePayloadHash } from '@/lib/auth';
+import {
+  createQuote,
+  reserveOperation,
+  signOperationAuthorization,
+  executeUpstreamAndSettle,
+} from '@/lib/payments';
+import { toolCatalog } from '@/lib/tools';
+import { toOperationDto } from '@/lib/dto';
+import {
+  X402_HEADER,
+  X402_RESPONSE_HEADER,
+  X402_V2_REQUIRED_HEADER,
+  X402_V2_SIGNATURE_HEADER,
+  X402_V2_RESPONSE_HEADER,
+  X402_V1_HEADER,
+  X402_V1_RESPONSE_HEADER,
+  CAIP2_AVALANCHE_FUJI,
+  LEGACY_AVALANCHE_FUJI,
+  getActiveX402Version,
+  X402_SCHEME,
+} from '@/lib/constants';
+import { normalizeAddress } from '@/lib/chain';
+import { computeBoundNonce } from '@/lib/x402-binding';
+
+export async function POST(
+  req: NextRequest,
+  context: any
+) {
+  try {
+    const { id } = await context.params;
+    const rawId = decodeURIComponent(id);
+    const toolId = toolCatalog[rawId] ? rawId : (toolCatalog[`tool:${rawId}`] ? `tool:${rawId}` : rawId);
+    const authHeader = req.headers.get('authorization') || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+
+    if (!token) {
+      return NextResponse.json({ error: 'Missing spend token' }, { status: 401 });
+    }
+
+    let claims;
+    try {
+      claims = await verifyToken(token);
+    } catch {
+      return NextResponse.json({ error: 'Invalid or expired spend token' }, { status: 401 });
+    }
+
+    if (claims.type !== 'spend') {
+      return NextResponse.json({ error: 'Spend token required' }, { status: 403 });
+    }
+
+    const body = await req.json();
+    const operationId = req.headers.get('x-operation-id') || body.operationId;
+    if (!operationId) {
+      return NextResponse.json({ error: 'operationId is required' }, { status: 400 });
+    }
+
+    // Generic tools route cannot create or drive TalkMeter sessions/minutes (Finding F8)
+    if (toolId === 'tool:talkmeter' || body.sessionId || body.minuteIndex !== undefined) {
+      return NextResponse.json(
+        { error: 'TalkMeter operations must be initiated via TalkMeter tick service' },
+        { status: 403 }
+      );
+    }
+
+    const v2PaymentHeader =
+      req.headers.get(X402_V2_SIGNATURE_HEADER.toLowerCase()) ||
+      req.headers.get(X402_V2_SIGNATURE_HEADER);
+    const v1PaymentHeader =
+      req.headers.get(X402_V1_HEADER.toLowerCase()) ||
+      req.headers.get(X402_V1_HEADER);
+    const paymentHeader = v2PaymentHeader || v1PaymentHeader;
+    const appOrigin = process.env.APP_ORIGIN || 'http://localhost:3000';
+    const sellerAddress = process.env.SELLER_ADDRESS || '0x0000000000000000000000000000000000000002';
+
+    // 1. Unpaid request or server-orchestrated request
+    if (!paymentHeader) {
+      if (req.headers.get('x-orchestrate') === 'true' || body.orchestrate === true) {
+        await createQuote({
+          operationId,
+          toolId,
+          input: body.arguments || body.input || body,
+          tokenClaims: claims,
+          sellerAddress,
+          appOrigin,
+        });
+
+        await reserveOperation({
+          operationId,
+          tokenClaims: claims,
+        });
+
+        await signOperationAuthorization({
+          operationId,
+          agentPrivateKey: process.env.AGENT_PRIVATE_KEY as `0x${string}` | undefined,
+        });
+
+        const execution = await executeUpstreamAndSettle({
+          operationId,
+          claims,
+          toolId,
+          arguments: body.arguments || body.input || body,
+        });
+
+        const isSettled = execution.operation?.state === 'SETTLED';
+        return NextResponse.json({
+          operationId,
+          state: execution.operation?.state,
+          result: isSettled ? execution.result : null,
+          operation: toOperationDto(execution.operation, { includeResult: true }),
+          mode: execution.mode,
+          failureReason: execution.operation?.failureReason,
+        });
+      }
+
+      const quote = await createQuote({
+        operationId,
+        toolId,
+        input: body.arguments || body.input || body,
+        tokenClaims: claims,
+        sellerAddress,
+        appOrigin,
+      });
+
+      const activeVersion = getActiveX402Version();
+      const requiredPayloadBase64 = Buffer.from(
+        JSON.stringify(quote.unpaidResponse)
+      ).toString('base64');
+
+      const headers: Record<string, string> = {
+        'X-Operation-Id': operationId,
+      };
+
+      if (activeVersion === 1) {
+        headers[X402_V1_HEADER] = requiredPayloadBase64;
+      } else {
+        headers[X402_V2_REQUIRED_HEADER] = requiredPayloadBase64;
+      }
+
+      return NextResponse.json(quote.unpaidResponse, {
+        status: 402,
+        headers,
+      });
+    }
+
+    // 2. Paid request: Decode and strictly verify x402 payment payload (v1 and v2 dual-support)
+    let paymentPayload: any;
+    try {
+      const rawJson = Buffer.from(paymentHeader, 'base64').toString('utf8');
+      paymentPayload = JSON.parse(rawJson);
+    } catch {
+      try {
+        paymentPayload = JSON.parse(paymentHeader);
+      } catch {
+        return NextResponse.json(
+          { error: 'Malformed payment header (must be valid base64 JSON)' },
+          { status: 400 }
+        );
+      }
+    }
+
+    const payloadVersion = Number(paymentPayload.x402Version || paymentPayload.version || 1);
+    if (payloadVersion !== 1 && payloadVersion !== 2) {
+      return NextResponse.json(
+        { error: 'Invalid x402 protocol envelope: unsupported version' },
+        { status: 400 }
+      );
+    }
+
+    const payloadScheme = paymentPayload.scheme || paymentPayload.accepted?.scheme;
+    if (payloadScheme && payloadScheme !== X402_SCHEME) {
+      return NextResponse.json(
+        { error: 'Invalid x402 protocol envelope: unsupported scheme' },
+        { status: 400 }
+      );
+    }
+
+    const payloadNetwork = paymentPayload.network || paymentPayload.accepted?.network;
+    const isSupportedNetwork =
+      payloadNetwork === CAIP2_AVALANCHE_FUJI ||
+      payloadNetwork === LEGACY_AVALANCHE_FUJI ||
+      payloadNetwork === '43113';
+
+    if (!isSupportedNetwork) {
+      return NextResponse.json(
+        { error: 'Invalid x402 protocol envelope: unsupported network' },
+        { status: 400 }
+      );
+    }
+
+    const innerPayload = paymentPayload.payload;
+    if (!innerPayload) {
+      return NextResponse.json(
+        { error: 'Invalid x402 protocol envelope: missing payload' },
+        { status: 400 }
+      );
+    }
+
+    const auth = innerPayload.authorization || innerPayload;
+    const sig = innerPayload.signature || paymentPayload.signature;
+
+    if (!auth || !auth.from || !auth.to || !auth.value || !auth.nonce || !sig) {
+      return NextResponse.json(
+        { error: 'Invalid x402 protocol envelope: missing authorization or signature' },
+        { status: 400 }
+      );
+    }
+
+    // Scoped lookup before execution
+    const op = await prisma.toolOperation.findUnique({
+      where: { operationId },
+    });
+
+    if (!op || op.missionSlug !== claims.missionSlug) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
+    // ATC'26 F4: Premature result disclosure gating on terminal failed state
+    if (op.state === 'FAILED') {
+      return NextResponse.json(
+        {
+          operationId,
+          state: 'FAILED',
+          result: null,
+          failureReason: op.failureReason,
+          error: op.failureReason || 'OPERATION_FAILED',
+        },
+        { status: 400 }
+      );
+    }
+
+    // Validate tool existence
+    const tool = toolCatalog[toolId];
+    if (!tool) {
+      return NextResponse.json({ error: `Tool ${toolId} not found` }, { status: 404 });
+    }
+
+    // Compute input hash from incoming request body
+    const argCheck = tool.validateInput(body.arguments || body.input || body);
+    if (!argCheck.valid) {
+      return NextResponse.json({ error: argCheck.error || 'Invalid arguments' }, { status: 400 });
+    }
+    const incomingInputHash = computePayloadHash(argCheck.canonicalInput);
+
+    const terms = JSON.parse(op.paymentTerms || '{}');
+
+    // Cryptographic request-bound nonce check (ATC'26 F1 Defense)
+    const expectedBoundNonce = computeBoundNonce({
+      operationId: op.operationId,
+      toolId,
+      inputHash: incomingInputHash,
+      priceAtomic: terms.priceAtomic || op.authValue || '0',
+      payTo: terms.payTo || op.authTo || '',
+      chainId: op.chainId,
+    });
+
+    const authNonce = (auth.nonce || '').toLowerCase();
+    if (
+      authNonce !== expectedBoundNonce.toLowerCase() ||
+      (op.authNonce || '').toLowerCase() !== expectedBoundNonce.toLowerCase()
+    ) {
+      return NextResponse.json(
+        { error: 'PAYMENT_NOT_BOUND_TO_REQUEST' },
+        { status: 403 }
+      );
+    }
+
+    if (op.toolId !== toolId) {
+      return NextResponse.json(
+        { error: 'PAYMENT_NOT_BOUND_TO_REQUEST', detail: 'Tool mismatch' },
+        { status: 403 }
+      );
+    }
+
+    // Bind payment authorization to stored immutable operation authorization
+    if (
+      normalizeAddress(auth.from) !== normalizeAddress(op.authFrom || '') ||
+      normalizeAddress(auth.to) !== normalizeAddress(op.authTo || '') ||
+      auth.value?.toString() !== op.authValue?.toString() ||
+      sig !== op.authSignature
+    ) {
+      return NextResponse.json(
+        { error: 'Payment authorization does not match operation terms' },
+        { status: 403 }
+      );
+    }
+
+    // Execute upstream and settle with caller claims binding
+    const execution = await executeUpstreamAndSettle({
+      operationId,
+      claims,
+      toolId,
+      arguments: body.arguments || body.input || body,
+    });
+
+    const isSettled = execution.operation?.state === 'SETTLED';
+
+    const v2PaymentResponseHeader = Buffer.from(
+      JSON.stringify({
+        x402Version: 2,
+        txHash: execution.operation?.txHash || (isSettled ? 'mock:settled' : null),
+        status: execution.operation?.state,
+        network: CAIP2_AVALANCHE_FUJI,
+      })
+    ).toString('base64');
+
+    const v1PaymentResponseHeader = Buffer.from(
+      JSON.stringify({
+        x402Version: 1,
+        txHash: execution.operation?.txHash || (isSettled ? 'mock:settled' : null),
+        status: execution.operation?.state,
+      })
+    ).toString('base64');
+
+    // Result is ONLY returned when state is SETTLED (Finding F4)
+    const returnedResult = isSettled ? execution.result : null;
+    const responseStatus = isSettled ? 200 : 202;
+
+    return NextResponse.json(
+      {
+        operationId,
+        state: execution.operation?.state,
+        result: returnedResult,
+        txHash: execution.operation?.txHash,
+        mode: execution.mode,
+        failureReason: execution.operation?.failureReason,
+      },
+      {
+        status: responseStatus,
+        headers: {
+          [X402_V2_RESPONSE_HEADER]: v2PaymentResponseHeader,
+          [X402_V1_RESPONSE_HEADER]: v1PaymentResponseHeader,
+          'X-Operation-Id': operationId,
+        },
+      }
+    );
+  } catch (err: any) {
+    if (err.message === 'OPERATION_SCOPE_MISMATCH' || err.message === 'INPUT_MISMATCH') {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
+    if (err.message === 'OPERATION_NOT_FOUND') {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
