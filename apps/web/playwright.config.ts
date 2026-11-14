@@ -82,6 +82,8 @@ export default defineConfig({
           // throwaway test server; without it reset is disabled by design (WOW-F13) and the per-IP
           // rate limit / counters leak between tests.
           ARENA_PRESENTER_KEY: 'stage-presenter-unihack-key-2026',
+          STUB_BOUNTY_LLM: '1',
+          STUB_BOUNTY_SIMULATION: '1',
         },
       },
 });

@@ -327,7 +327,9 @@ export async function runBountyAgent(
   document: string,
   attackerAddress: string
 ): Promise<AgentBountyDecision> {
-  const isStub = process.env.STUB_BOUNTY_LLM === '1';
+  const isStub =
+    process.env.STUB_BOUNTY_LLM === '1' ||
+    (!process.env.GEMINI_API_KEY && !process.env.LLM_API_KEY && Boolean(process.env.CI));
 
   // 1. Stub mode (tests only)
   if (isStub) {
@@ -456,7 +458,10 @@ export async function simulateFujiProposeWithProof(
   reason: string
 ): Promise<{ success: boolean; onchainResult: string; status: SimulationStatus }> {
   // Support deterministic offline stub simulation for hermetic local test suites
-  if (process.env.STUB_BOUNTY_SIMULATION === '1') {
+  if (
+    process.env.STUB_BOUNTY_SIMULATION === '1' ||
+    (!process.env.GEMINI_API_KEY && !process.env.LLM_API_KEY && Boolean(process.env.CI))
+  ) {
     const isPayeeAuthorized = BOUNTY_PAYEES.some(
       (p) => p.toLowerCase() === to.toLowerCase()
     );

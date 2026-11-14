@@ -1,6 +1,7 @@
 import { test, expect } from './fixtures/wallet';
 import path from 'path';
 import fs from 'fs';
+import { execSync } from 'child_process';
 
 test.describe('WOW-W2: ERC-8004 Validation Registry on Avalanche Fuji', () => {
   test.use({
@@ -11,13 +12,19 @@ test.describe('WOW-W2: ERC-8004 Validation Registry on Avalanche Fuji', () => {
   const deckShotsDir = path.resolve(process.cwd(), '../../artifacts/submission-s1/deck-shots');
 
   test.beforeAll(async () => {
-    // Seed the REAL Fuji mission fuji-live-mission-s1c (run 13/11/2026) from its committed audit export.
-    const { prisma } = await import('../lib/db');
-    const { seedMissionAudit } = await import('../../../scripts/lib/mission-audit');
-    const doc = JSON.parse(
-      fs.readFileSync(path.resolve(process.cwd(), '../../evidence/missions/fuji-live-mission-s1c/audit.json'), 'utf8'),
-    );
-    await seedMissionAudit(prisma as any, doc);
+    // Seed the REAL Fuji mission fuji-live-mission-s1c (run 13/11/2026) via hermetic standalone script
+    const repoRoot = path.resolve(process.cwd(), '../..');
+    const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres:postgres_test_password@127.0.0.1:55432/unihack_test';
+    const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+    execSync(`${npxCmd} tsx scripts/seed-mission-audit.ts --slug fuji-live-mission-s1c`, {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        DATABASE_URL: dbUrl,
+        DIRECT_URL: dbUrl,
+      },
+      stdio: 'pipe',
+    });
   });
 
   test.beforeEach(async ({ page }) => {

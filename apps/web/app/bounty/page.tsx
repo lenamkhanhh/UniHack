@@ -446,7 +446,7 @@ export default function BountyPage() {
                 <h3 className="card-title flex items-center gap-2">
                   {t('bounty.result.title')}
                 </h3>
-                {(lastResult.source === 'recorded' || lastResult.mode === 'recorded' || lastResult.id?.startsWith('rec-')) && (
+                {(lastResult.source === 'recorded' || lastResult.mode === 'recorded' || lastResult.mode === 'stub' || lastResult.id?.startsWith('rec-')) && (
                   <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-tag bg-warn-bg text-warn border border-warn-rule">
                     {t('bounty.result.recorded_run')}
                   </span>
