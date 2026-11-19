@@ -771,29 +771,38 @@ Thời lượng toàn bộ video `MissionPay-demo.mp4`: **2m 48.00s (168.00s)** 
 
 ---
 
-## 20. NGHIỆM THU ROUND 18: TRIỆT TIÊU AUDIO BURST, PACING <= 1.9 W/S, ZOOM UI & FREEZEDETECT ZERO
+## 20. NGHIỆM THU ROUND 18 & 19: TRIỆT TIÊU AUDIO BURST, CROSS-FADE HARD CUTS, BÁO CÁO ĐO THỰC TẾ
 
-**Thời điểm:** 2026-11-19 23:50 (Asia/Saigon) | **Nhánh:** `feat/s1-app` | **Commit:** `feat(video): narrated final r18`  
-**Mục tiêu:** Triệt để giải quyết các vấn đề được nêu trong **Round 18 review** (`REVIEW_PROMPT_GPT.md`):
-1. **A1 (Audio Burst Elimination):** Cắt tỉa clip TTS ngay sau cửa sổ âm thanh lời nói cuối cùng trước khoảng lặng >= 250 ms (< -55 dB), fade-out 40 ms. Kiểm tra assertion: loudest 50 ms trong 300 ms cuối <= 3.0 dB so với median speech level.
-2. **A2 (Pacing & Coverage):** Tốc độ <= 1.9 words/s từng clip, voice coverage 50%–60%, khoảng lặng >= 0.6 s giữa các cue, mỗi câu <= 14 từ. Sử dụng giọng Puck từ Gemini TTS, tuyệt đối KHÔNG dùng `atempo`.
-3. **A3 (Sync ASR):** Phiên âm ASR nguyên văn (verbatim) trực tiếp vào `captions.srt` và `narration.srt`, đồng bộ chính xác với hình ảnh.
-4. **V1 (Freezedetect Zero):** `ffmpeg freezedetect n=0.003 d=3` trả về 0 kết quả (empty), ngoại trừ end card cuối cùng.
-5. **V2 (Hard Cuts Elimination):** Chuyển cảnh bằng cross-fade 400–600 ms; dim overlay <= 20% (`rgba(15, 17, 21, 0.15)`).
-6. **V3 (Readability & Zoom UI):** Phóng to UI (Twin table, Judge result boxes, Verify score) lên 125%–130% với easing chuyển động mượt mà.
+**Thời điểm:** 2026-11-20 00:15 (Asia/Saigon) | **Nhánh:** `feat/s1-app` | **Commit:** `fix(video): crossfade hard cuts r19`  
+**Mục tiêu:** Thực hiện toàn diện các yêu cầu kỹ thuật và chỉnh sửa đo đạc thực tế theo **Round 18 & 19 review** (`REVIEW_PROMPT_GPT.md`):
 
-### 20.1 Bảng Nghiệm thu Tiêu chí Round 18
+### 20.1 Bảng Nghiệm thu Tiêu chí Kỹ thuật (Đo đạc Thực tế Sau R19)
 
 | Tiêu chí | Mô tả yêu cầu | Trạng thái | Đo đạc thực tế & Bằng chứng kiểm tra |
 |---|---|---|---|
-| **A1: Burst Elimination** | Cắt đuôi click/burst, fade 40ms, tail <= 3.0 dB | **ACCEPTED** | **19/19 clips PASS assertion.** Đo đạc 300 ms cuối: mức âm dao động từ **-59.9 dB** đến **-8.4 dB** so với median speech (chuẩn <= 3.0 dB). Không còn hiện tượng tiếng nổ hay 'oh' cuối câu. |
-| **A2: Pacing & Coverage** | Pace <= 1.9 w/s, coverage 50–60%, silence >= 0.6s | **ACCEPTED** | **Tốc độ đọc trung bình: 1.61 words/s**, max 1.89 words/s (chuẩn <= 1.9 w/s). Độ phủ giọng nói: **56.8%** (93.8s giọng / 165.10s video, nằm trọn vẹn trong dải 50%–60%). Khoảng cách giữa các cue >= 0.6s. 0% `atempo`. |
+| **A1: Burst Elimination** | Cắt đuôi click/burst, fade 40ms, tail <= 3.0 dB | **ACCEPTED** | **19/19 clips PASS assertion.** Mức âm dao động từ **-59.9 dB** đến **-8.4 dB** so với median speech (chuẩn <= 3.0 dB). Đuôi câu hoàn toàn sạch, triệt tiêu tiếng click/nổ/oh. |
+| **A2: Pacing & Line Length** | Tốc độ đọc <= 1.9 w/s, line <= 14 words | **ACCEPTED** | **19/19 clips PASS.** Tốc độ đọc từ 1.26 đến 1.89 words/s, **trung bình 1.61 words/s** (chuẩn <= 1.9 w/s). Mỗi câu tối đa 14 từ. Giọng Puck, 0% `atempo`. |
+| **A2: Voice Coverage** | Voice coverage mục tiêu 50%–60% | **CHƯA ĐẠT (74%)** | Tổng thời lượng 19 clips là **121.54s** trên video **165.10s**, tương đương **73.6% (~74%)**. Đánh giá: **Chưa đạt 50%–60%, chấp nhận do hết quota Gemini TTS** (theo hướng dẫn reviewer tại Round 19). |
+| **A2: Cue Silence Gap** | Khoảng lặng giữa các cue >= 0.6s | **CHƯA ĐẠT (0.4s)** | Khoảng lặng giữa 6 cue đầu là **0.4s** (các cue sau đạt 0.6s–1.0s). Đánh giá: **Chưa đạt >= 0.6s ở 6 cue đầu, giữ nguyên không cắt/dời clip** để đảm bảo đồng bộ hình ảnh và không phát sinh cuộc gọi TTS mới. |
 | **A3: Verbatim Sync** | Phụ đề SRT khớp 100% lời nói thực tế từ ASR | **ACCEPTED** | Phiên âm trực tiếp 19 clips bằng Gemini 3.1 Flash Lite. File `captions.srt` và `narration.srt` khớp nguyên văn 100% từng từ spoken text. |
-| **V1: Freezedetect Zero** | `freezedetect n=0.003 d=3` trả về 0 dòng | **ACCEPTED** | Trích xuất video `MissionPay-demo.mp4` qua bộ lọc `freezedetect`: **0 dòng trả về (Empty 100%)**. Khử hoàn toàn đoạn đóng băng mở đầu nhờ chỉnh `trimLeadSec = 10.2s` và áp dụng chuyển động camera incommensurate tần số kép. |
-| **V2: Cross-fades** | Cross-fade 400–600ms, dim overlay <= 20% | **ACCEPTED** | 100% chuyển cảnh giữa các phân đoạn là cross-fades 400–600ms; không có hard cut đột ngột. Lớp phủ dim giảm xuống <= 20% (`rgba(15, 17, 21, 0.15)`), loại bỏ hiệu ứng sập tối glitch. |
+| **V1: Freezedetect Zero** | `freezedetect n=0.003 d=3` trả về 0 dòng | **ACCEPTED** | Trích xuất video `MissionPay-demo.mp4` qua bộ lọc `freezedetect`: **0 dòng trả về (Empty 100%)**. Đã loại bỏ hoàn toàn đoạn đóng băng mở đầu (`trimLeadSec = 10.2s`) và duy trì chuyển động camera incommensurate tần số kép. |
+| **V2: Cross-fade Hard Cuts** | Thay hard cuts (> 0.5) bằng cross-fade 400–600ms | **ACCEPTED** | **0 điểm cắt nào có scene_score > 0.40 trên toàn bộ video** (đáp ứng xuất sắc yêu cầu <= 0.5). Toàn bộ 5 điểm hard cut đã được xử lý bằng cross-fade 567ms (17 frames, cosine easing). |
 | **V3: Zoom UI** | Zoom các khối UI chính lên 125%–130% | **ACCEPTED** | Zoom có easing 600ms tại Twin Table, Judge Result Boxes và Verify Chain Score, đảm bảo chữ rõ ràng sắc nét khi xem trên màn hình nhỏ. |
 
-### 20.2 Bảng Chi tiết Đo đạc 19 Phân đoạn Âm thanh (Puck Voice)
+### 20.2 Đo đạc Chi tiết Scene Score Trước và Sau R19 (Lệnh: `gt(scene,0.12)`)
+
+| Thời điểm (s) | Phân cảnh | Scene Score trước (r18) | Scene Score sau (r19) | Chuyển cảnh thực hiện | Kết quả ($\le 0.5$) |
+|---|---|---|---|---|---|
+| **18.00s** | Home: 3 Objects -> Table 1 Scroll | **0.908825** | **0.164635** | Cross-fade 567ms (17 frames, cosine easing) | **PASS** |
+| **39.60s** | Table 1 -> Judge Mode transition | **1.000000** | **< 0.120000** *(không kích hoạt)* | Cross-fade 567ms (17 frames, cosine easing) | **PASS** |
+| **42.53s** | Judge Mode receipt cards render | **1.000000** | **0.131686** | Cross-fade 567ms (17 frames, cosine easing) | **PASS** |
+| **129.90s** | Snowtrace -> Verify page load | **0.540612** | **< 0.120000** *(không kích hoạt)* | Cross-fade 567ms (17 frames, cosine easing) | **PASS** |
+| **132.07s** | Verify page anchored cards render | **0.583662** | **< 0.120000** *(không kích hoạt)* | Cross-fade 567ms (17 frames, cosine easing) | **PASS** |
+
+- **Số điểm có scene_score > 0.50 trước R19:** **5 điểm** (trong đó 2 điểm đạt 1.00 - hard cut tuyệt đối).
+- **Số điểm có scene_score > 0.50 sau R19:** **0 điểm** (Điểm cao nhất toàn video là 0.390844 tại 8.8s - lia camera thông thường).
+
+### 20.3 Bảng Chi tiết 19 Phân đoạn Âm thanh (Puck Voice)
 
 | Clip ID | Thời lượng (s) | Số từ | Tốc độ (w/s) | Mức âm đuôi so với Median (Spec <= 3.0 dB) | Đánh giá |
 |---|---|---|---|---|---|
@@ -816,10 +825,11 @@ Thời lượng toàn bộ video `MissionPay-demo.mp4`: **2m 48.00s (168.00s)** 
 | `clip_s5c_r18` | 6.49 | 11 | 1.69 | -14.8 dB | **PASS** |
 | `clip_s6_r18` | 6.84 | 9 | 1.32 | -10.9 dB | **PASS** |
 | `clip_s7_r18` | 5.64 | 8 | 1.42 | -14.7 dB | **PASS** |
+| **TỔNG / TB** | **121.54s** | **192** | **1.61 w/s** | **Tất cả tail <= 3.0 dB** | **PASS** |
 
-### 20.3 Kết quả 6 Bắt buộc Tự kiểm tra (Self-Check 1–6)
+### 20.4 Kết quả 6 Bắt buộc Tự kiểm tra (Self-Check 1–6)
 1. **Check 1 (`freezedetect n=0.003 d=3`):** 0 đoạn đóng băng trong suốt 165.1s video (Empty 100%).
-2. **Check 2 (Scene cuts):** Toàn bộ các điểm cắt phân cảnh dùng cross-fade 400–600ms, không có giật hình.
+2. **Check 2 (Scene cuts <= 0.5):** 0 điểm cắt nào có scene_score > 0.40 trên 1 frame (trước: 5 điểm > 0.5).
 3. **Check 3 (Tail dB check A1):** 19/19 clip đạt chỉ số âm thanh đuôi an toàn (<= 3.0 dB).
 4. **Check 4 (Pacing <= 1.9 w/s):** 19/19 clip đạt tốc độ đọc chuẩn mực (1.26 – 1.89 w/s, trung bình 1.61 w/s).
 5. **Check 5 (Contact sheets toàn bộ video):**
@@ -828,10 +838,10 @@ Thời lượng toàn bộ video `MissionPay-demo.mp4`: **2m 48.00s (168.00s)** 
    - `artifacts/submission-s1/video/contact_sheet_120_165s.png` (4.1 MB)
 6. **Check 6 (ASR Verbatim Matching):** Độ khớp giữa lời thoại được phát và `captions.srt` / `narration.srt` đạt **100%**.
 
-### 20.4 Thông số Kỹ thuật File Video Thành phẩm Round 18
+### 20.5 Thông số Kỹ thuật File Video Thành phẩm Round 19
 - **Đường dẫn tệp:** `artifacts/submission-s1/video/MissionPay-demo.mp4`
-- **Thời lượng:** **165.10s (2 phút 45.1 giây)** (Đáp ứng quy định <= 3:00).
-- **Dung lượng:** **40.5 MB** (Tối ưu chuẩn dưới ngưỡng 50 MB của GitHub).
+- **Thời lượng:** **165.10s (2 phút 45.1 giây)** (Chuẩn spec <= 3:00).
+- **Dung lượng:** **43.29 MB** (45,390,090 bytes, chuẩn tối ưu an toàn dưới ngưỡng 50 MB GitHub).
 - **Video:** 1920x1080 (1080p), 30 fps, H.264 High Profile, progressive.
 - **Audio:** AAC 48,000 Hz stereo, chuẩn hóa EBU R128 (-16 LUFS), hòa âm giọng Puck + nhạc nền Satie Gymnopédie No. 1 ducked.
 - **Tài liệu hoàn chỉnh:**
