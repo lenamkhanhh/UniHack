@@ -15,12 +15,30 @@ console.log('   MissionPay Automated 1080p Video Recording (Round 13-C)      ');
 console.log('================================================================\n');
 
 console.log('[1/3] Executing Playwright video recording spec (project=video)...');
+let envDbUrl: string | undefined = process.env.TEST_DATABASE_URL;
+if (!envDbUrl) {
+  const envPath = path.resolve(ROOT, 'apps/web/.env');
+  if (fs.existsSync(envPath)) {
+    for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('DATABASE_URL=')) {
+        envDbUrl = trimmed.slice('DATABASE_URL='.length).trim().replace(/^["']|["']$/g, '');
+        break;
+      }
+    }
+  }
+}
+
 try {
   execSync(
     'npx.cmd playwright test e2e/video/record-demo.spec.ts --project=video',
     {
       cwd: path.resolve(ROOT, 'apps/web'),
       stdio: 'inherit',
+      env: {
+        ...process.env,
+        ...(envDbUrl ? { TEST_DATABASE_URL: envDbUrl, DATABASE_URL: envDbUrl, DIRECT_URL: envDbUrl } : {}),
+      },
     }
   );
 } catch (err: any) {
