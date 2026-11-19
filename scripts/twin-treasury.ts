@@ -841,7 +841,7 @@ export async function runTwinTreasury(
     '--silent',
   ]);
 
-  let forkBlockNumber: number;
+  let forkBlockNumber = 0;
   let balanceDeltaVendorA = '';
   let balanceDeltaVendorB = '';
   let balanceDeltaLegitB = '';
