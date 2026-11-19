@@ -850,21 +850,15 @@ export async function runTwinTreasury(
   const plannedTransactions: TwinTransactionPlan[] = [];
 
   try {
+    await new Promise((r) => setTimeout(r, 4000));
     const forkTransport = http(`http://127.0.0.1:${port}`);
     const forkClient = createPublicClient({ chain: avalancheFuji, transport: forkTransport });
 
-    let connected = false;
-    for (let attempt = 0; attempt < 30; attempt++) {
-      try {
-        forkBlockNumber = Number(await forkClient.getBlockNumber());
-        connected = true;
-        break;
-      } catch {
-        await new Promise((r) => setTimeout(r, 500));
-      }
-    }
-    if (!connected) {
-      throw new Error(`Failed to connect to anvil on port ${port} after 15 seconds`);
+    try {
+      forkBlockNumber = Number(await forkClient.getBlockNumber());
+    } catch {
+      await new Promise((r) => setTimeout(r, 2000));
+      forkBlockNumber = Number(await forkClient.getBlockNumber());
     }
     console.log(`[Anvil] Successfully connected to Fuji fork at Block #${forkBlockNumber}`);
 
