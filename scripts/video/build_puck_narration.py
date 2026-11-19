@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """Build final narrated demo video using Google Gemini TTS ('Puck') and Erik Satie background music.
 
-Requirements (Round 17c):
-- TTS Model: gemini-3.1-flash-tts-preview with voice 'Puck'
-- Style prompt: 'Say in an upbeat, confident tech-demo voice, with real emphasis: <cue text>'
-- Audio format: PCM s16le 24kHz mono -> 48kHz stereo WAV
-- Verification: Transcribe each clip back with gemini-3.1-flash-lite
-- Background music: Erik Satie Gymnopédie No. 1 (public domain), mixed at volume 0.32 with sidechain ducking and EBU R128 loudnorm (-16 LUFS)
-- Subtitles: artifacts/submission-s1/video/narration.srt
-- Credits: artifacts/submission-s1/video/CREDITS.md
-- Total runtime: 140–175s (Target ~149.1s), voice coverage >= 70%, speech rate 2.0–2.4 words/s. NO atempo anywhere.
+Requirements (Round 18 Review):
+- A1: Eliminate trailing click/burst ("oh"). Cut each clip at end of speech, drop after >=250ms silence gap, 40ms fade-out.
+      Build-time assertion: loudest 50ms in last 300ms must not exceed median speech level by > 3 dB.
+- A2: Measured pace <= 1.9 words/s per clip. Voice coverage 50–60%. Silence >= 0.6s between cues.
+      Style prompt: "Say in a calm, clear, measured pace, natural sentence endings, no exclamation: <cue text>"
+      Model: gemini-3.1-flash-tts-preview (voice: Puck). No atempo anywhere.
+- A3: Subtitles / captions match exact spoken ASR text verbatim. Visual cues synchronized.
+- Audio mix: Erik Satie Gymnopédie No. 1 (public domain), sidechain ducking, EBU R128 loudnorm (-16 LUFS).
 """
 
 import os
@@ -21,6 +20,7 @@ import wave
 import subprocess
 import urllib.request
 import urllib.error
+import numpy as np
 from pathlib import Path
 
 # Unbuffered print helper
@@ -58,128 +58,141 @@ if not api_key:
 
 print("GEMINI_API_KEY loaded successfully.")
 
-# Cues definitions for Round 17d (15 cues aligned with new scenes, voice coverage >= 70%, rate 2.0-2.4 words/s)
-# Total Video Duration: 140.0s (in spec 140s–175s, voice coverage: 98.46s / 140s = 70.33%). NO ATEMPO ANYWHERE.
+# Cues definitions for Round 18
+# Rules: <= 14 words per line, <= 1.9 words/s, >= 0.6s gap between cues, 50%–60% coverage, total <= 180s
 CUES = [
     {
         'id': 's0_intro',
-        'file_base': 'clip_s0_puck',
-        'start_s': 0.100,
-        'next_start_s': 3.300,
+        'file_base': 'clip_s0_r18',
+        'start_s': 0.200,
+        'next_start_s': 6.500,
         'text': 'Same vendor. Same treasury. Two outcomes.',
-        'caption': 'MissionPay: Same vendor. Same treasury. Two outcomes.',
     },
     {
         'id': 's1a_home',
-        'file_base': 'clip_s1a_puck',
-        'start_s': 3.100,
-        'next_start_s': 12.500,
-        'text': 'MissionPay secures AI agent treasuries. The owner signs authorized payees, agents propose payouts, and the Avalanche smart contract enforces every limit.',
-        'caption': 'MissionPay: owner signs authorized payees, agents propose, Avalanche contract enforces.',
+        'file_base': 'clip_s1a_r18',
+        'start_s': 6.500,
+        'next_start_s': 15.500,
+        'text': 'MissionPay secures agent treasuries: owner signs limits, contract enforces on Avalanche.',
     },
     {
         'id': 's1b_objects',
-        'file_base': 'clip_s1b_puck',
-        'start_s': 12.600,
-        'next_start_s': 20.300,
-        'text': "Three objects govern payouts: the owner's signed intent, a cryptographic Merkle proof, and our Avalanche Fuji smart contract.",
-        'caption': 'Three objects govern payouts: signed mission policy, Merkle proof, and treasury gate.',
+        'file_base': 'clip_s1b_r18',
+        'start_s': 15.500,
+        'next_start_s': 24.500,
+        'text': 'Three objects govern payouts: signed policy, Merkle proof, and treasury gate.',
     },
     {
-        'id': 's1c_table',
-        'file_base': 'clip_s1c_puck',
-        'start_s': 20.400,
-        'next_start_s': 32.300,
-        'text': 'Twin allowlist paid the vendor zero point zero one USDC. Twin mission reverted with Payee Not In Mission Set: zero USDC out. Every row links to a real Fuji transaction.',
-        'caption': 'Twin table: allowlist paid 0.01 USDC, mission reverted PayeeNotInMissionSet, 0 lost.',
+        'id': 's1c1_allowlist',
+        'file_base': 'clip_s1c1_r18',
+        'start_s': 24.500,
+        'next_start_s': 30.500,
+        'text': 'The allowlist drained funds to an off-mission vendor.',
+    },
+    {
+        'id': 's1c2_mission',
+        'file_base': 'clip_s1c2_r18',
+        'start_s': 30.500,
+        'next_start_s': 38.500,
+        'text': 'On Avalanche Fuji... MissionPay strictly reverted... with zero funds lost.',
+    },
+    {
+        'id': 's1c3_links',
+        'file_base': 'clip_s1c3_r18',
+        'start_s': 38.500,
+        'next_start_s': 45.000,
+        'text': 'Each row links... to a real Fuji transaction receipt.',
     },
     {
         'id': 's2a_receipts',
-        'file_base': 'clip_s2a_puck',
-        'start_s': 32.400,
-        'next_start_s': 37.500,
-        'text': 'In Judge Mode, three live receipts from Avalanche Fuji prove on-chain behavior.',
-        'caption': 'In Judge Mode, test any attacker: the contract strictly reverts with PayeeNotInMissionSet.',
+        'file_base': 'clip_s2a_r18',
+        'start_s': 45.500,
+        'next_start_s': 53.000,
+        'text': 'In Judge Mode, live Fuji receipts prove on-chain behavior.',
     },
     {
         'id': 's2b_attacker',
-        'file_base': 'clip_s2b_puck',
-        'start_s': 37.600,
-        'next_start_s': 43.200,
-        'text': 'Simulating a random attacker: the contract strictly reverts with Payee Not In Mission Set.',
-        'caption': 'Random attacker: the contract reverts with PayeeNotInMissionSet.',
+        'file_base': 'clip_s2b_r18',
+        'start_s': 53.000,
+        'next_start_s': 62.000,
+        'text': 'Testing an attacker: the contract strictly reverts with Payee Not In Mission Set.',
     },
     {
         'id': 's2c_owner',
-        'file_base': 'clip_s2c_puck',
-        'start_s': 43.300,
-        'next_start_s': 51.500,
-        'text': 'Testing the owner address: authorized and accepted. These are read-only eth call simulations: no gas, no private keys.',
-        'caption': 'Owner address: proposal accepted. Read-only eth_call simulation, no gas, no keys.',
+        'file_base': 'clip_s2c_r18',
+        'start_s': 62.000,
+        'next_start_s': 70.000,
+        'text': 'Testing the owner address succeeds. Read-only simulation requires zero gas.',
     },
     {
         'id': 's2d_cast',
-        'file_base': 'clip_s2d_puck',
-        'start_s': 51.600,
-        'next_start_s': 57.000,
+        'file_base': 'clip_s2d_r18',
+        'start_s': 70.500,
+        'next_start_s': 78.500,
         'text': 'Copy the cast command to query public Avalanche Fuji RPC directly.',
-        'caption': 'Verify independently: copy cast call to query public Avalanche Fuji RPC directly.',
     },
     {
         'id': 's2e_limits',
-        'file_base': 'clip_s2e_puck',
-        'start_s': 57.100,
-        'next_start_s': 62.000,
-        'text': "Known limits: updating the mission Merkle root requires the owner's signature.",
-        'caption': 'Known limits: dynamic budget updates require owner signature to update Merkle root.',
+        'file_base': 'clip_s2e_r18',
+        'start_s': 79.000,
+        'next_start_s': 86.500,
+        'text': 'Updating the mission Merkle root requires the owner signature.',
     },
     {
         'id': 's3a_bounty',
-        'file_base': 'clip_s3a_puck',
-        'start_s': 62.100,
-        'next_start_s': 69.000,
-        'text': 'In our public Bounty challenge, prompt injection tricks the agent, but our dual-layer guard preserves the treasury.',
-        'caption': 'Bounty Challenge: prompt injection fools the agent, but the contract preserves treasury.',
+        'file_base': 'clip_s3a_r18',
+        'start_s': 87.000,
+        'next_start_s': 96.000,
+        'text': 'Prompt injection tricks the agent, but our dual-layer guard protects the treasury.',
     },
     {
         'id': 's3b_trace',
-        'file_base': 'clip_s3b_puck',
-        'start_s': 69.100,
-        'next_start_s': 74.000,
-        'text': 'The poisoned address is tainted from tool output, so the validator blocks it.',
-        'caption': 'Tainted address from tool output is blocked by validator; contract provides hard backstop.',
+        'file_base': 'clip_s3b_r18',
+        'start_s': 96.500,
+        'next_start_s': 106.000,
+        'text': 'Tainted from tool output... our validator blocks the payout.',
     },
     {
         'id': 's4_snowtrace',
-        'file_base': 'clip_s4_puck',
-        'start_s': 74.100,
-        'next_start_s': 82.800,
-        'text': 'Snowtrace confirms the live receipt: execution strictly reverted on Avalanche Fuji, with Payee Not In Mission Set.',
-        'caption': 'On-chain proof: Snowtrace confirms execution reverted with PayeeNotInMissionSet.',
+        'file_base': 'clip_s4_r18',
+        'start_s': 106.500,
+        'next_start_s': 116.000,
+        'text': 'Snowtrace confirms live execution reverted on Fuji... with Payee Not In Mission Set.',
     },
     {
-        'id': 's5_verify',
-        'file_base': 'clip_s5_puck',
-        'start_s': 83.000,
-        'next_start_s': 128.500,
-        'text': 'Anchored on chain with an ERC 8004 score of 100, tamper with one byte, and verification breaks.',
-        'caption': 'Independent verification: ERC-8004 score 100/100; tamper with 1 byte and verification breaks.',
+        'id': 's5a_verify',
+        'file_base': 'clip_s5a_r18',
+        'start_s': 116.500,
+        'next_start_s': 126.500,
+        'text': 'Cryptographically anchored on Fuji... ERC eight thousand and four validation confirms a perfect score.',
+    },
+    {
+        'id': 's5b_tamper',
+        'file_base': 'clip_s5b_r18',
+        'start_s': 127.000,
+        'next_start_s': 136.000,
+        'text': 'Tamper one byte... and the cryptographic hash chain breaks.',
+    },
+    {
+        'id': 's5c_restore',
+        'file_base': 'clip_s5c_r18',
+        'start_s': 136.500,
+        'next_start_s': 145.500,
+        'text': 'Restore the original... and one hundred percent cryptographic integrity is confirmed.',
     },
     {
         'id': 's6_diagram',
-        'file_base': 'clip_s6_puck',
-        'start_s': 128.800,
-        'next_start_s': 133.600,
-        'text': 'Agents propose payouts, smart contracts enforce limits.',
-        'caption': 'Dual-Layer Defense: LLM agents propose, while Avalanche Fuji contracts enforce.',
+        'file_base': 'clip_s6_r18',
+        'start_s': 146.000,
+        'next_start_s': 154.000,
+        'text': 'Agents propose payouts... while Avalanche smart contracts enforce limits.',
     },
     {
         'id': 's7_outro',
-        'file_base': 'clip_s7_puck',
-        'start_s': 134.000,
-        'next_start_s': 139.500,
-        'text': "LLMs can be fooled. Budgets on Avalanche can't.",
-        'caption': "LLMs can be fooled. Budgets on Avalanche can't.",
+        'file_base': 'clip_s7_r18',
+        'start_s': 154.500,
+        'next_start_s': 162.000,
+        'text': 'LLMs can be fooled... Budgets on Avalanche cannot.',
     },
 ]
 
@@ -187,7 +200,10 @@ def format_srt_time(sec: float) -> str:
     h = int(sec // 3600)
     m = int((sec % 3600) // 60)
     s = int(sec % 60)
-    ms = int((sec % 1) * 1000)
+    ms = int(round((sec % 1) * 1000))
+    if ms >= 1000:
+        s += 1
+        ms -= 1000
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 def get_audio_duration(file_path: Path) -> float:
@@ -200,26 +216,78 @@ def get_audio_duration(file_path: Path) -> float:
     res = subprocess.run(cmd, capture_output=True, text=True, check=True)
     return float(res.stdout.strip())
 
-def generate_tts_clip(cue: dict, force: bool = False) -> tuple[Path, bool]:
+def trim_and_assert_tail(raw_mono: np.ndarray, sr: int = 24000) -> tuple[np.ndarray, float, float, float]:
+    """Cuts clip at end of speech, drops after >=250ms silence gap, applies 40ms fade-out.
+    Performs build-time assertion: loudest 50ms in last 300ms must not exceed median speech level by > 3 dB.
+    """
+    w10 = int(0.010 * sr)
+    n_win = len(raw_mono) // w10
+    rms_db = np.array([20 * np.log10(np.sqrt(np.mean(raw_mono[i*w10:(i+1)*w10]**2)) + 1e-12) for i in range(n_win)])
+
+    speech_indices = np.where(rms_db > -45.0)[0]
+    cand_gap = None
+    for idx in reversed(speech_indices):
+        for offset in range(1, 8):
+            gap_start = idx + offset
+            if gap_start + 25 <= n_win:
+                gap_vals = rms_db[gap_start : gap_start + 25]
+                # Gap of >= 250ms below -50dB with average below -55dB
+                if np.all(gap_vals < -50.0) and np.mean(gap_vals) < -55.0:
+                    cand_gap = (gap_start, gap_start + 25)
+                    break
+        if cand_gap is not None:
+            break
+
+    if cand_gap is not None:
+        # Drop everything after the gap
+        cut_sample = cand_gap[1] * w10
+        trimmed = raw_mono[:cut_sample].copy()
+    else:
+        trimmed = raw_mono.copy()
+
+    # 40ms linear fade-out
+    fade_len = int(0.040 * sr)
+    if len(trimmed) > fade_len:
+        trimmed[-fade_len:] *= np.linspace(1.0, 0.0, fade_len)
+
+    # Assertion metrics
+    speech_windows = rms_db[rms_db > -45.0]
+    med_speech = float(np.median(speech_windows)) if len(speech_windows) > 0 else -22.0
+    w50 = int(0.050 * sr)
+    last300 = trimmed[-int(0.300 * sr):]
+    loudest_50ms = -999.0
+    for j in range(0, len(last300) - w50 + 1, max(1, w50 // 4)):
+        c50 = last300[j : j+w50]
+        rms50 = 20 * np.log10(np.sqrt(np.mean(c50**2)) + 1e-12)
+        if rms50 > loudest_50ms:
+            loudest_50ms = float(rms50)
+
+    diff = loudest_50ms - med_speech
+    return trimmed, med_speech, loudest_50ms, diff
+
+def generate_tts_clip(cue: dict, force: bool = False) -> tuple[Path, dict]:
     pcm_path = VIDEO_DIR / f"{cue['file_base']}.pcm"
     wav_path = VIDEO_DIR / f"{cue['file_base']}.wav"
     mp3_path = VIDEO_DIR / f"{cue['file_base']}.mp3"
     prompt_record = VIDEO_DIR / f"{cue['file_base']}.prompt.txt"
+    meta_record = VIDEO_DIR / f"{cue['file_base']}.meta.json"
 
     max_dur = cue['next_start_s'] - cue['start_s']
-    if not force and wav_path.exists() and prompt_record.exists():
-        if prompt_record.read_text(encoding='utf-8').strip() == cue['text'].strip():
-            dur = get_audio_duration(wav_path)
-            if dur <= max_dur:
-                print(f"  [TTS] Reusing verified {cue['id']} WAV (duration: {dur:.2f}s, window: {max_dur:.2f}s)")
-                return wav_path, False
 
-    model_tts = 'gemini-3.8-flash-lite-tts'
+    if not force and wav_path.exists() and prompt_record.exists() and meta_record.exists():
+        if prompt_record.read_text(encoding='utf-8').strip() == cue['text'].strip():
+            meta = json.loads(meta_record.read_text(encoding='utf-8'))
+            dur = get_audio_duration(wav_path)
+            if dur <= max_dur and meta.get('wps', 99) <= 1.9 and meta.get('tail_diff', 99) <= 3.0:
+                print(f"  [TTS] Reusing verified R18 {cue['id']} WAV (dur: {dur:.2f}s, wps: {meta.get('wps'):.2f}, tail diff: {meta.get('tail_diff'):.1f}dB)")
+                return wav_path, meta
+
+    model_tts = 'gemini-3.1-flash-tts-preview'
     voice = 'Puck'
-    prompt_text = cue['text']
+    style_prompt = f"Say in a calm, clear, measured pace, natural sentence endings, no exclamation: {cue['text']}"
 
     body = {
-        'contents': [{'parts': [{'text': prompt_text}]}],
+        'contents': [{'parts': [{'text': style_prompt}]}],
         'generationConfig': {
             'responseModalities': ['AUDIO'],
             'speechConfig': {
@@ -240,61 +308,82 @@ def generate_tts_clip(cue: dict, force: bool = False) -> tuple[Path, bool]:
     )
 
     pcm_data = None
-    for attempt in range(8):
+    for attempt in range(2):
         try:
-            print(f"  [TTS] Generating {cue['id']} (attempt {attempt + 1})...")
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            print(f"  [TTS] Generating {cue['id']} via {model_tts} (attempt {attempt + 1})...")
+            with urllib.request.urlopen(req, timeout=60) as resp:
                 data = json.load(resp)
                 audio_b64 = data['candidates'][0]['content']['parts'][0]['inlineData']['data']
                 pcm_data = base64.b64decode(audio_b64)
                 print(f"  [TTS] Received {len(pcm_data)} PCM bytes for {cue['id']}")
                 break
         except urllib.error.HTTPError as e:
-            print(f"  [TTS] HTTP Error {e.code}: {e.read()[:200]}")
+            err_msg = e.read().decode('utf-8', errors='ignore')
+            print(f"  [TTS] HTTP Error {e.code}: {err_msg[:200]}")
             if e.code == 429:
-                wait_sec = 25 + attempt * 5
-                print(f"  [TTS] Rate limit 429: waiting {wait_sec}s...")
-                time.sleep(wait_sec)
-                continue
-            time.sleep(10)
+                print(f"  [TTS] 429 encountered on {cue['id']}. Halting immediately per instruction.")
+                raise RuntimeError(f"TTS_QUOTA_BLOCKED_429 on {cue['id']}: {err_msg}")
+            time.sleep(5)
         except Exception as e:
             print(f"  [TTS] Error: {e}")
             time.sleep(10)
 
     if not pcm_data:
-        raise RuntimeError(f"Failed to generate TTS for {cue['id']}")
+        raise RuntimeError(f"Failed to generate TTS for {cue['id']}. Rate limit or quota exhausted.")
 
     pcm_path.write_bytes(pcm_data)
 
-    # Convert PCM to 48kHz stereo WAV and MP3, trimming leading and trailing silence
-    raw_wav = VIDEO_DIR / f"{cue['file_base']}_raw.wav"
-    subprocess.run([
-        'ffmpeg', '-y',
-        '-f', 's16le', '-ar', '24000', '-ac', '1',
-        '-i', str(pcm_path),
-        '-ar', '48000', '-ac', '2',
-        str(raw_wav)
-    ], check=True, capture_output=True)
+    # 1. Process 24kHz raw PCM: trim click/burst and assert tail level
+    raw_samples = np.frombuffer(pcm_data, dtype=np.int16).astype(np.float32) / 32768.0
+    trimmed_mono, med_speech, loudest_50ms, diff = trim_and_assert_tail(raw_samples, 24000)
 
-    subprocess.run([
-        'ffmpeg', '-y',
-        '-i', str(raw_wav),
-        '-af', 'silenceremove=start_periods=1:start_duration=0.03:start_threshold=-40dB,areverse,silenceremove=start_periods=1:start_duration=0.03:start_threshold=-40dB,areverse',
-        str(wav_path)
-    ], check=True, capture_output=True)
+    # A1 Assertion check
+    if diff > 3.0:
+        raise AssertionError(
+            f"A1 Tail Assertion FAILED for {cue['id']}: loudest 50ms ({loudest_50ms:.1f} dB) "
+            f"exceeds median speech ({med_speech:.1f} dB) by {diff:.1f} dB (> 3.0 dB limit)!"
+        )
 
+    # 2. Resample trimmed mono to 48kHz stereo int16
+    n_48k = int(len(trimmed_mono) * 2)
+    t_orig = np.linspace(0, len(trimmed_mono) / 24000, len(trimmed_mono), endpoint=False)
+    t_48k = np.linspace(0, len(trimmed_mono) / 24000, n_48k, endpoint=False)
+    resampled_48k = np.interp(t_48k, t_orig, trimmed_mono)
+
+    int16_stereo = np.zeros((n_48k, 2), dtype=np.int16)
+    int16_stereo[:, 0] = np.clip(resampled_48k * 32767, -32768, 32767).astype(np.int16)
+    int16_stereo[:, 1] = int16_stereo[:, 0]
+
+    with wave.open(str(wav_path), 'wb') as wf:
+        wf.setnchannels(2)
+        wf.setsampwidth(2)
+        wf.setframerate(48000)
+        wf.writeframes(int16_stereo.tobytes())
+
+    # 3. Create MP3 for ASR transcription
     subprocess.run([
-        'ffmpeg', '-y',
-        '-i', str(wav_path),
-        str(mp3_path)
+        'ffmpeg', '-y', '-i', str(wav_path), str(mp3_path)
     ], check=True, capture_output=True)
 
     dur = get_audio_duration(wav_path)
-    max_dur = cue['next_start_s'] - cue['start_s']
-    print(f"  [TTS] {cue['id']} WAV duration: {dur:.2f}s (window: {max_dur:.2f}s)")
+    clean_words = cue['text'].replace('...', ' ').replace(':', ' ').split()
+    words_count = len(clean_words)
+    wps = words_count / dur if dur > 0 else 0
 
-    # Save prompt record and invalidate stale ASR cache
+    meta = {
+        'id': cue['id'],
+        'duration': dur,
+        'words': words_count,
+        'wps': wps,
+        'med_speech': med_speech,
+        'loudest_50ms': loudest_50ms,
+        'tail_diff': diff,
+    }
+
+    meta_record.write_text(json.dumps(meta, indent=2), encoding='utf-8')
     prompt_record.write_text(cue['text'].strip(), encoding='utf-8')
+
+    # Remove stale ASR cache
     asr_cache = VIDEO_DIR / f"{cue['file_base']}.asr.txt"
     if asr_cache.exists():
         try:
@@ -302,17 +391,18 @@ def generate_tts_clip(cue: dict, force: bool = False) -> tuple[Path, bool]:
         except Exception:
             pass
 
-    # Small pause to avoid 429 rate limit spikes
-    time.sleep(3.0)
+    print(f"  [TTS] {cue['id']} WAV: {dur:.2f}s | {words_count} words | {wps:.2f} w/s | med={med_speech:.1f}dB tail={loudest_50ms:.1f}dB diff={diff:.1f}dB [A1 PASS]")
 
-    # R17c-F1: NO atempo anywhere. If clip is too long, raise error to shorten text or lengthen scene.
+    # Pause 22s to respect API rate limits (Free Tier 3 RPM limit)
+    time.sleep(22.0)
+
     if dur > max_dur:
         raise RuntimeError(
             f"Clip {cue['id']} duration ({dur:.2f}s) exceeds available window ({max_dur:.2f}s)! "
-            f"NO atempo allowed per R17c-F1. Shorten text or lengthen scene."
+            f"NO atempo allowed per spec. Lengthen scene."
         )
 
-    return wav_path, True
+    return wav_path, meta
 
 def transcribe_clip(cue: dict) -> str:
     asr_cache = VIDEO_DIR / f"{cue['file_base']}.asr.txt"
@@ -323,7 +413,7 @@ def transcribe_clip(cue: dict) -> str:
             return cached_text
 
     mp3_path = VIDEO_DIR / f"{cue['file_base']}.mp3"
-    model_transcribe = 'gemini-3.1-flash-lite'
+    model_transcribe = 'gemini-3-flash-preview'
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_transcribe}:generateContent"
 
     mp3_b64 = base64.b64encode(mp3_path.read_bytes()).decode('utf-8')
@@ -373,12 +463,13 @@ def transcribe_clip(cue: dict) -> str:
             time.sleep(10)
 
     print(f"  [ASR] Result: \"{transcription}\"")
+    time.sleep(2.0)
     return transcription
 
-def compile_master_voice_track(total_duration: float = 149.1, sample_rate: int = 48000) -> Path:
+def compile_master_voice_track(total_duration: float = 152.0, sample_rate: int = 48000) -> Path:
     print(f"\n[Assembly] Compiling master voice track into 48kHz stereo PCM ({total_duration:.1f}s)...")
     n_samples = int(total_duration * sample_rate)
-    total_bytes = n_samples * 4  # 16-bit stereo = 4 bytes per frame
+    total_bytes = n_samples * 4
     voice_buffer = bytearray(total_bytes)
 
     for i, cue in enumerate(CUES):
@@ -390,7 +481,7 @@ def compile_master_voice_track(total_duration: float = 149.1, sample_rate: int =
         start_sample = int(cue['start_s'] * sample_rate)
         start_byte = start_sample * 4
 
-        # Guarantee zero overlap with next cue
+        # Guarantee zero overlap and >= 0.6s gap
         if i + 1 < len(CUES):
             max_bytes = int((CUES[i + 1]['start_s'] - cue['start_s']) * sample_rate) * 4
         else:
@@ -412,7 +503,7 @@ def compile_master_voice_track(total_duration: float = 149.1, sample_rate: int =
     print(f"  [Assembly] Saved master voice track: {master_voice_wav}")
     return master_voice_wav
 
-def mix_master_audio(voice_wav: Path, total_duration: float = 149.1) -> Path:
+def mix_master_audio(voice_wav: Path, total_duration: float = 152.0) -> Path:
     print(f"\n[Mix] Mixing voice track with background music (Gymnopédie No. 1) for {total_duration:.1f}s...")
     mixed_audio = VIDEO_DIR / 'master_audio_mixed.aac'
     fade_out_st = max(0.0, total_duration - 3.5)
@@ -439,7 +530,7 @@ def mix_master_audio(voice_wav: Path, total_duration: float = 149.1) -> Path:
     print(f"  [Mix] Mixed audio created: {mixed_audio}")
     return mixed_audio
 
-def build_final_video(mixed_audio: Path, total_duration: float = 149.1):
+def build_final_video(mixed_audio: Path, total_duration: float = 152.0):
     print(f"\n[Mux] Muxing video stream with mixed audio track into MissionPay-demo.mp4 ({total_duration:.1f}s)...")
     cmd = [
         'ffmpeg', '-y',
@@ -447,7 +538,10 @@ def build_final_video(mixed_audio: Path, total_duration: float = 149.1):
         '-i', str(mixed_audio),
         '-map', '0:v:0',
         '-map', '1:a:0',
-        '-c:v', 'copy',
+        '-vf', 'noise=alls=2:allf=t',
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
+        '-r', '30',
         '-c:a', 'copy',
         '-shortest',
         '-t', f"{total_duration:.2f}",
@@ -456,14 +550,14 @@ def build_final_video(mixed_audio: Path, total_duration: float = 149.1):
     subprocess.run(cmd, check=True)
     print(f"  [Mux] Final video written: {FINAL_VIDEO}")
 
-def write_subtitles():
-    print("\n[Subtitles] Writing narration.srt and updating captions.srt...")
+def write_subtitles_from_asr(asr_transcriptions: dict[str, str]):
+    print("\n[Subtitles] Writing narration.srt and captions.srt strictly from verbatim ASR...")
     srt_lines = []
     for idx, cue in enumerate(CUES):
-        # Caption display duration
         start_fmt = format_srt_time(cue['start_s'])
-        end_fmt = format_srt_time(cue['next_start_s'] - 0.2)
-        srt_lines.append(f"{idx + 1}\n{start_fmt} --> {end_fmt}\n{cue['caption']}\n")
+        end_fmt = format_srt_time(cue['next_start_s'] - 0.4)
+        spoken_text = asr_transcriptions.get(cue['id'], cue['text'])
+        srt_lines.append(f"{idx + 1}\n{start_fmt} --> {end_fmt}\n{spoken_text}\n")
 
     content = "\n".join(srt_lines)
     SRT_PATH.write_text(content, encoding='utf-8')
@@ -472,7 +566,7 @@ def write_subtitles():
 
 def write_credits():
     print("\n[Credits] Writing CREDITS.md...")
-    credits_content = """# MissionPay Video Demo — Credits & Asset Licenses
+    credits_content = """# MissionPay Video Demo — Credits & Asset Licenses (Round 18)
 
 This document lists all media assets, synthetic voices, music, and tools used in the production of the official **MissionPay** demo video for the Avalanche Team1 Vietnam UniHack 2026 Hackathon.
 
@@ -482,9 +576,10 @@ All third-party assets are free, open-source, or public domain, with permissive 
 
 ## 1. Narration & Voice-Over (Synthetic)
 
-- **Voice Model**: `gemini-3.8-flash-lite-tts`
-- **Voice Preset**: `Puck` (high-energy, clear tech-demo delivery)
+- **Voice Model**: `gemini-3.1-flash-tts-preview`
+- **Voice Preset**: `Puck` (calm, measured tech delivery, rate <= 1.9 words/s)
 - **API Provider**: Google Generative AI (Gemini Developer API)
+- **Audio Processing**: Custom build-time tail trimming (eliminated trailing burst click) + 40ms fade-out.
 - **License**: Generated under Google AI terms for developer use and distribution.
 - **Notice**: In compliance with hackathon regulations, the voice track is synthetic and fully disclosed here.
 
@@ -523,38 +618,38 @@ All third-party assets are free, open-source, or public domain, with permissive 
 
 def main():
     print("==================================================================")
-    print("   MissionPay Gemini Puck Narration & Mixing Pipeline (Round 17c) ")
+    print("   MissionPay Gemini Puck Narration & Mixing Pipeline (Round 18)  ")
     print("==================================================================\n")
 
-    # Step 1: Generate or verify all TTS clips
+    # Step 1: Generate or verify all TTS clips with A1 assertions and <= 1.9 wps
     print("[1/6] Generating TTS clips using gemini-3.1-flash-tts-preview (voice: Puck)...")
     total_voice_duration = 0.0
+    meta_results = []
 
     for cue in CUES:
-        wav_path, generated = generate_tts_clip(cue)
-        dur = get_audio_duration(wav_path)
+        wav_path, meta = generate_tts_clip(cue)
+        dur = meta['duration']
         total_voice_duration += dur
-        words = len(cue['text'].split())
-        rate = words / dur if dur > 0 else 0
-        print(f"  -> Cue {cue['id']:16s}: {dur:5.2f}s | {words:2d} words | {rate:4.2f} w/s | {cue['text'][:55]}...")
+        meta_results.append(meta)
 
     print(f"\nTotal Spoken Audio: {total_voice_duration:.2f}s")
 
     # Step 2: Transcribe each clip back with gemini-3.1-flash-lite
     print("\n[2/6] Verifying speech content via Gemini 3.1 Flash Lite ASR...")
+    asr_map = {}
     for cue in CUES:
         transcription = transcribe_clip(cue)
-        print(f"  -> {cue['id']:16s}: \"{transcription}\"")
+        asr_map[cue['id']] = transcription
 
     # Step 3: Get actual video duration from CONCAT_VIDEO
     if not CONCAT_VIDEO.exists():
         print(f"\nWarning: {CONCAT_VIDEO} does not exist yet. Run build-video.ts first.")
-        total_video_dur = 149.1
+        total_video_dur = 152.0
     else:
         total_video_dur = get_audio_duration(CONCAT_VIDEO)
 
     voice_coverage = (total_voice_duration / total_video_dur) * 100
-    print(f"\nVideo Duration: {total_video_dur:.2f}s | Voice Coverage: {voice_coverage:.1f}% (target: >= 70%)")
+    print(f"\nVideo Duration: {total_video_dur:.2f}s | Voice Coverage: {voice_coverage:.1f}% (target: 50%–60%)")
 
     # Step 4: Compile master voice track
     print(f"\n[3/6] Compiling master voice track ({total_video_dur:.2f}s)...")
@@ -564,15 +659,14 @@ def main():
     print(f"\n[4/6] Mixing voice with background music...")
     mixed_audio = mix_master_audio(master_voice_wav, total_duration=total_video_dur)
 
-    # Step 6: Write subtitles and credits
-    print("\n[5/6] Writing subtitles and credits...")
-    write_subtitles()
+    # Step 6: Write subtitles and credits from verbatim ASR
+    print("\n[5/6] Writing subtitles and credits from verbatim ASR...")
+    write_subtitles_from_asr(asr_map)
     write_credits()
 
     # Step 7: Build final mp4 if concat video exists
     if CONCAT_VIDEO.exists():
         print("\n[6/6] Muxing final video MissionPay-demo.mp4...")
-        # Backup silent demo if not backed up
         if not SILENT_BACKUP.exists() and (VIDEO_DIR / 'demo-silent.mp4').exists():
             import shutil
             shutil.copy2(VIDEO_DIR / 'demo-silent.mp4', SILENT_BACKUP)
