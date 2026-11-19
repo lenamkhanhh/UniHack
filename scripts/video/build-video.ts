@@ -70,17 +70,17 @@ async function renderCardScreenshots() {
   const diagramMp4 = path.join(CARDS_DIR, 'card_diagram.mp4');
   const outroMp4 = path.join(CARDS_DIR, 'card_outro.mp4');
 
-  // S0 Intro: 3.0s with subtle 1.00 -> 1.05 zoom (Round 18 V1: eliminates frozen stretches)
+  // S0 Intro: 3.0s with subtle 1.00 -> 1.05 centered slow zoom
   execSync(
-    `ffmpeg -y -loop 1 -i "${introPng}" -vf "zoompan=z='min(zoom+0.0008,1.05)':x='iw/2-(iw/zoom/2)+sin(on/10)*20':y='ih/2-(ih/zoom/2)':d=90:s=1920x1080:fps=30" -c:v libx264 -t 3.0 -pix_fmt yuv420p -r 30 "${introMp4}"`,
+    `ffmpeg -y -loop 1 -i "${introPng}" -vf "zoompan=z='min(zoom+0.0008,1.05)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=90:s=1920x1080:fps=30" -c:v libx264 -t 3.0 -pix_fmt yuv420p -r 30 "${introMp4}"`,
     { stdio: 'pipe' }
   );
-  // S6 Diagram: 5.0s with subtle 1.00 -> 1.06 zoom
+  // S6 Diagram: 5.0s with subtle 1.00 -> 1.06 centered slow zoom
   execSync(
-    `ffmpeg -y -loop 1 -i "${diagramPng}" -vf "zoompan=z='min(zoom+0.0008,1.06)':x='iw/2-(iw/zoom/2)+sin(on/10)*25':y='ih/2-(ih/zoom/2)':d=150:s=1920x1080:fps=30" -c:v libx264 -t 5.0 -pix_fmt yuv420p -r 30 "${diagramMp4}"`,
+    `ffmpeg -y -loop 1 -i "${diagramPng}" -vf "zoompan=z='min(zoom+0.0008,1.06)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=150:s=1920x1080:fps=30" -c:v libx264 -t 5.0 -pix_fmt yuv420p -r 30 "${diagramMp4}"`,
     { stdio: 'pipe' }
   );
-  // S7 Outro: 4.0s (Round 18 V1: final end card <= 4s with slow 1.00 -> 1.04 zoom)
+  // S7 Outro: 4.0s with slow 1.00 -> 1.04 centered slow zoom
   execSync(
     `ffmpeg -y -loop 1 -i "${outroPng}" -vf "zoompan=z='min(zoom+0.00033,1.04)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=120:s=1920x1080:fps=30" -c:v libx264 -t 4.0 -pix_fmt yuv420p -r 30 "${outroMp4}"`,
     { stdio: 'pipe' }
@@ -127,11 +127,11 @@ async function main() {
   const ptsRatio = (targetDemoDur / rawDur).toFixed(4);
 
   // Ensure demoSilent is 30fps and 1920x1080, trimmed of initial blank loading frames
-  // Round 18 V1: add continuous organic camera motion to eliminate all frozen stretches
+  // Round 19: completely remove sin/cos crop shaking to ensure perfectly stable UI display
   const normalizedDemo = path.join(VIDEO_DIR, 'demo-norm30.mp4');
   console.log(`[2/6] Normalizing demo recording to 1080p30 (raw: ${rawDur.toFixed(2)}s, target: ${targetDemoDur.toFixed(2)}s, pts: ${ptsRatio})...`);
   execSync(
-    `ffmpeg -y -ss ${trimLeadSec} -i "${demoSilentMp4}" -r 30 -vf "setpts=${ptsRatio}*PTS,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,crop=1900:1060:x='(in_w-out_w)/2 + 8*sin(n*0.1) + 4*sin(n*0.23)':y='(in_h-out_h)/2 + 6*cos(n*0.08) + 3*cos(n*0.19)',scale=1920:1080" -c:v libx264 -pix_fmt yuv420p "${normalizedDemo}"`,
+    `ffmpeg -y -ss ${trimLeadSec} -i "${demoSilentMp4}" -r 30 -vf "setpts=${ptsRatio}*PTS,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -pix_fmt yuv420p "${normalizedDemo}"`,
     { stdio: 'inherit' }
   );
 

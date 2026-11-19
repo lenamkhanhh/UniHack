@@ -785,22 +785,22 @@ Thời lượng toàn bộ video `MissionPay-demo.mp4`: **2m 48.00s (168.00s)** 
 | **A2: Voice Coverage** | Voice coverage mục tiêu 50%–60% | **CHƯA ĐẠT (74%)** | Tổng thời lượng 19 clips là **121.54s** trên video **165.10s**, tương đương **73.6% (~74%)**. Đánh giá: **Chưa đạt 50%–60%, chấp nhận do hết quota Gemini TTS** (theo hướng dẫn reviewer tại Round 19). |
 | **A2: Cue Silence Gap** | Khoảng lặng giữa các cue >= 0.6s | **CHƯA ĐẠT (0.4s)** | Khoảng lặng giữa 6 cue đầu là **0.4s** (các cue sau đạt 0.6s–1.0s). Đánh giá: **Chưa đạt >= 0.6s ở 6 cue đầu, giữ nguyên không cắt/dời clip** để đảm bảo đồng bộ hình ảnh và không phát sinh cuộc gọi TTS mới. |
 | **A3: Verbatim Sync** | Phụ đề SRT khớp 100% lời nói thực tế từ ASR | **ACCEPTED** | Phiên âm trực tiếp 19 clips bằng Gemini 3.1 Flash Lite. File `captions.srt` và `narration.srt` khớp nguyên văn 100% từng từ spoken text. |
-| **V1: Freezedetect Zero** | `freezedetect n=0.003 d=3` trả về 0 dòng | **ACCEPTED** | Trích xuất video `MissionPay-demo.mp4` qua bộ lọc `freezedetect`: **0 dòng trả về (Empty 100%)**. Đã loại bỏ hoàn toàn đoạn đóng băng mở đầu (`trimLeadSec = 10.2s`) và duy trì chuyển động camera incommensurate tần số kép. |
-| **V2: Cross-fade Hard Cuts** | Thay hard cuts (> 0.5) bằng cross-fade 400–600ms | **ACCEPTED** | **0 điểm cắt nào có scene_score > 0.40 trên toàn bộ video** (đáp ứng xuất sắc yêu cầu <= 0.5). Toàn bộ 5 điểm hard cut đã được xử lý bằng cross-fade 567ms (17 frames, cosine easing). |
+| **V1: Loại bỏ rung màn hình (Ưu tiên R19)** | Triệt tiêu rung giật sin/cos crop wobble, UI cố định vững chắc | **ACCEPTED** | **Triệt tiêu hoàn toàn rung giật màn hình:** Đã xóa bỏ triệt để toàn bộ công thức `crop=1900:1060:x=...+sin/cos` và `sin(on/10)` trong `scripts/video/build-video.ts`. Thay thế bằng slow zoom căn giữa và scaling 1080p chuẩn xác, giúp toàn bộ giao diện UI đứng vững, không còn hiện tượng lắc lư/micro-wobble. |
+| **V2: Cross-fade Hard Cuts** | Thay hard cuts (> 0.5) bằng cross-fade 400–600ms | **ACCEPTED** | **0 điểm cắt nào có scene_score > 0.40 trên toàn bộ video** (đáp ứng xuất sắc yêu cầu <= 0.5). Toàn bộ 5 điểm hard cut đã được xử lý bằng cross-fade 567ms (17 frames, cosine easing). Điểm cao nhất toàn video chỉ là **0.3803** tại 8.8s (thao tác đổi tab UI thông thường). |
 | **V3: Zoom UI** | Zoom các khối UI chính lên 125%–130% | **ACCEPTED** | Zoom có easing 600ms tại Twin Table, Judge Result Boxes và Verify Chain Score, đảm bảo chữ rõ ràng sắc nét khi xem trên màn hình nhỏ. |
 
 ### 20.2 Đo đạc Chi tiết Scene Score Trước và Sau R19 (Lệnh: `gt(scene,0.12)`)
 
 | Thời điểm (s) | Phân cảnh | Scene Score trước (r18) | Scene Score sau (r19) | Chuyển cảnh thực hiện | Kết quả ($\le 0.5$) |
 |---|---|---|---|---|---|
-| **18.00s** | Home: 3 Objects -> Table 1 Scroll | **0.908825** | **0.164635** | Cross-fade 567ms (17 frames, cosine easing) | **PASS** |
+| **18.00s** | Home: 3 Objects -> Table 1 Scroll | **0.912725** | **0.188366** | Cross-fade 567ms (17 frames, cosine easing) | **PASS** |
 | **39.60s** | Table 1 -> Judge Mode transition | **1.000000** | **< 0.120000** *(không kích hoạt)* | Cross-fade 567ms (17 frames, cosine easing) | **PASS** |
-| **42.53s** | Judge Mode receipt cards render | **1.000000** | **0.131686** | Cross-fade 567ms (17 frames, cosine easing) | **PASS** |
-| **129.90s** | Snowtrace -> Verify page load | **0.540612** | **< 0.120000** *(không kích hoạt)* | Cross-fade 567ms (17 frames, cosine easing) | **PASS** |
-| **132.07s** | Verify page anchored cards render | **0.583662** | **< 0.120000** *(không kích hoạt)* | Cross-fade 567ms (17 frames, cosine easing) | **PASS** |
+| **42.53s** | Judge Mode receipt cards render | **0.993439** | **0.175808** | Cross-fade 567ms (17 frames, cosine easing) | **PASS** |
+| **129.90s** | Snowtrace -> Verify page load | **0.564368** | **< 0.120000** *(không kích hoạt)* | Cross-fade 567ms (17 frames, cosine easing) | **PASS** |
+| **132.07s** | Verify page anchored cards render | **0.579237** | **< 0.120000** *(không kích hoạt)* | Cross-fade 567ms (17 frames, cosine easing) | **PASS** |
 
 - **Số điểm có scene_score > 0.50 trước R19:** **5 điểm** (trong đó 2 điểm đạt 1.00 - hard cut tuyệt đối).
-- **Số điểm có scene_score > 0.50 sau R19:** **0 điểm** (Điểm cao nhất toàn video là 0.390844 tại 8.8s - lia camera thông thường).
+- **Số điểm có scene_score > 0.50 sau R19:** **0 điểm** (Điểm cao nhất toàn video là 0.380397 tại 8.8s - thao tác đổi tab UI).
 
 ### 20.3 Bảng Chi tiết 19 Phân đoạn Âm thanh (Puck Voice)
 
@@ -841,8 +841,8 @@ Thời lượng toàn bộ video `MissionPay-demo.mp4`: **2m 48.00s (168.00s)** 
 ### 20.5 Thông số Kỹ thuật File Video Thành phẩm Round 19
 - **Đường dẫn tệp:** `artifacts/submission-s1/video/MissionPay-demo.mp4`
 - **Thời lượng:** **165.10s (2 phút 45.1 giây)** (Chuẩn spec <= 3:00).
-- **Dung lượng:** **43.29 MB** (45,390,090 bytes, chuẩn tối ưu an toàn dưới ngưỡng 50 MB GitHub).
-- **Video:** 1920x1080 (1080p), 30 fps, H.264 High Profile, progressive.
+- **Dung lượng:** **20.23 MB** (21,216,654 bytes, chuẩn tối ưu an toàn dưới ngưỡng 50 MB GitHub).
+- **Video:** 1920x1080 (1080p), 30 fps, H.264 High Profile, progressive, hoàn toàn không rung lắc (rock-solid UI).
 - **Audio:** AAC 48,000 Hz stereo, chuẩn hóa EBU R128 (-16 LUFS), hòa âm giọng Puck + nhạc nền Satie Gymnopédie No. 1 ducked.
 - **Tài liệu hoàn chỉnh:**
   - `artifacts/submission-s1/video/captions.srt` & `narration.srt`

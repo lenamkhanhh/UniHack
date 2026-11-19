@@ -3,35 +3,31 @@ import numpy as np
 import subprocess
 import os
 
-import cv2
-import numpy as np
-import subprocess
-import os
-
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 
-VIDEO_IN = os.path.join(ROOT, "artifacts", "submission-s1", "video", "MissionPay-demo.mp4")
+VIDEO_SILENT = os.path.join(ROOT, "artifacts", "submission-s1", "video", "concat-silent.mp4")
+VIDEO_EXISTING = os.path.join(ROOT, "artifacts", "submission-s1", "video", "MissionPay-demo.mp4")
 VIDEO_TMP = os.path.join(ROOT, "artifacts", "submission-s1", "video", "temp_smooth.mp4")
 VIDEO_OUT = os.path.join(ROOT, "artifacts", "submission-s1", "video", "MissionPay-demo.mp4")
 AUDIO_TMP = os.path.join(ROOT, "artifacts", "submission-s1", "video", "temp_audio.aac")
 
-print(f"Opening {VIDEO_IN}...")
-cap = cv2.VideoCapture(VIDEO_IN)
+# 1. First extract audio from existing MissionPay-demo.mp4 (which has master Puck + Satie track)
+print("Extracting master audio track...")
+subprocess.run(
+    f'ffmpeg -y -i "{VIDEO_EXISTING}" -vn -c:a copy "{AUDIO_TMP}"',
+    shell=True,
+    check=True,
+    capture_output=True
+)
+
+print(f"Opening {VIDEO_SILENT}...")
+cap = cv2.VideoCapture(VIDEO_SILENT)
 fps = cap.get(cv2.CAP_PROP_FPS)
 width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 print(f"Video info: {width}x{height} @ {fps} fps, total {total_frames} frames ({total_frames/fps:.2f}s)")
-
-# 1. First extract audio to keep it bit-for-bit identical
-print("Extracting original audio track...")
-subprocess.run(
-    f'ffmpeg -y -i "{VIDEO_IN}" -vn -c:a copy "{AUDIO_TMP}"',
-    shell=True,
-    check=True,
-    capture_output=True
-)
 
 # 2. Known cut frame indices from ffmpeg scene analysis:
 # 18.00s -> 540
