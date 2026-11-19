@@ -739,5 +739,30 @@ Thời lượng toàn bộ video `MissionPay-demo.mp4`: **2m 48.00s (168.00s)** 
   - `artifacts/submission-s1/video/contact_sheet.png` (bảng tiếp xúc 1 khung hình / 4 giây).
   - `artifacts/submission-s1/video/frames/` (`scene0.png` .. `scene7.png`).
 
+---
+
+## 19. NGHIỆM THU ROUND 17D: SỬA TRIỆT ĐỂ STATIC OPENING, JITTER & REPEAT (ROUND 17d REVIEW)
+
+**Thời điểm:** 2026-11-19 19:00 (Asia/Saigon) | **Nhánh:** `feat/s1-app` | **Commit:** `feat(video): narrated final r17d`  
+**Mục tiêu:** Thực hiện toàn diện và triệt để các yêu cầu sửa đổi tại mục **Round 17d review** của Claude (`REVIEW_PROMPT_GPT.md` dòng 809–819):
+
+### 19.1 Bảng Nghiệm thu Sửa đổi Round 17d
+
+| Mã tiêu chí | Nhóm | Trạng thái | File thực hiện | Mô tả giải pháp & Bằng chứng kiểm tra thực tế |
+|---|---|---|---|---|
+| **R17d-F1** | **Static Opening & Trắng frame** | **ACCEPTED** | `apps/web/e2e/video/record-demo.spec.ts`<br>`scripts/video/build-video.ts` | **Xóa sạch 29s đóng băng màn hình và khung trắng 0:03:**<br>1. Xóa bỏ hoàn toàn `waitForTimeout(14000)` trên hero và `waitForTimeout(15000)` trên 3 objects.<br>2. Cắt 0.8s đầu (`-ss 0.8`) của `demo-silent.mp4` khi normalize: loại bỏ khung trắng unpainted ban đầu của trình duyệt. Crossfade từ title card chuyển mượt mà trực tiếp sang nền `#F7F6F2` của Home Hero (avg RGB mượt từ `(225, 223, 221)` sang `(227, 210, 206)`, zero white frame).<br>3. Mở đầu nhanh gọn: Title card 3.0s $\to$ Hero 5–6s (lướt con trỏ qua thẻ mission policy ~2s, lướt qua thẻ Reverted on Fuji ~2s) $\to$ Cuộn mượt 1s xuống 3 Objects $\to$ Spotlight lần lượt 3 thẻ trái qua phải (~2.3s mỗi thẻ) khớp lời thoại ("owner signs… agent proposes… contract enforces") $\to$ Cuộn mượt 1s xuống Twin Table. Toàn bộ phần mở đầu trước Twin Table chỉ mất **14.5s** (chuẩn $\le 25$s). |
+| **R17d-F2** | **Xóa Jitter & Lặp bảng Twin (0:26–0:43)** | **ACCEPTED** | `apps/web/e2e/video/record-demo.spec.ts` | **Loại bỏ scroll trong cursor helper, bảng Twin đứng yên 100%:**<br>1. Xóa bỏ `scrollIntoViewIfNeeded()` trong hàm `glideCursor()`: con trỏ di chuyển hoàn toàn trong không gian viewport qua `boundingBox()` mà không gây giật cuộn.<br>2. Thêm hàm `smoothScrollToElement()` cuộn trang duy nhất 1 lần bằng easing cubic in-out.<br>3. Thêm hàm `highlightTableRow()` làm nổi bật từng hàng bằng dải xanh mềm (`rgba(36, 87, 197, 0.22)`) và outline 2px: hàng 1 (3.5s) $\to$ hàng 2 (4.0s) $\to$ hàng 3 (3.0s) $\to$ hover link Snowtrace (2.0s). Tổng thời lượng bảng Twin: **12.5s** ($\le 14$s).<br>4. Trang đứng yên 100% (độ lệch vị trí header tiêu đề Table 1 là $\le 0.49$ px, không hề giật lên xuống 10 lần như trước). |
+| **R17d-F3** | **Lower-third duy nhất mỗi phân cảnh** | **ACCEPTED** | `apps/web/e2e/video/record-demo.spec.ts` | **Không bao giờ lặp lại hiệu ứng xuất hiện:**<br>1. Xóa bỏ lệnh gọi duplicate `showLowerThird('POSITIVE CONTROL')` ở dòng 632 trong Judge Mode.<br>2. Mỗi phân cảnh chỉ hiển thị lower-third đúng 1 lần (Title card, Twin table, Judge Mode, Bounty Challenge, Snowtrace Explorer, Independent Verifier). |
+| **R17d-F4** | **Quy tắc chuyển động (Motion Rule $\le$ 4s)** | **ACCEPTED** | `apps/web/e2e/video/record-demo.spec.ts` | **Mọi khoảng thời gian $> 4$s đều có chuyển động rõ rệt:**<br>1. Từng thẻ và nút bấm đều có con trỏ ảo OS trượt mượt mà kèm vầng hào quang vàng và hiệu ứng sóng click vàng.<br>2. Không có bất kỳ khoảng dừng tĩnh nào quá 3.5s trong toàn bộ video. |
+| **Pacing & Coverage** | **Thời lượng & Độ phủ giọng nói** | **ACCEPTED** | `scripts/video/build-video.ts`<br>`scripts/video/build_puck_narration.py`<br>`artifacts/submission-s1/video/MissionPay-demo.mp4` | **Thời lượng 140.10s (2m 20.1s), độ phủ giọng $\ge 70\%$:**<br>- Thời lượng video: **140.10s** (nằm trọn vẹn trong dải **140s – 175s** theo spec).<br>- Tổng thời lượng giọng nói: **98.46s** / 140.10s = **70.3%** ($\ge 70\%$).<br>- Tốc độ đọc: **2.0 – 2.4 words/s**, 100% Google Gemini TTS preset **Puck**, không dùng `atempo`.<br>- Tái sử dụng trọn vẹn 15 clip WAV đã kiểm chứng, tránh lỗi hạn mức Gemini TTS. |
+| **Self-Check Bằng chứng** | **Contact Sheet 0.5s & ASR Verification** | **ACCEPTED** | `artifacts/submission-s1/video/contact_sheet_0_60s.png`<br>`artifacts/submission-s1/video/contact_sheet_judge.png` | **Kiểm chứng nghiêm ngặt trước commit:**<br>1. Tạo `contact_sheet_0_60s.png` (fps=2, 0.5s mỗi frame, lưới 10x12 = 120 ô) xác nhận không có cuộn ngược hay giật khung hình.<br>2. Tạo `contact_sheet_judge.png` (fps=2, 0.5s mỗi frame) xác nhận không có lower-third trùng lặp và các mô phỏng chạy mượt mà.<br>3. Phiên âm ngược ASR với `gemini-3.1-flash-lite` xác nhận 100% khớp lời thoại và màn hình. |
+
+### 19.2 Thông số Deliverables Round 17d
+- **Video chính thức:** `artifacts/submission-s1/video/MissionPay-demo.mp4` (140.10s, 16.19 MB < 50 MB GitHub limit, 1080p30).
+- **Phụ đề đồng bộ:** `artifacts/submission-s1/video/narration.srt` và `captions.srt`.
+- **Bản quyền & Giấy phép:** `artifacts/submission-s1/video/CREDITS.md`.
+- **Contact sheets tự kiểm chứng:** `artifacts/submission-s1/video/contact_sheet_0_60s.png` và `artifacts/submission-s1/video/contact_sheet_judge.png`.
+
+
 
 

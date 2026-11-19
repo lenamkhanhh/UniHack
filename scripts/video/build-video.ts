@@ -70,9 +70,9 @@ async function renderCardScreenshots() {
   const diagramMp4 = path.join(CARDS_DIR, 'card_diagram.mp4');
   const outroMp4 = path.join(CARDS_DIR, 'card_outro.mp4');
 
-  // S0 Intro: 3.5s
+  // S0 Intro: 3.0s (Round 17d: title card 3 s with cross-fade)
   execSync(
-    `ffmpeg -y -loop 1 -i "${introPng}" -c:v libx264 -t 3.5 -pix_fmt yuv420p -r 30 "${introMp4}"`,
+    `ffmpeg -y -loop 1 -i "${introPng}" -c:v libx264 -t 3.0 -pix_fmt yuv420p -r 30 "${introMp4}"`,
     { stdio: 'pipe' }
   );
   // S6 Diagram: 5.0s (Prompt R14: "S6 diagram card 5 s")
@@ -113,22 +113,24 @@ async function main() {
     process.exit(1);
   }
 
-  const rawDur = getDuration(demoSilentMp4);
+  // Trim initial blank/unpainted browser loading frames (0.8s) to eliminate white frame between title card and home page
+  const trimLeadSec = 0.8;
+  const rawDur = Math.max(1, getDuration(demoSilentMp4) - trimLeadSec);
   const durIntro = getDuration(cards.introMp4);
   const durDiagram = getDuration(cards.diagramMp4);
   const durOutro = getDuration(cards.outroMp4);
   const cardsNetDur = durIntro + durDiagram + durOutro - 0.9; // 3 x 0.3s xfade
 
-  // Target total video duration: 160.0s (Prompt R17c: comfortably in 140s–175s range)
-  const targetTotalDur = 160.0;
+  // Target total video duration: 140.0s (Round 17d: 140s–175s range, achieves >= 70% voice coverage with existing verified Puck clips)
+  const targetTotalDur = 140.0;
   const targetDemoDur = targetTotalDur - cardsNetDur;
   const ptsRatio = (targetDemoDur / rawDur).toFixed(4);
 
-  // Ensure demoSilent is 30fps and 1920x1080
+  // Ensure demoSilent is 30fps and 1920x1080, trimmed of initial blank loading frames
   const normalizedDemo = path.join(VIDEO_DIR, 'demo-norm30.mp4');
   console.log(`[2/6] Normalizing demo recording to 1080p30 (raw: ${rawDur.toFixed(2)}s, target: ${targetDemoDur.toFixed(2)}s, pts: ${ptsRatio})...`);
   execSync(
-    `ffmpeg -y -i "${demoSilentMp4}" -r 30 -vf "setpts=${ptsRatio}*PTS,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -pix_fmt yuv420p "${normalizedDemo}"`,
+    `ffmpeg -y -ss ${trimLeadSec} -i "${demoSilentMp4}" -r 30 -vf "setpts=${ptsRatio}*PTS,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -pix_fmt yuv420p "${normalizedDemo}"`,
     { stdio: 'pipe' }
   );
 
@@ -297,8 +299,8 @@ async function main() {
   console.log('================================================================');
   console.log(`- Final File:   ${FINAL_OUTPUT}`);
   console.log(`- Duration:     ${Math.floor(finalDuration / 60)}m ${(finalDuration % 60).toFixed(1)}s (${finalDuration.toFixed(2)}s)`);
-  console.log(`- Target:       2:40 – 2:55 (Reviewer Spec: 160s – 175s)`);
-  console.log(`- In Spec:      ${finalDuration >= 160 && finalDuration <= 175 ? 'YES ✅' : 'CHECK DURATION ⚠️'}`);
+  console.log(`- Target:       2:20 – 2:55 (Reviewer Spec: 140s – 175s)`);
+  console.log(`- In Spec:      ${finalDuration >= 140 && finalDuration <= 175 ? 'YES ✅' : 'CHECK DURATION ⚠️'}`);
   console.log(`- File Size:    ${finalSizeMB} MB (< 50 MB Git Threshold)`);
   console.log(`- Audio Track:  ${customVoicePath ? 'Track B (Owner Human Voice)' : 'Track A (Draft edge-tts en-US-AndrewNeural)'}`);
   console.log(`- Frames:       ${FRAMES_DIR}`);

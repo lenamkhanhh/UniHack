@@ -202,6 +202,7 @@ async function injectVisualEffects(page: Page) {
 
 /**
  * Glides the virtual cursor smoothly with easing over ~400-600ms to target element.
+ * NOTE (Round 17d): Never scroll inside cursor helper. Operates strictly in viewport space.
  */
 async function glideCursor(
   page: Page,
@@ -218,7 +219,6 @@ async function glideCursor(
         loc = page.getByText(selectorOrLocator).first();
       }
       if (await loc.isVisible()) {
-        await loc.scrollIntoViewIfNeeded();
         const box = await loc.boundingBox();
         if (box) {
           targetX = box.x + box.width / 2;
@@ -227,7 +227,6 @@ async function glideCursor(
       }
     } else if (selectorOrLocator && typeof selectorOrLocator.boundingBox === 'function') {
       if (await selectorOrLocator.isVisible()) {
-        await selectorOrLocator.scrollIntoViewIfNeeded();
         const box = await selectorOrLocator.boundingBox();
         if (box) {
           targetX = box.x + box.width / 2;
@@ -250,6 +249,91 @@ async function glideCursor(
       await page.waitForTimeout(options.holdMs);
     }
   }
+}
+
+/**
+ * Explicit smooth scroll helper with cubic in-out easing (Round 17d).
+ */
+async function smoothScrollTo(page: Page, targetY: number, durationMs = 1000) {
+  await page.evaluate(
+    ({ targetY, durationMs }) => {
+      return new Promise<void>((resolve) => {
+        const startY = window.scrollY;
+        const diff = targetY - startY;
+        const startTime = performance.now();
+        function step(now: number) {
+          const elapsed = now - startTime;
+          const progress = Math.min(elapsed / durationMs, 1);
+          const ease =
+            progress < 0.5
+              ? 4 * progress * progress * progress
+              : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+          window.scrollTo(0, startY + diff * ease);
+          if (progress < 1) {
+            requestAnimationFrame(step);
+          } else {
+            resolve();
+          }
+        }
+        requestAnimationFrame(step);
+      });
+    },
+    { targetY, durationMs }
+  );
+  await page.waitForTimeout(100);
+}
+
+/**
+ * Smooth scroll viewport until selector reaches topOffset (Round 17d).
+ */
+async function smoothScrollToElement(page: Page, selector: string, topOffset = 80, durationMs = 1000) {
+  const targetY = await page.evaluate(
+    ({ sel, topOffset }) => {
+      const el = document.querySelector(sel);
+      if (el) {
+        return window.scrollY + el.getBoundingClientRect().top - topOffset;
+      }
+      return null;
+    },
+    { sel: selector, topOffset }
+  );
+  if (targetY !== null) {
+    await smoothScrollTo(page, Math.max(0, targetY), durationMs);
+  }
+}
+
+/**
+ * Highlights a table row with soft blue tint and outline, keeping the table 100% still (Round 17d).
+ * Zero page scroll, zero entrance re-trigger.
+ */
+async function highlightTableRow(page: Page, rowText: string, durationMs = 3000) {
+  const box = await page.evaluate((text) => {
+    const rows = Array.from(document.querySelectorAll('section[aria-labelledby="twin-heading"] tbody tr'));
+    const targetRow = rows.find((r) => r.textContent && r.textContent.includes(text)) as HTMLElement;
+    if (targetRow) {
+      targetRow.style.transition = 'background-color 0.3s ease, outline 0.3s ease';
+      targetRow.style.backgroundColor = 'rgba(36, 87, 197, 0.22)';
+      targetRow.style.outline = '2px solid #2457C5';
+      const rect = targetRow.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }
+    return null;
+  }, rowText);
+
+  if (box) {
+    await page.mouse.move(box.x, box.y, { steps: 15 });
+  }
+
+  await page.waitForTimeout(durationMs);
+
+  await page.evaluate((text) => {
+    const rows = Array.from(document.querySelectorAll('section[aria-labelledby="twin-heading"] tbody tr'));
+    const targetRow = rows.find((r) => r.textContent && r.textContent.includes(text)) as HTMLElement;
+    if (targetRow) {
+      targetRow.style.backgroundColor = '';
+      targetRow.style.outline = '';
+    }
+  }, rowText);
 }
 
 async function showLowerThird(
@@ -414,8 +498,8 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
     test.setTimeout(360_000); // 6m max test timeout for full live network recording
 
     // =============================================================
-    // SCENE 1: Home (/) Top to Bottom ONCE (45s total)
-    // 1. Hero (14s) -> 2. Three Objects (15s) -> 3. Twin Table (16s)
+    // SCENE 1: Home (/) Top to Bottom ONCE (Round 17d: Opening <= 25s before Twin table, Twin <= 14s)
+    // 1. Hero (5-6s) -> 2. Three Objects (8-9s) -> 3. Twin Table (<= 14s)
     // =============================================================
     await page.goto('/');
     await injectVisualEffects(page);
@@ -424,7 +508,7 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
       'LIVE ON AVALANCHE FUJI',
       'Intent-Driven Budget Security',
       'GuardedTreasury: 0x20451c1e2dCD83F166B4f22868BAdECb5868d545',
-      4000,
+      3800,
       'blue'
     );
     await showCaption(
@@ -433,52 +517,88 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
     );
     await expect(page.locator('#hero-heading')).toBeVisible();
 
-    // 1. Home hero view (14s)
-    await page.waitForTimeout(14000);
+    // 1. Home hero view (5-6s):
+    // Cursor glides over the mission card, then the "Reverted on Avalanche Fuji" card (spotlight each ~2s)
+    await triggerSpotlight(
+      page,
+      'Mission: Audit contract',
+      '📋 Signed Mission Policy: 0.10 USDC',
+      2000
+    );
+    await triggerSpotlight(
+      page,
+      'PayeeNotInMissionSet',
+      '🛡️ Reverted on Fuji: PayeeNotInMissionSet',
+      2000
+    );
+    await page.waitForTimeout(1000);
 
-    // 2. Smooth scroll down to "Three objects decide every payout" (#objects-heading) (15s)
-    const objectsHeading = page.locator('#objects-heading');
-    if (await objectsHeading.isVisible()) {
-      await objectsHeading.scrollIntoViewIfNeeded();
-    } else {
-      await page.evaluate(() => window.scrollBy({ top: 650, behavior: 'smooth' }));
-    }
+    // 2. ONE smooth scroll down to "Three objects decide every payout" (#objects-heading) (1s)
+    await smoothScrollToElement(page, '#objects-heading', 80, 1000);
     await showCaption(
       page,
       'Three objects govern payouts: signed mission policy, Merkle proof, and treasury gate.'
     );
-    await page.waitForTimeout(15000);
 
-    // 3. Smooth scroll down to Table 1: Twin Treasury (#twin-heading) (16s)
-    const twinHeading = page.locator('#twin-heading');
-    if (await twinHeading.isVisible()) {
-      await twinHeading.scrollIntoViewIfNeeded();
-    } else {
-      await page.evaluate(() => window.scrollBy({ top: 750, behavior: 'smooth' }));
-    }
+    // Spotlight the 3 cards left to right (~2.5s each) in sync with narration "owner signs… agent proposes… contract has the last word"
+    // Card 1: Signed Mission Policy
+    await triggerSpotlight(
+      page,
+      'Signed Mission Policy',
+      '1️⃣ Owner signs: Authorized Payees & Limits',
+      2300
+    );
+    // Card 2: Payment Proposal + Proof
+    await triggerSpotlight(
+      page,
+      'Payment Proposal + Proof',
+      '2️⃣ Agent proposes: Merkle Proof required',
+      2300
+    );
+    // Card 3: GuardedTreasury Contract
+    await triggerSpotlight(
+      page,
+      'GuardedTreasury Contract',
+      '3️⃣ Contract gate: Last word on-chain',
+      2300
+    );
+    await page.waitForTimeout(600);
+
+    // 3. ONE smooth scroll down to Table 1: Twin Treasury (#twin-heading) (1s)
+    await smoothScrollToElement(page, '#twin-heading', 80, 1000);
+
+    // Lower-third shown ONCE per section (Round 17d)
+    await showLowerThird(
+      page,
+      'TWIN BENCHMARK',
+      'Deterministic On-Chain Revert',
+      'Allowlist leaks 0.01 USDC · MissionPay: 0 USDC lost',
+      3800,
+      'blue'
+    );
     await showCaption(
       page,
       'Twin table: allowlist paid 0.01 USDC, MissionPay reverted PayeeNotInMissionSet, 0 lost.'
     );
-    await page.waitForTimeout(1000);
 
-    // Spotlight 1: Allowlist Drained row (5s)
-    await triggerSpotlight(
-      page,
-      'twin.allowlist.v1',
-      '⚠️ twin.allowlist.v1: Drained (+0.01 USDC)',
-      5000
-    );
+    // Twin table (<= 14s total):
+    // Page stays 100% still (zero scroll); highlight row 1 -> row 2 -> row 3 with soft row highlight; then hover one Snowtrace link.
+    // Row 1: Allowlist Drained (3.5s)
+    await highlightTableRow(page, 'twin.allowlist.v1', 3500);
 
-    // Spotlight 2: Mission B Guarded row (5s)
-    await triggerSpotlight(
-      page,
-      'twin.mission.v1',
-      '🛡️ twin.mission.v1: Reverted (PayeeNotInMissionSet)',
-      5000
-    );
+    // Row 2: Mission Reverted (4.0s)
+    await highlightTableRow(page, 'twin.mission.v1', 4000);
 
-    await page.waitForTimeout(5000);
+    // Row 3: Control Paid (3.0s)
+    await highlightTableRow(page, 'Control', 3000);
+
+    // Hover Snowtrace link on Row 2 (2.0s)
+    const snowtraceLink = page.locator('section[aria-labelledby="twin-heading"] tbody tr:nth-child(2) a').first();
+    if (await snowtraceLink.isVisible()) {
+      await glideCursor(page, snowtraceLink, { holdMs: 2000 });
+    } else {
+      await page.waitForTimeout(2000);
+    }
 
     // =============================================================
     // SCENE 2: /judge interactive "Try it yourself" (41s total)
@@ -565,14 +685,8 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
     await page.locator('#judge-receipts-grid').waitFor({ state: 'visible', timeout: 30000 });
     await page.locator('#receipt-card-missionB_negative').waitFor({ state: 'visible', timeout: 10000 });
     // Scroll receipts into upper viewport so caption at bottom never touches the receipts
-    await page.evaluate(() => {
-      const el = document.getElementById('judge-receipts-grid');
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        window.scrollBy({ top: rect.top - 160, behavior: 'smooth' });
-      }
-    });
-    await page.waitForTimeout(1000);
+    await smoothScrollToElement(page, '#judge-receipts-grid', 160, 800);
+    await page.waitForTimeout(600);
 
     await showLowerThird(
       page,
@@ -588,26 +702,20 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
     );
     await expect(page.locator('h1')).toContainText(/Judge Mode/i);
 
-    // Spotlight the 3 live receipt cards (8s)
+    // Spotlight the 3 live receipt cards (7s)
     await triggerSpotlight(
       page,
       '#judge-receipts-grid',
       '⛓️ 3 Live On-Chain Receipts from Avalanche Fuji RPC',
       5000
     );
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(2000);
 
     // Scroll to Block 2 "Try it yourself" in upper viewport (top: 80px)
-    await page.evaluate(() => {
-      const el = document.getElementById('block2-heading');
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        window.scrollBy({ top: rect.top - 80, behavior: 'smooth' });
-      }
-    });
-    await page.waitForTimeout(1000);
+    await smoothScrollToElement(page, '#block2-heading', 80, 800);
+    await page.waitForTimeout(600);
 
-    // 1. Trigger simulation with Random Attacker (Negative Control) (11s)
+    // 1. Trigger simulation with Random Attacker (Negative Control) (9s)
     const askContractBtn = page.getByRole('button', {
       name: /Ask the Fuji Contract|Hỏi Hợp Đồng Fuji/i,
     });
@@ -619,24 +727,17 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
         page,
         '#simulation-result-card',
         '❌ PayeeNotInMissionSet (Contract Reverted Off-Mission Attacker)',
-        5000
+        4500
       );
-      await page.waitForTimeout(5000);
+      await page.waitForTimeout(2500);
     }
 
-    // 2. Trigger simulation with Owner (Positive Control) (10s)
+    // 2. Trigger simulation with Owner (Positive Control) (9s)
+    // NOTE (Round 17d): Lower-third appears at most once per section. Removed duplicate lower-third here.
     const testOwnerBtn = page.getByRole('button', {
       name: /Test Owner|Thử Ví Owner/i,
     });
     if (await testOwnerBtn.isVisible()) {
-      await showLowerThird(
-        page,
-        'POSITIVE CONTROL',
-        'Legitimate Payout Authorization',
-        'Owner address present in signed mission root · Simulation succeeds',
-        3000,
-        'green'
-      );
       await glideCursor(page, testOwnerBtn, { click: true });
       await page.waitForTimeout(1000);
 
@@ -647,41 +748,29 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
         '✅ Legitimate Mission Payee: Contract Authorizes Payout',
         4500
       );
-      await page.waitForTimeout(4500);
+      await page.waitForTimeout(2500);
     }
 
     // Scroll to Block 3 terminal reproduction commands ONCE (≤ 6s)
     const block3 = page.locator('#block3-heading');
     if (await block3.isVisible()) {
-      await page.evaluate(() => {
-        const b3 = document.getElementById('block3-heading');
-        if (b3) {
-          const rect = b3.getBoundingClientRect();
-          window.scrollBy({ top: rect.top - 90, behavior: 'smooth' });
-        }
-      });
+      await smoothScrollToElement(page, '#block3-heading', 90, 800);
       await showCaption(
         page,
         'Verify independently: copy cast call to query public Avalanche Fuji RPC directly.'
       );
-      await page.waitForTimeout(6000);
+      await page.waitForTimeout(5000);
     }
 
     // Scroll to Block 4 Known limits ONCE (≤ 5s)
     const block4 = page.locator('#block4-heading');
     if (await block4.isVisible()) {
-      await page.evaluate(() => {
-        const b4 = document.getElementById('block4-heading');
-        if (b4) {
-          const rect = b4.getBoundingClientRect();
-          window.scrollBy({ top: rect.top - 90, behavior: 'smooth' });
-        }
-      });
+      await smoothScrollToElement(page, '#block4-heading', 90, 800);
       await showCaption(
         page,
         'Known limits: dynamic budget updates require owner signature to update Merkle root.'
       );
-      await page.waitForTimeout(5000);
+      await page.waitForTimeout(4500);
     }
 
     // =============================================================
