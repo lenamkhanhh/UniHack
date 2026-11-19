@@ -850,3 +850,27 @@ Thời lượng toàn bộ video `MissionPay-demo.mp4`: **2m 48.00s (168.00s)** 
   - 3 contact sheets: `contact_sheet_0_60s.png`, `contact_sheet_60_120s.png`, `contact_sheet_120_165s.png`
   - `artifacts/submission-s1/video/frames/` (`scene0.png` .. `scene7.png`)
 
+
+
+---
+
+## 21. ROUND 20: VIDEO REBUILT BY CLAUDE (frame-stepped renderer), MEASURED NUMBERS
+
+**Date:** 2026-11-20 | **Branch:** `feat/s1-app` | **Why:** the r18/r19 video was judged poor by the owner (stalls, rough transitions, screen shake). The shake came from a sin/cos crop offset in `build-video.ts` that existed only to pass `freezedetect`; it is gone. The video is now rendered by `scripts/video/render-engine.mjs`, `render-scenes.mjs`, `scenes-judge-onward.mjs` and `assemble-video.py` (see `artifacts/submission-s1/video/README.md`). Every output frame is rendered on purpose (scroll, cursor, one-way eased pan/zoom), scenes are joined by 0.5 s cross-fades, and the 19 `clip_*_r18` voice clips are used unchanged (no TTS call, no `atempo`).
+
+All numbers below were measured on the committed `MissionPay-demo.mp4`:
+
+| Check | Result |
+|---|---|
+| Format | 1920x1080, 30 fps, H.264 (CRF 22, maxrate 7M) + AAC, 147.87 s (2:28), 55.4 MB |
+| `freezedetect n=0.003 d=2` and `d=1.5` | 0 segments (no jitter trick used) |
+| Hard cuts (`scene` score on one frame) | largest single-frame score 0.198, none above 0.25 (r19 had 1.00, 1.00, 0.91, 0.54, 0.58) |
+| Near-duplicate frames (mean abs diff < 0.02 on 192x108 gray) | 3.3% of 4,435 frame steps; longest run 0.17 s |
+| Loudness | -15.8 LUFS integrated, LRA 5.6 LU, true peak -1.0 dBFS (above the -1.5 dBFS target by 0.5 dB) |
+| Voice clip tails | last 100 ms of all 19 clips is at or below -65 dBFS; loudest 50 ms of the last 300 ms is at most -0.2 dB relative to the clip's median speech level (limit was +3 dB) |
+| Gap between spoken lines | min 1.43 s, mean 1.71 s (spec: >= 0.6 s) |
+| Pace (ASR text words / clip duration) | mean 1.59 w/s; above the 1.9 w/s target: `s1c1` 2.08 and `s3a` 1.97 (Gemini's own count for these two clips was 1.67 and 1.82 because it counts "allow-list"/"off-mission" as one word) |
+| Voice coverage | 75.7% of the video, **not** the 50-60% asked in r18: lowering it needs shorter lines and new TTS calls, not done |
+| Captions | burned in and in `captions.srt` / `narration.srt`; text = ASR transcript of each clip, timed to the real clip window |
+
+Not verified: nobody has listened to the final mix yet (tails and pace are numbers, not ears). Honest limits of the footage: `/`, `/judge`, `/bounty` typing, `/verify` tamper and restore are the live deployment; the Snowtrace receipt is a frame from our earlier live recording (Snowtrace is behind a Cloudflare challenge for headless browsers) and the bounty result is the committed deck screenshot whose "RECORDED RUN" badge is part of the image.
