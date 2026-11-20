@@ -1,4 +1,4 @@
-// Constants from pipeline/00-overview.md §6 - NEVER modify without updating specs and manifest
+// Constants from docs/design/pipeline/00-overview.md §6 - NEVER modify without updating specs and manifest
 
 export const CHAIN_ID = 43113;
 export const CHAIN_NAME = 'Avalanche Fuji';

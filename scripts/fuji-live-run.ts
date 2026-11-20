@@ -1,7 +1,7 @@
 /**
  * S1-2 [P0]: Avalanche Fuji Live End-to-End Orchestrator (App-Coordinated x402 & Real DB Audit Head)
  *
- * Implements S1 Review Fixes (S1-F1, S1-F2, S1-F3, S1-F4) as specified in REVIEW_PROMPT_GPT.md §4m:
+ * Implements S1 Review Fixes (S1-F1, S1-F2, S1-F3, S1-F4) as specified in docs/review-history/REVIEW_PROMPT_GPT.md §4m:
  *
  * 0. Setup: Verify Owner, Agent, and Treasury balances on Avalanche Fuji.
  * 1. Owner createMission: Confirmed on-chain tx 0x1785ad12...

@@ -230,7 +230,7 @@ const deliveryTxHash = await relayerWalletClient.sendTransaction({
 
 | Step | Action | Responsibility | Target Date |
 |---|---|---|---|
-| **Step 0** | Architecture spike & documentation (`docs/m9-self-relay-spike.md`) | Claude / Gemini | **13 Nov (Done)** |
+| **Step 0** | Architecture spike & documentation (`docs/avalanche/m9-self-relay-spike.md`) | Claude / Gemini | **13 Nov (Done)** |
 | **Step 1** | Faucet funding for Dispatch testnet ví Owner & Agent | Owner | 14–15 Nov |
 | **Step 2** | Deploy `MissionSpendGateway` on Dispatch and `MissionBudgetHub` on Fuji | Gemini | 16 Nov |
 | **Step 3** | Implement standalone relayer script `scripts/m9-self-relay.ts` | Gemini | 16 Nov |

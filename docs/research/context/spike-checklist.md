@@ -1,6 +1,6 @@
 # Spike checklist — Fuji payment trước, không chặn S1 bằng guard
 
-Research/build snapshot 4 November 2026. Owning specs: pipeline/00–05; acceptance IDs ở pipeline/06.
+Research/build snapshot 4 November 2026. Owning specs: docs/design/pipeline/00–05; acceptance IDs ở docs/design/pipeline/06.
 Checklist này là execution plan, mọi ô chưa tick. Không coi historical T/V IDs là test evidence.
 
 ## Day 1: x402 feasibility

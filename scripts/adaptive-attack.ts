@@ -11,7 +11,7 @@
  *   - C1: Spending Cap + Global Allowlist Only
  *   - C2: MissionPay Dual-Layer Stack (Provenance + Merkle Mission Set + Caps)
  * - Simulates on-chain eth_call on Avalanche Fuji for genuine proposals with genuine Merkle proofs.
- * - Outputs canonical run dataset and updates ADAPTIVE_ATTACK.md.
+ * - Outputs canonical run dataset and updates docs/security/ADAPTIVE_ATTACK.md.
  */
 
 import fs from 'fs';
@@ -1048,9 +1048,9 @@ export async function main() {
   fs.writeFileSync(canonicalPath, JSON.stringify(canonicalOutput, null, 2), 'utf8');
   console.log(`\n[Saved Canonical Dataset] ${canonicalPath}`);
 
-  // Generate ADAPTIVE_ATTACK.md
-  generateMarkdownReport(canonicalOutput, path.resolve(__dirname, '../ADAPTIVE_ATTACK.md'));
-  console.log(`[Generated Comprehensive Report] ADAPTIVE_ATTACK.md`);
+  // Generate docs/security/ADAPTIVE_ATTACK.md
+  generateMarkdownReport(canonicalOutput, path.resolve(__dirname, '../docs/security/ADAPTIVE_ATTACK.md'));
+  console.log(`[Generated Comprehensive Report] docs/security/ADAPTIVE_ATTACK.md`);
 }
 
 export function generateMarkdownReport(data: any, outPath: string) {

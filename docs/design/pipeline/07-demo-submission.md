@@ -62,7 +62,7 @@ abandoned reservation cleanup, retry/restart recovery và TalkMeter. Không gi�
 
 Planning deadline 21/11/2026 23:59 VN; internal submit 20/11.
 Theo research snapshot, Team1 và Builder Hub khác deadline/venue/submission route.
-Dùng [competition context](../context/competition-context.md) để xác nhận organizer instructions gần ngày nộp;
+Dùng [competition context](../../research/context/competition-context.md) để xác nhận organizer instructions gần ngày nộp;
 không tự giả định phải submit cả hai hay dùng ngày muộn hơn. Lượt sửa spec này chưa submit bất kỳ form nào.
 
 ## 5. Evidence theo rubric

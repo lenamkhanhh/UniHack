@@ -299,7 +299,7 @@ export async function runLiveICM() {
     console.log(
       'Owner must claim testnet DISPATCH tokens at https://core.app/tools/testnet-faucet/?subnet=dispatch'
     );
-    console.log('Refer to OWNER_TODO.md for step-by-step faucet instructions.');
+    console.log('Refer to docs/review-history/OWNER_TODO.md for step-by-step faucet instructions.');
     return {
       status: 'AWAITING_OWNER_FAUCET',
       ownerAddress,

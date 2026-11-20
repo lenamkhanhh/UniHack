@@ -1,4 +1,4 @@
-> **Historical record — superseded for implementation.** Các verdict và snippets dưới đây mô tả các commit trước, bao gồm những sửa tiếp tục được thay thế. Không copy interface/test IDs hoặc dùng quy tắc precedence cũ từ file này. Spec hiện hành do từng owning file 00–09 quản lý; handoff 11 chỉ tóm tắt. Xem [revision record](../context/spec-hardening.md) cho lượt sửa trực tiếp sau dec7648.
+> **Historical record — superseded for implementation.** Các verdict và snippets dưới đây mô tả các commit trước, bao gồm những sửa tiếp tục được thay thế. Không copy interface/test IDs hoặc dùng quy tắc precedence cũ từ file này. Spec hiện hành do từng owning file 00–09 quản lý; handoff 11 chỉ tóm tắt. Xem [revision record](../../research/context/spec-hardening.md) cho lượt sửa trực tiếp sau dec7648.
 
 # 10 — Review-response: 12 góp ý của GPT, đối chiếu với spec tại commit 8dd1f49
 
@@ -25,11 +25,11 @@ sau lượt sửa, để Gemini không phải đoán "đã sửa ở đâu".
 
 **Spec cũ sai ở đâu:**
 
-- `pipeline/01-contracts.md` §3–§4: `missionId` là `bytes32` tự do,
+- `docs/design/pipeline/01-contracts.md` §3–§4: `missionId` là `bytes32` tự do,
   `0x0` = không thuộc mission nào, chỉ check cap "nếu có missionId".
   Không có struct mission, không có existence/expiry/agent assignment,
   không có hàm tạo/đóng mission.
-- `pipeline/04-agent.md` §2, §5: LLM cung cấp `mission_id` trong JSON,
+- `docs/design/pipeline/04-agent.md` §2, §5: LLM cung cấp `mission_id` trong JSON,
   validator chỉ cộng `missionSpent`. LLM đổi ID là né cap, bỏ mission
   là né luôn mission cap.
 
@@ -61,11 +61,11 @@ không hiểu đề xuất.
 
 **Spec cũ sai ở đâu:**
 
-- `pipeline/04-agent.md` §2: schema yêu cầu `amount_atomic ≤ per-call/
+- `docs/design/pipeline/04-agent.md` §2: schema yêu cầu `amount_atomic ≤ per-call/
   per-tx cap`, trong khi §3 lại nói treasury vượt cap thì QUEUE.
   Một amount vừa "sai schema" vừa "được queue" là mâu thuẫn không
   implement được.
-- `pipeline/02-x402-tools.md` §6 mục 6: tool payment vượt tier thì
+- `docs/design/pipeline/02-x402-tools.md` §6 mục 6: tool payment vượt tier thì
   "chuyển sang queue", trong khi `04` §3 nói tool không queue trong
   MVP. Hai file nói hai hành vi khác nhau.
 
@@ -90,7 +90,7 @@ không hiểu đề xuất.
 
 **Spec cũ thiếu ở đâu:**
 
-- `pipeline/01-contracts.md` §5–§6: `execute()` nói "chỉ chạy proposal
+- `docs/design/pipeline/01-contracts.md` §5–§6: `execute()` nói "chỉ chạy proposal
   đã Approved hoặc Queued mà owner vừa approve" (mơ hồ); không nói
   approve/execute sau expiry, Approved có hết hạn không, recipient
   bị gỡ allowlist sau khi queue, mission hết hạn sau approve, execute
@@ -131,7 +131,7 @@ không hiểu đề xuất.
 
 **Spec cũ sai ở đâu:**
 
-- `pipeline/05-app.md` §4: "Agent propose không cần auth ví, nhưng
+- `docs/design/pipeline/05-app.md` §4: "Agent propose không cần auth ví, nhưng
   bị giới hạn bởi validator" trong khi server giữ `AGENT_PRIVATE_KEY`.
   Người ngoài gọi request hợp lệ là tiêu được ngân sách mission,
   dù không được giao mission.
@@ -172,7 +172,7 @@ không hiểu đề xuất.
 
 **Spec cũ thiếu ở đâu:**
 
-- `pipeline/02-x402-tools.md` §3: chỉ có 402 → sign → 200, không có
+- `docs/design/pipeline/02-x402-tools.md` §3: chỉ có 402 → sign → 200, không có
   trạng thái operation, không có reservation, không xử lý retry,
   concurrent request, timeout sau settlement, hoặc response bị mất.
   Random nonce chống replay cùng authorization, đúng, nhưng không
@@ -217,7 +217,7 @@ không hiểu đề xuất.
 
 **Spec cũ nói quá ở đâu:**
 
-- `pipeline/01-contracts.md` §5 và `02` §5: pause "chặn propose +
+- `docs/design/pipeline/01-contracts.md` §5 và `02` §5: pause "chặn propose +
   execute + tool pre-flight", nghe như kill switch chặn mọi thứ,
   trong khi authorization EIP-3009 đã ký vẫn settle được trước
   `validBefore`.
@@ -314,7 +314,7 @@ không hiểu đề xuất.
 
 **Spec cũ nói quá ở đâu:**
 
-- `pipeline/04-agent.md` §7: "ledger này mà sửa 1 dòng là lộ ngay"
+- `docs/design/pipeline/04-agent.md` §7: "ledger này mà sửa 1 dòng là lộ ngay"
   và `09` §1: "không cần tin team" — trong khi cùng team kiểm soát
   cả DB lẫn verifier API thì viết lại toàn bộ lịch sử và tính lại
   chain là được. `verify=true` chỉ chứng minh dữ liệu hiện tại nhất
@@ -342,7 +342,7 @@ không hiểu đề xuất.
 
 **Spec cũ nói quá ở đâu:**
 
-- `pipeline/04-agent.md` §8: "bị lừa cũng không mất tiền" và
+- `docs/design/pipeline/04-agent.md` §8: "bị lừa cũng không mất tiền" và
   `00` §2 / `06` §2: "guard thì 0 mất" không kèm phạm vi threat model.
   Agent vẫn mua được tool hợp lệ nhưng vô ích trong cap; agent key
   bị lộ vẫn propose được trong policy.
@@ -373,17 +373,17 @@ không hiểu đề xuất.
 
 **Spec cũ mâu thuẫn ở đâu:**
 
-- `pipeline/08-build-plan.md` §1: S1 Rails 7–9/11, S2 Guard 10–12/11,
+- `docs/design/pipeline/08-build-plan.md` §1: S1 Rails 7–9/11, S2 Guard 10–12/11,
   nhưng §3 lại yêu cầu contract + T1–T12 **trước** tool server.
   Làm theo §3 là phá stage và phá fallback.
-- `pipeline/06-tests-security.md` §1: gọi tất cả là `forge test`
+- `docs/design/pipeline/06-tests-security.md` §1: gọi tất cả là `forge test`
   trong khi T6 (unlimited approval) là validator test, T12 (audit
   khớp event) là integration test — không chạy bằng forge được.
-- `context/spike-checklist.md`: numbering T1–T12 lệch với pipeline
+- `docs/research/context/spike-checklist.md`: numbering T1–T12 lệch với pipeline
   mới, scope vẫn nói "Blocked event" (event bị revert xóa, xem mục 3
   và 01 §7), và chưa có mission/operation gate.
 
-**Quyết định sau sửa (xem 08 §1, §3, §4; 06 §1–§3; context/spike-checklist.md):**
+**Quyết định sau sửa (xem 08 §1, §3, §4; 06 §1–§3; docs/research/context/spike-checklist.md):**
 
 - Đồng bộ thứ tự: S0 spike → **S1 tool server + TalkMeter + identity
   display + S1 submission pack** → S2 contract + validator + queue +
@@ -498,7 +498,7 @@ sản phẩm và scope, chưa implement app, chưa deploy contract.
 
 **Spec cũ sai ở đâu:**
 
-- `pipeline/02-x402-tools.md` §9.4 (tại 56939ab): "Nonce chưa dùng
+- `docs/design/pipeline/02-x402-tools.md` §9.4 (tại 56939ab): "Nonce chưa dùng
   → operation chuyển sang FAILED, reservation được trả lại, client
   có thể bắt đầu operation mới." Điều này sai vì authorization vẫn
   có thể settle sau đó, trong cửa sổ `validBefore`.
@@ -537,8 +537,8 @@ sản phẩm và scope, chưa implement app, chưa deploy contract.
 
 **Spec cũ mâu thuẫn ở đâu:**
 
-- `pipeline/04-agent.md` §3 B3: kill switch check `guard.paused()`.
-- `pipeline/05-app.md` §4a: verify mission token bằng cách đối chiếu
+- `docs/design/pipeline/04-agent.md` §3 B3: kill switch check `guard.paused()`.
+- `docs/design/pipeline/05-app.md` §4a: verify mission token bằng cách đối chiếu
   owner với `owner()` của guard.
 - Cả hai đều vô nghĩa ở S1, khi guard chưa deploy. Spec cũ chỉ nói
   "S1 mission chỉ tồn tại off-chain" (04 §5) mà không định nghĩa
@@ -578,7 +578,7 @@ sản phẩm và scope, chưa implement app, chưa deploy contract.
 
 **Spec cũ thiếu ở đâu:**
 
-- `pipeline/05-app.md` §3 (tại 56939ab): `ToolOperation` chỉ có
+- `docs/design/pipeline/05-app.md` §3 (tại 56939ab): `ToolOperation` chỉ có
   operationId, toolId, inputHash, state, reservedAmount, txHash,
   missionId, sessionId, minuteIndex. Không có held result,
   authorization (nonce/payer/validity/signature), payment terms,
@@ -616,7 +616,7 @@ sản phẩm và scope, chưa implement app, chưa deploy contract.
 
 **Spec cũ sai ở đâu:**
 
-- `pipeline/06-tests-security.md` §5 (tại 56939ab): row "Agent key
+- `docs/design/pipeline/06-tests-security.md` §5 (tại 56939ab): row "Agent key
   bị lộ" ghi tổn thất tối đa là `dailyCap + toolCap trong kỳ`.
   Điều này đúng cho treasury (guard enforce on-chain) nhưng sai
   cho tool wallet: attacker giữ agent private key không cần đi qua
@@ -662,7 +662,7 @@ sản phẩm và scope, chưa implement app, chưa deploy contract.
 
 **Spec cũ thiếu ở đâu:**
 
-- `pipeline/02-x402-tools.md` §9.3 (tại 56939ab): retry chỉ check
+- `docs/design/pipeline/02-x402-tools.md` §9.3 (tại 56939ab): retry chỉ check
   operationId + inputHash. Không ràng buộc mission, payer, payment
   terms — nên cùng operationId có thể bị dùng lại ở mission khác,
   hoặc retry với payer/amount/payTo khác vẫn được xử lý.

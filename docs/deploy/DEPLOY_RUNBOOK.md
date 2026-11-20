@@ -83,7 +83,7 @@ That is all. `/judge`, `/arena/twin`, `/`, `/verify/<slug>` work with only these
 | `ARENA_PRESENTER_KEY` | `<long-random>` | Only for the `/stage` reset button. Unset = reset disabled. | `lib/arena.ts`, `app/stage/actions.ts` |
 | `BOUNTY_SALT` | `<random>` | Salt for IP hashing; a hard-coded default exists. Set a random value on public deploys. | `lib/bounty.ts:68` |
 | `NEXT_PUBLIC_STAGE` | `S1` | Header stage badge; default `S1`. | `app/layout.tsx:23` |
-| `GUARDED_TREASURY_ADDRESS`, `NEXT_PUBLIC_VALIDATION_REGISTRY_ADDRESS`, `NEXT_PUBLIC_ERC8004_AGENT_ID` | see `DEPLOY_CHECKLIST.md` | All have working in-code defaults for the verified Fuji deployment; set only to override. | `lib/config.ts` (getGuardedTreasuryAddress), `app/api/verify/[missionId]/route.ts:248-268` |
+| `GUARDED_TREASURY_ADDRESS`, `NEXT_PUBLIC_VALIDATION_REGISTRY_ADDRESS`, `NEXT_PUBLIC_ERC8004_AGENT_ID` | see `docs/deploy/DEPLOY_CHECKLIST.md` | All have working in-code defaults for the verified Fuji deployment; set only to override. | `lib/config.ts` (getGuardedTreasuryAddress), `app/api/verify/[missionId]/route.ts:248-268` |
 
 `APP_ORIGIN`, `DEPLOYMENT_ID`, `MISSION_TOKEN_SECRET`, `OWNER_ADDRESS` are only needed for wallet-signed mission creation / token minting (`lib/auth.ts:199-278`). Judges do not need them; leave unset on the public site.
 
