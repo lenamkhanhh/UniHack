@@ -18,6 +18,23 @@ import {
 import fs from 'fs';
 import path from 'path';
 
+// The Anvil fork reads live Fuji state from a public RPC, which occasionally drops a request.
+// Retry only transport failures so a real assertion failure is never masked.
+async function withRpcRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastError: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!/HTTP request failed|fetch failed|ECONNRESET|ETIMEDOUT|timed out/i.test(msg)) throw err;
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  }
+  throw lastError;
+}
+
 // R12-F1 must not depend on live Fuji state or a real key: when `stubLiveFujiClient.active` is set,
 // createPublicClient returns an in-memory client for the live preflight reads. Anvil fork tests
 // (flag off) use the real viem implementation.
@@ -131,7 +148,7 @@ describe('Twin Treasury Verification & Route Tests (Round 11)', () => {
   });
 
   it('R11-F1: runs Anvil fork simulation on Fuji bytecode and asserts exact balance deltas and 9 steps', async () => {
-    const report = await runTwinTreasury({ dryRun: true, forkPort: 8562 });
+    const report = await withRpcRetry(() => runTwinTreasury({ dryRun: true, forkPort: 8562 }));
 
     expect(report.mode).toBe('dry-run');
     expect(report.forkBlockNumber).toBeGreaterThan(60_000_000);
@@ -157,11 +174,15 @@ describe('Twin Treasury Verification & Route Tests (Round 11)', () => {
 
   it('R11-F1 (fail test): throws critical error if Mission B negative control unexpectedly succeeds', async () => {
     await expect(
-      runTwinTreasury({
-        dryRun: true,
-        forkPort: 8563,
-        mockNegativeSuccessForTest: true,
-      })
+      withRpcRetry(
+        () =>
+          runTwinTreasury({
+            dryRun: true,
+            forkPort: 8563,
+            mockNegativeSuccessForTest: true,
+          }),
+        3
+      )
     ).rejects.toThrow('CRITICAL FAILURE: Mission B negative control did NOT revert!');
   }, 45000);
 

@@ -5,7 +5,7 @@
 [![CI](https://github.com/lenamkhanhh/UniHack/actions/workflows/ci.yml/badge.svg)](https://github.com/lenamkhanhh/UniHack/actions/workflows/ci.yml)
 
 - **Live Demo:** [https://unihack-missionpay.vercel.app](https://unihack-missionpay.vercel.app)
-- **Video Presentation (2:20, narrated):** [`artifacts/submission-s1/video/MissionPay-demo.mp4`](artifacts/submission-s1/video/MissionPay-demo.mp4)
+- **Video Presentation (2:28, narrated):** [`artifacts/submission-s1/video/MissionPay-demo.mp4`](artifacts/submission-s1/video/MissionPay-demo.mp4)
 - **Judge mode (verify in 30 s):** `/judge` asks the live Fuji contract about any address you type (read-only `eth_call`, no key, no gas).
 - **Twin Treasury, live on Fuji (13/11/2026):** same allowlisted vendor, same treasury. Allowlist-only mission paid it ([0x548d…7fc6](https://testnet.snowtrace.io/tx/0x548d1106a69626eed32d308088f188c6d2d71d8e2f61e495f637d9f04e367fc6)); payee-set mission reverted `PayeeNotInMissionSet` ([0x0ad5…3e38](https://testnet.snowtrace.io/tx/0x0ad53adcf5790523e22219dcadc2c69b1a783d22c0bf651a9fa4742b43783e38)); approved payee still paid ([0xcb72…6315](https://testnet.snowtrace.io/tx/0xcb7236d146a2c8e2789db8ec2a80358b17d65993fc7b07187802e34c48656315)).
 - **Snowtrace GuardedTreasury Contract:** [`0x20451c1e2dCD83F166B4f22868BAdECb5868d545`](https://testnet.snowtrace.io/address/0x20451c1e2dCD83F166B4f22868BAdECb5868d545)
