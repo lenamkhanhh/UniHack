@@ -11,7 +11,7 @@ S1 cần basic result/payment receipt và budget; S3 hoàn thiện public export
 - Hai budget riêng; tool reserved là tiền có thể còn settle, không phải số trang trí.
 - Owner lấy lại result đã trả tiền dù mission hết hạn hoặc app restart.
 - Receipt nối actual result bytes, policy snapshot và chain payment; không chứng minh quality tự động.
-Các thành phần đã có tiền lệ trong [build sources](../context/build-sources.md).
+Các thành phần đã có tiền lệ trong [build sources](../../research/context/build-sources.md).
 Không claim novelty của từng primitive, không tự suy đã hơn mọi đối thủ vì có nhiều layer.
 
 ## 2. Optional theo thứ tự, chỉ sau gates core

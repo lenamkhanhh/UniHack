@@ -1,6 +1,6 @@
 # MissionPay — kiểm SOTA và prior work (v3, 08/11/2026)
 
-Bổ sung cho `RESEARCH_COMPETITIVE_2026-11-07.md` (v2). Lần này kiểm riêng 7 phần mới làm trong plan WOW, và quét lại các đối thủ mới xuất hiện trong 30 ngày qua.
+Bổ sung cho `docs/research/RESEARCH_COMPETITIVE_2026-11-07.md` (v2). Lần này kiểm riêng 7 phần mới làm trong plan WOW, và quét lại các đối thủ mới xuất hiện trong 30 ngày qua.
 
 ## 0. Kết luận thẳng
 

@@ -1,4 +1,4 @@
-> **Reference snapshot, not implementation authority.** File này giữ research ngày 4/11 và các pattern tham khảo. SDK APIs, deployed addresses và upstream claims cần verify lúc spike. Implementation hiện hành theo pipeline/00–05: quote trước compute, reserve trước sign, receipt bind nonce, spend/read tách quyền. Không copy source-specific custody/approval/rolling-window behavior vào MVP nếu khác owning spec.
+> **Reference snapshot, not implementation authority.** File này giữ research ngày 4/11 và các pattern tham khảo. SDK APIs, deployed addresses và upstream claims cần verify lúc spike. Implementation hiện hành theo docs/design/pipeline/00–05: quote trước compute, reserve trước sign, receipt bind nonce, spend/read tách quyền. Không copy source-specific custody/approval/rolling-window behavior vào MVP nếu khác owning spec.
 
 # Build sources — what is actually useful, and what to copy
 

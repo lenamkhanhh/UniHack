@@ -29,7 +29,7 @@ live payment, benchmark or runtime test was performed in this revision.
 
 ## Implementation acceptance
 
-See [06](../pipeline/06-tests-security.md) for C/P/V/E/L requirements. They are not marked passed.
+See [06](../../design/pipeline/06-tests-security.md) for C/P/V/E/L requirements. They are not marked passed.
 Check the deployed USDC and registry ABIs/code, SDK versions, facilitator settlement, Fuji finality support,
 database migrations and every runtime behavior when implementing. Candidate addresses are not deployment evidence.
 
@@ -55,11 +55,11 @@ Commands run from the scoped UniHack checkout unless an explicit file path is sh
 
 - git status --short -- .; git log -1 --format='%H %s'; git remote -v; rg --files -g AGENTS.md .
 - git fetch origin main; git merge --ff-only origin/main (fast-forward from the stale local research commit).
-- Get-Content for the applicable AIO Code AGENTS.md, existing pipeline/context/README, and the writing-style skill
+- Get-Content for the applicable AIO Code AGENTS.md, existing docs/design/pipeline/context/README, and the writing-style skill
   under the user-supplied skill root; Test-Path for the explicit applicable instruction paths.
 - python --version; git config user.name; git config user.email (read-only identity check; private values not recorded here).
 - Scoped Get-Content/Select-Object and rg consistency searches over the edited files.
-- git diff --check -- .; git diff --stat -- .; git diff --numstat -- .; git diff -- pipeline/01-contracts.md.
+- git diff --check -- .; git diff --stat -- .; git diff --numstat -- .; git diff -- docs/design/pipeline/01-contracts.md.
 - Inline Python Markdown/link/JSON/table/schema/acceptance checks using pathlib/re/json and subprocess;
   subprocess ran git check-ignore --no-index -q for env/private-evidence/broadcast fixtures and .env.example,
   and `git diff --check -- .`. Fixtures are path strings; no secret files or app test fixtures were created.

@@ -2,7 +2,7 @@
 
 **Mục tiêu:** Tài liệu hướng dẫn cấu hình, kiểm tra môi trường và sẵn sàng triển khai (Production Readiness) cho ứng dụng MissionPay trên hạ tầng đám mây (Vercel / AWS / GCP) và Hosted PostgreSQL (Supabase / Neon), tuân thủ nguyên tắc không deploy thực tế khi chưa có lệnh phê duyệt của Owner.
 
-> **Public deploy (Vercel + Neon, ~15 phút):** làm theo [`docs/DEPLOY_RUNBOOK.md`](docs/DEPLOY_RUNBOOK.md) (các bước, bảng env REQUIRED / OPTIONAL / MUST NOT, smoke test, rollback). Tài liệu này là bảng tham chiếu đầy đủ cho Full App; **trang public cho giám khảo chỉ cần `DATABASE_URL`, `DIRECT_URL`, `PAYMENT_MODE=LIVE_FUJI` và KHÔNG được đặt bất kỳ private key nào** (`AGENT_PRIVATE_KEY`, `RELAYER_PRIVATE_KEY`, `VALIDATOR_PRIVATE_KEY`, `FACILITATOR_PRIVATE_KEY`).
+> **Public deploy (Vercel + Neon, ~15 phút):** làm theo [`docs/deploy/DEPLOY_RUNBOOK.md`](DEPLOY_RUNBOOK.md) (các bước, bảng env REQUIRED / OPTIONAL / MUST NOT, smoke test, rollback). Tài liệu này là bảng tham chiếu đầy đủ cho Full App; **trang public cho giám khảo chỉ cần `DATABASE_URL`, `DIRECT_URL`, `PAYMENT_MODE=LIVE_FUJI` và KHÔNG được đặt bất kỳ private key nào** (`AGENT_PRIVATE_KEY`, `RELAYER_PRIVATE_KEY`, `VALIDATOR_PRIVATE_KEY`, `FACILITATOR_PRIVATE_KEY`).
 > Cấu hình Vercel nằm ở `apps/web/vercel.json` (Root Directory `apps/web`, build `@missionpay/guard` trước web, `prisma generate`). Font dùng `next/font/google` (Geist, Geist Mono, Archivo) và được tải lúc build.
 
 ---

@@ -1,7 +1,7 @@
 # 08 — Build plan và release gates
 
 Planning snapshot 4/11/2026. Deadline an toàn 21/11 23:59 VN, feature freeze 17/11,
-submit mục tiêu 20/11. Logistics đối chiếu [competition context](../context/competition-context.md);
+submit mục tiêu 20/11. Logistics đối chiếu [competition context](../../research/context/competition-context.md);
 không dựa vào deadline muộn hơn để mở rộng scope.
 
 ## 1. Lịch với output

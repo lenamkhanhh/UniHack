@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 860" width="1600" height="860" font-family="Geist, Inter, 'Segoe UI', system-ui, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#121417"/></marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#D92D3A"/></marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0B7A4B"/></marker>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#2B59C3"/></marker>
+    <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7A3E9D"/></marker>
+    <style>
+      .t{font-size:17px;font-weight:700;fill:#121417}
+      .s{font-size:13.5px;fill:#4A4F57}
+      .lane{font-size:13px;font-weight:700;letter-spacing:1.6px;fill:#6B7079}
+      .lbl{font-size:13px;font-weight:600;fill:#121417}
+      .lr{font-size:13px;font-weight:700;fill:#D92D3A}
+      .lg{font-size:13px;font-weight:700;fill:#0B7A4B}
+      .lb{font-size:13px;font-weight:700;fill:#2B59C3}
+      .box{fill:#FFFFFF;stroke:#D9D4CA;stroke-width:1.5}
+    </style>
+  </defs>
+
+  <rect width="1600" height="860" fill="#F7F5F0"/>
+  <text x="40" y="52" font-size="30" font-weight="800" fill="#121417" letter-spacing="0.5">MISSIONPAY ARCHITECTURE<tspan fill="#D92D3A">.</tspan></text>
+  <text x="40" y="80" font-size="15" fill="#4A4F57">The LLM only proposes. Avalanche decides who gets paid: a contract checks every payee against the set the owner signed for this mission.</text>
+
+  <rect x="30" y="110" width="270" height="720" rx="14" fill="#EFEBE3"/>
+  <text x="50" y="138" class="lane">PEOPLE</text>
+  <rect x="320" y="110" width="380" height="720" rx="14" fill="#EFEBE3"/>
+  <text x="340" y="138" class="lane">OFF-CHAIN APP · NEXT.JS ON VERCEL</text>
+  <rect x="720" y="110" width="470" height="720" rx="14" fill="#E9EEF8"/>
+  <text x="740" y="138" class="lane" style="fill:#2B59C3">AVALANCHE FUJI C-CHAIN</text>
+  <rect x="1210" y="110" width="360" height="430" rx="14" fill="#EFEBE3"/>
+  <text x="1230" y="138" class="lane">WHERE THE MONEY GOES</text>
+  <rect x="1210" y="560" width="360" height="270" rx="14" fill="#F3ECF6"/>
+  <text x="1230" y="588" class="lane" style="fill:#7A3E9D">DISPATCH L1 · ICM</text>
+
+  <rect x="50" y="170" width="230" height="96" rx="12" class="box"/>
+  <text x="70" y="204" class="t">Owner</text>
+  <text x="70" y="228" class="s">signs one mission: payees,</text>
+  <text x="70" y="247" class="s">caps, expiry (wallet or passkey)</text>
+
+  <rect x="50" y="600" width="230" height="120" rx="12" class="box" style="stroke:#2B59C3"/>
+  <text x="70" y="634" class="t">Anyone · judges</text>
+  <text x="70" y="658" class="s">Judge Mode: eth_call on Fuji,</text>
+  <text x="70" y="677" class="s">zero gas. /verify recomputes</text>
+  <text x="70" y="696" class="s">the hash chain in the browser</text>
+
+  <rect x="345" y="170" width="330" height="96" rx="12" class="box"/>
+  <text x="365" y="204" class="t">AI agent (LLM)</text>
+  <text x="365" y="228" class="s">reads invoices, email, web pages.</text>
+  <text x="365" y="247" class="s">Can be fooled. Only proposes payouts</text>
+
+  <rect x="345" y="330" width="330" height="96" rx="12" class="box"/>
+  <text x="365" y="364" class="t">Validator guard</text>
+  <text x="365" y="388" class="s">provenance: payee must come from</text>
+  <text x="365" y="407" class="s">the owner. (3) sends proposeWithProof</text>
+
+  <rect x="345" y="490" width="330" height="96" rx="12" class="box"/>
+  <text x="365" y="524" class="t">Audit hash chain</text>
+  <text x="365" y="548" class="s">every step as a Keccak-256 linked</text>
+  <text x="365" y="567" class="s">entry; head anchored on Fuji</text>
+
+  <rect x="345" y="650" width="330" height="96" rx="12" class="box"/>
+  <text x="365" y="684" class="t">x402 facilitator</text>
+  <text x="365" y="708" class="s">agent buys tools in gasless USDC</text>
+  <text x="365" y="727" class="s">(EIP-3009), bound to the request</text>
+
+  <rect x="745" y="300" width="420" height="160" rx="14" fill="#FFFFFF" stroke="#D92D3A" stroke-width="2.5"/>
+  <text x="767" y="336" font-size="20" font-weight="800" fill="#121417">GuardedTreasury</text>
+  <text x="767" y="362" class="s">holds the USDC. Pays only if the payee has a</text>
+  <text x="767" y="381" class="s">Merkle proof for this mission's owner-signed</text>
+  <text x="767" y="400" class="s">root and the amount fits the caps.</text>
+  <text x="767" y="436" font-size="14" font-weight="700" fill="#D92D3A">else: revert PayeeNotInMissionSet</text>
+
+  <rect x="745" y="170" width="200" height="96" rx="12" class="box"/>
+  <text x="763" y="204" class="t">P-256 precompile</text>
+  <text x="763" y="228" class="s">checks the owner's</text>
+  <text x="763" y="247" class="s">passkey on-chain</text>
+
+  <rect x="965" y="170" width="200" height="96" rx="12" class="box"/>
+  <text x="983" y="204" class="t">Proof anchor</text>
+  <text x="983" y="228" class="s">audit head hash</text>
+  <text x="983" y="247" class="s">stored on-chain</text>
+
+  <rect x="745" y="500" width="420" height="96" rx="12" class="box"/>
+  <text x="767" y="534" class="t">ERC-8004 registries</text>
+  <text x="767" y="558" class="s">agent #294 identity, owner reputation, and an</text>
+  <text x="767" y="577" class="s">independent validator scoring missions 100/100</text>
+
+  <rect x="745" y="650" width="420" height="110" rx="12" class="box" style="stroke:#7A3E9D"/>
+  <text x="767" y="684" class="t">MissionBudgetHub</text>
+  <text x="767" y="708" class="s">receives spend requests over ICM, checks</text>
+  <text x="767" y="727" class="s">mission, agent and Merkle proof, then pays.</text>
+  <text x="767" y="746" font-size="13" font-weight="700" fill="#D92D3A">stranger: UnauthorizedAgent</text>
+
+  <rect x="1235" y="250" width="310" height="86" rx="12" fill="#E6F4EC" stroke="#0B7A4B" stroke-width="2"/>
+  <text x="1255" y="284" class="t" style="fill:#0B7A4B">Payee in the set</text>
+  <text x="1255" y="308" class="s">receives USDC (tx 0xcb72…6315)</text>
+
+  <rect x="1235" y="380" width="310" height="96" rx="12" fill="#FBE9EA" stroke="#D92D3A" stroke-width="2"/>
+  <text x="1255" y="414" class="t" style="fill:#D92D3A">Off-mission payee</text>
+  <text x="1255" y="438" class="s">even a vendor on the company</text>
+  <text x="1255" y="457" class="s">allowlist: 0 USDC (tx 0x0ad5…3e38)</text>
+
+  <rect x="1235" y="660" width="310" height="96" rx="12" class="box" style="stroke:#7A3E9D"/>
+  <text x="1255" y="694" class="t">MissionSpendGateway</text>
+  <text x="1255" y="718" class="s">the agent sends spend requests</text>
+  <text x="1255" y="737" class="s">from another Avalanche L1</text>
+
+  <path d="M280 218 L338 218" stroke="#121417" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <text x="285" y="208" class="lbl">task</text>
+
+  <path d="M165 170 C 165 124, 260 112, 420 112 L 940 112 Q 955 112 955 127 L 955 292" stroke="#121417" stroke-width="2.2" fill="none" marker-end="url(#a)"/>
+  <rect x="455" y="97" width="236" height="22" rx="11" fill="#121417"/>
+  <text x="573" y="113" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">1 · owner signs the mission root</text>
+
+  <path d="M510 266 L510 322" stroke="#121417" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <text x="520" y="300" class="lbl">2 · propose payout</text>
+
+  <path d="M675 378 L737 378" stroke="#121417" stroke-width="2.2" fill="none" marker-end="url(#a)"/>
+  <text x="683" y="368" class="lbl">3</text>
+
+  <path d="M510 426 L510 482" stroke="#121417" stroke-width="2" fill="none" stroke-dasharray="6 5" marker-end="url(#a)"/>
+  <text x="520" y="460" class="lbl">log every step</text>
+
+  <path d="M675 512 L 708 512 L 708 152 L 1050 152 Q 1065 152 1065 166" stroke="#2B59C3" stroke-width="2" fill="none" stroke-dasharray="6 5" marker-end="url(#ab)"/>
+  <text x="714" y="300" class="lb" transform="rotate(-90 714 300)">anchor head</text>
+
+  <path d="M1165 330 L1227 300" stroke="#0B7A4B" stroke-width="2.4" fill="none" marker-end="url(#ag)"/>
+  <text x="1170" y="304" class="lg">USDC</text>
+
+  <path d="M1165 420 L1227 425" stroke="#D92D3A" stroke-width="2.4" fill="none" marker-end="url(#ar)"/>
+  <text x="1170" y="410" class="lr">revert</text>
+
+  <path d="M845 300 L845 274" stroke="#121417" stroke-width="1.8" fill="none" stroke-dasharray="5 4" marker-end="url(#a)"/>
+  <path d="M955 460 L955 492" stroke="#121417" stroke-width="1.8" fill="none" stroke-dasharray="5 4" marker-end="url(#a)"/>
+
+  <path d="M1235 708 L1173 708" stroke="#7A3E9D" stroke-width="2.4" fill="none" marker-end="url(#ap)"/>
+  <text x="1232" y="625" font-size="13" font-weight="700" fill="#7A3E9D">ICM · Teleporter, BLS-signed</text>
+
+  <path d="M280 640 C 312 640, 305 540, 338 540" stroke="#2B59C3" stroke-width="2" fill="none" stroke-dasharray="6 5" marker-end="url(#ab)"/>
+  <text x="200" y="590" class="lb">recompute</text>
+
+  <path d="M165 720 L 165 790 Q 165 800 175 800 L 1188 800 Q 1198 800 1198 790 L 1198 452 L 1173 452" stroke="#2B59C3" stroke-width="2" fill="none" stroke-dasharray="6 5" marker-end="url(#ab)"/>
+  <text x="430" y="822" class="lb">re-check any payee against the live contract (eth_call, zero gas)</text>
+</svg>

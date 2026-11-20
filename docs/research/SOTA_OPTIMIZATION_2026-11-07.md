@@ -1,6 +1,6 @@
 # MissionPay: rà soát SOTA và kế hoạch tối đa điểm (07/11/2026)
 
-Người viết: reviewer (Claude). Gemini chỉ implement theo spec sẽ giao ở `REVIEW_PROMPT_GPT.md`.
+Người viết: reviewer (Claude). Gemini chỉ implement theo spec sẽ giao ở `docs/review-history/REVIEW_PROMPT_GPT.md`.
 
 Căn cứ:
 - Rubric: Tech 25, Avalanche 25, Creativity 15, Impact 15, Pitch 10, UI/UX 10.
@@ -43,7 +43,7 @@ Căn cứ:
 | # | Việc | Tiêu chí ăn điểm | Ai làm / phụ thuộc | Công sức |
 |---|---|---|---|---|
 | **S1** | **Fuji live end-to-end** (đã lên kế hoạch): deploy contract mới, `setMissionPayeeRoot` bằng MetaMask, x402 thật, giao dịch revert `PayeeNotInMissionSet` thật, neo proof. | Avalanche +8–10, Tech +2 | Owner nạp faucet và duyệt broadcast → Gemini | Trung bình |
-| **S2** | **Eval "PayBench-ADI"** với LLM thật. 3 họ đòn: (a) subset APort Vault (kiểm licence dataset trước); (b) **ADI chèn delimiter vào trường người nhận và số tiền** theo kỹ thuật của paper SNU; (c) Bankr, Zscaler, Cornell. 3 cấu hình: không guard / validator không có provenance / MissionPay đầy đủ. Báo **ASR (tiền tới payee không được phép)** và **utility (payout hợp lệ hoàn thành)**. Kèm vài tx revert trên Fuji. Ra `ATTACK_EVAL.md` và một slide. | Tech +2, Creativity +2, Impact +2 | Cần `GEMINI_API_KEY` → Gemini | Trung bình |
+| **S2** | **Eval "PayBench-ADI"** với LLM thật. 3 họ đòn: (a) subset APort Vault (kiểm licence dataset trước); (b) **ADI chèn delimiter vào trường người nhận và số tiền** theo kỹ thuật của paper SNU; (c) Bankr, Zscaler, Cornell. 3 cấu hình: không guard / validator không có provenance / MissionPay đầy đủ. Báo **ASR (tiền tới payee không được phép)** và **utility (payout hợp lệ hoàn thành)**. Kèm vài tx revert trên Fuji. Ra `docs/security/ATTACK_EVAL.md` và một slide. | Tech +2, Creativity +2, Impact +2 | Cần `GEMINI_API_KEY` → Gemini | Trung bình |
 | **S3** | **Vá x402 theo ATC'26.** Nonce EIP-3009 = `keccak256(operationId, H(method‖URI‖body), quoteHash)`, seller tính lại và so khớp (F1). Test cho F1, F2, F4. Thêm bảng tự kiểm 4 lớp lỗ vào README. | Tech +1–2 | Gemini, không phụ thuộc gì | Thấp |
 | **S4** | **ERC-8004 Validation:** deploy `ValidationRegistry` từ `ava-labs/8004-boilerplate` lên Fuji. Khi đóng mission: `validationRequest`/`validationResponse` với `requestHash` = audit head đã neo, `response` = 100 nếu tiền ra ngoài phạm vi = 0, `responseURI` = link /verify. | Avalanche +1–2, Creativity +1 | Sau S1 | Thấp–trung bình |
 | **S5** | **Arena on-chain:** màn Stage hiện số dư USDC của ví mission đọc live từ Fuji, link Snowtrace, dòng "không đổi sau N đòn", và tx revert gần nhất. | UI/UX +1, Avalanche +1, wow | Sau S1 | Thấp |

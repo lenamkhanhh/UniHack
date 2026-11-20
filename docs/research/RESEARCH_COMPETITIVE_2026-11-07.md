@@ -180,7 +180,7 @@ Câu chốt mới:
 | P0 | Sửa deck slide 3, 10 + câu trả lời Q&A theo mục 5 | — | Reviewer | Thấp |
 | P0 | **G1:** `provenance` cho mỗi tham số trong proposal (`OWNER_MISSION` / `TOOL_OUTPUT` / `LLM`); luật `RECIPIENT_UNTRUSTED_PROVENANCE`, `AMOUNT_FROM_UNTRUSTED_SOURCE`; thêm đòn Zscaler (JSON-LD "$3 license") và đòn Cornell (OTP) vào Arena | G1, G3 | Gemini | Trung bình |
 | P0 | **Fuji live** (đã lên kế hoạch) | G5 | Owner + Gemini | Thấp phía owner |
-| P1 | **G2:** script `attack-eval` replay N đòn (dataset APort, ghi nguồn + các đòn sự cố thật) × 2 model (cần `GEMINI_API_KEY`) → `ATTACK_EVAL.md`: LLM bị lừa X%, tiền ra ngoài phạm vi 0, kèm link tx bị contract chặn | G2 | Gemini | Trung bình |
+| P1 | **G2:** script `attack-eval` replay N đòn (dataset APort, ghi nguồn + các đòn sự cố thật) × 2 model (cần `GEMINI_API_KEY`) → `docs/security/ATTACK_EVAL.md`: LLM bị lừa X%, tiền ra ngoài phạm vi 0, kèm link tx bị contract chặn | G2 | Gemini | Trung bình |
 | P2 | **G4 rút gọn:** chỉ đưa vào roadmap và slide, *không* hứa demo | G4 | — | — |
 
 ## 7. Q&A chuẩn bị
