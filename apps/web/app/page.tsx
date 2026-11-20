@@ -23,12 +23,12 @@ interface MissionSummary {
 }
 
 const REPO = 'https://github.com/lenamkhanhh/UniHack';
-const REPO_BLOB = `${REPO}/blob/feat/s1-app`;
+const REPO_BLOB = `${REPO}/blob/main`;
 const SNOWTRACE_TX = 'https://testnet.snowtrace.io/tx/';
 
 const RESOURCE_LINKS = [
-  { key: 'home.links.deck', href: `${REPO}/raw/feat/s1-app/artifacts/submission-s1/deck-v2/MissionPay_Deck_v2.pdf` },
-  { key: 'home.links.video', href: `${REPO_BLOB}/artifacts/submission-s1/demo.mp4` },
+  { key: 'home.links.deck', href: 'https://docs.google.com/presentation/d/1MSbomuT7qXj2MCg6taqkS6tEqdVH_VybzS5wTcQAKHY/edit?usp=sharing' },
+  { key: 'home.links.video', href: 'https://drive.google.com/file/d/1OqQu5Q_XHDf-owe6r5xeLyeEydrrYO7Z/view?usp=sharing' },
   { key: 'home.links.code', href: REPO },
   { key: 'home.links.evidence', href: `${REPO_BLOB}/artifacts/submission-s1/FUJI_EVIDENCE.md` },
   { key: 'home.links.benchmark', href: `${REPO_BLOB}/eval/agentdojo/SUMMARY.md` },
