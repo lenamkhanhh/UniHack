@@ -1,0 +1,47 @@
+{
+  "timestamp": "2026-11-20T08:19:05.078Z",
+  "dispatchChainId": 779672,
+  "fujiChainId": 43113,
+  "gatewayAddress": "0x20451c1e2dCD83F166B4f22868BAdECb5868d545",
+  "budgetHubAddress": "0x8Ba595B37b2206Df29D05Cf8fE42477eEB426fE3",
+  "scenario1_authorized_agent_spend": {
+    "status": "DELIVERED",
+    "delivery": "DELIVERED_ON_DESTINATION",
+    "dispatchSendTx": {
+      "hash": "0x6f806bfc33c7fa8b044af2bde3ef86cbf1d902ccd6dd92574879ffbac550a2ca",
+      "blockNumber": 34463,
+      "gasUsed": "214664",
+      "messageId": "0x0c03f3c9106e3bbe5f99b8eb57cbc5cf3cc105da52a3d574741f0228445545ed",
+      "teleporterMessageID": "0xa537d0f4a5cef5bb99d8585ff8163420a3f674ba9a75c7711619d5b7e36b027d"
+    },
+    "fujiDeliveryTx": {
+      "hash": "0x5641b631aba7a1dd2edd8516ded5b0ffa6c09b97029f6cf36800860f8ed1443b",
+      "blockNumber": 61370466,
+      "gasUsed": "461452",
+      "event": "SpendExecuted"
+    },
+    "revertReason": null,
+    "decoded_via_eth_call_replay": null
+  },
+  "scenario2_stranger_spend": {
+    "status": "REVERTED",
+    "delivery": "REVERTED_ON_DESTINATION",
+    "revertReason": "UnauthorizedAgent",
+    "decoded_via_eth_call_replay": "Execution reverted with reason: UnauthorizedAgent.",
+    "dispatchSendTx": {
+      "hash": "0xb7f337c3532f7c46850b8d0c16a91093834d05f38e66bfb97d5b2fa29de0b4ff",
+      "blockNumber": 34464,
+      "gasUsed": "214664",
+      "messageId": "0x9f84213e21bbd75b6d35b62a3459d1571b5e92897bca83faab02e0a6b00c0b2b",
+      "teleporterMessageID": "0xc325af3cc5d4397628f0bccc1971bc06c87812c25f047605f067eb01c8a5ebac"
+    },
+    "fujiDeliveryTx": {
+      "hash": "0xdd99bfd754ea2f200581c3ab08d8245799c203f114d820677a85356b3f40341d",
+      "blockNumber": 61370470,
+      "gasUsed": "relayed",
+      "event": "MessageExecutionFailed"
+    }
+  },
+  "delivery_note": "Both Fuji delivery txs were sent by a public Avalanche ICM relayer (0x09C00b61a37187C4762eaEc92FED4A53D019702a), not by our self-relay. Our self-relay (scripts/m9-self-relay.ts, Glacier-aggregated BLS signature + EIP-2930 predicate) built a valid signed Warp message (eth_call: predicate verified) but its broadcasts arrived one block later and reverted with 'TeleporterMessenger: message already received'.",
+  "hub_usdc_note": "Hub funded with 1.00 USDC; three authorized 0.10 USDC spends executed across runs on 20/11 (hub balance 0.70 USDC after the final run)."
+}

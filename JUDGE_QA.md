@@ -1,7 +1,7 @@
 # MissionPay: Q&A dự phòng cho giám khảo
 
 Chỉ dùng các con số đã được Claude kiểm lại. Ô ghi "CHƯA CÓ" thì không được nói lên sân khấu.
-Cập nhật: 2026-11-14.
+Cập nhật: 2026-11-20.
 Live Demo URL: [https://unihack-missionpay.vercel.app](https://unihack-missionpay.vercel.app)
 
 ## 1. Số liệu được phép nói
@@ -21,7 +21,7 @@ Live Demo URL: [https://unihack-missionpay.vercel.app](https://unihack-missionpa
 | Python Benchmark | 14/14 unit tests pass trong `eval/agentdojo/test_provguard_pairs.py` | `eval/agentdojo` |
 | On-chain Contracts Fuji | Địa chỉ Fuji hiện tại (`0x2045...`) là bản deploy cũ. Các bản vá mới (A1 root snapshot, A3 passkey governance) **CHƯA** deploy lên Fuji; đang chờ lệnh duyệt của Owner | `contracts/` |
 | Passkey WebAuthn | Xác thực P-256 / DER / RP ID / Origin đã kiểm bằng unit tests và virtual authenticators (LOCAL_BROWSER_CRYPTO_BOUNDARY). Sinh trắc học phần cứng live trên Fuji ghi **NOT_RUN** | `apps/web`, `contracts/` |
-| ICM Fuji ↔ Dispatch | Mới chạy với **mock local** (12 test). Chưa có giao dịch live | `contracts/test/MissionCrossChainICM.t.sol` |
+| ICM Dispatch → Fuji **live** (20/11) | Gateway trên Dispatch `0x2045…d545`, Hub trên Fuji `0x8Ba5…6fE3`. Agent đúng mission: gửi trên Dispatch `0x6f80…a2ca`, thực thi trên Fuji ([0x5641…443b](https://testnet.snowtrace.io/tx/0x5641b631aba7a1dd2edd8516ded5b0ffa6c09b97029f6cf36800860f8ed1443b)), trả 0,10 USDC. Người lạ: gửi `0xb7f3…b4ff`, bị chặn trên Fuji `UnauthorizedAgent` ([0xdd99…341d](https://testnet.snowtrace.io/tx/0xdd99bfd754ea2f200581c3ab08d8245799c203f114d820677a85356b3f40341d)), 0 USDC. Lưu ý: hai lượt giao tin là do relayer ICM công khai làm; self-relay của mình tạo được chữ ký hợp lệ nhưng đến chậm một block. Ngoài ra 12 test mock | `evidence/m9/icm-live.json`, `contracts/test/MissionCrossChainICM.t.sol` |
 
 ## 2. Câu hỏi khó và câu trả lời
 
@@ -48,7 +48,8 @@ Live Demo URL: [https://unihack-missionpay.vercel.app](https://unihack-missionpa
 - Agent thì không làm được: agent chỉ đề xuất. Backend không giữ key của owner, còn relayer chỉ trả gas.
 
 **"Cross-chain (ICM) chạy thật chưa?"**
-- Chưa. Contract hub/gateway và script deploy đã fork-simulate trên RPC thật của Fuji và Dispatch. Việc gửi live cần faucet Dispatch và một relayer: trong 50k block gần nhất, mình kiểm không thấy relayer công khai nào giao tin Dispatch→Fuji. Phần này ghi là roadmap.
+- Rồi, trên testnet từ 20/11. Agent gửi yêu cầu chi trên Dispatch L1; tin nhắn Teleporter sang Fuji; Hub kiểm mission, agent và proof Merkle rồi mới trả USDC. Người lạ gửi cùng mission thì bị chặn `UnauthorizedAgent`, 0 USDC. Hai tx Fuji ở bảng mục 1.
+- Nói thật: tin được giao bởi relayer ICM công khai. Script self-relay của mình (Glacier gom chữ ký BLS, predicate EIP-2930) tạo được message ký hợp lệ nhưng đến sau một block nên revert "message already received".
 
 **"allowance-ai trên NEAR làm y hệt?"**
 - Giống ở cap, allowlist, Face ID và arena.
@@ -64,5 +65,5 @@ Live Demo URL: [https://unihack-missionpay.vercel.app](https://unihack-missionpa
 ## 3. Không được nói
 
 - "SOTA", "đầu tiên", "duy nhất", hay "tốt hơn ProvGuard".
-- "Live cross-chain".
+- "Tự relay cross-chain" (lượt giao là relayer công khai làm). Được nói "ICM live trên testnet".
 - Bất kỳ số AgentDojo live nào trước khi Claude ghi vào bảng ở mục 1. Đặc biệt **không nói "0/48"**: số đó đo trên defense bị lỗi. Số live dùng được là 2/48 vs 31/48 (mục 1).
