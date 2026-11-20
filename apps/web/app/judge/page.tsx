@@ -567,7 +567,7 @@ export default function JudgePage() {
         {/* 3 Links */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <a
-            href="https://github.com/lenamkhanhh/UniHack/raw/feat/s1-app/artifacts/submission-s1/deck-v2/MissionPay_Deck_v2.pdf"
+            href="https://docs.google.com/presentation/d/1MSbomuT7qXj2MCg6taqkS6tEqdVH_VybzS5wTcQAKHY/edit?usp=sharing"
             target="_blank"
             rel="noreferrer"
             className="p-4 rounded-card bg-tint-slate hover:bg-[#DCE4EE] border border-info-rule transition space-y-1 block"
@@ -582,7 +582,7 @@ export default function JudgePage() {
           </a>
 
           <a
-            href="https://github.com/lenamkhanhh/UniHack/blob/feat/s1-app/artifacts/submission-s1/FUJI_EVIDENCE.md"
+            href="https://github.com/lenamkhanhh/UniHack/blob/main/artifacts/submission-s1/FUJI_EVIDENCE.md"
             target="_blank"
             rel="noreferrer"
             className="p-4 rounded-card bg-tint-slate hover:bg-[#DCE4EE] border border-info-rule transition space-y-1 block"

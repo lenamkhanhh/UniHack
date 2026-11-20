@@ -1,0 +1,13 @@
+.cache
+artifacts
+contracts/lib
+contracts/out
+contracts/cache
+contracts/broadcast
+node_modules
+**/node_modules
+.git
+**/test-results
+**/playwright-report
+**/.next
+scripts/video/out
