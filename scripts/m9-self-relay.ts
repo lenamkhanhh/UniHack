@@ -405,10 +405,15 @@ export async function selfRelayDispatchTx(
     `[Self-Relay] Broadcasting EIP-2930 delivery transaction from ${relayerAccount.address}...`
   );
 
+  // eth_estimateGas does not budget for Warp predicate verification plus the
+  // message's requiredGasLimit, so an estimated limit can leave Teleporter short
+  // of gas. Use a fixed, generous limit (override with M9_DELIVERY_GAS).
+  const deliveryGas = BigInt(process.env.M9_DELIVERY_GAS || '1500000');
   const txHash = await walletClient.sendTransaction({
     to: TELEPORTER_MESSENGER_ADDRESS,
     data: calldata,
     accessList,
+    gas: deliveryGas,
     chain: avalancheFuji,
   });
 

@@ -66,7 +66,9 @@ describe('WOW-F16: Calibrate Bankr & Arena UI Claims (Anti-Hyperbole)', () => {
   it('calibrated Bankr panel displays honest off-chain validator defense label', () => {
     const bankrPage = fs.readFileSync(path.resolve(process.cwd(), 'app/bankr/page.tsx'), 'utf8');
     expect(bankrPage).toContain('Tiền đã chuyển: $0.00 — chặn bởi validator (off-chain)');
-    expect(bankrPage).toContain('Lớp contract: chứng minh khi chạy Fuji');
+    // The replay itself stays labelled off-chain; the contract layer points to the live Fuji proof.
+    expect(bankrPage).toContain('Lớp contract: đã chứng minh trên Fuji');
+    expect(bankrPage).toContain('(off-chain)');
     expect(bankrPage).toContain('HỆ THỐNG MISSIONPAY (MÔ PHỎNG SANDBOX)');
   });
 

@@ -241,6 +241,7 @@ export default function VerifyMissionProofPage() {
         valid: false,
         errors: ['No audit log records available for verification'],
         headHash: '',
+        recomputedHeadHash: '',
         totalEntries: 0,
       };
     }
@@ -248,7 +249,8 @@ export default function VerifyMissionProofPage() {
   }, [currentEntries]);
 
   // On-chain head comparison
-  const clientHead = verification.headHash || '';
+  // Show the head recomputed from content, so a 1-byte edit visibly changes it.
+  const clientHead = verification.recomputedHeadHash || verification.headHash || '';
   const onchainHead = anchorStatus?.onchainHead || '';
   const isAnchored = Boolean(anchorStatus?.anchored && onchainHead);
   const isHeadMatch = isAnchored && verification.valid && clientHead && onchainHead && clientHead.toLowerCase() === onchainHead.toLowerCase();

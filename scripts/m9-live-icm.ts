@@ -348,8 +348,10 @@ export async function runLiveICM() {
   });
 
   // Common Mission Parameters
+  // Must equal the id registered by ConfigureFujiHub: keccak256("mission.dispatch.live.01").
+  // (The raw left-aligned string bytes are NOT registered and make the hub revert MissionNotFound.)
   const missionId = (process.env.M9_MISSION_ID ||
-    '0x6d697373696f6e2e64697370617463682e6c6976652e30310000000000000000') as Hex;
+    '0x2dcfbb90bc49dce79fececc679a1f1bc9848550889759b914cee4a6480e4eab6') as Hex;
   const validPayee = (process.env.M9_VALID_PAYEE ||
     '0x1111111111111111111111111111111111111111') as Address;
   const validProof = [
@@ -388,7 +390,7 @@ export async function runLiveICM() {
         data: log.data,
         topics: log.topics,
       });
-      if (decoded.eventName === 'SpendRequested') {
+      if (decoded.eventName === 'SpendRequestSent') {
         agentMessageId = (decoded.args as any).messageId;
         agentTeleporterMsgId = (decoded.args as any).teleporterMessageID;
       }
@@ -443,7 +445,8 @@ export async function runLiveICM() {
           'event SpendExecuted(bytes32 indexed messageId, bytes32 indexed missionId, address indexed agent, address payee, uint256 amount)'
         ),
         args: { messageId: agentMessageId },
-        fromBlock: currentBlock > 500n ? currentBlock - 500n : 0n,
+        // Public Fuji RPC caps eth_getLogs at 100 blocks per request.
+        fromBlock: currentBlock > 95n ? currentBlock - 95n : 0n,
       });
 
       const deliveryLog = logs[0];
@@ -529,7 +532,7 @@ export async function runLiveICM() {
         data: log.data,
         topics: log.topics,
       });
-      if (decoded.eventName === 'SpendRequested') {
+      if (decoded.eventName === 'SpendRequestSent') {
         strangerMessageId = (decoded.args as any).messageId;
         strangerTeleporterMsgId = (decoded.args as any).teleporterMessageID;
       }
@@ -601,7 +604,8 @@ export async function runLiveICM() {
       args: {
         sourceBlockchainID: dispatchBlockchainID,
       },
-      fromBlock: currentBlock > 500n ? currentBlock - 500n : 0n,
+      // Public Fuji RPC caps eth_getLogs at 100 blocks per request.
+        fromBlock: currentBlock > 95n ? currentBlock - 95n : 0n,
     });
 
     const matchingFailLog = failLogs.find(
