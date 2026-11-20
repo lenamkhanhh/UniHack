@@ -1,4 +1,4 @@
-# MissionPay Video Demo — Credits & Asset Licenses
+# MissionPay Video Demo — Credits & Asset Licenses (Round 18)
 
 This document lists all media assets, synthetic voices, music, and tools used in the production of the official **MissionPay** demo video for the Avalanche Team1 Vietnam UniHack 2026 Hackathon.
 
@@ -8,9 +8,10 @@ All third-party assets are free, open-source, or public domain, with permissive 
 
 ## 1. Narration & Voice-Over (Synthetic)
 
-- **Voice Model**: `gemini-3.8-flash-lite-tts`
-- **Voice Preset**: `Puck` (high-energy, clear tech-demo delivery)
+- **Voice Model**: `gemini-3.1-flash-tts-preview`
+- **Voice Preset**: `Puck` (calm, measured tech delivery, rate <= 1.9 words/s)
 - **API Provider**: Google Generative AI (Gemini Developer API)
+- **Audio Processing**: Custom build-time tail trimming (eliminated trailing burst click) + 40ms fade-out.
 - **License**: Generated under Google AI terms for developer use and distribution.
 - **Notice**: In compliance with hackathon regulations, the voice track is synthetic and fully disclosed here.
 

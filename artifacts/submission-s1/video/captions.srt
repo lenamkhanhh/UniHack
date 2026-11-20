@@ -1,59 +1,89 @@
 1
-00:00:00,100 --> 00:00:03,099
-MissionPay: Same vendor. Same treasury. Two outcomes.
+00:00:00,800 --> 00:00:05,550
+Same vendor, same treasury. Two outcomes.
 
 2
-00:00:03,100 --> 00:00:12,300
-MissionPay: owner signs authorized payees, agents propose, Avalanche contract enforces.
+00:00:06,767 --> 00:00:14,567
+MissionPay secures agent treasuries. Owner signs limits,
+contract enforces on Avalanche.
 
 3
-00:00:12,599 --> 00:00:20,100
-Three objects govern payouts: signed mission policy, Merkle proof, and treasury gate.
+00:00:15,767 --> 00:00:23,237
+Three objects govern payouts: signed policy, Merkle
+proof, and Treasury gate.
 
 4
-00:00:20,399 --> 00:00:32,099
-Twin table: allowlist paid 0.01 USDC, mission reverted PayeeNotInMissionSet, 0 lost.
+00:00:24,433 --> 00:00:29,233
+The allow list drained funds to an off mission vendor.
 
 5
-00:00:32,399 --> 00:00:37,299
-In Judge Mode, test any attacker: the contract strictly reverts with PayeeNotInMissionSet.
+00:00:30,433 --> 00:00:37,093
+On Avalanche Fuji, Mission Pay strictly reverted with
+zero funds lost.
 
 6
-00:00:37,600 --> 00:00:43,000
-Random attacker: the contract reverts with PayeeNotInMissionSet.
+00:00:38,300 --> 00:00:43,780
+Each row links to a real Fuji transaction receipt.
 
 7
-00:00:43,299 --> 00:00:51,299
-Owner address: proposal accepted. Read-only eth_call simulation, no gas, no keys.
+00:00:44,967 --> 00:00:50,787
+In judge mode, live Fuji receipts prove on-chain
+behavior.
 
 8
-00:00:51,600 --> 00:00:56,799
-Verify independently: copy cast call to query public Avalanche Fuji RPC directly.
+00:00:52,000 --> 00:00:58,940
+Testing an attacker. The contract strictly reverts with
+payee not in mission set.
 
 9
-00:00:57,100 --> 00:01:01,799
-Known limits: dynamic budget updates require owner signature to update Merkle root.
+00:01:00,133 --> 00:01:07,313
+Testing the owner address succeeds. Read-only simulation
+requires zero gas.
 
 10
-00:01:02,100 --> 00:01:08,799
-Bounty Challenge: prompt injection fools the agent, but the contract preserves treasury.
+00:01:08,500 --> 00:01:14,830
+Copy the cast command to query public avalanche fuji rpc
+directly.
 
 11
-00:01:09,099 --> 00:01:13,799
-Tainted address from tool output is blocked by validator; contract provides hard backstop.
+00:01:16,033 --> 00:01:20,793
+Updating the mission merkle root requires the owner's
+signature.
 
 12
-00:01:14,099 --> 00:01:22,599
-On-chain proof: Snowtrace confirms execution reverted with PayeeNotInMissionSet.
+00:01:22,000 --> 00:01:28,590
+Prompt injection tricks the agent, but our dual layer
+guard protects the treasury.
 
 13
-00:01:23,000 --> 00:02:08,300
-Independent verification: ERC-8004 score 100/100; tamper with 1 byte and verification breaks.
+00:01:29,800 --> 00:01:34,850
+Tainted from tool output, our validator blocks the
+payout.
 
 14
-00:02:08,800 --> 00:02:13,400
-Dual-Layer Defense: LLM agents propose, while Avalanche Fuji contracts enforce.
+00:01:36,067 --> 00:01:44,387
+Snowtrace confirms live execution reverted on Fuji with
+payee not in mission set.
 
 15
-00:02:14,000 --> 00:02:19,300
-LLMs can be fooled. Budgets on Avalanche can't.
+00:01:45,600 --> 00:01:55,280
+Cryptographically anchored on Fuji, ERC-8004 validation
+confirms a perfect score.
+
+16
+00:01:56,467 --> 00:02:01,407
+Tamper one byte and the cryptographic hash chain breaks.
+
+17
+00:02:02,600 --> 00:02:09,090
+Restore the original, and 100% cryptographic integrity
+is confirmed.
+
+18
+00:02:10,300 --> 00:02:17,140
+Agents propose payouts while Avalanche smart contracts
+enforce limits.
+
+19
+00:02:18,333 --> 00:02:23,973
+LLMs can be fooled. Budgets on Avalanche cannot.

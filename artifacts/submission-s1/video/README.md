@@ -4,22 +4,27 @@ This directory contains the post-production pipeline and deliverables for the **
 
 ---
 
-## 1. Quick Rebuild Commands
+## 1. Current pipeline (static frames, Claude-built, r21 - 20/11)
 
-### Rebuild with Default Voiceover (Track A - Edge TTS):
+The shipped `MissionPay-demo.mp4` is produced by four scripts in `scripts/video/`, not by the older screencast recorder:
+
 ```bash
-# 1. Record the full 1080p demo with overlays & visual effects
-npm run record:demo
+# 1. Render each scene from the live site (run from apps/web so @playwright/test resolves).
+cd apps/web && node ../../scripts/video/render-scenes.mjs --out <dir> [--only s1a,s1b]
+#    (render-engine.mjs + compose-frames.py are used internally)
 
-# 2. Build final mastered video with title cards, xfades, audio, and subtitles
-npx tsx scripts/video/build-video.ts
+# 2. Cross-fade (0.5 s xfade) the 19 scenes, place the 19 Puck r18 voice clips, duck Satie, add the caption band,
+#    encode once (1920x1080, constant 30 fps, H.264, +faststart).
+python scripts/video/assemble-video.py --scenes <dir> --out artifacts/submission-s1/video/MissionPay-demo.mp4
 ```
 
-### Rebuild with Presenter Voice (Track B - Human Recording):
-```bash
-# Provide custom voice recording (e.g. owner.wav or owner.mp3)
-npx tsx scripts/video/build-video.ts --voice path/to/owner.wav
-```
+- **Fixed framing.** Every scene is a still 1920x950 view of the page; the bottom 130 px is a dark caption band, so captions never cover the page. The page is screenshotted at 2x only when something changes (cursor, typing, click result, callout); unchanged frames are the identical image. Zoom is used only three times (Twin table, Judge result, Verify score): one eased 0.7 s move, then it holds.
+- **Callouts.** A red frame plus a short label points at the cell being described while the voice mentions it.
+- Scene length = voice clip + 0.8 s lead + 0.9 s tail; scenes overlap by 0.5 s, so the gap between two spoken lines is 1.2 s. No `atempo`, no `setpts` on footage, no shake or jitter.
+- The voice is the 19 `clip_*_r18.wav` clips (Gemini TTS "Puck"); captions are their ASR text (`clip_*_r18.asr.txt`).
+- `/`, `/judge`, `/bounty` (typing) and `/verify` (tamper / restore) are the live deployment. Two scenes are stills: the Snowtrace receipt (`cards/snowtrace_frame.png`, a frame from our earlier live recording, because Snowtrace is behind a Cloudflare challenge for headless browsers) and the bounty result (`deck-shots/deck-bounty-tricked.png`, whose "RECORDED RUN" badge is part of the image).
+
+The sections below describe the older (Round 13) pipeline and are kept for history.
 
 ---
 

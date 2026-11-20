@@ -52,6 +52,9 @@ artifacts/submission-s1/video/*.pcm
 artifacts/submission-s1/video/*.aac
 artifacts/submission-s1/video/*.asr.txt
 artifacts/submission-s1/video/voice-samples/
+artifacts/submission-s1/video/clip_*.meta.json
+artifacts/submission-s1/video/clip_*.prompt.txt
+artifacts/submission-s1/video/r18_clips/
 
 
 

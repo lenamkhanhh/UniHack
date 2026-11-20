@@ -47,7 +47,7 @@ async function injectVisualEffects(page: Page) {
         height: 28px;
         pointer-events: none;
         z-index: 1000000000;
-        transform: translate(-100px, -100px);
+        transform: translate(960px, 480px);
         transition: transform 0.04s ease-out;
       }
       #fake-cursor.hide {
@@ -65,6 +65,11 @@ async function injectVisualEffects(page: Page) {
         filter: blur(5px);
         pointer-events: none;
         z-index: -1;
+        animation: haloPulse 2.0s ease-in-out infinite alternate;
+      }
+      @keyframes haloPulse {
+        0% { transform: translate(-50%, -50%) scale(0.9); opacity: 0.30; }
+        100% { transform: translate(-50%, -50%) scale(1.35); opacity: 0.65; }
       }
 
       /* Lower-third broadcast banner (R17c-F5: paper card #F7F6F2, accent bar, title 30px, sub 20px, kicker 16px) */
@@ -116,11 +121,11 @@ async function injectVisualEffects(page: Page) {
         line-height: 1.3;
       }
 
-      /* Spotlight Dim Backdrop */
+      /* Spotlight Dim Backdrop (R18-V2: <= 20% dim overlay, no dark glitch) */
       #spotlight-backdrop {
         position: fixed;
         inset: 0;
-        background: rgba(15, 17, 21, 0.60);
+        background: rgba(15, 17, 21, 0.15);
         z-index: 999990;
         opacity: 0;
         transition: opacity 0.4s ease;
@@ -164,11 +169,32 @@ async function injectVisualEffects(page: Page) {
         from { transform: translateX(-50%) translateY(0); }
         to { transform: translateX(-50%) translateY(-6px); }
       }
+
+      /* R18-V1: Ambient breathing glow to eliminate all frozen stretches */
+      #ambient-breathing {
+        position: fixed;
+        inset: -20px;
+        pointer-events: none;
+        z-index: 999990;
+        background: radial-gradient(circle at 50% 50%, rgba(36, 87, 197, 0.045) 0%, transparent 75%);
+        animation: ambientBreathe 3.0s ease-in-out infinite alternate;
+      }
+      @keyframes ambientBreathe {
+        0% { transform: scale(0.90); opacity: 0.35; }
+        100% { transform: scale(1.15); opacity: 0.85; }
+      }
     `,
   });
 
   // Inject fake cursor element and event listeners
   await page.evaluate(() => {
+    let ambient = document.getElementById('ambient-breathing');
+    if (!ambient) {
+      ambient = document.createElement('div');
+      ambient.id = 'ambient-breathing';
+      document.body.appendChild(ambient);
+    }
+
     let cursor = document.getElementById('fake-cursor');
     if (!cursor) {
       cursor = document.createElement('div');
@@ -197,7 +223,60 @@ async function injectVisualEffects(page: Page) {
       document.body.appendChild(ripple);
       setTimeout(() => ripple.remove(), 350);
     });
+
+    // R18-V1: Continuous cursor micro-breathing to eliminate all frozen stretches
+    let orbitAngle = 0;
+    setInterval(() => {
+      orbitAngle += 0.08;
+      const c = document.getElementById('fake-cursor');
+      if (c && !c.classList.contains('hide')) {
+        const dx = Math.sin(orbitAngle) * 2.0;
+        const dy = Math.cos(orbitAngle) * 2.0;
+        c.style.marginLeft = `${dx.toFixed(2)}px`;
+        c.style.marginTop = `${dy.toFixed(2)}px`;
+      }
+    }, 40);
   });
+}
+
+/**
+ * R18-V3: Zooms UI sections to 125%-130% with an eased 600ms push for readability.
+ */
+async function zoomSection(page: Page, selector: string, scale = 1.28, durationMs = 600) {
+  await page.evaluate(
+    ({ sel, scale, durationMs }) => {
+      const el = document.querySelector(sel) as HTMLElement;
+      if (el) {
+        el.style.transition = `transform ${durationMs}ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow ${durationMs}ms ease`;
+        el.style.transformOrigin = 'center 35%';
+        el.style.transform = `scale(${scale})`;
+        el.style.zIndex = '99990';
+        el.style.boxShadow = '0 16px 36px rgba(0, 0, 0, 0.18)';
+      }
+    },
+    { sel: selector, scale, durationMs }
+  );
+  await page.waitForTimeout(durationMs);
+}
+
+async function resetZoomSection(page: Page, selector: string, durationMs = 600) {
+  await page.evaluate(
+    ({ sel, durationMs }) => {
+      const el = document.querySelector(sel) as HTMLElement;
+      if (el) {
+        el.style.transition = `transform ${durationMs}ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow ${durationMs}ms ease`;
+        el.style.transform = 'scale(1.0)';
+        el.style.boxShadow = '';
+        setTimeout(() => {
+          if (el.style.transform === 'scale(1)') {
+            el.style.zIndex = '';
+          }
+        }, durationMs);
+      }
+    },
+    { sel: selector, durationMs }
+  );
+  await page.waitForTimeout(durationMs);
 }
 
 /**
@@ -315,16 +394,22 @@ async function highlightTableRow(page: Page, rowText: string, durationMs = 3000)
       targetRow.style.backgroundColor = 'rgba(36, 87, 197, 0.22)';
       targetRow.style.outline = '2px solid #2457C5';
       const rect = targetRow.getBoundingClientRect();
-      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      return {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+        startX: Math.max(100, rect.left + 80),
+        endX: Math.min(1800, rect.right - 80),
+      };
     }
     return null;
   }, rowText);
 
   if (box) {
-    await page.mouse.move(box.x, box.y, { steps: 15 });
+    await page.mouse.move(box.startX, box.y, { steps: 10 });
+    await page.mouse.move(box.endX, box.y, { steps: 35 });
   }
 
-  await page.waitForTimeout(durationMs);
+  await page.waitForTimeout(Math.max(500, durationMs - 1200));
 
   await page.evaluate((text) => {
     const rows = Array.from(document.querySelectorAll('section[aria-labelledby="twin-heading"] tbody tr'));
@@ -567,6 +652,9 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
     // 3. ONE smooth scroll down to Table 1: Twin Treasury (#twin-heading) (1s)
     await smoothScrollToElement(page, '#twin-heading', 80, 1000);
 
+    // R18-V3: Zoom Twin table section to 128% with eased 600ms push
+    await zoomSection(page, 'section[aria-labelledby="twin-heading"]', 1.28, 600);
+
     // Lower-third shown ONCE per section (Round 17d)
     await showLowerThird(
       page,
@@ -599,6 +687,7 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
     } else {
       await page.waitForTimeout(2000);
     }
+    await resetZoomSection(page, 'section[aria-labelledby="twin-heading"]', 600);
 
     // =============================================================
     // SCENE 2: /judge interactive "Try it yourself" (41s total)
@@ -703,6 +792,7 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
     await expect(page.locator('h1')).toContainText(/Judge Mode/i);
 
     // Spotlight the 3 live receipt cards (7s)
+    await zoomSection(page, '#judge-receipts-grid', 1.25, 600);
     await triggerSpotlight(
       page,
       '#judge-receipts-grid',
@@ -710,6 +800,7 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
       5000
     );
     await page.waitForTimeout(2000);
+    await resetZoomSection(page, '#judge-receipts-grid', 600);
 
     // Scroll to Block 2 "Try it yourself" in upper viewport (top: 80px)
     await smoothScrollToElement(page, '#block2-heading', 80, 800);
@@ -723,6 +814,7 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
       await glideCursor(page, askContractBtn, { click: true });
       await page.waitForTimeout(1000);
 
+      await zoomSection(page, '#simulation-result-card', 1.28, 600);
       await triggerSpotlight(
         page,
         '#simulation-result-card',
@@ -730,6 +822,7 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
         4500
       );
       await page.waitForTimeout(2500);
+      await resetZoomSection(page, '#simulation-result-card', 600);
     }
 
     // 2. Trigger simulation with Owner (Positive Control) (9s)
@@ -741,6 +834,7 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
       await glideCursor(page, testOwnerBtn, { click: true });
       await page.waitForTimeout(1000);
 
+      await zoomSection(page, '#simulation-result-card', 1.28, 600);
       // Spotlight success result badge
       await triggerSpotlight(
         page,
@@ -749,6 +843,7 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
         4500
       );
       await page.waitForTimeout(2500);
+      await resetZoomSection(page, '#simulation-result-card', 600);
     }
 
     // Scroll to Block 3 terminal reproduction commands ONCE (≤ 6s)
@@ -759,7 +854,13 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
         page,
         'Verify independently: copy cast call to query public Avalanche Fuji RPC directly.'
       );
-      await page.waitForTimeout(5000);
+      await glideCursor(page, '#block3-heading', { holdMs: 1500 });
+      const copyBtn = page.locator('button:has-text("Copy"), [data-testid="copy-cast-btn"], #block3-heading ~ div pre').first();
+      if (await copyBtn.isVisible()) {
+        await glideCursor(page, copyBtn, { holdMs: 2000 });
+      } else {
+        await page.waitForTimeout(2000);
+      }
     }
 
     // Scroll to Block 4 Known limits ONCE (≤ 5s)
@@ -770,7 +871,13 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
         page,
         'Known limits: dynamic budget updates require owner signature to update Merkle root.'
       );
-      await page.waitForTimeout(4500);
+      await glideCursor(page, '#block4-heading', { holdMs: 1500 });
+      const limitCard = page.locator('#block4-heading ~ div, section:has(#block4-heading) p').first();
+      if (await limitCard.isVisible()) {
+        await glideCursor(page, limitCard, { holdMs: 2000 });
+      } else {
+        await page.waitForTimeout(2000);
+      }
     }
 
     // =============================================================
@@ -836,8 +943,11 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
         document.body.appendChild(overlay);
       }, imgBase64);
 
-      // Top view showing 3 layers (4s)
-      await page.waitForTimeout(4000);
+      // Top view showing 3 layers (4s): cursor glides across layer badges
+      await glideCursor(page, '#bounty-recorded-overlay', { holdMs: 800 });
+      await page.mouse.move(700, 320, { steps: 25 });
+      await page.mouse.move(1200, 420, { steps: 25 });
+      await page.waitForTimeout(800);
 
       // Smooth scroll overlay down into provenance trace
       await page.evaluate(() => {
@@ -848,10 +958,13 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
       });
       await showCaption(
         page,
-        'The poisoned address is tainted from tool output, so the validator blocks it.'
+        'Tainted from tool output... our validator blocks the payout.'
       );
-      // Wait for scroll + hold at trace (total <= 10s on overlay)
-      await page.waitForTimeout(5500);
+      // Wait for scroll + hold at trace (total <= 10s on overlay): cursor explores trace nodes
+      await page.mouse.move(960, 600, { steps: 20 });
+      await page.mouse.move(650, 750, { steps: 30 });
+      await page.mouse.move(1150, 800, { steps: 30 });
+      await page.waitForTimeout(1000);
     }
 
     // =============================================================
@@ -1063,6 +1176,7 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
     await expect(page.locator('h1')).toContainText(/DON'T TRUST US/i);
 
     // 1. Initial VALID state: point to 100/100 badge and spotlight once (8s)
+    await zoomSection(page, '.lg\\:col-span-3', 1.25, 600);
     await triggerSpotlight(
       page,
       '[data-testid="erc8004-status-badge"]',
@@ -1070,18 +1184,20 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
       5000
     );
     await page.waitForTimeout(2000);
+    await resetZoomSection(page, '.lg\\:col-span-3', 600);
 
     // 2. Click "Test modify 1 byte" with virtual cursor (9s)
     const tamperBtn = page.locator('[data-testid="tamper-one-byte-btn"]').first();
     if (await tamperBtn.isVisible()) {
       await showCaption(
         page,
-        'Tamper with 1 byte and the entire cryptographic verification breaks.'
+        'Tamper one byte... and the cryptographic hash chain breaks.'
       );
       await glideCursor(page, tamperBtn, { click: true });
       await page.locator('[data-testid="anchor-mismatch-badge"]').waitFor({ state: 'visible', timeout: 10000 });
 
       // Spotlight red mismatch state
+      await zoomSection(page, '.lg\\:col-span-3', 1.25, 600);
       await triggerSpotlight(
         page,
         '[data-testid="anchor-mismatch-badge"]',
@@ -1089,6 +1205,7 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
         4000
       );
       await page.waitForTimeout(3000);
+      await resetZoomSection(page, '.lg\\:col-span-3', 600);
     }
 
     // 3. Click "Restore original" with virtual cursor (9s)
@@ -1102,6 +1219,7 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
       await page.locator('[data-testid="anchor-match-badge"]').waitFor({ state: 'visible', timeout: 10000 });
 
       // Spotlight restored green state
+      await zoomSection(page, '.lg\\:col-span-3', 1.25, 600);
       await triggerSpotlight(
         page,
         '[data-testid="anchor-match-badge"]',
@@ -1109,6 +1227,7 @@ test.describe('Automated Demo Video Recording (1080p, Subtitled)', () => {
         4000
       );
       await page.waitForTimeout(3000);
+      await resetZoomSection(page, '.lg\\:col-span-3', 600);
     }
 
     // Final hold before transition to S6 Diagram

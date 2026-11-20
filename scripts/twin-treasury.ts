@@ -841,7 +841,7 @@ export async function runTwinTreasury(
     '--silent',
   ]);
 
-  let forkBlockNumber: number;
+  let forkBlockNumber = 0;
   let balanceDeltaVendorA = '';
   let balanceDeltaVendorB = '';
   let balanceDeltaLegitB = '';
@@ -850,10 +850,16 @@ export async function runTwinTreasury(
   const plannedTransactions: TwinTransactionPlan[] = [];
 
   try {
-    await new Promise((r) => setTimeout(r, 2200));
+    await new Promise((r) => setTimeout(r, 4000));
     const forkTransport = http(`http://127.0.0.1:${port}`);
     const forkClient = createPublicClient({ chain: avalancheFuji, transport: forkTransport });
-    forkBlockNumber = Number(await forkClient.getBlockNumber());
+
+    try {
+      forkBlockNumber = Number(await forkClient.getBlockNumber());
+    } catch {
+      await new Promise((r) => setTimeout(r, 2000));
+      forkBlockNumber = Number(await forkClient.getBlockNumber());
+    }
     console.log(`[Anvil] Successfully connected to Fuji fork at Block #${forkBlockNumber}`);
 
     const liveGasPrice = await forkClient.getGasPrice();
