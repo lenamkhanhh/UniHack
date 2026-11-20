@@ -138,7 +138,7 @@ export default function BankrReplayPage() {
               <span className="text-xs font-mono font-bold bg-emerald-950/60 text-emerald-400 px-3 py-1 rounded-full border border-emerald-800">
                 {tr('HỆ THỐNG MISSIONPAY (MÔ PHỎNG SANDBOX)', 'MISSIONPAY SYSTEM (SANDBOX SIMULATION)')}
               </span>
-              <span className="text-[13px] font-mono text-gray-500">{tr('Lớp contract: chứng minh khi chạy Fuji', 'Contract layer: proven when run on Fuji')}</span>
+              <span className="text-[13px] font-mono text-gray-500">{tr('Lớp contract: đã chứng minh trên Fuji', 'Contract layer: proven on Fuji')}</span>
             </div>
 
             <h2 className="text-lg font-bold text-gray-200 mb-2">{tr('GuardedTreasury + Ví phiên cô lập', 'GuardedTreasury + isolated session wallet')}</h2>
@@ -177,7 +177,7 @@ export default function BankrReplayPage() {
                 <div className="flex flex-col space-y-1">
                   <span className="text-gray-400">Validator Guard:</span>
                   <span className="text-red-400 font-bold text-xs bg-red-950/40 p-2 rounded-tag border border-red-900/50">
-                    {result.guardedSystem?.contractDefense || `Validator BLOCK ${result.validatorVerdict?.rule || 'RECIPIENT_NOT_ALLOWLISTED'} (off-chain) · ${tr('Lớp contract cap: sẽ chứng minh khi chạy Fuji live', 'Contract cap layer: will be proven on live Fuji')}`}
+                    {`${tr('Người nhận đến từ dữ liệu web (không tin cậy)', 'Recipient came from untrusted web data')} → BLOCK (${result.validatorVerdict?.rule || 'RECIPIENT_UNTRUSTED_PROVENANCE'}) (off-chain) · ${tr('Lớp contract: đã chứng minh live trên Fuji ở Twin Treasury', 'Contract layer: proven live on Fuji in Twin Treasury')}`}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -201,7 +201,7 @@ export default function BankrReplayPage() {
           </div>
 
           <div className="text-[13px] text-gray-500 border-t border-night-rule pt-3 mt-6 font-mono text-center">
-            {tr('BẢO VỆ OFF-CHAIN BỞI VALIDATOR • LỚP CONTRACT CAP SẼ CHỨNG MINH KHI CHẠY FUJI LIVE', 'OFF-CHAIN PROTECTION BY THE VALIDATOR • CONTRACT CAP LAYER WILL BE PROVEN ON LIVE FUJI')}
+            {tr('BẢO VỆ OFF-CHAIN BỞI VALIDATOR • LỚP CONTRACT ĐÃ CHỨNG MINH LIVE TRÊN FUJI (TWIN TREASURY)', 'OFF-CHAIN PROTECTION BY THE VALIDATOR • CONTRACT LAYER PROVEN LIVE ON FUJI (TWIN TREASURY)')}
           </div>
         </div>
       </div>

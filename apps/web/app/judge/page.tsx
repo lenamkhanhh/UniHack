@@ -577,7 +577,7 @@ export default function JudgePage() {
               <span className="text-sm text-info">↗</span>
             </div>
             <p className="text-sm text-ink-2">
-              {isVi ? '13 slide định dạng PDF với số liệu benchmark thật.' : '13-slide pitch deck with verified replay benchmark.'}
+              {isVi ? 'Pitch deck PDF với số liệu benchmark thật.' : 'Pitch deck (PDF) with verified replay benchmark.'}
             </p>
           </a>
 
@@ -627,8 +627,8 @@ export default function JudgePage() {
             <li>
               <strong className="text-ink">Inter-Chain Messaging (ICM):</strong>{' '}
               {isVi
-                ? 'Đã chứng minh self-relay thành công qua Avalanche Glacier Signature Aggregator và access list predicate; việc triển khai Dispatch hub/gateway đang chờ faucet testnet công khai.'
-                : 'Cross-chain self-relay is verified via public Dispatch warp messages and Avalanche Glacier signature aggregator; live Dispatch gateway deployment is pending public faucet funding.'}
+                ? 'Live trên testnet từ 20/11: agent gửi yêu cầu chi trên Dispatch, Hub trên Fuji thực thi (0x5641…443b); người lạ bị chặn UnauthorizedAgent (0xdd99…341d). Tin được giao bởi relayer ICM công khai; self-relay của đội tạo chữ ký hợp lệ nhưng đến chậm một block.'
+                : 'Live on testnet since 20/11: an agent spend sent on Dispatch was executed by the Fuji hub (0x5641…443b); a stranger spend was rejected with UnauthorizedAgent (0xdd99…341d). Delivery was done by a public ICM relayer; our own self-relay produced a valid signed message but arrived a block later.'}
             </li>
             <li>
               <strong className="text-ink">AgentDojo Banking Replay:</strong>{' '}

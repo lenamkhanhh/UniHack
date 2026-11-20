@@ -20,7 +20,27 @@ export interface VerificationResult {
   valid: boolean;
   errors: string[];
   headHash: string;
+  /**
+   * Head obtained by recomputing every link from the content itself: each entry is
+   * re-hashed with its prev_hash replaced by the previous recomputed hash. Equals
+   * headHash for an intact chain; differs as soon as any byte of any entry changes.
+   */
+  recomputedHeadHash: string;
   totalEntries: number;
+}
+
+/** Re-hash the chain from content, propagating each recomputed hash into the next entry. */
+export function recomputeChainHead(entries: AuditEntry[]): string {
+  let prev = INITIAL_PREV_HASH;
+  for (const entry of entries) {
+    let json = entry.canonicalJson || '';
+    const declaredPrev = entry.prevHash || '';
+    if (declaredPrev && declaredPrev.toLowerCase() !== prev.toLowerCase()) {
+      json = json.split(`"prev_hash":"${declaredPrev}"`).join(`"prev_hash":"${prev}"`);
+    }
+    prev = keccak256(stringToBytes(json));
+  }
+  return prev;
 }
 
 /**
@@ -48,6 +68,7 @@ export function verifyProof(
       valid: false,
       errors: ['Entries must be an array'],
       headHash: INITIAL_PREV_HASH,
+      recomputedHeadHash: INITIAL_PREV_HASH,
       totalEntries: 0,
     };
   }
@@ -146,6 +167,7 @@ export function verifyProof(
     valid: errors.length === 0,
     errors,
     headHash: currentPrevHash,
+    recomputedHeadHash: recomputeChainHead(entries),
     totalEntries: entries.length,
   };
 }
