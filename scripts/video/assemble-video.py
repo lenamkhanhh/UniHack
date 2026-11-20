@@ -71,14 +71,19 @@ def wrap(text: str, width: int = 44) -> str:
     return "\n".join(lines)
 
 
-srt = []
+srt, srt_burn = [], []
+# caption band = bottom 130 px (y 950..1080); text is centred in it (PlayRes forced to 1920x1080, see original_size)
+POS = "{\\an5\\pos(960,1015)}"
 for i, sid in enumerate(ORDER):
     a = S[i] + LEAD
     b = a + meta[i]["duration"]
-    srt.append(f"{i + 1}\n{tc(a)} --> {tc(b)}\n{wrap(asr[i])}\n")
+    txt = wrap(asr[i], 56)
+    srt.append(f"{i + 1}\n{tc(a)} --> {tc(b)}\n{txt}\n")
+    srt_burn.append(f"{i + 1}\n{tc(a)} --> {tc(b)}\n{POS}{txt.replace(chr(10), chr(10) + POS)}\n")
 srt_text = "\n".join(srt)
 work = scenes_dir
 (work / "captions_build.srt").write_text(srt_text, encoding="utf-8")
+(work / "captions_burn.srt").write_text("\n".join(srt_burn), encoding="utf-8")
 
 # ---------- voice track (clips placed at their absolute start; mono 24k -> stereo 48k)
 cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
@@ -126,15 +131,27 @@ for i in range(1, len(vids)):
     chain.append(f"{prev}[{i}:v]xfade=transition=fade:duration={XF}:offset={off:.3f}{nxt}")
     prev = nxt
 final_label = prev
+# fixed caption band under the 1920x950 page area: the caption never covers the page
+chain.append(f"{final_label}pad=1920:1080:0:0:color=0x0F1115,drawbox=x=0:y=950:w=1920:h=4:color=0xE84142:t=fill[banded]")
+final_label = "[banded]"
 if not args.no_captions:
-    # style: bold white text on a translucent dark box, bottom centre
-    style = ("FontName=Arial,FontSize=11,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H99000000,"
-             "BorderStyle=3,Outline=2,Shadow=0,MarginV=34,Alignment=2")
-    srt_name = "captions_build.srt"
-    chain.append(f"{final_label}subtitles={srt_name}:fontsdir=C\\\\:/Windows/Fonts:force_style='{style}'[vout]")
+    # white Segoe UI Bold 40 px, centred in the 130 px band (y centre 1015); one drawtext per caption
+    dts = []
+    for i in range(len(ORDER)):
+        a_ = S[i] + LEAD
+        b_ = a_ + meta[i]["duration"]
+        with open(work / f"cap_{i}.txt", "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(wrap(asr[i], 56))
+        dts.append(
+            f"drawtext=fontfile='C\\:/Windows/Fonts/segoeuib.ttf':textfile=cap_{i}.txt:expansion=none:fontsize=40:fontcolor=white:"
+            f"line_spacing=8:x=(w-text_w)/2:y=1015-text_h/2:enable='between(t,{a_:.3f},{b_:.3f})'"
+        )
+    chain.append(f"{final_label}" + ",".join(dts) + "[vout]")
     final_label = "[vout]"
+# single lossy encode, constant 30 fps, faststart
 cmd += ["-filter_complex", ";".join(chain), "-map", final_label, "-map", f"{len(vids)}:a",
-        "-c:v", "libx264", "-preset", "slow", "-crf", "22", "-maxrate", "7M", "-bufsize", "14M", "-pix_fmt", "yuv420p", "-r", "30",
+        "-c:v", "libx264", "-preset", "slow", "-crf", "19", "-maxrate", "8M", "-bufsize", "16M", "-pix_fmt", "yuv420p",
+        "-r", "30", "-fps_mode", "cfr", "-g", "60",
         "-c:a", "copy", "-movflags", "+faststart", "-t", f"{total:.3f}", args.out]
 subprocess.run(cmd, check=True, cwd=str(work))
 print("wrote", args.out)

@@ -4,90 +4,86 @@ Same vendor, same treasury. Two outcomes.
 
 2
 00:00:06,767 --> 00:00:14,567
-MissionPay secures agent treasuries. Owner signs limits, contract enforces on
-Avalanche.
+MissionPay secures agent treasuries. Owner signs limits,
+contract enforces on Avalanche.
 
 3
 00:00:15,767 --> 00:00:23,237
-Three objects govern payouts: signed policy,
-Merkle proof, and Treasury gate.
+Three objects govern payouts: signed policy, Merkle
+proof, and Treasury gate.
 
 4
 00:00:24,433 --> 00:00:29,233
-The allow list drained funds to an off
-mission vendor.
+The allow list drained funds to an off mission vendor.
 
 5
 00:00:30,433 --> 00:00:37,093
-On Avalanche Fuji, Mission Pay strictly
-reverted with zero funds lost.
+On Avalanche Fuji, Mission Pay strictly reverted with
+zero funds lost.
 
 6
 00:00:38,300 --> 00:00:43,780
-Each row links to a real Fuji transaction
-receipt.
+Each row links to a real Fuji transaction receipt.
 
 7
 00:00:44,967 --> 00:00:50,787
-In judge mode, live Fuji receipts prove
-on-chain behavior.
+In judge mode, live Fuji receipts prove on-chain
+behavior.
 
 8
 00:00:52,000 --> 00:00:58,940
-Testing an attacker. The contract strictly
-reverts with payee not in mission set.
+Testing an attacker. The contract strictly reverts with
+payee not in mission set.
 
 9
 00:01:00,133 --> 00:01:07,313
-Testing the owner address succeeds.
-Read-only simulation requires zero gas.
+Testing the owner address succeeds. Read-only simulation
+requires zero gas.
 
 10
 00:01:08,500 --> 00:01:14,830
-Copy the cast command to query public
-avalanche fuji rpc directly.
+Copy the cast command to query public avalanche fuji rpc
+directly.
 
 11
 00:01:16,033 --> 00:01:20,793
-Updating the mission merkle root requires
-the owner's signature.
+Updating the mission merkle root requires the owner's
+signature.
 
 12
 00:01:22,000 --> 00:01:28,590
-Prompt injection tricks the agent, but our
-dual layer guard protects the treasury.
+Prompt injection tricks the agent, but our dual layer
+guard protects the treasury.
 
 13
 00:01:29,800 --> 00:01:34,850
-Tainted from tool output, our validator
-blocks the payout.
+Tainted from tool output, our validator blocks the
+payout.
 
 14
 00:01:36,067 --> 00:01:44,387
-Snowtrace confirms live execution reverted
-on Fuji with payee not in mission set.
+Snowtrace confirms live execution reverted on Fuji with
+payee not in mission set.
 
 15
 00:01:45,600 --> 00:01:55,280
-Cryptographically anchored on Fuji, ERC-8004
-validation confirms a perfect score.
+Cryptographically anchored on Fuji, ERC-8004 validation
+confirms a perfect score.
 
 16
 00:01:56,467 --> 00:02:01,407
-Tamper one byte and the cryptographic hash
-chain breaks.
+Tamper one byte and the cryptographic hash chain breaks.
 
 17
 00:02:02,600 --> 00:02:09,090
-Restore the original, and 100% cryptographic
-integrity is confirmed.
+Restore the original, and 100% cryptographic integrity
+is confirmed.
 
 18
 00:02:10,300 --> 00:02:17,140
-Agents propose payouts while Avalanche smart
-contracts enforce limits.
+Agents propose payouts while Avalanche smart contracts
+enforce limits.
 
 19
 00:02:18,333 --> 00:02:23,973
-LLMs can be fooled. Budgets on Avalanche
-cannot.
+LLMs can be fooled. Budgets on Avalanche cannot.

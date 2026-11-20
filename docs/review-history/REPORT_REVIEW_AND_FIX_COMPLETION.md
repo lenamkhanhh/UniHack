@@ -874,3 +874,24 @@ All numbers below were measured on the committed `MissionPay-demo.mp4`:
 | Captions | burned in and in `captions.srt` / `narration.srt`; text = ASR transcript of each clip, timed to the real clip window |
 
 Not verified: nobody has listened to the final mix yet (tails and pace are numbers, not ears). Honest limits of the footage: `/`, `/judge`, `/bounty` typing, `/verify` tamper and restore are the live deployment; the Snowtrace receipt is a frame from our earlier live recording (Snowtrace is behind a Cloudflare challenge for headless browsers) and the bounty result is the committed deck screenshot whose "RECORDED RUN" badge is part of the image.
+
+
+---
+
+## 22. ROUND 21: STATIC CLEAN CUT (owner feedback on r20: "laggy, wants a fixed frame")
+
+**Date:** 2026-11-20 | **Change:** r20 panned and zoomed continuously, which looked laggy (the camera box was an arbitrary float rectangle and Playwright rounded it per frame). r21 drops continuous camera motion entirely: each scene is a fixed 1920x950 view of the page, the caption lives in a separate 130 px band below it (never over the page), callouts (red frame + label) point at the cell being described, and zoom is used only three times (Twin table, Judge result, Verify score) as one eased 0.7 s move followed by a hold. The page is re-screenshotted only when something changes; every other frame is the identical image. One lossy encode at the end. Audio is unchanged (the same 19 Puck r18 clips).
+
+Measured on the committed `MissionPay-demo.mp4`:
+
+| Check | Result |
+|---|---|
+| Format | 1920x1080, H.264 + AAC, 147.87 s (2:28), 19.3 MB, `+faststart` |
+| Cadence | 4,436 frames, every pts delta exactly 33.33 ms (constant 30 fps, none missing or doubled) |
+| Hard cuts | 0 single-frame scene scores above 0.3 (max 0.214, i.e. cross-fades and the three zooms) |
+| Stillness | 6.4% of frame steps are bit-identical in the page area; between frames 0.5 s apart inside static stretches the page differs by 0 to 3,000 pixels (cursor, typing, callout fade); worst 16,737 px (0.92%) where a callout moves between cards. No whole-frame shift. |
+| `freezedetect n=0.003 d=2` | 25 static segments of 2.3-8.5 s: intended (fixed frame with caption), as the owner asked |
+| Loudness | -15.8 LUFS, true peak -1.0 dBFS |
+| Voice / pace / coverage | unchanged from section 21: coverage 75.7%, mean 1.59 w/s, `s1c1` 2.08 and `s3a` 1.97 above 1.9 w/s, gaps between lines 1.2 s |
+
+Not verified: nobody has listened to the audio yet. The Snowtrace scene is a still from our earlier live recording (Cloudflare blocks headless browsers) and the bounty result is the committed "RECORDED RUN" screenshot.
