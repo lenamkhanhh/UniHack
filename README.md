@@ -14,7 +14,7 @@ The owner signs who a mission may pay. The AI agent can only propose.<br>
 ![Track](https://img.shields.io/badge/UniHack%202026-Agent%20Economy%20%C2%B7%20x402-121417)
 
 <a href="https://unihack-missionpay.vercel.app"><img src="https://img.shields.io/badge/Live%20demo-E84142?style=for-the-badge&logo=vercel&logoColor=white" alt="Live demo"></a>
-<a href="https://drive.google.com/file/d/1OqQu5Q_XHDf-owe6r5xeLyeEydrrYO7Z/view"><img src="https://img.shields.io/badge/Demo%20video%20(2%3A28)-121417?style=for-the-badge&logo=googledrive&logoColor=white" alt="Demo video"></a>
+<a href="https://drive.google.com/file/d/1OqQu5Q_XHDf-owe6r5xeLyeEydrrYO7Z/view"><img src="https://img.shields.io/badge/Demo%20video%20(2%3A28)-7C3AED?style=for-the-badge&logo=googledrive&logoColor=white" alt="Demo video"></a>
 <a href="https://docs.google.com/presentation/d/1MSbomuT7qXj2MCg6taqkS6tEqdVH_VybzS5wTcQAKHY"><img src="https://img.shields.io/badge/Pitch%20deck-F4B400?style=for-the-badge&logo=googleslides&logoColor=white" alt="Pitch deck"></a>
 <a href="https://unihack-missionpay.vercel.app/judge"><img src="https://img.shields.io/badge/Judge%20mode-2B59C3?style=for-the-badge&logo=ethereum&logoColor=white" alt="Judge mode"></a>
 <a href="https://unihack-missionpay.vercel.app/verify/fuji-live-mission-s1c"><img src="https://img.shields.io/badge/Verify%20audit%20chain-0B7A4B?style=for-the-badge&logo=checkmarx&logoColor=white" alt="Verify"></a>
